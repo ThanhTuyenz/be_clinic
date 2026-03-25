@@ -2,6 +2,10 @@ import bcrypt from 'bcryptjs'
 import jwt from 'jsonwebtoken'
 import User from '../models/User.js'
 import Role from '../models/Role.js'
+import { sendOtpEmail } from '../services/mail.js'
+import { generateOtp } from '../utils/otp.js'
+
+const OTP_MS = 10 * 60 * 1000
 
 function jwtSecret() {
   const s = process.env.JWT_SECRET
@@ -13,7 +17,7 @@ function jwtSecret() {
   return s
 }
 
-function signToken(user, roleName) {
+function signAccessToken(user, roleName) {
   return jwt.sign(
     {
       sub: user._id.toString(),
@@ -25,11 +29,53 @@ function signToken(user, roleName) {
   )
 }
 
+/** JWT ngắn hạn — bước xác nhận OTP sau đăng ký (không phải token đăng nhập). */
+function signVerificationToken(userId) {
+  return jwt.sign(
+    { sub: userId.toString(), typ: 'email_verify' },
+    jwtSecret(),
+    { expiresIn: '15m' }
+  )
+}
+
+function maskEmail(email) {
+  const [u, d] = String(email).split('@')
+  if (!d) return '***'
+  const safe = u.length <= 2 ? u[0] + '*' : u.slice(0, 2) + '***'
+  return `${safe}@${d}`
+}
+
+/** Hiển thị kiểu Việt Nam: họ + tên */
+function displayNameFromUser(user) {
+  if (!user) return ''
+  const s = [user.lastName, user.firstName].filter(Boolean).join(' ').trim()
+  return s
+}
+
+function userPublicJson(user, roleName) {
+  const displayName = displayNameFromUser(user)
+  return {
+    id: user._id,
+    email: user.email,
+    firstName: user.firstName ?? '',
+    lastName: user.lastName ?? '',
+    displayName: displayName || user.email,
+    userType: user.userType,
+    role: roleName,
+  }
+}
+
 export async function register(req, res) {
   try {
-    const { fullName, email, phone, password } = req.body
-    if (!fullName?.trim() || !email?.trim() || !phone?.trim() || !password) {
-      return res.status(400).json({ message: 'Vui lòng nhập đủ thông tin.' })
+    const { firstName, lastName, email, phone, password } = req.body
+    if (
+      !firstName?.trim() ||
+      !lastName?.trim() ||
+      !email?.trim() ||
+      !phone?.trim() ||
+      !password
+    ) {
+      return res.status(400).json({ message: 'Vui lòng nhập đủ họ, tên và thông tin còn lại.' })
     }
     if (password.length < 6) {
       return res
@@ -54,24 +100,36 @@ export async function register(req, res) {
       return res.status(500).json({ message: 'Hệ thống chưa có vai trò bệnh nhân.' })
     }
 
+    const otp = generateOtp()
+    const emailOtpHash = await bcrypt.hash(otp, 8)
+    const emailOtpExpires = new Date(Date.now() + OTP_MS)
+
     const passwordHash = await bcrypt.hash(password, 10)
+    const fn = firstName.trim()
+    const ln = lastName.trim()
     const user = await User.create({
       email: emailNorm,
       passwordHash,
       roleId: role._id,
       userType: 'patient',
-      fullName: fullName.trim(),
+      firstName: fn,
+      lastName: ln,
       phone: phoneNorm,
+      emailVerified: false,
+      emailOtpHash,
+      emailOtpExpires,
     })
 
+    await sendOtpEmail(emailNorm, otp, displayNameFromUser({ firstName: fn, lastName: ln }))
+
+    const verificationToken = signVerificationToken(user._id)
+
     return res.status(201).json({
-      message: 'Đăng ký thành công.',
-      user: {
-        id: user._id,
-        email: user.email,
-        fullName: user.fullName,
-        userType: user.userType,
-      },
+      message:
+        'Đã tạo tài khoản. Vui lòng nhập mã OTP đã gửi tới email để hoàn tất.',
+      verificationToken,
+      email: emailNorm,
+      emailMask: maskEmail(emailNorm),
     })
   } catch (err) {
     if (err.code === 11000) {
@@ -79,6 +137,117 @@ export async function register(req, res) {
         .status(409)
         .json({ message: 'Email hoặc số điện thoại đã tồn tại.' })
     }
+    console.error(err)
+    return res.status(500).json({ message: 'Lỗi máy chủ.' })
+  }
+}
+
+export async function verifyEmail(req, res) {
+  try {
+    const { verificationToken, otp } = req.body
+    if (!verificationToken || otp === undefined || otp === null) {
+      return res.status(400).json({
+        message: 'Thiếu mã xác thực hoặc OTP.',
+      })
+    }
+
+    let decoded
+    try {
+      decoded = jwt.verify(verificationToken, jwtSecret())
+    } catch {
+      return res.status(400).json({
+        message:
+          'Phiên xác thực hết hạn. Vui lòng nhấn Gửi lại mã hoặc đăng ký lại.',
+      })
+    }
+
+    if (decoded.typ !== 'email_verify' || !decoded.sub) {
+      return res.status(400).json({ message: 'Token xác thực không hợp lệ.' })
+    }
+
+    const user = await User.findById(decoded.sub)
+      .select('+emailOtpHash +emailOtpExpires')
+      .populate('roleId', 'name description')
+
+    if (!user) {
+      return res.status(400).json({ message: 'Không tìm thấy tài khoản.' })
+    }
+
+    if (user.emailVerified) {
+      return res.status(400).json({ message: 'Email đã được xác thực trước đó.' })
+    }
+
+    if (!user.emailOtpHash || !user.emailOtpExpires) {
+      return res.status(400).json({
+        message: 'Không có mã OTP. Vui lòng gửi lại mã.',
+      })
+    }
+
+    if (Date.now() > new Date(user.emailOtpExpires).getTime()) {
+      return res.status(400).json({
+        message: 'Mã OTP đã hết hạn. Vui lòng gửi lại mã.',
+      })
+    }
+
+    const ok = await bcrypt.compare(String(otp).trim(), user.emailOtpHash)
+    if (!ok) {
+      return res.status(400).json({ message: 'Mã OTP không đúng.' })
+    }
+
+    user.emailVerified = true
+    user.emailOtpHash = undefined
+    user.emailOtpExpires = undefined
+    await user.save()
+
+    const roleName = user.roleId?.name ?? 'unknown'
+    const token = signAccessToken(user, roleName)
+
+    return res.json({
+      message: 'Xác thực email thành công. Bạn đã được đăng nhập.',
+      token,
+      user: userPublicJson(user, roleName),
+    })
+  } catch (err) {
+    console.error(err)
+    return res.status(500).json({ message: 'Lỗi máy chủ.' })
+  }
+}
+
+export async function resendOtp(req, res) {
+  try {
+    const { email } = req.body
+    if (!email?.trim()) {
+      return res.status(400).json({ message: 'Vui lòng nhập email đã đăng ký.' })
+    }
+
+    const emailNorm = String(email).trim().toLowerCase()
+    const user = await User.findOne({ email: emailNorm }).select(
+      '+emailOtpHash +emailOtpExpires'
+    )
+
+    if (!user) {
+      return res.status(404).json({ message: 'Không tìm thấy tài khoản với email này.' })
+    }
+
+    if (user.emailVerified) {
+      return res.status(400).json({ message: 'Email đã được xác thực.' })
+    }
+
+    const otp = generateOtp()
+    user.emailOtpHash = await bcrypt.hash(otp, 8)
+    user.emailOtpExpires = new Date(Date.now() + OTP_MS)
+    await user.save()
+
+    await sendOtpEmail(emailNorm, otp, displayNameFromUser(user))
+
+    const verificationToken = signVerificationToken(user._id)
+
+    return res.json({
+      message: 'Đã gửi lại mã OTP.',
+      verificationToken,
+      emailMask: maskEmail(emailNorm),
+    })
+  } catch (err) {
     console.error(err)
     return res.status(500).json({ message: 'Lỗi máy chủ.' })
   }
@@ -109,19 +278,30 @@ export async function login(req, res) {
       return res.status(401).json({ message: 'Sai thông tin đăng nhập.' })
     }
 
+    if (user.emailVerified === false) {
+      const otp = generateOtp()
+      user.emailOtpHash = await bcrypt.hash(otp, 8)
+      user.emailOtpExpires = new Date(Date.now() + OTP_MS)
+      await user.save()
+      await sendOtpEmail(user.email, otp, displayNameFromUser(user))
+      const verificationToken = signVerificationToken(user._id)
+      return res.status(403).json({
+        code: 'EMAIL_NOT_VERIFIED',
+        message:
+          'Tài khoản chưa xác thực email. Đã gửi mã OTP đến hộp thư của bạn.',
+        email: user.email,
+        emailMask: maskEmail(user.email),
+        verificationToken,
+      })
+    }
+
     const roleName = user.roleId?.name ?? 'unknown'
-    const token = signToken(user, roleName)
+    const token = signAccessToken(user, roleName)
 
     return res.json({
       message: 'Đăng nhập thành công.',
       token,
-      user: {
-        id: user._id,
-        email: user.email,
-        fullName: user.fullName,
-        userType: user.userType,
-        role: roleName,
-      },
+      user: userPublicJson(user, roleName),
     })
   } catch (err) {
     console.error(err)
