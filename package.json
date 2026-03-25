@@ -1,0 +1,24 @@
+{
+  "name": "be_clinic",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Backend Phòng khám ABC — Node.js + Express + MongoDB",
+  "scripts": {
+    "start": "node src/index.js",
+    "dev": "node --watch src/index.js",
+    "test:db": "node src/testConnection.js"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "bcryptjs": "^3.0.2",
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.7",
+    "express": "^4.21.2",
+    "jsonwebtoken": "^9.0.3",
+    "mongodb": "^6.12.0",
+    "mongoose": "^8.9.5"
+  }
+}
