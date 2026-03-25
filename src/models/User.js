@@ -21,7 +21,13 @@ const userSchema = new mongoose.Schema(
       enum: ['patient', 'doctor', 'receptionist'],
     },
     isActive: { type: Boolean, default: true },
-    fullName: { type: String, trim: true },
+    emailVerified: { type: Boolean, default: false },
+    emailOtpHash: { type: String, select: false },
+    emailOtpExpires: { type: Date, select: false },
+    /** Tên (given name) */
+    firstName: { type: String, trim: true },
+    /** Họ (family name) */
+    lastName: { type: String, trim: true },
     phone: { type: String, trim: true },
     dob: { type: Date },
     gender: { type: Boolean },
