@@ -1,5 +1,6 @@
 import mongoose from 'mongoose'
 import { seedRoles } from './seedRoles.js'
+import { seedDoctors } from './seedDoctors.js'
 
 export async function connectDb() {
   const uri = process.env.MONGODB_URI
@@ -8,4 +9,5 @@ export async function connectDb() {
   }
   await mongoose.connect(uri)
   await seedRoles()
+  await seedDoctors()
 }
