@@ -35,6 +35,9 @@ const userSchema = new mongoose.Schema(
     citizenId: { type: String, trim: true },
     specialtyId: { type: mongoose.Schema.Types.ObjectId },
     shiftId: { type: mongoose.Schema.Types.ObjectId },
+    specialty: { type: String, trim: true },
+    experienceYears: { type: Number, min: 0 },
+    avatarUrl: { type: String, trim: true },
     bio: { type: String, trim: true },
   },
   { timestamps: true }
