@@ -33,12 +33,15 @@ const userSchema = new mongoose.Schema(
     gender: { type: Boolean },
     address: { type: String, trim: true },
     citizenId: { type: String, trim: true },
-    specialtyId: { type: mongoose.Schema.Types.ObjectId },
+    // In your Mongo, specialtyID is stored as string (e.g. "SPEC-001")
+    specialtyId: { type: String, trim: true },
+    // Some documents use "specialtyID" (capital D)
+    specialtyID: { type: String, trim: true },
     shiftId: { type: mongoose.Schema.Types.ObjectId },
-    specialty: { type: String, trim: true },
-    experienceYears: { type: Number, min: 0 },
-    avatarUrl: { type: String, trim: true },
     bio: { type: String, trim: true },
+    // Extra fields that may exist in Mongo (used by FE UI)
+    avatarUrl: { type: String, trim: true },
+    experienceYears: { type: Number },
   },
   { timestamps: true }
 )
