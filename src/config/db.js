@@ -9,5 +9,5 @@ export async function connectDb() {
   }
   await mongoose.connect(uri)
   await seedRoles()
-  await seedDoctors()
+  // NOTE: Không tự seed bác sĩ lên Mongo khi khởi động.
 }

@@ -308,3 +308,59 @@ export async function login(req, res) {
     return res.status(500).json({ message: 'Lỗi máy chủ.' })
   }
 }
+
+export async function staffLogin(req, res) {
+  try {
+    const { email: loginId, password } = req.body
+    if (!loginId?.trim() || !password) {
+      return res.status(400).json({
+        message: 'Vui lòng nhập email/số điện thoại và mật khẩu.',
+      })
+    }
+
+    const raw = String(loginId).trim()
+    const emailCandidate = raw.toLowerCase()
+
+    const user = await User.findOne({
+      $or: [{ email: emailCandidate }, { phone: raw }],
+    }).populate('roleId', 'name description')
+
+    if (!user || !user.isActive) {
+      return res.status(401).json({ message: 'Sai thông tin đăng nhập.' })
+    }
+
+    if (user.userType === 'patient') {
+      return res.status(403).json({
+        code: 'STAFF_ONLY',
+        message: 'Tài khoản này không thuộc nhóm nhân viên.',
+      })
+    }
+
+    const ok = await bcrypt.compare(password, user.passwordHash)
+    if (!ok) {
+      return res.status(401).json({ message: 'Sai thông tin đăng nhập.' })
+    }
+
+    // Nhân viên seed sẵn thường đã verified; vẫn giữ rule emailVerified nếu DB có.
+    if (user.emailVerified === false) {
+      return res.status(403).json({
+        code: 'EMAIL_NOT_VERIFIED',
+        message: 'Tài khoản chưa xác thực email.',
+        email: user.email,
+        emailMask: maskEmail(user.email),
+      })
+    }
+
+    const roleName = user.roleId?.name ?? 'unknown'
+    const token = signAccessToken(user, roleName)
+
+    return res.json({
+      message: 'Đăng nhập nhân viên thành công.',
+      token,
+      user: userPublicJson(user, roleName),
+    })
+  } catch (err) {
+    console.error(err)
+    return res.status(500).json({ message: 'Lỗi máy chủ.' })
+  }
+}
