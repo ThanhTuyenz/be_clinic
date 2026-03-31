@@ -1,6 +1,7 @@
 import { Router } from 'express'
 import {
   login,
+  staffLogin,
   register,
   resendOtp,
   verifyEmail,
@@ -12,5 +13,6 @@ router.post('/register', register)
 router.post('/verify-email', verifyEmail)
 router.post('/resend-otp', resendOtp)
 router.post('/login', login)
+router.post('/staff-login', staffLogin)
 
 export default router
