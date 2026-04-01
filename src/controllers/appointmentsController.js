@@ -253,6 +253,42 @@ export async function createAppointment(req, res) {
       return res.status(400).json({ message: 'appointmentDate không hợp lệ.' })
     }
 
+    const ACTIVE_STATUSES = ['pending', 'confirmed']
+
+    // Rule 1: Patient cannot book the same time slot as another appointment (any doctor).
+    // We treat appointments as time-slots keyed by (appointmentDate, startTime).
+    const patientTimeConflict = await Appointment.findOne({
+      patientId: req.user.id,
+      appointmentDate: date,
+      startTime: startTimeStr,
+      status: { $in: ACTIVE_STATUSES },
+    })
+      .select({ _id: 1 })
+      .lean()
+
+    if (patientTimeConflict) {
+      return res.status(409).json({
+        message: 'Bạn đã có lịch khám khác trùng khung giờ này. Vui lòng chọn giờ khác.',
+      })
+    }
+
+    // Rule 2: A patient can only have 1 active appointment per doctor until it is completed/cancelled.
+    const patientDoctorConflict = await Appointment.findOne({
+      patientId: req.user.id,
+      doctorId: doctorIdStr,
+      status: { $in: ACTIVE_STATUSES },
+    })
+      .select({ _id: 1, appointmentDate: 1, startTime: 1, status: 1 })
+      .lean()
+
+    if (patientDoctorConflict) {
+      return res.status(409).json({
+        message:
+          'Bạn đã có một lịch khám đang chờ/xác nhận với bác sĩ này. ' +
+          'Chỉ đặt lại sau khi lịch đó hoàn thành hoặc đã hủy.',
+      })
+    }
+
     let appointment
     try {
       appointment = await Appointment.create({
@@ -280,6 +316,46 @@ export async function createAppointment(req, res) {
         appointmentDate: appointment.appointmentDate,
         startTime: appointment.startTime,
         status: appointment.status,
+      },
+    })
+  } catch (err) {
+    console.error(err)
+    return res.status(500).json({ message: 'Lỗi máy chủ.' })
+  }
+}
+
+export async function cancelAppointment(req, res) {
+  try {
+    if (!req.user?.id || req.user.userType !== 'patient') {
+      return res.status(403).json({ message: 'Chỉ bệnh nhân mới hủy được lịch khám.' })
+    }
+
+    const rawId = String(req.params.id || '').trim()
+    if (!isMongoObjectId(rawId)) {
+      return res.status(400).json({ message: 'Mã lịch không hợp lệ.' })
+    }
+
+    const appt = await Appointment.findById(rawId)
+    if (!appt) {
+      return res.status(404).json({ message: 'Không tìm thấy lịch khám.' })
+    }
+
+    if (String(appt.patientId) !== String(req.user.id)) {
+      return res.status(403).json({ message: 'Bạn không có quyền hủy lịch này.' })
+    }
+
+    if (appt.status === 'cancelled') {
+      return res.status(400).json({ message: 'Lịch này đã được hủy trước đó.' })
+    }
+
+    appt.status = 'cancelled'
+    await appt.save()
+
+    return res.status(200).json({
+      message: 'Đã hủy lịch khám.',
+      appointment: {
+        id: appt._id,
+        status: appt.status,
       },
     })
   } catch (err) {

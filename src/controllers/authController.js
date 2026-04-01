@@ -4,6 +4,7 @@ import User from '../models/User.js'
 import Role from '../models/Role.js'
 import { sendOtpEmail } from '../services/mail.js'
 import { generateOtp } from '../utils/otp.js'
+import mongoose from 'mongoose'
 
 const OTP_MS = 10 * 60 * 1000
 
@@ -62,6 +63,82 @@ function userPublicJson(user, roleName) {
     displayName: displayName || user.email,
     userType: user.userType,
     role: roleName,
+  }
+}
+
+function isMongoObjectId(id) {
+  return typeof id === 'string' && /^[a-fA-F0-9]{24}$/.test(id)
+}
+
+export async function me(req, res) {
+  try {
+    if (!req.user?.id) {
+      return res.status(401).json({ message: 'Token không hợp lệ.' })
+    }
+
+    const idStr = String(req.user.id).trim()
+    let u = await User.collection.findOne(
+      { _id: idStr },
+      {
+        projection: {
+          email: 1,
+          userType: 1,
+          firstName: 1,
+          lastName: 1,
+          phone: 1,
+          dob: 1,
+          gender: 1,
+          address: 1,
+          citizenId: 1,
+        },
+      },
+    )
+
+    if (!u && isMongoObjectId(idStr)) {
+      u = await User.collection.findOne(
+        { _id: new mongoose.Types.ObjectId(idStr) },
+        {
+          projection: {
+            email: 1,
+            userType: 1,
+            firstName: 1,
+            lastName: 1,
+            phone: 1,
+            dob: 1,
+            gender: 1,
+            address: 1,
+            citizenId: 1,
+          },
+        },
+      )
+    }
+
+    if (!u) return res.status(404).json({ message: 'Không tìm thấy người dùng.' })
+
+    if (String(u.userType || '').toLowerCase() !== 'patient') {
+      return res.status(403).json({ message: 'Chỉ bệnh nhân mới xem được hồ sơ tại API này.' })
+    }
+
+    const displayName = displayNameFromUser(u) || u.email
+
+    return res.status(200).json({
+      user: {
+        id: u._id,
+        email: u.email,
+        userType: u.userType,
+        firstName: u.firstName ?? '',
+        lastName: u.lastName ?? '',
+        displayName,
+        phone: u.phone ?? '',
+        dob: u.dob ?? null,
+        gender: u.gender ?? null,
+        address: u.address ?? '',
+        citizenId: u.citizenId ?? '',
+      },
+    })
+  } catch (err) {
+    console.error(err)
+    return res.status(500).json({ message: 'Lỗi máy chủ.' })
   }
 }
 
