@@ -10,6 +10,8 @@ const userSchema = new mongoose.Schema(
       trim: true,
     },
     passwordHash: { type: String, required: true },
+    /** Tài khoản tạo theo luồng OTP trước, chưa đặt mật khẩu */
+    mustSetPassword: { type: Boolean, default: false },
     roleId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: 'Role',

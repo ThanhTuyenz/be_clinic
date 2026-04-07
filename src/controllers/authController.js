@@ -2,6 +2,7 @@ import bcrypt from 'bcryptjs'
 import jwt from 'jsonwebtoken'
 import User from '../models/User.js'
 import Role from '../models/Role.js'
+import PendingRegistration from '../models/PendingRegistration.js'
 import { sendOtpEmail } from '../services/mail.js'
 import { generateOtp } from '../utils/otp.js'
 import mongoose from 'mongoose'
@@ -34,6 +35,31 @@ function signAccessToken(user, roleName) {
 function signVerificationToken(userId) {
   return jwt.sign(
     { sub: userId.toString(), typ: 'email_verify' },
+    jwtSecret(),
+    { expiresIn: '15m' }
+  )
+}
+
+function signPendingVerificationToken(pendingId) {
+  return jwt.sign(
+    { sub: pendingId.toString(), typ: 'pending_email_verify' },
+    jwtSecret(),
+    { expiresIn: '15m' }
+  )
+}
+
+/** JWT ngắn hạn — dùng để hoàn tất đăng ký sau khi OTP đúng. */
+function signCompleteRegisterToken(userId) {
+  return jwt.sign(
+    { sub: userId.toString(), typ: 'complete_register' },
+    jwtSecret(),
+    { expiresIn: '15m' }
+  )
+}
+
+function signPendingCompleteToken(pendingId) {
+  return jwt.sign(
+    { sub: pendingId.toString(), typ: 'pending_complete_register' },
     jwtSecret(),
     { expiresIn: '15m' }
   )
@@ -219,6 +245,60 @@ export async function register(req, res) {
   }
 }
 
+/**
+ * Bắt đầu đăng ký: chỉ cần email -> gửi OTP.
+ * Chỉ tạo bản ghi pending (KHÔNG tạo User) cho tới khi hoàn tất bước cuối.
+ */
+export async function startRegister(req, res) {
+  try {
+    const { email } = req.body
+    if (!email?.trim()) {
+      return res.status(400).json({ message: 'Vui lòng nhập email.' })
+    }
+
+    const emailNorm = String(email).trim().toLowerCase()
+
+    const exists = await User.findOne({ email: emailNorm })
+    if (exists) {
+      return res.status(409).json({ message: 'Email đã được đăng ký.' })
+    }
+
+    const otp = generateOtp()
+    const emailOtpHash = await bcrypt.hash(otp, 8)
+    const emailOtpExpires = new Date(Date.now() + OTP_MS)
+
+    const pending = await PendingRegistration.findOneAndUpdate(
+      { email: emailNorm },
+      {
+        $set: {
+          email: emailNorm,
+          emailOtpHash,
+          emailOtpExpires,
+          emailVerified: false,
+        },
+      },
+      { upsert: true, new: true }
+    ).select('_id email')
+
+    await sendOtpEmail(emailNorm, otp, emailNorm)
+
+    const verificationToken = signPendingVerificationToken(pending._id)
+
+    return res.status(201).json({
+      message: 'Đã gửi OTP. Vui lòng nhập mã để xác nhận email.',
+      verificationToken,
+      email: emailNorm,
+      emailMask: maskEmail(emailNorm),
+    })
+  } catch (err) {
+    if (err.code === 11000) {
+      return res.status(409).json({ message: 'Email đã tồn tại.' })
+    }
+    console.error(err)
+    return res.status(500).json({ message: 'Lỗi máy chủ.' })
+  }
+}
+
 export async function verifyEmail(req, res) {
   try {
     const { verificationToken, otp } = req.body
@@ -238,7 +318,43 @@ export async function verifyEmail(req, res) {
       })
     }
 
-    if (decoded.typ !== 'email_verify' || !decoded.sub) {
+    if (!decoded?.typ || !decoded?.sub) {
+      return res.status(400).json({ message: 'Token xác thực không hợp lệ.' })
+    }
+
+    // Luồng pending: chưa tạo User trong DB
+    if (decoded.typ === 'pending_email_verify') {
+      const pending = await PendingRegistration.findById(decoded.sub).select(
+        '+emailOtpHash +emailOtpExpires email emailVerified'
+      )
+
+      if (!pending) {
+        return res.status(400).json({ message: 'Phiên đăng ký không tồn tại hoặc đã hết hạn.' })
+      }
+      if (pending.emailVerified) {
+        return res.status(400).json({ message: 'Email đã được xác thực trước đó.' })
+      }
+      if (Date.now() > new Date(pending.emailOtpExpires).getTime()) {
+        return res.status(400).json({ message: 'Mã OTP đã hết hạn. Vui lòng gửi lại mã.' })
+      }
+      const ok = await bcrypt.compare(String(otp).trim(), pending.emailOtpHash)
+      if (!ok) {
+        return res.status(400).json({ message: 'Mã OTP không đúng.' })
+      }
+
+      pending.emailVerified = true
+      await pending.save()
+
+      const completeToken = signPendingCompleteToken(pending._id)
+      return res.json({
+        message: 'Xác thực email thành công. Vui lòng tạo mật khẩu để hoàn tất đăng ký.',
+        completeToken,
+        email: pending.email,
+        emailMask: maskEmail(pending.email),
+      })
+    }
+
+    if (decoded.typ !== 'email_verify') {
       return res.status(400).json({ message: 'Token xác thực không hợp lệ.' })
     }
 
@@ -277,10 +393,148 @@ export async function verifyEmail(req, res) {
     await user.save()
 
     const roleName = user.roleId?.name ?? 'unknown'
+    // Nếu user tạo theo luồng OTP trước và chưa đặt mật khẩu -> không đăng nhập,
+    // trả token hoàn tất đăng ký để FE set mật khẩu.
+    if (user.mustSetPassword) {
+      const completeToken = signCompleteRegisterToken(user._id)
+      return res.json({
+        message: 'Xác thực email thành công. Vui lòng tạo mật khẩu để hoàn tất đăng ký.',
+        completeToken,
+        email: user.email,
+        emailMask: maskEmail(user.email),
+      })
+    }
+
     const token = signAccessToken(user, roleName)
 
     return res.json({
       message: 'Xác thực email thành công. Bạn đã được đăng nhập.',
+      token,
+      user: userPublicJson(user, roleName),
+    })
+  } catch (err) {
+    console.error(err)
+    return res.status(500).json({ message: 'Lỗi máy chủ.' })
+  }
+}
+
+export async function completeRegister(req, res) {
+  try {
+    const { completeToken, firstName, lastName, phone, password } = req.body
+    if (!completeToken) {
+      return res.status(400).json({ message: 'Thiếu phiên hoàn tất đăng ký.' })
+    }
+    if (
+      !firstName?.trim() ||
+      !lastName?.trim() ||
+      !phone?.trim() ||
+      !password
+    ) {
+      return res.status(400).json({ message: 'Vui lòng nhập đủ họ, tên và thông tin còn lại.' })
+    }
+    if (password.length < 6) {
+      return res.status(400).json({ message: 'Mật khẩu cần ít nhất 6 ký tự.' })
+    }
+
+    let decoded
+    try {
+      decoded = jwt.verify(completeToken, jwtSecret())
+    } catch {
+      return res.status(400).json({
+        message: 'Phiên hoàn tất đăng ký đã hết hạn. Vui lòng xác thực OTP lại.',
+      })
+    }
+
+    if (!decoded?.typ || !decoded?.sub) {
+      return res.status(400).json({ message: 'Token hoàn tất đăng ký không hợp lệ.' })
+    }
+
+    // Luồng pending: lúc này mới tạo User
+    if (decoded.typ === 'pending_complete_register') {
+      const pending = await PendingRegistration.findById(decoded.sub).select('email emailVerified')
+      if (!pending) {
+        return res.status(400).json({ message: 'Phiên đăng ký không tồn tại hoặc đã hết hạn.' })
+      }
+      if (!pending.emailVerified) {
+        return res.status(400).json({ message: 'Email chưa được xác thực.' })
+      }
+
+      const phoneNorm = String(phone).trim()
+      const emailNorm = pending.email
+
+      const exists = await User.findOne({
+        $or: [{ email: emailNorm }, { phone: phoneNorm }],
+      })
+      if (exists) {
+        return res.status(409).json({ message: 'Email hoặc số điện thoại đã được đăng ký.' })
+      }
+
+      const role = await Role.findOne({ name: 'patient' })
+      if (!role) {
+        return res.status(500).json({ message: 'Hệ thống chưa có vai trò bệnh nhân.' })
+      }
+
+      const passwordHash = await bcrypt.hash(password, 10)
+      const user = await User.create({
+        email: emailNorm,
+        passwordHash,
+        roleId: role._id,
+        userType: 'patient',
+        firstName: String(firstName).trim(),
+        lastName: String(lastName).trim(),
+        phone: phoneNorm,
+        emailVerified: true,
+      })
+
+      await PendingRegistration.deleteOne({ _id: pending._id })
+
+      const roleName = role.name ?? 'patient'
+      const token = signAccessToken(user, roleName)
+      return res.json({
+        message: 'Hoàn tất đăng ký thành công.',
+        token,
+        user: userPublicJson(user, roleName),
+      })
+    }
+
+    if (decoded.typ !== 'complete_register') {
+      return res.status(400).json({ message: 'Token hoàn tất đăng ký không hợp lệ.' })
+    }
+
+    const user = await User.findById(decoded.sub).populate('roleId', 'name description')
+    if (!user) {
+      return res.status(400).json({ message: 'Không tìm thấy tài khoản.' })
+    }
+    if (user.emailVerified !== true) {
+      return res.status(400).json({ message: 'Email chưa được xác thực.' })
+    }
+    if (!user.mustSetPassword) {
+      return res.status(400).json({ message: 'Tài khoản đã hoàn tất đăng ký.' })
+    }
+
+    const phoneNorm = String(phone).trim()
+    if (phoneNorm) {
+      const phoneExists = await User.findOne({
+        phone: phoneNorm,
+        _id: { $ne: user._id },
+      })
+      if (phoneExists) {
+        return res.status(409).json({ message: 'Số điện thoại đã được sử dụng.' })
+      }
+    }
+
+    user.firstName = String(firstName).trim()
+    user.lastName = String(lastName).trim()
+    user.phone = phoneNorm
+    user.passwordHash = await bcrypt.hash(password, 10)
+    user.mustSetPassword = false
+    await user.save()
+
+    const roleName = user.roleId?.name ?? 'unknown'
+    const token = signAccessToken(user, roleName)
+
+    return res.json({
+      message: 'Hoàn tất đăng ký thành công.',
       token,
       user: userPublicJson(user, roleName),
     })
@@ -298,6 +552,27 @@ export async function resendOtp(req, res) {
     }
 
     const emailNorm = String(email).trim().toLowerCase()
+
+    // Ưu tiên resend cho pending nếu đang trong luồng đăng ký mới
+    const pending = await PendingRegistration.findOne({ email: emailNorm }).select(
+      '+emailOtpHash +emailOtpExpires emailVerified'
+    )
+    if (pending && !pending.emailVerified) {
+      const otp = generateOtp()
+      pending.emailOtpHash = await bcrypt.hash(otp, 8)
+      pending.emailOtpExpires = new Date(Date.now() + OTP_MS)
+      await pending.save()
+
+      await sendOtpEmail(emailNorm, otp, emailNorm)
+
+      const verificationToken = signPendingVerificationToken(pending._id)
+      return res.json({
+        message: 'Đã gửi lại mã OTP.',
+        verificationToken,
+        emailMask: maskEmail(emailNorm),
+      })
+    }
+
     const user = await User.findOne({ email: emailNorm }).select(
       '+emailOtpHash +emailOtpExpires'
     )
@@ -353,6 +628,15 @@ export async function login(req, res) {
     const ok = await bcrypt.compare(password, user.passwordHash)
     if (!ok) {
       return res.status(401).json({ message: 'Sai thông tin đăng nhập.' })
+    }
+
+    if (user.mustSetPassword) {
+      return res.status(403).json({
+        code: 'PASSWORD_NOT_SET',
+        message: 'Tài khoản chưa hoàn tất đăng ký. Vui lòng xác thực OTP và tạo mật khẩu.',
+        email: user.email,
+        emailMask: maskEmail(user.email),
+      })
     }
 
     if (user.emailVerified === false) {
