@@ -3,6 +3,7 @@ import {
   login,
   staffLogin,
   me,
+  updateMe,
   register,
   startRegister,
   completeRegister,
@@ -21,5 +22,6 @@ router.post('/resend-otp', resendOtp)
 router.post('/login', login)
 router.post('/staff-login', staffLogin)
 router.get('/me', requireAuth, me)
+router.patch('/me', requireAuth, updateMe)
 
 export default router

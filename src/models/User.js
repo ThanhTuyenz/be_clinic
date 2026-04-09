@@ -33,6 +33,7 @@ const userSchema = new mongoose.Schema(
     phone: { type: String, trim: true },
     dob: { type: Date },
     gender: { type: Boolean },
+    ethnicity: { type: String, trim: true },
     address: { type: String, trim: true },
     citizenId: { type: String, trim: true },
     // In your Mongo, specialtyID is stored as string (e.g. "SPEC-001")

@@ -89,6 +89,12 @@ function userPublicJson(user, roleName) {
     displayName: displayName || user.email,
     userType: user.userType,
     role: roleName,
+    phone: user.phone ?? '',
+    dob: user.dob ?? null,
+    gender: user.gender ?? null,
+    ethnicity: user.ethnicity ?? '',
+    address: user.address ?? '',
+    citizenId: user.citizenId ?? '',
   }
 }
 
@@ -114,6 +120,7 @@ export async function me(req, res) {
           phone: 1,
           dob: 1,
           gender: 1,
+          ethnicity: 1,
           address: 1,
           citizenId: 1,
         },
@@ -132,6 +139,7 @@ export async function me(req, res) {
             phone: 1,
             dob: 1,
             gender: 1,
+            ethnicity: 1,
             address: 1,
             citizenId: 1,
           },
@@ -158,8 +166,107 @@ export async function me(req, res) {
         phone: u.phone ?? '',
         dob: u.dob ?? null,
         gender: u.gender ?? null,
+        ethnicity: u.ethnicity ?? '',
         address: u.address ?? '',
         citizenId: u.citizenId ?? '',
+      },
+    })
+  } catch (err) {
+    console.error(err)
+    return res.status(500).json({ message: 'Lỗi máy chủ.' })
+  }
+}
+
+function parseGenderToBooleanOrNull(value) {
+  if (value === true) return true
+  if (value === false) return false
+  const s = String(value ?? '').trim().toLowerCase()
+  if (!s) return null
+  if (s === 'nam' || s === 'male' || s === 'm' || s === 'true') return true
+  if (s === 'nữ' || s === 'nu' || s === 'female' || s === 'f' || s === 'false') return false
+  return null
+}
+
+export async function updateMe(req, res) {
+  try {
+    if (!req.user?.id) {
+      return res.status(401).json({ message: 'Token không hợp lệ.' })
+    }
+    if (String(req.user.userType || '').toLowerCase() !== 'patient') {
+      return res.status(403).json({ message: 'Chỉ bệnh nhân mới cập nhật hồ sơ tại API này.' })
+    }
+
+    const { dob, gender, ethnicity, citizenId, address } = req.body || {}
+
+    const next = {}
+
+    if (dob !== undefined) {
+      const d = new Date(dob)
+      if (Number.isNaN(d.getTime())) {
+        return res.status(400).json({ message: 'Ngày sinh không hợp lệ.' })
+      }
+      next.dob = d
+    }
+
+    if (gender !== undefined) {
+      next.gender = parseGenderToBooleanOrNull(gender)
+    }
+
+    if (ethnicity !== undefined) {
+      next.ethnicity = String(ethnicity || '').trim()
+    }
+
+    if (citizenId !== undefined) {
+      const cid = String(citizenId || '').trim()
+      if (cid && !/^\d{9,12}$/.test(cid)) {
+        return res.status(400).json({ message: 'Số CCCD/CMND không hợp lệ.' })
+      }
+      next.citizenId = cid
+    }
+
+    if (address !== undefined) {
+      next.address = String(address || '').trim()
+    }
+
+    const updated = await User.findByIdAndUpdate(
+      req.user.id,
+      { $set: next },
+      {
+        new: true,
+        runValidators: true,
+        projection: {
+          email: 1,
+          userType: 1,
+          firstName: 1,
+          lastName: 1,
+          phone: 1,
+          dob: 1,
+          gender: 1,
+          ethnicity: 1,
+          address: 1,
+          citizenId: 1,
+        },
+      },
+    )
+
+    if (!updated) return res.status(404).json({ message: 'Không tìm thấy người dùng.' })
+
+    const displayName = displayNameFromUser(updated) || updated.email
+    return res.status(200).json({
+      message: 'Cập nhật hồ sơ thành công.',
+      user: {
+        id: updated._id,
+        email: updated.email,
+        userType: updated.userType,
+        firstName: updated.firstName ?? '',
+        lastName: updated.lastName ?? '',
+        displayName,
+        phone: updated.phone ?? '',
+        dob: updated.dob ?? null,
+        gender: updated.gender ?? null,
+        ethnicity: updated.ethnicity ?? '',
+        address: updated.address ?? '',
+        citizenId: updated.citizenId ?? '',
       },
     })
   } catch (err) {
