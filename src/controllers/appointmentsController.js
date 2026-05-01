@@ -1,6 +1,8 @@
 import mongoose from 'mongoose'
+import bcrypt from 'bcryptjs'
 import Appointment from '../models/Appointment.js'
 import User from '../models/User.js'
+import Role from '../models/Role.js'
 import Specialty from '../models/Specialty.js'
 import Department from '../models/Department.js'
 
@@ -14,6 +16,33 @@ function isValidIsoDateOnly(s) {
 
 function isValidHHmm(s) {
   return typeof s === 'string' && /^([01]\d|2[0-3]):[0-5]\d$/.test(s)
+}
+
+function displayNameFromUser(user) {
+  const first = String(user?.firstName || '').trim()
+  const last = String(user?.lastName || '').trim()
+  const full = `${last} ${first}`.trim()
+  return full || String(user?.displayName || user?.fullName || user?.name || '').trim() || String(user?.email || '').trim()
+}
+
+function staffSummary(user) {
+  if (!user) return null
+  return {
+    id: String(user._id || user.id || '').trim(),
+    displayName: displayNameFromUser(user),
+    email: String(user.email || '').trim(),
+    userType: String(user.userType || user.role || '').trim(),
+  }
+}
+
+async function findUserByIdFlexible(userId, projection) {
+  const id = String(userId || '').trim()
+  if (!id) return null
+  let user = await User.collection.findOne({ _id: id }, { projection })
+  if (!user && isMongoObjectId(id)) {
+    user = await User.collection.findOne({ _id: new mongoose.Types.ObjectId(id) }, { projection })
+  }
+  return user
 }
 
 /** Khung giờ 12 phút từ 08:00 đến 20:00 (khớp cách đặt lịch phía bệnh nhân). */
@@ -143,6 +172,9 @@ export async function listMyAppointments(req, res) {
             startTime: a.startTime,
             endTime: a.endTime || '',
             status: a.status || 'pending',
+            source: a.source || '',
+            bookingSource: a.source || '',
+            createdByStaff: a.createdByStaff || null,
             note: a.note || '',
             createdAt: a.createdAt,
             doctor: null,
@@ -189,6 +221,9 @@ export async function listMyAppointments(req, res) {
           startTime: a.startTime,
           endTime: a.endTime || '',
           status: a.status || 'pending',
+          source: a.source || '',
+          bookingSource: a.source || '',
+          createdByStaff: a.createdByStaff || null,
           note: a.note || '',
           createdAt: a.createdAt,
           doctorId: doctorIdStr || String(doc._id || ''),
@@ -273,6 +308,9 @@ export async function listDoctorAppointments(req, res) {
           startTime: a.startTime,
           endTime: a.endTime || '',
           status: a.status || 'pending',
+          source: a.source || '',
+          bookingSource: a.source || '',
+          createdByStaff: a.createdByStaff || null,
           note: a.note || '',
           createdAt: a.createdAt,
           doctorId: doctorIdStr,
@@ -392,6 +430,7 @@ export async function createAppointment(req, res) {
         startTime: startTimeStr,
         note: note ? String(note).trim() : '',
         status: 'pending',
+        source: 'online',
       })
     } catch (e) {
       // Duplicate key from unique slot index -> slot already booked.
@@ -410,6 +449,9 @@ export async function createAppointment(req, res) {
         appointmentDate: appointment.appointmentDate,
         startTime: appointment.startTime,
         status: appointment.status,
+        source: appointment.source,
+        bookingSource: appointment.source,
+        createdByStaff: appointment.createdByStaff || null,
       },
     })
   } catch (err) {
@@ -570,6 +612,90 @@ async function findPatientUserByContact(rawLogin) {
   return User.findOne({ userType: 'patient', phone: raw }).lean()
 }
 
+function splitPatientName(displayName) {
+  const parts = String(displayName || '')
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean)
+  if (!parts.length) return { firstName: '', lastName: '' }
+  if (parts.length === 1) return { firstName: parts[0], lastName: '' }
+  return {
+    firstName: parts[parts.length - 1],
+    lastName: parts.slice(0, -1).join(' '),
+  }
+}
+
+function parseGenderToBooleanOrNull(value) {
+  if (value === true) return true
+  if (value === false) return false
+  const s = String(value ?? '').trim().toLowerCase()
+  if (!s) return null
+  if (s === 'nam' || s === 'male' || s === 'm' || s === 'true') return true
+  if (s === 'nữ' || s === 'nu' || s === 'female' || s === 'f' || s === 'false') return false
+  return null
+}
+
+async function createPatientForReception({ patientInfo, patientEmailOrPhone }) {
+  const info = patientInfo && typeof patientInfo === 'object' ? patientInfo : {}
+  const rawContact = String(patientEmailOrPhone || '').trim()
+  const phone = String(info.phone || (!rawContact.includes('@') ? rawContact : '')).trim()
+  const emailFromInput = String(info.email || (rawContact.includes('@') ? rawContact : '')).trim().toLowerCase()
+  const email = emailFromInput
+  const displayName = String(info.displayName || '').trim()
+  const { firstName, lastName } = splitPatientName(displayName)
+
+  if (!displayName || !phone) {
+    return {
+      errorStatus: 400,
+      errorMessage: 'Bệnh nhân mới cần có họ tên và số điện thoại để tạo tài khoản.',
+    }
+  }
+  if (!/^[^\s@]+@gmail\.com$/i.test(email)) {
+    return {
+      errorStatus: 400,
+      errorMessage: 'Bệnh nhân mới cần có Gmail hợp lệ để tạo tài khoản.',
+    }
+  }
+
+  const existing = await User.findOne({
+    $or: [{ email }, { phone }],
+  }).lean()
+  if (existing) {
+    return {
+      errorStatus: 409,
+      errorMessage: 'Email hoặc số điện thoại đã thuộc tài khoản khác.',
+    }
+  }
+
+  const role = await Role.findOne({ name: 'patient' }).lean()
+  if (!role) {
+    return {
+      errorStatus: 500,
+      errorMessage: 'Hệ thống chưa có vai trò bệnh nhân.',
+    }
+  }
+
+  const dobRaw = info.dob ? new Date(info.dob) : null
+  const passwordHash = await bcrypt.hash('111111', 10)
+  const created = await User.create({
+    email,
+    passwordHash,
+    mustSetPassword: false,
+    roleId: role._id,
+    userType: 'patient',
+    isActive: true,
+    emailVerified: true,
+    firstName,
+    lastName,
+    phone,
+    dob: dobRaw && !Number.isNaN(dobRaw.getTime()) ? dobRaw : undefined,
+    gender: parseGenderToBooleanOrNull(info.gender),
+    address: String(info.address || '').trim(),
+  })
+
+  return { patient: created.toObject(), created: true }
+}
+
 export async function lookupAppointmentByTicket(req, res) {
   try {
     if (String(req.user?.userType || '') !== 'receptionist') {
@@ -691,6 +817,9 @@ export async function lookupAppointmentByTicket(req, res) {
         startTime: a.startTime,
         endTime: a.endTime || '',
         status: a.status || 'pending',
+        source: a.source || '',
+        bookingSource: a.source || '',
+        createdByStaff: a.createdByStaff || null,
         note: a.note || '',
         createdAt: a.createdAt,
       },
@@ -735,13 +864,17 @@ export async function createAppointmentReception(req, res) {
       return res.status(403).json({ message: 'Chỉ nhân viên tiếp nhận mới đặt lịch thay bệnh nhân.' })
     }
 
-    const { patientEmailOrPhone, doctorId, appointmentDate, startTime, note } = req.body
+    const { patientEmailOrPhone, patient: patientInfo, doctorId, appointmentDate, startTime, note } = req.body
 
-    const patient = await findPatientUserByContact(patientEmailOrPhone)
+    let patient = await findPatientUserByContact(patientEmailOrPhone)
+    let patientCreated = false
     if (!patient) {
-      return res.status(404).json({
-        message: 'Không tìm thấy bệnh nhân với email/SĐT này. Bệnh nhân cần đăng ký tài khoản trước.',
-      })
+      const created = await createPatientForReception({ patientInfo, patientEmailOrPhone })
+      if (created.errorStatus) {
+        return res.status(created.errorStatus).json({ message: created.errorMessage })
+      }
+      patient = created.patient
+      patientCreated = Boolean(created.created)
     }
     if (patient.isActive === false) {
       return res.status(400).json({ message: 'Tài khoản bệnh nhân đang bị khóa.' })
@@ -786,6 +919,18 @@ export async function createAppointmentReception(req, res) {
     }
 
     const ACTIVE_STATUSES = ['pending', 'confirmed']
+    const staffDoc = await findUserByIdFlexible(req.user.id, {
+      firstName: 1,
+      lastName: 1,
+      email: 1,
+      userType: 1,
+    })
+    const createdByStaff = staffSummary(staffDoc) || {
+      id: String(req.user.id || ''),
+      displayName: 'Nhân viên phòng khám',
+      email: '',
+      userType: String(req.user.userType || ''),
+    }
 
     const patientTimeConflict = await Appointment.findOne({
       patientId: patientIdStr,
@@ -826,6 +971,8 @@ export async function createAppointmentReception(req, res) {
         startTime: startTimeStr,
         note: note ? String(note).trim() : '',
         status: 'pending',
+        source: 'clinic',
+        createdByStaff,
       })
     } catch (e) {
       if (e && (e.code === 11000 || e?.name === 'MongoServerError')) {
@@ -837,8 +984,11 @@ export async function createAppointmentReception(req, res) {
     const ticket = buildTicketCode(appointment._id, appointment.appointmentDate)
 
     return res.status(201).json({
-      message: 'Đặt lịch thành công.',
+      message: patientCreated
+        ? 'Đã tạo tài khoản bệnh nhân với mật khẩu mặc định 111111 và đặt lịch thành công.'
+        : 'Đặt lịch thành công.',
       ticket,
+      patientCreated,
       appointment: {
         id: appointment._id,
         patientId: appointment.patientId,
@@ -846,6 +996,9 @@ export async function createAppointmentReception(req, res) {
         appointmentDate: appointment.appointmentDate,
         startTime: appointment.startTime,
         status: appointment.status,
+        source: appointment.source,
+        bookingSource: appointment.source,
+        createdByStaff: appointment.createdByStaff || null,
       },
     })
   } catch (err) {
@@ -861,6 +1014,240 @@ function buildPatientCode(userId) {
   return `YM${yy}${pad}`
 }
 
+/** Tiếp nhận: tra BN theo mã hiển thị (YM…), khớp buildPatientCode. */
+export async function lookupPatientByCode(req, res) {
+  try {
+    if (String(req.user?.userType || '') !== 'receptionist') {
+      return res.status(403).json({ message: 'Chỉ nhân viên tiếp nhận mới tra cứu được mã bệnh nhân.' })
+    }
+    const code = String(req.query.code || '').trim()
+    if (!code) {
+      return res.status(400).json({ message: 'Thiếu mã bệnh nhân.' })
+    }
+    const normalized = code.toUpperCase()
+    const patients = await User.find({
+      userType: 'patient',
+      isActive: { $ne: false },
+    })
+      .select({ firstName: 1, lastName: 1, email: 1, phone: 1, dob: 1, gender: 1, address: 1, avatarUrl: 1 })
+      .lean()
+    const hit = patients.find((u) => buildPatientCode(u._id).toUpperCase() === normalized)
+    if (!hit) {
+      return res.status(404).json({ message: 'Không tìm thấy bệnh nhân với mã này.' })
+    }
+    return res.status(200).json({
+      patient: {
+        id: hit._id,
+        firstName: hit.firstName,
+        lastName: hit.lastName,
+        displayName: [hit.lastName, hit.firstName].filter(Boolean).join(' ').trim(),
+        email: hit.email,
+        phone: hit.phone,
+        avatarUrl: hit.avatarUrl,
+        dob: hit.dob ?? null,
+        gender: genderLabel(hit.gender),
+        address: hit.address || '',
+        age: ageFromDob(hit.dob),
+        patientCode: buildPatientCode(hit._id),
+      },
+    })
+  } catch (err) {
+    console.error(err)
+    return res.status(500).json({ message: 'Lỗi máy chủ.' })
+  }
+}
+
+/** Tiếp nhận: danh sách bệnh nhân (lọc + phân trang) để chọn nhanh. */
+export async function listPatientsReception(req, res) {
+  try {
+    if (String(req.user?.userType || '') !== 'receptionist') {
+      return res.status(403).json({ message: 'Chỉ nhân viên tiếp nhận mới xem được danh sách bệnh nhân.' })
+    }
+
+    const pageRaw = Number(req.query.page || 1)
+    const pageSizeRaw = Number(req.query.pageSize || 10)
+    const page = Number.isFinite(pageRaw) && pageRaw > 0 ? Math.floor(pageRaw) : 1
+    const pageSize =
+      Number.isFinite(pageSizeRaw) && pageSizeRaw > 0 && pageSizeRaw <= 50 ? Math.floor(pageSizeRaw) : 10
+
+    const patientCodeQ = String(req.query.patientCode || '').trim().toUpperCase()
+    const nameQ = String(req.query.name || '').trim().toLowerCase()
+    const phoneQ = String(req.query.phone || '').trim()
+    const accountQ = String(req.query.account || '').trim().toLowerCase() // email
+
+    // Nếu tìm theo mã BN (YM..) thì dùng logic lookup chính xác.
+    if (patientCodeQ) {
+      // Reuse existing behavior (exact code match).
+      const fakeReq = { ...req, query: { ...req.query, code: patientCodeQ } }
+      // Call lookupPatientByCode but capture its output.
+      let statusCode = 200
+      const out = await new Promise((resolve) => {
+        const fakeRes = {
+          status(code) {
+            statusCode = code
+            return this
+          },
+          json(payload) {
+            resolve(payload)
+          },
+        }
+        // eslint-disable-next-line no-underscore-dangle
+        lookupPatientByCode(fakeReq, fakeRes)
+      })
+      if (statusCode !== 200 || !out?.patient) {
+        return res.status(200).json({ patients: [], total: 0, page, pageSize })
+      }
+      return res.status(200).json({ patients: [out.patient], total: 1, page: 1, pageSize: 1 })
+    }
+
+    const query = {
+      userType: 'patient',
+      isActive: { $ne: false },
+    }
+    if (phoneQ) query.phone = { $regex: escapeRegex(phoneQ), $options: 'i' }
+    if (accountQ) query.email = { $regex: escapeRegex(accountQ), $options: 'i' }
+
+    const projection = {
+      firstName: 1,
+      lastName: 1,
+      email: 1,
+      phone: 1,
+      dob: 1,
+      gender: 1,
+      address: 1,
+      citizenId: 1,
+      avatarUrl: 1,
+      createdAt: 1,
+    }
+
+    // Name search: apply in-memory (first/last can be missing and we want fullName contains).
+    const raw = await User.find(query).select(projection).sort({ createdAt: -1 }).lean()
+
+    let rows = (raw || []).map((u) => ({
+      id: u._id,
+      firstName: u.firstName,
+      lastName: u.lastName,
+      displayName: [u.lastName, u.firstName].filter(Boolean).join(' ').trim(),
+      email: u.email,
+      phone: u.phone,
+      avatarUrl: u.avatarUrl,
+      dob: u.dob ?? null,
+      gender: genderLabel(u.gender),
+      address: u.address || '',
+      age: ageFromDob(u.dob),
+      patientCode: buildPatientCode(u._id),
+      citizenId: u.citizenId || '',
+    }))
+
+    if (nameQ) {
+      rows = rows.filter((r) => String(r.displayName || '').toLowerCase().includes(nameQ))
+    }
+
+    const total = rows.length
+    const start = (page - 1) * pageSize
+    const end = start + pageSize
+    const patients = rows.slice(start, end)
+
+    return res.status(200).json({ patients, total, page, pageSize })
+  } catch (err) {
+    console.error(err)
+    return res.status(500).json({ message: 'Lỗi máy chủ.' })
+  }
+}
+
+export async function listPatientHistoryReception(req, res) {
+  try {
+    if (String(req.user?.userType || '') !== 'receptionist') {
+      return res.status(403).json({ message: 'Chỉ nhân viên tiếp nhận mới xem được lịch sử khám.' })
+    }
+
+    const patientId = String(req.query.patientId || '').trim()
+    if (!patientId) {
+      return res.status(400).json({ message: 'Thiếu patientId.' })
+    }
+
+    const items = await Appointment.find({ patientId })
+      .sort({ appointmentDate: -1, startTime: -1, createdAt: -1 })
+      .limit(50)
+      .lean()
+
+    const doctorIdsRaw = [...new Set((items || []).map((a) => String(a?.doctorId || '').trim()).filter(Boolean))]
+    const doctorObjectIds = doctorIdsRaw.filter(isMongoObjectId).map((id) => new mongoose.Types.ObjectId(id))
+
+    const doctors =
+      doctorIdsRaw.length > 0
+        ? await User.collection
+            .find(
+              {
+                userType: 'doctor',
+                $or: [
+                  { _id: { $in: doctorIdsRaw } },
+                  doctorObjectIds.length ? { _id: { $in: doctorObjectIds } } : { _id: { $in: [] } },
+                ],
+              },
+              {
+                projection: {
+                  firstName: 1,
+                  lastName: 1,
+                  email: 1,
+                  specialtyID: 1,
+                  specialtyId: 1,
+                  specialtyName: 1,
+                  specialty: 1,
+                },
+              },
+            )
+            .toArray()
+        : []
+
+    const doctorById = new Map(doctors.map((d) => [String(d._id), d]))
+    const specialtyIds = Array.from(
+      new Set(
+        doctors
+          .map((d) => d?.specialtyID ?? d?.specialtyId)
+          .filter(Boolean)
+          .map((id) => String(id).trim()),
+      ),
+    )
+
+    const specialties = specialtyIds.length
+      ? await Specialty.find({ specialtyID: { $in: specialtyIds } }, { specialtyID: 1, specialtyName: 1 }).lean()
+      : []
+    const specialtyNameById = new Map(
+      specialties.map((s) => [String(s.specialtyID), String(s.specialtyName || '').trim()]),
+    )
+
+    return res.status(200).json({
+      appointments: (items || []).map((a) => {
+        const did = String(a?.doctorId || '').trim()
+        const doc = did ? doctorById.get(did) || null : null
+        const specId = doc ? doc.specialtyID ?? doc.specialtyId : ''
+        const specialtyName = specId
+          ? specialtyNameById.get(String(specId).trim()) || String(doc?.specialtyName || doc?.specialty || '').trim()
+          : String(doc?.specialtyName || doc?.specialty || '').trim()
+        const doctorName = doc
+          ? [doc.lastName, doc.firstName].filter(Boolean).join(' ').trim() || doc.email || ''
+          : ''
+
+        return {
+          id: a._id,
+          ticket: buildTicketCode(a._id, a.appointmentDate),
+          appointmentDate: a.appointmentDate,
+          startTime: a.startTime,
+          status: a.status || 'pending',
+          note: a.note || '',
+          createdAt: a.createdAt,
+          doctorName,
+          specialtyName,
+        }
+      }),
+    })
+  } catch (err) {
+    console.error(err)
+    return res.status(500).json({ message: 'Lỗi máy chủ.' })
+  }
+}
+
 function ageFromDob(dob) {
   if (!dob) return null
   const d = dob instanceof Date ? dob : new Date(dob)
@@ -873,6 +1260,10 @@ function genderLabel(g) {
   if (g === true) return 'Nam'
   if (g === false) return 'Nữ'
   return ''
+}
+
+function escapeRegex(s) {
+  return String(s || '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
 }
 
 export async function listReceptionAppointments(req, res) {
@@ -1017,6 +1408,9 @@ export async function listReceptionAppointments(req, res) {
         startTime: a.startTime,
         endTime: a.endTime || '',
         status: a.status || 'pending',
+        source: a.source || '',
+        bookingSource: a.source || '',
+        createdByStaff: a.createdByStaff || null,
         note: a.note || '',
         createdAt: a.createdAt,
         patient: patientOut,

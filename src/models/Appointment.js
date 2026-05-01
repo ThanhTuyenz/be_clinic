@@ -16,6 +16,17 @@ const appointmentSchema = new mongoose.Schema(
     startTime: { type: String, required: true }, // HH:mm
     endTime: { type: String }, // tuỳ chọn
     status: { type: String, default: 'pending' }, // pending/confirmed/cancelled
+    source: {
+      type: String,
+      enum: ['online', 'clinic'],
+      default: 'online',
+    },
+    createdByStaff: {
+      id: { type: String, trim: true },
+      displayName: { type: String, trim: true },
+      email: { type: String, trim: true },
+      userType: { type: String, trim: true },
+    },
     note: { type: String, default: '' },
   },
   { timestamps: true }

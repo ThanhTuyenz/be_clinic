@@ -8,7 +8,8 @@ import appointmentsRoutes from './routes/appointmentsRoutes.js'
 
 const app = express()
 const PORT = Number(process.env.PORT) || 5000
-const corsOriginRaw = process.env.CORS_ORIGIN || 'http://localhost:5173'
+const corsOriginRaw =
+  process.env.CORS_ORIGIN || 'http://localhost:5173,http://localhost:5174'
 const corsAllowlist = String(corsOriginRaw)
   .split(',')
   .map((s) => s.trim())
