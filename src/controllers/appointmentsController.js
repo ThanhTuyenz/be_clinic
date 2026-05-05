@@ -59,13 +59,50 @@ function generateDaySlotTimes() {
   return out
 }
 
+/** Khớp fe_clinic / fe_clinic_ad `DEFAULT_SLOT_MINUTES` (12). */
+const SLOT_END_MINUTES = 12
+
+function dateKeyFromAppointmentDoc(appointmentDate) {
+  if (!appointmentDate) return ''
+  const d = appointmentDate instanceof Date ? appointmentDate : new Date(appointmentDate)
+  if (Number.isNaN(d.getTime())) return ''
+  const pad2 = (n) => String(n).padStart(2, '0')
+  return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`
+}
+
+function getSlotEndDateFromAppt(appt) {
+  const dk = dateKeyFromAppointmentDoc(appt?.appointmentDate)
+  if (!dk) return null
+  const en = String(appt?.endTime || '').trim()
+  if (en.length >= 5) {
+    const t = en.slice(0, 5)
+    const end = new Date(`${dk}T${t}:00`)
+    return Number.isNaN(end.getTime()) ? null : end
+  }
+  const st = String(appt?.startTime || '00:00').slice(0, 5)
+  const start = new Date(`${dk}T${st}:00`)
+  if (Number.isNaN(start.getTime())) return null
+  start.setMinutes(start.getMinutes() + SLOT_END_MINUTES)
+  return start
+}
+
+/** Lịch pending đã qua hết khung giờ khám (dùng cho tự động hủy an toàn phía server). */
+function isPendingAppointmentPastSlotServer(appt) {
+  if (String(appt?.status || '').toLowerCase() !== 'pending') return false
+  const end = getSlotEndDateFromAppt(appt)
+  if (!end) return false
+  return end.getTime() < Date.now()
+}
+
 export async function listMyAppointments(req, res) {
   try {
     if (!req.user?.id || req.user.userType !== 'patient') {
       return res.status(403).json({ message: 'Chỉ bệnh nhân mới xem được lịch đã đặt.' })
     }
 
-    const items = await Appointment.find({ patientId: req.user.id })
+    const items = await Appointment.find({
+      patientId: req.user.id,
+    })
       .sort({ appointmentDate: -1, startTime: 1, createdAt: -1 })
       .lean()
 
@@ -168,6 +205,7 @@ export async function listMyAppointments(req, res) {
           }
           return {
             id: a._id,
+            ticket: buildTicketCode(a._id, a.appointmentDate),
             appointmentDate: a.appointmentDate,
             startTime: a.startTime,
             endTime: a.endTime || '',
@@ -176,6 +214,11 @@ export async function listMyAppointments(req, res) {
             bookingSource: a.source || '',
             createdByStaff: a.createdByStaff || null,
             note: a.note || '',
+            cancelReason: a.cancelReason || '',
+            cancelledAt: a.cancelledAt || null,
+            cancelledBy: a.cancelledBy || null,
+            confirmedAt: a.confirmedAt || null,
+            confirmedBy: a.confirmedBy || null,
             createdAt: a.createdAt,
             doctor: null,
             doctorId: doctorIdStr || '',
@@ -217,6 +260,7 @@ export async function listMyAppointments(req, res) {
 
         return {
           id: a._id,
+          ticket: buildTicketCode(a._id, a.appointmentDate),
           appointmentDate: a.appointmentDate,
           startTime: a.startTime,
           endTime: a.endTime || '',
@@ -225,6 +269,11 @@ export async function listMyAppointments(req, res) {
           bookingSource: a.source || '',
           createdByStaff: a.createdByStaff || null,
           note: a.note || '',
+          cancelReason: a.cancelReason || '',
+          cancelledAt: a.cancelledAt || null,
+          cancelledBy: a.cancelledBy || null,
+          confirmedAt: a.confirmedAt || null,
+          confirmedBy: a.confirmedBy || null,
           createdAt: a.createdAt,
           doctorId: doctorIdStr || String(doc._id || ''),
           doctor: {
@@ -289,6 +338,9 @@ export async function listDoctorAppointments(req, res) {
                   email: 1,
                   phone: 1,
                   avatarUrl: 1,
+                  dob: 1,
+                  gender: 1,
+                  address: 1,
                 },
               },
             )
@@ -304,6 +356,7 @@ export async function listDoctorAppointments(req, res) {
 
         return {
           id: a._id,
+          ticket: buildTicketCode(a._id, a.appointmentDate),
           appointmentDate: a.appointmentDate,
           startTime: a.startTime,
           endTime: a.endTime || '',
@@ -312,6 +365,11 @@ export async function listDoctorAppointments(req, res) {
           bookingSource: a.source || '',
           createdByStaff: a.createdByStaff || null,
           note: a.note || '',
+          cancelReason: a.cancelReason || '',
+          cancelledAt: a.cancelledAt || null,
+          cancelledBy: a.cancelledBy || null,
+          confirmedAt: a.confirmedAt || null,
+          confirmedBy: a.confirmedBy || null,
           createdAt: a.createdAt,
           doctorId: doctorIdStr,
           patient: doc
@@ -323,6 +381,10 @@ export async function listDoctorAppointments(req, res) {
                 email: doc.email,
                 phone: doc.phone,
                 avatarUrl: doc.avatarUrl,
+                dob: doc.dob ?? null,
+                gender: genderLabel(doc.gender),
+                address: doc.address || '',
+                patientCode: buildPatientCode(doc._id),
               }
             : null,
         }
@@ -444,6 +506,7 @@ export async function createAppointment(req, res) {
       message: 'Đặt lịch thành công.',
       appointment: {
         id: appointment._id,
+        ticket: buildTicketCode(appointment._id, appointment.appointmentDate),
         patientId: appointment.patientId,
         doctorId: appointment.doctorId,
         appointmentDate: appointment.appointmentDate,
@@ -484,7 +547,34 @@ export async function cancelAppointment(req, res) {
       return res.status(400).json({ message: 'Lịch này đã được hủy trước đó.' })
     }
 
+    const reasonRaw =
+      req.body && typeof req.body === 'object'
+        ? String(req.body.cancelReason ?? req.body.reason ?? '').trim()
+        : ''
+    if (!reasonRaw) {
+      return res.status(400).json({ message: 'Vui lòng chọn hoặc nhập lý do hủy lịch.' })
+    }
+    if (reasonRaw.length > 500) {
+      return res.status(400).json({ message: 'Lý do hủy quá dài (tối đa 500 ký tự).' })
+    }
+
+    const patientDoc = await findUserByIdFlexible(req.user.id, {
+      firstName: 1,
+      lastName: 1,
+      email: 1,
+      userType: 1,
+    })
+    const who = staffSummary(patientDoc) || {
+      id: String(req.user.id || ''),
+      displayName: 'Bệnh nhân',
+      email: '',
+      userType: 'patient',
+    }
+
     appt.status = 'cancelled'
+    appt.cancelReason = reasonRaw
+    appt.cancelledAt = new Date()
+    appt.cancelledBy = { role: 'patient', ...who }
     await appt.save()
 
     return res.status(200).json({
@@ -492,6 +582,9 @@ export async function cancelAppointment(req, res) {
       appointment: {
         id: appt._id,
         status: appt.status,
+        cancelReason: appt.cancelReason,
+        cancelledAt: appt.cancelledAt,
+        cancelledBy: appt.cancelledBy,
       },
     })
   } catch (err) {
@@ -716,7 +809,8 @@ export async function lookupAppointmentByTicket(req, res) {
 
     const candidates = await Appointment.find({
       appointmentDate: { $gte: dayStart, $lte: dayEnd },
-      status: { $in: ['pending', 'confirmed'] },
+      // Tiếp nhận cần tra cứu được cả lịch đã hủy (để biết trạng thái thật khi bệnh nhân đưa QR).
+      status: { $in: ['pending', 'confirmed', 'cancelled'] },
     }).lean()
 
     const want = ticketRaw.toUpperCase().replace(/\s+/g, '')
@@ -821,6 +915,11 @@ export async function lookupAppointmentByTicket(req, res) {
         bookingSource: a.source || '',
         createdByStaff: a.createdByStaff || null,
         note: a.note || '',
+        cancelReason: a.cancelReason || '',
+        cancelledAt: a.cancelledAt || null,
+        cancelledBy: a.cancelledBy || null,
+        confirmedAt: a.confirmedAt || null,
+        confirmedBy: a.confirmedBy || null,
         createdAt: a.createdAt,
       },
       patient: patientDoc
@@ -1412,6 +1511,11 @@ export async function listReceptionAppointments(req, res) {
         bookingSource: a.source || '',
         createdByStaff: a.createdByStaff || null,
         note: a.note || '',
+        cancelReason: a.cancelReason || '',
+        cancelledAt: a.cancelledAt || null,
+        cancelledBy: a.cancelledBy || null,
+        confirmedAt: a.confirmedAt || null,
+        confirmedBy: a.confirmedBy || null,
         createdAt: a.createdAt,
         patient: patientOut,
         doctor: doc
@@ -1473,6 +1577,77 @@ export async function updateAppointmentStatusReception(req, res) {
       return res.status(404).json({ message: 'Không tìm thấy lịch khám.' })
     }
 
+    if (status === 'cancelled') {
+      const reasonRaw = String(req.body?.cancelReason ?? req.body?.reason ?? '').trim()
+      if (reasonRaw.length > 500) {
+        return res.status(400).json({ message: 'Lý do hủy quá dài (tối đa 500 ký tự).' })
+      }
+      const bySystem =
+        req.body?.cancelledBySystem === true ||
+        req.body?.cancelledBySystem === 'true' ||
+        req.body?.cancelledBySystem === 1
+      if (bySystem) {
+        if (!isPendingAppointmentPastSlotServer(appt)) {
+          return res.status(400).json({
+            message:
+              'Không thể ghi nhận hủy tự động: lịch chưa qua khung giờ hoặc không còn ở trạng thái chờ.',
+          })
+        }
+        appt.cancelReason =
+          reasonRaw || 'Quá thời gian chờ xác nhận — khung giờ khám đã kết thúc, hệ thống tự hủy lịch.'
+        appt.cancelledAt = new Date()
+        appt.cancelledBy = {
+          role: 'system',
+          id: 'system',
+          displayName: 'Hệ thống',
+          email: '',
+          userType: 'system',
+        }
+      } else {
+        const staffDoc = await findUserByIdFlexible(req.user.id, {
+          firstName: 1,
+          lastName: 1,
+          email: 1,
+          userType: 1,
+        })
+        const who = staffSummary(staffDoc) || {
+          id: String(req.user.id || ''),
+          displayName: 'Nhân viên phòng khám',
+          email: '',
+          userType: String(req.user.userType || ''),
+        }
+        appt.cancelReason = reasonRaw || 'Hủy bởi nhân viên tiếp nhận'
+        appt.cancelledAt = new Date()
+        appt.cancelledBy = { role: 'staff', ...who }
+      }
+      appt.confirmedBy = null
+      appt.confirmedAt = null
+    } else if (status === 'confirmed') {
+      appt.cancelReason = ''
+      appt.cancelledAt = null
+      appt.cancelledBy = null
+      const staffDoc = await findUserByIdFlexible(req.user.id, {
+        firstName: 1,
+        lastName: 1,
+        email: 1,
+        userType: 1,
+      })
+      const who = staffSummary(staffDoc) || {
+        id: String(req.user.id || ''),
+        displayName: 'Nhân viên phòng khám',
+        email: '',
+        userType: String(req.user.userType || ''),
+      }
+      appt.confirmedBy = { role: 'staff', ...who }
+      appt.confirmedAt = new Date()
+    } else {
+      appt.cancelReason = ''
+      appt.cancelledAt = null
+      appt.cancelledBy = null
+      appt.confirmedBy = null
+      appt.confirmedAt = null
+    }
+
     appt.status = status
     await appt.save()
 
@@ -1481,6 +1656,11 @@ export async function updateAppointmentStatusReception(req, res) {
       appointment: {
         id: appt._id,
         status: appt.status,
+        cancelReason: appt.cancelReason || '',
+        cancelledAt: appt.cancelledAt || null,
+        cancelledBy: appt.cancelledBy || null,
+        confirmedAt: appt.confirmedAt || null,
+        confirmedBy: appt.confirmedBy || null,
       },
     })
   } catch (err) {

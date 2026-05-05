@@ -28,6 +28,23 @@ const appointmentSchema = new mongoose.Schema(
       userType: { type: String, trim: true },
     },
     note: { type: String, default: '' },
+    cancelReason: { type: String, default: '' },
+    cancelledAt: { type: Date },
+    cancelledBy: {
+      role: { type: String, trim: true },
+      id: { type: String, trim: true },
+      displayName: { type: String, trim: true },
+      email: { type: String, trim: true },
+      userType: { type: String, trim: true },
+    },
+    confirmedAt: { type: Date },
+    confirmedBy: {
+      role: { type: String, trim: true },
+      id: { type: String, trim: true },
+      displayName: { type: String, trim: true },
+      email: { type: String, trim: true },
+      userType: { type: String, trim: true },
+    },
   },
   { timestamps: true }
 )
