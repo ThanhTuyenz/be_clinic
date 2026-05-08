@@ -12,6 +12,7 @@ const collName = String(process.env.MONGO_MED_COLLECTION || 'medicine').trim()
 const usersColl = String(process.env.MONGO_USERS_COLLECTION || 'users').trim()
 const apptsCollName = String(process.env.MONGO_APPOINTMENTS_COLLECTION || 'appointments').trim()
 const specialtiesColl = String(process.env.MONGO_SPECIALTIES_COLLECTION || 'specialties').trim()
+const departmentsColl = String(process.env.MONGO_DEPARTMENTS_COLLECTION || 'department').trim()
 const jwtSecret = String(process.env.JWT_SECRET || '').trim()
 const port = Number(process.env.PORT || 5000)
 
@@ -139,9 +140,169 @@ function appointmentsCollection(db) {
   return db.collection(apptsCollName)
 }
 
+function normalizeVi(s) {
+  try {
+    return String(s || '')
+      .toLowerCase()
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .replace(/đ/g, 'd')
+  } catch {
+    return String(s || '').toLowerCase()
+  }
+}
+
+function isNonEmptyString(x) {
+  return typeof x === 'string' && x.trim().length > 0
+}
+
+function uniqueBy(arr, getKey) {
+  const out = []
+  const seen = new Set()
+  for (const it of arr || []) {
+    const k = getKey(it)
+    if (!k || seen.has(k)) continue
+    seen.add(k)
+    out.push(it)
+  }
+  return out
+}
+
+function todayIsoDate() {
+  return new Date().toISOString().slice(0, 10)
+}
+
+function clampIsoDate(iso, minIso, maxIso) {
+  const s = String(iso || '').slice(0, 10)
+  if (!s) return minIso
+  if (minIso && s < minIso) return minIso
+  if (maxIso && s > maxIso) return maxIso
+  return s
+}
+
+function addDaysIso(iso, days) {
+  const d = new Date(`${String(iso).slice(0, 10)}T00:00:00`)
+  if (Number.isNaN(d.getTime())) return todayIsoDate()
+  d.setDate(d.getDate() + Number(days || 0))
+  return d.toISOString().slice(0, 10)
+}
+
+function detectRedFlags(text) {
+  const t = normalizeVi(text)
+  const patterns = [
+    /dau nguc/,
+    /kho tho/,
+    /te liet|liet nua nguoi|meo mieng|noi khong ro/,
+    /ngat|bat tinh/,
+    /chay mau nhieu|non ra mau|di ngoai ra mau/,
+    /co giat/,
+    /sot cao(.*)co cung|cung gay|phat ban tim/,
+  ]
+  const matched = patterns.find((p) => p.test(t))
+  return matched ? { redFlag: true } : { redFlag: false }
+}
+
+function specialtyFromSymptoms(text) {
+  const t = normalizeVi(text)
+  const map = [
+    { spec: 'Tim mạch', rx: /(dau nguc|hoi hop|tim dap nhanh|tang huyet ap|huyet ap)/ },
+    { spec: 'Tai Mũi Họng', rx: /(dau hong|viem hong|nghet mui|chay mui|viem xoang|u tai|dau tai)/ },
+    { spec: 'Da liễu', rx: /(noi mun|mun|ngua|di ung|man do|phat ban|nam da)/ },
+    { spec: 'Tiêu hóa', rx: /(dau bung|tieu chay|tao bon|day hoi|non|buon non|trao nguoc)/ },
+    { spec: 'Nhi khoa', rx: /(tre em|so sinh|be \\d+ tuoi|con toi)/ },
+    { spec: 'Sản — Phụ khoa', rx: /(mang thai|kinh nguyet|ra huyet|dau bung duoi|phu khoa)/ },
+    { spec: 'Thần kinh', rx: /(dau dau|chong mat|te bi|mat ngu|run tay)/ },
+    { spec: 'Chấn thương chỉnh hình', rx: /(dau khop|dau lung|chan thuong|bong gan|trat khop)/ },
+    { spec: 'Nội tiết', rx: /(tieu duong|duong huyet|tuyen giap|giam can|tang can)/ },
+  ]
+  for (const r of map) {
+    if (r.rx.test(t)) return r.spec
+  }
+  return 'Nội tổng quát'
+}
+
+function translateSymptomsVi(text) {
+  const raw = String(text || '').trim()
+  const t = normalizeVi(raw)
+  if (!t) return { raw: '', items: [], summary: '' }
+
+  const rules = [
+    { rx: /(dau hong|viem hong)/, label: 'Đau họng/viêm họng', explain: 'Đau rát vùng họng, có thể liên quan viêm đường hô hấp trên.' },
+    { rx: /(ho khan)/, label: 'Ho khan', explain: 'Ho không có đờm, thường gặp trong viêm họng/viêm phế quản, dị ứng.' },
+    { rx: /(ho co dom|dom)/, label: 'Ho có đờm', explain: 'Ho kèm đờm, gợi ý viêm đường hô hấp có tiết dịch.' },
+    { rx: /(sot|nhiet do)/, label: 'Sốt', explain: 'Tăng nhiệt độ cơ thể, có thể do nhiễm trùng/viêm.' },
+    { rx: /(nghet mui)/, label: 'Nghẹt mũi', explain: 'Tắc mũi, hay gặp khi viêm mũi/viêm xoang/dị ứng.' },
+    { rx: /(chay mui)/, label: 'Chảy mũi', explain: 'Dịch mũi chảy ra, hay gặp viêm mũi/viêm xoang/cảm lạnh.' },
+    { rx: /(dau bung)/, label: 'Đau bụng', explain: 'Đau vùng bụng, có thể liên quan tiêu hóa (dạ dày/ruột).' },
+    { rx: /(tieu chay)/, label: 'Tiêu chảy', explain: 'Đi ngoài phân lỏng nhiều lần, thường do rối loạn tiêu hóa/nhiễm khuẩn.' },
+    { rx: /(tao bon)/, label: 'Táo bón', explain: 'Đi ngoài khó, ít, có thể liên quan chế độ ăn/tiêu hóa.' },
+    { rx: /(buon non|non)/, label: 'Buồn nôn/nôn', explain: 'Cảm giác buồn nôn hoặc nôn, có thể do dạ dày, ngộ độc, nhiễm trùng.' },
+    { rx: /(dau dau)/, label: 'Đau đầu', explain: 'Đau vùng đầu, có thể do căng thẳng, viêm xoang, vấn đề thần kinh…' },
+    { rx: /(chong mat)/, label: 'Chóng mặt', explain: 'Cảm giác quay cuồng/mất thăng bằng, có thể do tiền đình, huyết áp…' },
+    { rx: /(ngua|man do|phat ban)/, label: 'Ngứa/mẩn đỏ/phát ban', explain: 'Triệu chứng da liễu, có thể do dị ứng/viêm da.' },
+    { rx: /(dau khop)/, label: 'Đau khớp', explain: 'Đau vùng khớp, có thể do viêm/thoái hóa/chấn thương.' },
+    { rx: /(dau nguc)/, label: 'Đau ngực', explain: 'Đau tức ngực; nếu kèm khó thở/choáng cần cấp cứu.' },
+    { rx: /(kho tho)/, label: 'Khó thở', explain: 'Thở hụt hơi/khó thở; nếu nặng cần khám cấp cứu.' },
+  ]
+
+  const items = []
+  for (const r of rules) {
+    if (r.rx.test(t)) items.push({ label: r.label, explain: r.explain })
+  }
+
+  const uniq = uniqueBy(items, (x) => x.label)
+  const summary = uniq.length
+    ? `Mình diễn giải triệu chứng bạn mô tả thành: ${uniq.map((x) => x.label).join(', ')}.`
+    : raw
+      ? `Mình ghi nhận triệu chứng: ${raw}`
+      : ''
+
+  return { raw, items: uniq, summary }
+}
+
+function isMedicalRelated(text) {
+  const t = normalizeVi(text)
+  if (!t) return false
+
+  // booking intent
+  if (/(dat lich|kham|bac si|phong kham|co so y te|lich hen|hen kham)/.test(t)) return true
+
+  // common symptom keywords
+  const symptomHints = [
+    /dau/,
+    /sot/,
+    /ho/,
+    /nghet mui|chay mui/,
+    /non|buon non/,
+    /tieu chay|tao bon/,
+    /ngua|man do|phat ban/,
+    /kho tho/,
+    /chong mat/,
+    /te bi/,
+    /mat ngu/,
+    /viem/,
+    /di ung/,
+    /tieu duong|huyet ap/,
+    /kho tieu|day bung|trao nguoc/,
+  ]
+  if (symptomHints.some((rx) => rx.test(t))) return true
+
+  return false
+}
+
+function toChatMsg(role, content) {
+  return { role, content: String(content || '') }
+}
+
 /** DB chứa catalogue chuyên khoa (mặc định trùng MONGO_DB_NAME; Compass có thể để `test`). */
 function specialtiesDatabase(mongoClient) {
   const alt = String(process.env.MONGO_SPECIALTIES_DB_NAME || '').trim()
+  return mongoClient.db(alt || dbName)
+}
+
+/** DB chứa danh sách khoa/phòng ban (mặc định trùng MONGO_DB_NAME; Compass có thể để `test`). */
+function departmentsDatabase(mongoClient) {
+  const alt = String(process.env.MONGO_DEPARTMENTS_DB_NAME || '').trim()
   return mongoClient.db(alt || dbName)
 }
 
@@ -1020,6 +1181,209 @@ app.patch('/api/auth/me', authBearer, async (req, res) => {
   }
 })
 
+/**
+ * AI assistant for patients (rule-based + safe).
+ * Client sends { messages, state }.
+ * - Suggest specialty/doctors/slots
+ * - Create appointment when state.confirm === true
+ */
+app.post('/api/ai/chat', authBearer, async (req, res) => {
+  try {
+    const ut = String(req.auth?.userType || '').toLowerCase()
+    if (ut !== 'patient') {
+      res.status(403).json({ message: 'Chỉ bệnh nhân mới dùng trợ lý đặt lịch.' })
+      return
+    }
+
+    const messages = Array.isArray(req.body?.messages) ? req.body.messages : []
+    const stateIn = req.body?.state && typeof req.body.state === 'object' ? req.body.state : {}
+    const lastUser = [...messages].reverse().find((m) => String(m?.role || '').toLowerCase() === 'user')
+    const userText = String(lastUser?.content || '').trim()
+
+    if (userText && !isMedicalRelated(userText)) {
+      res.json({
+        ok: true,
+        assistant: toChatMsg(
+          'assistant',
+          'Xin cảm ơn bạn đã chia sẻ. Tôi hỗ trợ các câu hỏi liên quan đến lĩnh vực y tế, đặc biệt là đặt lịch khám với bác sĩ và cơ sở y tế. Nếu bạn có nhu cầu về sức khỏe, hãy cho tôi biết để được hỗ trợ.',
+        ),
+        state: { ...stateIn, nonMedical: true },
+        actions: [{ type: 'non_medical' }],
+      })
+      return
+    }
+
+    const { redFlag } = detectRedFlags(userText)
+    if (redFlag) {
+      res.json({
+        ok: true,
+        assistant: toChatMsg(
+          'assistant',
+          'Mình nhận thấy có dấu hiệu có thể nghiêm trọng. Bạn nên gọi cấp cứu 115 hoặc đến cơ sở y tế gần nhất ngay. Nếu cần, mình vẫn có thể hỗ trợ đặt lịch khám sau khi tình trạng ổn định hơn.',
+        ),
+        state: { ...stateIn, redFlag: true },
+        actions: [],
+      })
+      return
+    }
+
+    await client.connect()
+    const db = client.db(dbName)
+    const patient = await findUserByIdFlexible(db, String(req.auth.sub || '').trim())
+    if (!patient || userTypeOf(patient) !== 'patient') {
+      res.status(401).json({ message: 'Token không hợp lệ hoặc không phải tài khoản bệnh nhân.' })
+      return
+    }
+
+    const doctorsAll = await listPublicDoctors(db)
+
+    const desiredDateRaw = isNonEmptyString(stateIn?.appointmentDate) ? String(stateIn.appointmentDate).slice(0, 10) : ''
+    const desiredTimeRaw = isNonEmptyString(stateIn?.startTime) ? String(stateIn.startTime).slice(0, 5) : ''
+    const desiredSpecialtyRaw = isNonEmptyString(stateIn?.specialty) ? String(stateIn.specialty).trim() : ''
+    const desiredDoctorIdRaw = isNonEmptyString(stateIn?.doctorId) ? String(stateIn.doctorId).trim() : ''
+    const confirm = stateIn?.confirm === true || stateIn?.confirm === 'true'
+
+    const specialty = desiredSpecialtyRaw || specialtyFromSymptoms(userText)
+    const doctorsBySpec = filterDoctorsBySpecialty(doctorsAll, specialty)
+    const doctorsTop = uniqueBy(doctorsBySpec, (d) => String(d?.id || '').trim()).slice(0, 6)
+
+    const today = todayIsoDate()
+    const maxIso = addDaysIso(today, 90)
+    let appointmentDate = desiredDateRaw
+    if (!looksLikeIsoDate(appointmentDate)) appointmentDate = addDaysIso(today, 1)
+    appointmentDate = clampIsoDate(appointmentDate, today, maxIso)
+
+    const slots = buildSuggestedSlots(appointmentDate)
+    let startTime = desiredTimeRaw
+    if (!looksLikeTimeHHmm(startTime)) startTime = slots[0] || '08:00'
+
+    let chosenDoctor = null
+    if (desiredDoctorIdRaw) {
+      chosenDoctor = doctorsAll.find((d) => String(d?.id || '').trim() === desiredDoctorIdRaw) || null
+    }
+    if (!chosenDoctor) chosenDoctor = doctorsTop[0] || doctorsAll[0] || null
+
+    const noteFromState = isNonEmptyString(stateIn?.note) ? String(stateIn.note).trim() : ''
+    const note = noteFromState || (userText ? `AI intake: ${userText}` : '')
+
+    const nextState = {
+      ...stateIn,
+      specialty,
+      doctorId: chosenDoctor ? String(chosenDoctor.id) : '',
+      appointmentDate,
+      startTime,
+      note,
+      suggestedDoctors: doctorsTop.map((d) => ({ id: d.id, name: safeDoctorName(d), specialty: d.specialtyName || d.specialty || '' })),
+    }
+
+    if (confirm) {
+      const doctorIdToSend = String(nextState.doctorId || '').trim()
+      if (!doctorIdToSend) {
+        res.status(400).json({ message: 'Thiếu bác sĩ để đặt lịch.' })
+        return
+      }
+      const doctor = await findDoctorByIdFlexible(db, doctorIdToSend)
+      if (!doctor) {
+        res.status(400).json({ message: 'Không tìm thấy bác sĩ theo doctorId.' })
+        return
+      }
+
+      const endTime = computeAppointmentEndTime(nextState.startTime)
+      const now = new Date()
+      const ins = await appointmentsCollection(db).insertOne({
+        patientId: patient._id,
+        doctorId: doctor._id,
+        doctorSnapshot: buildDoctorSnapshot(doctor),
+        appointmentDate: nextState.appointmentDate,
+        startTime: nextState.startTime,
+        endTime,
+        status: 'pending',
+        ticket: '',
+        source: 'ai',
+        bookingSource: 'ai',
+        note: String(nextState.note || ''),
+        createdAt: now,
+        updatedAt: now,
+      })
+      const idStr = String(ins.insertedId)
+      const ticket = `YMA${idStr.slice(-10).toUpperCase()}`
+      await appointmentsCollection(db).updateOne({ _id: ins.insertedId }, { $set: { ticket } })
+      const doc = await appointmentsCollection(db).findOne({ _id: ins.insertedId })
+      const appointment = serializeAppointment(doc, doctor, patient)
+      await enrichAppointmentsSpecialtyNames(client, [appointment])
+
+      res.status(201).json({
+        ok: true,
+        assistant: toChatMsg(
+          'assistant',
+          `Mình đã tạo lịch khám cho bạn: ${appointment.appointmentDate} lúc ${appointment.startTime}. Bạn có thể xem trong “Lịch khám”.`,
+        ),
+        state: { ...nextState, confirm: false, bookedAppointmentId: appointment.id },
+        result: { ticket, appointment },
+        actions: [{ type: 'booking_created', appointmentId: appointment.id, ticket }],
+      })
+      return
+    }
+
+    const doctorCards = doctorsTop.map((d) => ({
+      id: d.id,
+      name: safeDoctorName(d),
+      specialty: String(d.specialtyName || d.specialty || '').trim(),
+      deptName: String(d.deptName || '').trim(),
+    }))
+
+    const docName = chosenDoctor ? safeDoctorName(chosenDoctor) : 'một bác sĩ phù hợp'
+    const slotPreview = (slots || []).slice(0, 5).join(', ')
+    const symptom = translateSymptomsVi(userText)
+    const reason = (() => {
+      const s = normalizeVi(userText)
+      if (!s) return ''
+      if (specialty === 'Tai Mũi Họng') return 'vì có dấu hiệu liên quan mũi/họng/tai.'
+      if (specialty === 'Tiêu hóa') return 'vì có dấu hiệu liên quan dạ dày/ruột.'
+      if (specialty === 'Da liễu') return 'vì có dấu hiệu liên quan da.'
+      if (specialty === 'Tim mạch') return 'vì có dấu hiệu liên quan tim mạch/huyết áp.'
+      if (specialty === 'Thần kinh') return 'vì có dấu hiệu liên quan thần kinh/đau đầu/chóng mặt.'
+      if (specialty === 'Chấn thương chỉnh hình') return 'vì có dấu hiệu liên quan cơ-xương-khớp.'
+      if (specialty === 'Nội tiết') return 'vì có dấu hiệu liên quan nội tiết.'
+      if (specialty === 'Sản — Phụ khoa') return 'vì có dấu hiệu liên quan sức khỏe phụ khoa/sản khoa.'
+      if (specialty === 'Nhi khoa') return 'vì mô tả có thể liên quan trẻ em.'
+      return ''
+    })()
+
+    const assistantText =
+      `${symptom.summary ? `**Diễn giải triệu chứng**: ${symptom.summary}\n` : ''}` +
+      `**Gợi ý khoa nên khám**: **${specialty}**${reason ? ` (${reason})` : ''}\n` +
+      `**Gợi ý đặt lịch**: ngày **${appointmentDate}**, vài khung giờ: ${slotPreview || '—'}.\n` +
+      `Bạn có thể chọn bác sĩ (gợi ý: ${docName}) hoặc chọn ở danh sách bên phải, rồi bấm “Xác nhận đặt lịch”.`
+
+    res.json({
+      ok: true,
+      assistant: toChatMsg('assistant', assistantText),
+      state: nextState,
+      actions: [
+        { type: 'symptom_translation', symptom },
+        { type: 'suggest_specialty', specialty },
+        { type: 'suggest_doctors', doctors: doctorCards },
+        { type: 'suggest_slots', appointmentDate, slots },
+        {
+          type: 'booking_draft',
+          draft: {
+            specialty,
+            doctorId: chosenDoctor ? chosenDoctor.id : '',
+            doctorName: chosenDoctor ? safeDoctorName(chosenDoctor) : '',
+            appointmentDate,
+            startTime,
+            note,
+          },
+        },
+      ],
+    })
+  } catch (e) {
+    console.error(e)
+    res.status(503).json({ message: mongoHint(e) })
+  }
+})
+
 function staffReceptionOrRegistration(req) {
   const ut = String(req.auth?.userType || '').toLowerCase()
   return ut === 'receptionist' || ut === 'registration'
@@ -1821,6 +2185,63 @@ function mapDoctorPublic(u) {
   }
 }
 
+async function listPublicDoctors(db) {
+  const rows = await db
+    .collection(usersColl)
+    .find({
+      $or: [{ userType: { $regex: /doctor/i } }, { role: { $regex: /doctor/i } }],
+    })
+    .project({ password: 0, passwordHash: 0, hash: 0 })
+    .limit(200)
+    .toArray()
+  const doctors = rows.filter(isDoctorUser).slice(0, 120).map(mapDoctorPublic)
+  await enrichPublicDoctorsSpecialtyNames(client, doctors)
+  return doctors
+}
+
+function filterDoctorsBySpecialty(doctors, specialtyName) {
+  const key = normalizeVi(specialtyName)
+  if (!key) return doctors || []
+  const out = (doctors || []).filter((d) => {
+    const spec = normalizeVi(d?.specialtyName || d?.specialty || d?.deptName || '')
+    return spec.includes(key)
+  })
+  if (out.length) return out
+  const words = key.split(/\s+/).filter(Boolean)
+  if (!words.length) return doctors || []
+  return (doctors || []).filter((d) => {
+    const spec = normalizeVi(d?.specialtyName || d?.specialty || d?.deptName || '')
+    return words.some((w) => w.length >= 3 && spec.includes(w))
+  })
+}
+
+function buildSuggestedSlots(isoDate) {
+  const base = stubFreeSlots().freeSlots || []
+  const today = todayIsoDate()
+  const isToday = String(isoDate || '').slice(0, 10) === today
+  if (!isToday) return base
+  const now = new Date()
+  const hh = String(now.getHours()).padStart(2, '0')
+  const mm = String(now.getMinutes()).padStart(2, '0')
+  const cur = `${hh}:${mm}`
+  return base.filter((t) => String(t) > cur)
+}
+
+function looksLikeTimeHHmm(s) {
+  return /^\d{2}:\d{2}$/.test(String(s || '').trim())
+}
+
+function looksLikeIsoDate(s) {
+  return /^\d{4}-\d{2}-\d{2}$/.test(String(s || '').trim())
+}
+
+function safeDoctorName(d) {
+  const last = String(d?.lastName || '').trim()
+  const first = String(d?.firstName || '').trim()
+  const full = `${last} ${first}`.trim()
+  return full || String(d?.displayName || '').trim() || String(d?.email || '').trim() || 'Bác sĩ'
+}
+
 /** Danh sách bác sĩ (userType doctor trong Mongo) — đủ trường cho landing fe_clinic */
 app.get('/api/doctors', async (_req, res) => {
   try {
@@ -1837,6 +2258,62 @@ app.get('/api/doctors', async (_req, res) => {
     const doctors = rows.filter(isDoctorUser).slice(0, 80).map(mapDoctorPublic)
     await enrichPublicDoctorsSpecialtyNames(client, doctors)
     res.json({ doctors })
+  } catch (e) {
+    console.error(e)
+    res.status(503).json({ message: mongoHint(e) })
+  }
+})
+
+/** Danh sách khoa (department) — dùng cho màn đặt lịch (public). */
+app.get('/api/departments', async (_req, res) => {
+  try {
+    await client.connect()
+    const db = departmentsDatabase(client)
+    const rows = await db
+      .collection(departmentsColl)
+      .find({})
+      .project({ deptID: 1, deptName: 1, description: 1, createdAt: 1, updatedAt: 1 })
+      .sort({ deptName: 1 })
+      .limit(500)
+      .toArray()
+
+    const departments = (rows || [])
+      .map((r) => ({
+        deptID: String(r?.deptID || '').trim(),
+        deptName: String(r?.deptName || '').trim(),
+        description: r?.description != null ? String(r.description) : '',
+      }))
+      .filter((d) => d.deptID && d.deptName)
+
+    res.json({ departments })
+  } catch (e) {
+    console.error(e)
+    res.status(503).json({ message: mongoHint(e) })
+  }
+})
+
+/** Danh sách chuyên khoa (specialties) — dùng để map specialtyID → deptID. */
+app.get('/api/specialties', async (_req, res) => {
+  try {
+    await client.connect()
+    const db = specialtiesDatabase(client)
+    const rows = await db
+      .collection(specialtiesColl)
+      .find({})
+      .project({ specialtyID: 1, specialtyName: 1, deptID: 1, deptId: 1 })
+      .sort({ specialtyName: 1 })
+      .limit(800)
+      .toArray()
+
+    const specialties = (rows || [])
+      .map((r) => ({
+        specialtyID: String(r?.specialtyID || r?.specialtyId || '').trim(),
+        specialtyName: String(r?.specialtyName || '').trim(),
+        deptID: String(r?.deptID || r?.deptId || '').trim(),
+      }))
+      .filter((s) => s.specialtyID)
+
+    res.json({ specialties })
   } catch (e) {
     console.error(e)
     res.status(503).json({ message: mongoHint(e) })
@@ -1900,6 +2377,22 @@ app.post('/api/examinations', authBearer, async (_req, res) => {
       notes: payload.notes != null ? String(payload.notes || '').trim() : '',
       treat: payload.treat != null ? String(payload.treat || '').trim() : '',
       reExamination: payload.reExamination != null ? payload.reExamination : null,
+      prescription:
+        Array.isArray(payload.prescription) && payload.prescription.length
+          ? payload.prescription
+              .map((it) => {
+                if (!it || typeof it !== 'object') return null
+                const name = String(it.name || '').trim()
+                const code = String(it.code || '').trim()
+                const unit = String(it.unit || '').trim()
+                const usage = String(it.usage || '').trim()
+                const qtyNum = Number(it.qty)
+                const qty = Number.isFinite(qtyNum) && qtyNum > 0 ? qtyNum : 1
+                if (!name && !code) return null
+                return { name, code, unit, qty, usage }
+              })
+              .filter(Boolean)
+          : [],
       updatedAt: now,
     }
 
