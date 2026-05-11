@@ -6,6 +6,8 @@ import bcrypt from 'bcryptjs'
 import jwt from 'jsonwebtoken'
 import { MongoClient, ObjectId } from 'mongodb'
 import { sendAppointmentConfirmationEmail } from './src/services/mail.js'
+import { extractChuyenKhoaFromMessage } from './src/services/aiReceptionSpecialty.js'
+import { suggestDoctorsBySpecialty } from './src/controllers/aiDoctorController.js'
 
 const uri = String(process.env.MONGODB_URI || '').trim()
 const dbName = String(process.env.MONGO_DB_NAME || 'clinic').trim()
@@ -219,7 +221,57 @@ function specialtyFromSymptoms(text) {
   for (const r of map) {
     if (r.rx.test(t)) return r.spec
   }
-  return 'Nội tổng quát'
+  return ''
+}
+
+function explicitSpecialtyFromText(text) {
+  const t = normalizeVi(text)
+  if (!t) return ''
+  const map = [
+    { spec: 'Nội tổng quát', rx: /noi tong quat|khoa noi\b|noi khoa/ },
+    { spec: 'Tai Mũi Họng', rx: /tai mui hong|tmh/ },
+    { spec: 'Da liễu', rx: /da lieu|khoa da\b/ },
+    { spec: 'Tiêu hóa', rx: /tieu hoa/ },
+    { spec: 'Tim mạch', rx: /tim mach/ },
+    { spec: 'Thần kinh', rx: /than kinh/ },
+    { spec: 'Chấn thương chỉnh hình', rx: /chan thuong chinh hinh|co xuong khop/ },
+    { spec: 'Nội tiết', rx: /noi tiet/ },
+    { spec: 'Sản — Phụ khoa', rx: /san phu khoa|phu khoa|san khoa/ },
+    { spec: 'Nhi khoa', rx: /nhi khoa|khoa nhi|kham tre/ },
+  ]
+  for (const r of map) {
+    if (r.rx.test(t)) return r.spec
+  }
+  return ''
+}
+
+function parseAppointmentDateFromText(text, today) {
+  const raw = String(text || '').trim()
+  const t = normalizeVi(raw)
+  if (!t) return ''
+  if (/\bhom nay\b/.test(t)) return today
+  if (/\bngay mai\b/.test(t) || /\bmai nay\b/.test(t)) return addDaysIso(today, 1)
+  if (/\bngay kia\b/.test(t) || /\bngay mot\b/.test(t)) return addDaysIso(today, 2)
+  const iso = raw.match(/\b(\d{4}-\d{2}-\d{2})\b/)
+  if (iso) return iso[1]
+  const dmy = raw.match(/\b(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})\b/)
+  if (dmy) {
+    const dd = String(dmy[1]).padStart(2, '0')
+    const mm = String(dmy[2]).padStart(2, '0')
+    return `${dmy[3]}-${mm}-${dd}`
+  }
+  return ''
+}
+
+function defaultBookingFollowUpQuestions(specialty, appointmentDate) {
+  const qs = []
+  if (!specialty) {
+    qs.push('Bạn muốn khám khoa nào, hoặc mô tả ngắn triệu chứng/nhu cầu khám?')
+  }
+  if (!appointmentDate) {
+    qs.push('Bạn muốn khám vào ngày nào? (vd: ngày mai, 2026-05-12)')
+  }
+  return qs.slice(0, 3)
 }
 
 function translateSymptomsVi(text) {
@@ -252,13 +304,19 @@ function translateSymptomsVi(text) {
   }
 
   const uniq = uniqueBy(items, (x) => x.label)
-  const summary = uniq.length
-    ? `Mình diễn giải triệu chứng bạn mô tả thành: ${uniq.map((x) => x.label).join(', ')}.`
-    : raw
-      ? `Mình ghi nhận triệu chứng: ${raw}`
-      : ''
+  const summary = uniq.length ? uniq.map((x) => x.label).join(', ') : ''
 
   return { raw, items: uniq, summary }
+}
+
+function buildAssistantLead(userText, symptom) {
+  const raw = String(userText || '').trim()
+  if (!raw) return ''
+  const labels = Array.isArray(symptom?.items)
+    ? symptom.items.map((x) => String(x?.label || '').trim()).filter(Boolean)
+    : []
+  if (labels.length) return `Mình ghi nhận: ${labels.join(', ')}.`
+  return `Mình hiểu ý bạn: “${raw}”.`
 }
 
 function isMedicalRelated(text) {
@@ -306,7 +364,7 @@ function getOllamaModel() {
 async function ollamaChatJson({ userText }) {
   const base = getOllamaBaseUrl()
   const model = getOllamaModel()
-  const system = `Bạn là trợ lý y tế cho phòng khám. NHIỆM VỤ: (1) diễn giải triệu chứng người dùng mô tả thành danh sách ngắn gọn, dễ hiểu; (2) gợi ý khoa nên khám; (3) đưa lý do ngắn; (4) nếu thiếu thông tin, đưa 1-3 câu hỏi tiếp theo. TUYỆT ĐỐI KHÔNG chẩn đoán bệnh, không kê đơn, không khẳng định chắc chắn. Nếu nhận thấy dấu hiệu cấp cứu (đau ngực dữ dội, khó thở nặng, liệt, ngất, chảy máu nhiều...), hãy đặt specialty="Cấp cứu" và reason cảnh báo đi cấp cứu.
+  const system = `Bạn là trợ lý đặt lịch cho phòng khám. Bám sát đúng nội dung tin nhắn mới nhất: nếu bệnh nhân nói đặt lịch, chọn khoa, bác sĩ, ngày/giờ hoặc xác nhận thì xử lý theo ý đó; chỉ liệt kê triệu chứng khi họ thật sự mô tả triệu chứng. Chỉ gợi ý specialty khi bệnh nhân nêu khoa mong muốn hoặc mô tả triệu chứng/nhu cầu đủ rõ; nếu chỉ nói muốn đặt lịch mà chưa rõ khoa/triệu chứng thì để specialty rỗng và hỏi thêm. NHIỆM VỤ: (1) gợi ý khoa nên khám khi đủ thông tin; (2) đưa lý do ngắn; (3) nếu thiếu thông tin, đưa 1-3 câu hỏi tiếp theo. TUYỆT ĐỐI KHÔNG chẩn đoán bệnh, không kê đơn, không khẳng định chắc chắn. Nếu nhận thấy dấu hiệu cấp cứu (đau ngực dữ dội, khó thở nặng, liệt, ngất, chảy máu nhiều...), hãy đặt specialty="Cấp cứu" và reason cảnh báo đi cấp cứu.
 
 Hãy trả về DUY NHẤT 1 JSON hợp lệ theo schema:
 {
@@ -457,6 +515,29 @@ async function enrichPublicDoctorsSpecialtyNames(mongoClient, doctors) {
   const map = await specialtyNameMapByIds(mongoClient, keys)
   if (!map.size) return
   for (const d of arr) enrichDoctorSpecialtyFromMap(d, map)
+}
+
+async function listClinicSpecialtyNames(mongoClient) {
+  try {
+    const sdb = specialtiesDatabase(mongoClient)
+    const rows = await sdb
+      .collection(specialtiesColl)
+      .find({})
+      .project({ specialtyName: 1 })
+      .sort({ specialtyName: 1 })
+      .limit(200)
+      .toArray()
+    return uniqueBy(
+      (rows || [])
+        .map((r) => String(r?.specialtyName || '').trim())
+        .filter(Boolean)
+        .map((name) => ({ name })),
+      (x) => x.name,
+    ).map((x) => x.name)
+  } catch (e) {
+    console.warn('[specialties] list names failed:', e?.message || e)
+    return []
+  }
 }
 
 function computeAppointmentEndTime(startTime, minutes = APPT_SLOT_MINUTES) {
@@ -1269,6 +1350,81 @@ app.patch('/api/auth/me', authBearer, async (req, res) => {
 })
 
 /**
+ * Trích xuất chuyên khoa từ tin nhắn bệnh nhân (lễ tân AI — chỉ JSON { chuyen_khoa }).
+ * Body: { message: string }
+ */
+app.post('/api/ai/extract-specialty', authBearer, async (req, res) => {
+  try {
+    const ut = String(req.auth?.userType || '').toLowerCase()
+    if (ut !== 'patient') {
+      res.status(403).json({ message: 'Chỉ bệnh nhân mới dùng trợ lý đặt lịch.' })
+      return
+    }
+
+    const message = String(req.body?.message ?? req.body?.userText ?? '').trim()
+    if (!message) {
+      res.status(400).json({ message: 'Thiếu tin nhắn (message).', code: 'MISSING_MESSAGE' })
+      return
+    }
+
+    const provider = getAiProvider()
+    if (provider !== 'ollama') {
+      res.status(503).json({
+        message: 'Endpoint này cần AI_PROVIDER=ollama trong .env.',
+        code: 'AI_PROVIDER_UNSUPPORTED',
+      })
+      return
+    }
+
+    await client.connect()
+    const specialtyNames = await listClinicSpecialtyNames(client)
+    const result = await extractChuyenKhoaFromMessage({
+      userText: message,
+      specialtyNames,
+      provider,
+    })
+
+    res.json({ ok: true, chuyen_khoa: result.chuyen_khoa })
+  } catch (e) {
+    const code = String(e?.code || '').trim()
+    if (code === 'AI_INVALID_JSON') {
+      res.status(422).json({
+        message: e.message || 'AI trả về không phải JSON hợp lệ.',
+        code,
+        raw: e.raw || '',
+      })
+      return
+    }
+    if (code === 'AI_EMPTY_RESPONSE' || code === 'AI_PROVIDER_ERROR') {
+      res.status(502).json({
+        message: e.message || 'Không nhận được phản hồi hợp lệ từ AI.',
+        code: code || 'AI_PROVIDER_ERROR',
+      })
+      return
+    }
+    if (code === 'AI_PROVIDER_UNSUPPORTED' || code === 'MISSING_MESSAGE') {
+      res.status(400).json({ message: e.message, code })
+      return
+    }
+    console.error(e)
+    res.status(503).json({ message: mongoHint(e) })
+  }
+})
+
+/**
+ * Bước 3: gợi ý top 3 bác sĩ theo chuyen_khoa (Mongoose, is_available, rating giảm dần).
+ * Body hoặc query: { chuyen_khoa: string }
+ */
+app.post('/api/ai/suggest-doctors', authBearer, async (req, res) => {
+  const ut = String(req.auth?.userType || '').toLowerCase()
+  if (ut !== 'patient') {
+    res.status(403).json({ message: 'Chỉ bệnh nhân mới dùng trợ lý đặt lịch.' })
+    return
+  }
+  await suggestDoctorsBySpecialty(req, res)
+})
+
+/**
  * AI assistant for patients (rule-based + safe).
  * Client sends { messages, state }.
  * - Suggest specialty/doctors/slots
@@ -1342,26 +1498,53 @@ app.post('/api/ai/chat', authBearer, async (req, res) => {
       }
     }
 
-    const specialtyFromLlm = String(llm?.specialty || '').trim()
-    const specialty = desiredSpecialtyRaw || specialtyFromLlm || specialtyFromSymptoms(userText)
-    const doctorsBySpec = filterDoctorsBySpecialty(doctorsAll, specialty)
+    const symptom =
+      llm && llm.symptoms && Array.isArray(llm.symptoms)
+        ? {
+            raw: userText,
+            items: llm.symptoms,
+            summary: llm.symptoms
+              .map((x) => String(x?.label || '').trim())
+              .filter(Boolean)
+              .join(', '),
+          }
+        : translateSymptomsVi(userText)
+
+    const hasSymptomSignals = Array.isArray(symptom?.items) && symptom.items.length > 0
+    const specialtyFromExplicit = explicitSpecialtyFromText(userText)
+    const specialtyFromSymptomsHit = specialtyFromSymptoms(userText)
+    const specialtyFromLlm =
+      llm?.specialty && (hasSymptomSignals || specialtyFromExplicit)
+        ? String(llm.specialty).trim()
+        : ''
+    const specialty =
+      desiredSpecialtyRaw || specialtyFromExplicit || specialtyFromSymptomsHit || specialtyFromLlm || ''
+    const doctorsBySpec = specialty ? filterDoctorsBySpecialty(doctorsAll, specialty) : []
     const doctorsTop = uniqueBy(doctorsBySpec, (d) => String(d?.id || '').trim()).slice(0, 6)
 
     const today = todayIsoDate()
     const maxIso = addDaysIso(today, 90)
-    let appointmentDate = desiredDateRaw
-    if (!looksLikeIsoDate(appointmentDate)) appointmentDate = addDaysIso(today, 1)
-    appointmentDate = clampIsoDate(appointmentDate, today, maxIso)
+    const parsedDateFromText = parseAppointmentDateFromText(userText, today)
+    let appointmentDate = desiredDateRaw || parsedDateFromText || ''
+    if (appointmentDate && looksLikeIsoDate(appointmentDate)) {
+      appointmentDate = clampIsoDate(appointmentDate, today, maxIso)
+    } else {
+      appointmentDate = ''
+    }
 
-    const slots = buildSuggestedSlots(appointmentDate)
+    const slots = appointmentDate ? buildSuggestedSlots(appointmentDate) : []
     let startTime = desiredTimeRaw
-    if (!looksLikeTimeHHmm(startTime)) startTime = slots[0] || '08:00'
+    if (appointmentDate) {
+      if (!looksLikeTimeHHmm(startTime)) startTime = slots[0] || '08:00'
+    } else if (!looksLikeTimeHHmm(startTime)) {
+      startTime = ''
+    }
 
     let chosenDoctor = null
     if (desiredDoctorIdRaw) {
       chosenDoctor = doctorsAll.find((d) => String(d?.id || '').trim() === desiredDoctorIdRaw) || null
     }
-    if (!chosenDoctor) chosenDoctor = doctorsTop[0] || doctorsAll[0] || null
+    if (!chosenDoctor && specialty && doctorsTop.length) chosenDoctor = doctorsTop[0] || null
 
     const noteFromState = isNonEmptyString(stateIn?.note) ? String(stateIn.note).trim() : ''
     const note = noteFromState || (userText ? `AI intake: ${userText}` : '')
@@ -1373,7 +1556,7 @@ app.post('/api/ai/chat', authBearer, async (req, res) => {
       appointmentDate,
       startTime,
       note,
-      suggestedDoctors: doctorsTop.map((d) => ({ id: d.id, name: safeDoctorName(d), specialty: d.specialtyName || d.specialty || '' })),
+      suggestedDoctors: doctorsTop.map(mapDoctorSuggest).filter(Boolean),
     }
 
     if (confirm) {
@@ -1426,30 +1609,13 @@ app.post('/api/ai/chat', authBearer, async (req, res) => {
       return
     }
 
-    const doctorCards = doctorsTop.map((d) => ({
-      id: d.id,
-      name: safeDoctorName(d),
-      specialty: String(d.specialtyName || d.specialty || '').trim(),
-      deptName: String(d.deptName || '').trim(),
-    }))
+    const doctorCards = doctorsTop.map(mapDoctorSuggest).filter(Boolean)
 
     const docName = chosenDoctor ? safeDoctorName(chosenDoctor) : 'một bác sĩ phù hợp'
     const slotPreview = (slots || []).slice(0, 5).join(', ')
 
-    const symptom =
-      llm && llm.symptoms && Array.isArray(llm.symptoms)
-        ? {
-            raw: userText,
-            items: llm.symptoms,
-            summary: llm.symptoms.length
-              ? `Mình diễn giải triệu chứng bạn mô tả thành: ${llm.symptoms.map((x) => x.label).join(', ')}.`
-              : userText
-                ? `Mình ghi nhận triệu chứng: ${userText}`
-                : '',
-          }
-        : translateSymptomsVi(userText)
-
     const reason = String(llm?.reason || '').trim() || (() => {
+      if (!Array.isArray(symptom?.items) || !symptom.items.length) return ''
       const s = normalizeVi(userText)
       if (!s) return ''
       if (specialty === 'Tai Mũi Họng') return 'vì có dấu hiệu liên quan mũi/họng/tai.'
@@ -1465,13 +1631,38 @@ app.post('/api/ai/chat', authBearer, async (req, res) => {
     })()
 
     const followUps = Array.isArray(llm?.followUpQuestions) ? llm.followUpQuestions : []
+    const followUpQuestions = followUps.length
+      ? followUps
+      : defaultBookingFollowUpQuestions(specialty, appointmentDate)
 
-    const assistantText =
-      `${symptom.summary ? `**Diễn giải triệu chứng**: ${symptom.summary}\n` : ''}` +
-      `**Gợi ý khoa nên khám**: **${specialty}**${reason ? ` (${reason})` : ''}\n` +
-      `**Gợi ý đặt lịch**: ngày **${appointmentDate}**, vài khung giờ: ${slotPreview || '—'}.\n` +
-      `${followUps.length ? `**Câu hỏi thêm**: ${followUps.map((q) => `- ${q}`).join('\n')}\n` : ''}` +
-      `Bạn có thể chọn bác sĩ (gợi ý: ${docName}) hoặc chọn ở danh sách bên phải, rồi bấm “Xác nhận đặt lịch”.`
+    const lead = buildAssistantLead(userText, symptom)
+    const lines = []
+    if (lead) lines.push(lead)
+    if (specialty) {
+      lines.push(`Mình gợi ý bạn khám khoa ${specialty}${reason ? ` (${reason})` : ''}.`)
+    } else {
+      lines.push(
+        'Bạn cho mình biết khoa muốn khám hoặc mô tả ngắn triệu chứng/nhu cầu để mình gợi ý khoa phù hợp. Mình chưa đoán bệnh cho bạn.',
+      )
+    }
+    if (appointmentDate) {
+      lines.push(
+        `Về lịch khám, mình ghi nhận ngày ${appointmentDate}${slotPreview ? `; một vài khung giờ: ${slotPreview}.` : '.'}`,
+      )
+    } else {
+      lines.push('Bạn muốn đặt lịch vào ngày nào?')
+    }
+    if (followUpQuestions.length) {
+      lines.push(...followUpQuestions)
+    }
+    if (specialty) {
+      lines.push(
+        `Bạn có thể chọn bác sĩ (gợi ý: ${docName}) hoặc chọn ở danh sách bên phải, rồi bấm “Xác nhận đặt lịch”.`,
+      )
+    } else if (appointmentDate) {
+      lines.push('Sau khi xác định khoa khám, mình sẽ gợi ý bác sĩ và khung giờ cụ thể.')
+    }
+    const assistantText = lines.join('\n')
 
     res.json({
       ok: true,
@@ -2365,6 +2556,25 @@ function safeDoctorName(d) {
   const first = String(d?.firstName || '').trim()
   const full = `${last} ${first}`.trim()
   return full || String(d?.displayName || '').trim() || String(d?.email || '').trim() || 'Bác sĩ'
+}
+
+function mapDoctorSuggest(d) {
+  if (!d || typeof d !== 'object') return null
+  const id = String(d.id || d._id || '').trim()
+  if (!id) return null
+  const specialty = String(d.specialtyName || d.specialty || '').trim()
+  const experienceYears = Number(d.experienceYears)
+  return {
+    id,
+    name: safeDoctorName(d),
+    specialty,
+    deptName: String(d.deptName || '').trim(),
+    deptId: String(d.deptID || d.deptId || '').trim(),
+    specialtyId: String(d.specialtyID || d.specialtyId || '').trim(),
+    bio: String(d.bio || '').trim(),
+    avatarUrl: String(d.avatarUrl || d.avatarURL || '').trim(),
+    experienceYears: Number.isFinite(experienceYears) && experienceYears > 0 ? experienceYears : null,
+  }
 }
 
 function patientEmailFromDoc(patient) {
