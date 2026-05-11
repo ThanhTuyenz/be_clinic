@@ -1361,6 +1361,8 @@ export async function listPatientHistoryReception(req, res) {
           ? [doc.lastName, doc.firstName].filter(Boolean).join(' ').trim() || doc.email || ''
           : ''
 
+        const specialtyId = specId ? String(specId).trim() : ''
+
         return {
           id: a._id,
           ticket: buildTicketCode(a._id, a.appointmentDate),
@@ -1369,8 +1371,21 @@ export async function listPatientHistoryReception(req, res) {
           status: a.status || 'pending',
           note: a.note || '',
           createdAt: a.createdAt,
+          doctorId: did,
+          specialtyId,
           doctorName,
           specialtyName,
+          doctor: doc
+            ? {
+                id: doc._id,
+                firstName: doc.firstName,
+                lastName: doc.lastName,
+                displayName: doctorName,
+                email: doc.email,
+                specialtyId,
+                specialtyName,
+              }
+            : null,
         }
       }),
     })
