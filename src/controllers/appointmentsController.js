@@ -5,6 +5,7 @@ import User from '../models/User.js'
 import Role from '../models/Role.js'
 import Specialty from '../models/Specialty.js'
 import Department from '../models/Department.js'
+import { sendAppointmentConfirmationEmail } from '../services/mail.js'
 
 function isMongoObjectId(id) {
   return typeof id === 'string' && /^[a-fA-F0-9]{24}$/.test(id)
@@ -23,6 +24,22 @@ function displayNameFromUser(user) {
   const last = String(user?.lastName || '').trim()
   const full = `${last} ${first}`.trim()
   return full || String(user?.displayName || user?.fullName || user?.name || '').trim() || String(user?.email || '').trim()
+}
+
+function queueAppointmentConfirmationEmail({ patient, doctor, appointment, ticket }) {
+  const to = String(patient?.email || '').trim().toLowerCase()
+  if (!to || !to.includes('@')) return
+  void sendAppointmentConfirmationEmail({
+    to,
+    recipientName: displayNameFromUser(patient),
+    ticket,
+    appointmentDate: appointment?.appointmentDate,
+    startTime: appointment?.startTime,
+    doctorName: displayNameFromUser(doctor),
+    specialtyName: String(doctor?.specialtyName || doctor?.specialty || '').trim(),
+  }).catch((err) => {
+    console.warn('[be_clinic] Gửi email xác nhận lịch khám thất bại:', err?.message || err)
+  })
 }
 
 function staffSummary(user) {
@@ -502,11 +519,20 @@ export async function createAppointment(req, res) {
       throw e
     }
 
+    const ticket = buildTicketCode(appointment._id, appointment.appointmentDate)
+    const patient = await User.findById(req.user.id).lean()
+    queueAppointmentConfirmationEmail({
+      patient,
+      doctor,
+      appointment,
+      ticket,
+    })
+
     return res.status(201).json({
       message: 'Đặt lịch thành công.',
       appointment: {
         id: appointment._id,
-        ticket: buildTicketCode(appointment._id, appointment.appointmentDate),
+        ticket,
         patientId: appointment.patientId,
         doctorId: appointment.doctorId,
         appointmentDate: appointment.appointmentDate,
@@ -1081,6 +1107,12 @@ export async function createAppointmentReception(req, res) {
     }
 
     const ticket = buildTicketCode(appointment._id, appointment.appointmentDate)
+    queueAppointmentConfirmationEmail({
+      patient,
+      doctor,
+      appointment,
+      ticket,
+    })
 
     return res.status(201).json({
       message: patientCreated
@@ -1090,6 +1122,7 @@ export async function createAppointmentReception(req, res) {
       patientCreated,
       appointment: {
         id: appointment._id,
+        ticket,
         patientId: appointment.patientId,
         doctorId: appointment.doctorId,
         appointmentDate: appointment.appointmentDate,

@@ -5,6 +5,7 @@ import express from 'express'
 import bcrypt from 'bcryptjs'
 import jwt from 'jsonwebtoken'
 import { MongoClient, ObjectId } from 'mongodb'
+import { sendAppointmentConfirmationEmail } from './src/services/mail.js'
 
 const uri = String(process.env.MONGODB_URI || '').trim()
 const dbName = String(process.env.MONGO_DB_NAME || 'clinic').trim()
@@ -288,6 +289,92 @@ function isMedicalRelated(text) {
   if (symptomHints.some((rx) => rx.test(t))) return true
 
   return false
+}
+
+function getAiProvider() {
+  return String(process.env.AI_PROVIDER || 'rule').trim().toLowerCase()
+}
+
+function getOllamaBaseUrl() {
+  return String(process.env.OLLAMA_BASE_URL || 'http://localhost:11434').trim().replace(/\/$/, '')
+}
+
+function getOllamaModel() {
+  return String(process.env.OLLAMA_MODEL || 'qwen2.5:7b').trim()
+}
+
+async function ollamaChatJson({ userText }) {
+  const base = getOllamaBaseUrl()
+  const model = getOllamaModel()
+  const system = `Bạn là trợ lý y tế cho phòng khám. NHIỆM VỤ: (1) diễn giải triệu chứng người dùng mô tả thành danh sách ngắn gọn, dễ hiểu; (2) gợi ý khoa nên khám; (3) đưa lý do ngắn; (4) nếu thiếu thông tin, đưa 1-3 câu hỏi tiếp theo. TUYỆT ĐỐI KHÔNG chẩn đoán bệnh, không kê đơn, không khẳng định chắc chắn. Nếu nhận thấy dấu hiệu cấp cứu (đau ngực dữ dội, khó thở nặng, liệt, ngất, chảy máu nhiều...), hãy đặt specialty="Cấp cứu" và reason cảnh báo đi cấp cứu.
+
+Hãy trả về DUY NHẤT 1 JSON hợp lệ theo schema:
+{
+  "symptoms": [{"label": string, "explain": string}],
+  "specialty": string,
+  "reason": string,
+  "followUpQuestions": [string]
+}
+Không thêm markdown, không thêm chữ ngoài JSON.`
+
+  const body = {
+    model,
+    stream: false,
+    format: 'json',
+    messages: [
+      { role: 'system', content: system },
+      { role: 'user', content: String(userText || '') },
+    ],
+    options: {
+      temperature: 0.2,
+    },
+  }
+
+  const res = await fetch(`${base}/api/chat`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  })
+
+  if (!res.ok) {
+    const text = await res.text().catch(() => '')
+    const err = new Error(text || `Ollama error (${res.status})`)
+    err.status = res.status
+    throw err
+  }
+
+  const data = await res.json()
+  const content = String(data?.message?.content || '').trim()
+  if (!content) throw new Error('Ollama không trả về nội dung.')
+
+  let parsed
+  try {
+    parsed = JSON.parse(content)
+  } catch (e) {
+    const err = new Error('Ollama trả về JSON không hợp lệ.')
+    err.cause = e
+    throw err
+  }
+
+  const symptoms = Array.isArray(parsed?.symptoms) ? parsed.symptoms : []
+  const out = {
+    symptoms: symptoms
+      .map((s) => {
+        if (!s || typeof s !== 'object') return null
+        const label = String(s.label || '').trim()
+        const explain = String(s.explain || '').trim()
+        if (!label) return null
+        return { label, explain }
+      })
+      .filter(Boolean),
+    specialty: String(parsed?.specialty || '').trim(),
+    reason: String(parsed?.reason || '').trim(),
+    followUpQuestions: Array.isArray(parsed?.followUpQuestions)
+      ? parsed.followUpQuestions.map((q) => String(q || '').trim()).filter(Boolean).slice(0, 3)
+      : [],
+  }
+
+  return out
 }
 
 function toChatMsg(role, content) {
@@ -1227,6 +1314,8 @@ app.post('/api/ai/chat', authBearer, async (req, res) => {
       return
     }
 
+    const aiProvider = getAiProvider()
+
     await client.connect()
     const db = client.db(dbName)
     const patient = await findUserByIdFlexible(db, String(req.auth.sub || '').trim())
@@ -1243,7 +1332,18 @@ app.post('/api/ai/chat', authBearer, async (req, res) => {
     const desiredDoctorIdRaw = isNonEmptyString(stateIn?.doctorId) ? String(stateIn.doctorId).trim() : ''
     const confirm = stateIn?.confirm === true || stateIn?.confirm === 'true'
 
-    const specialty = desiredSpecialtyRaw || specialtyFromSymptoms(userText)
+    let llm = null
+    if (aiProvider === 'ollama' && userText) {
+      try {
+        llm = await ollamaChatJson({ userText })
+      } catch (e) {
+        console.warn('[ai] ollama failed, fallback to rule:', e?.message || e)
+        llm = null
+      }
+    }
+
+    const specialtyFromLlm = String(llm?.specialty || '').trim()
+    const specialty = desiredSpecialtyRaw || specialtyFromLlm || specialtyFromSymptoms(userText)
     const doctorsBySpec = filterDoctorsBySpecialty(doctorsAll, specialty)
     const doctorsTop = uniqueBy(doctorsBySpec, (d) => String(d?.id || '').trim()).slice(0, 6)
 
@@ -1311,6 +1411,7 @@ app.post('/api/ai/chat', authBearer, async (req, res) => {
       const doc = await appointmentsCollection(db).findOne({ _id: ins.insertedId })
       const appointment = serializeAppointment(doc, doctor, patient)
       await enrichAppointmentsSpecialtyNames(client, [appointment])
+      queueAppointmentConfirmationEmail({ patient, doctor, appointment, ticket })
 
       res.status(201).json({
         ok: true,
@@ -1334,8 +1435,21 @@ app.post('/api/ai/chat', authBearer, async (req, res) => {
 
     const docName = chosenDoctor ? safeDoctorName(chosenDoctor) : 'một bác sĩ phù hợp'
     const slotPreview = (slots || []).slice(0, 5).join(', ')
-    const symptom = translateSymptomsVi(userText)
-    const reason = (() => {
+
+    const symptom =
+      llm && llm.symptoms && Array.isArray(llm.symptoms)
+        ? {
+            raw: userText,
+            items: llm.symptoms,
+            summary: llm.symptoms.length
+              ? `Mình diễn giải triệu chứng bạn mô tả thành: ${llm.symptoms.map((x) => x.label).join(', ')}.`
+              : userText
+                ? `Mình ghi nhận triệu chứng: ${userText}`
+                : '',
+          }
+        : translateSymptomsVi(userText)
+
+    const reason = String(llm?.reason || '').trim() || (() => {
       const s = normalizeVi(userText)
       if (!s) return ''
       if (specialty === 'Tai Mũi Họng') return 'vì có dấu hiệu liên quan mũi/họng/tai.'
@@ -1350,10 +1464,13 @@ app.post('/api/ai/chat', authBearer, async (req, res) => {
       return ''
     })()
 
+    const followUps = Array.isArray(llm?.followUpQuestions) ? llm.followUpQuestions : []
+
     const assistantText =
       `${symptom.summary ? `**Diễn giải triệu chứng**: ${symptom.summary}\n` : ''}` +
       `**Gợi ý khoa nên khám**: **${specialty}**${reason ? ` (${reason})` : ''}\n` +
       `**Gợi ý đặt lịch**: ngày **${appointmentDate}**, vài khung giờ: ${slotPreview || '—'}.\n` +
+      `${followUps.length ? `**Câu hỏi thêm**: ${followUps.map((q) => `- ${q}`).join('\n')}\n` : ''}` +
       `Bạn có thể chọn bác sĩ (gợi ý: ${docName}) hoặc chọn ở danh sách bên phải, rồi bấm “Xác nhận đặt lịch”.`
 
     res.json({
@@ -1362,6 +1479,7 @@ app.post('/api/ai/chat', authBearer, async (req, res) => {
       state: nextState,
       actions: [
         { type: 'symptom_translation', symptom },
+        ...(llm ? [{ type: 'ai_provider', provider: aiProvider, model: getOllamaModel() }] : [{ type: 'ai_provider', provider: aiProvider }]),
         { type: 'suggest_specialty', specialty },
         { type: 'suggest_doctors', doctors: doctorCards },
         { type: 'suggest_slots', appointmentDate, slots },
@@ -1552,6 +1670,12 @@ app.post('/api/appointments/reception', authBearer, async (req, res) => {
     const doc = await appointmentsCollection(db).findOne({ _id: ins.insertedId })
     const appointment = serializeAppointment(doc, doctor, patientFresh)
     await enrichAppointmentsSpecialtyNames(client, [appointment])
+    queueAppointmentConfirmationEmail({
+      patient: patientFresh,
+      doctor,
+      appointment,
+      ticket,
+    })
     res.status(201).json({ ticket, appointment, patientCreated })
   } catch (e) {
     console.error(e)
@@ -1955,6 +2079,7 @@ app.post('/api/appointments', authBearer, async (req, res) => {
     const doc = await appointmentsCollection(db).findOne({ _id: ins.insertedId })
     const appointment = serializeAppointment(doc, doctor, patient)
     await enrichAppointmentsSpecialtyNames(client, [appointment])
+    queueAppointmentConfirmationEmail({ patient, doctor, appointment, ticket })
     res.status(201).json({ ticket, appointment })
   } catch (e) {
     console.error(e)
@@ -2240,6 +2365,28 @@ function safeDoctorName(d) {
   const first = String(d?.firstName || '').trim()
   const full = `${last} ${first}`.trim()
   return full || String(d?.displayName || '').trim() || String(d?.email || '').trim() || 'Bác sĩ'
+}
+
+function patientEmailFromDoc(patient) {
+  const email = String(patient?.email || '').trim().toLowerCase()
+  return looksLikeEmail(email) ? email : ''
+}
+
+function queueAppointmentConfirmationEmail({ patient, doctor, appointment, ticket }) {
+  const to = patientEmailFromDoc(patient)
+  if (!to) return
+  void sendAppointmentConfirmationEmail({
+    to,
+    recipientName: patientDisplayNameFromDoc(patient),
+    ticket,
+    appointmentDate: appointment?.appointmentDate,
+    startTime: appointment?.startTime,
+    doctorName: safeDoctorName(doctor),
+    specialtyName:
+      String(appointment?.doctor?.specialtyName || doctor?.specialtyName || doctor?.specialty || '').trim(),
+  }).catch((err) => {
+    console.warn('[be_clinic] Gửi email xác nhận lịch khám thất bại:', err?.message || err)
+  })
 }
 
 /** Danh sách bác sĩ (userType doctor trong Mongo) — đủ trường cho landing fe_clinic */
