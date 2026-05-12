@@ -210,12 +210,12 @@ function specialtyFromSymptoms(text) {
   const map = [
     { spec: 'Tim mạch', rx: /(dau nguc|hoi hop|tim dap nhanh|tang huyet ap|huyet ap)/ },
     { spec: 'Tai Mũi Họng', rx: /(dau hong|viem hong|nghet mui|chay mui|viem xoang|u tai|dau tai)/ },
-    { spec: 'Da liễu', rx: /(noi mun|mun|ngua|di ung|man do|phat ban|nam da)/ },
+    { spec: 'Da liễu', rx: /(noi mun|mun|ngua|di ung|man do|phat ban|nam da|viem da|di ung da)/ },
     { spec: 'Tiêu hóa', rx: /(dau bung|tieu chay|tao bon|day hoi|non|buon non|trao nguoc)/ },
     { spec: 'Nhi khoa', rx: /(tre em|so sinh|be \\d+ tuoi|con toi)/ },
     { spec: 'Sản — Phụ khoa', rx: /(mang thai|kinh nguyet|ra huyet|dau bung duoi|phu khoa)/ },
+    { spec: 'Chấn thương chỉnh hình', rx: /(dau goi|dau got|dau khop|dau lung|dau vai|dau co|dau chan|chan thuong|bong gan|trat khop|gay xuong|thoai hoa khop)/ },
     { spec: 'Thần kinh', rx: /(dau dau|chong mat|te bi|mat ngu|run tay)/ },
-    { spec: 'Chấn thương chỉnh hình', rx: /(dau khop|dau lung|chan thuong|bong gan|trat khop)/ },
     { spec: 'Nội tiết', rx: /(tieu duong|duong huyet|tuyen giap|giam can|tang can)/ },
   ]
   for (const r of map) {
@@ -292,7 +292,8 @@ function translateSymptomsVi(text) {
     { rx: /(buon non|non)/, label: 'Buồn nôn/nôn', explain: 'Cảm giác buồn nôn hoặc nôn, có thể do dạ dày, ngộ độc, nhiễm trùng.' },
     { rx: /(dau dau)/, label: 'Đau đầu', explain: 'Đau vùng đầu, có thể do căng thẳng, viêm xoang, vấn đề thần kinh…' },
     { rx: /(chong mat)/, label: 'Chóng mặt', explain: 'Cảm giác quay cuồng/mất thăng bằng, có thể do tiền đình, huyết áp…' },
-    { rx: /(ngua|man do|phat ban)/, label: 'Ngứa/mẩn đỏ/phát ban', explain: 'Triệu chứng da liễu, có thể do dị ứng/viêm da.' },
+    { rx: /(ngua|man do|phat ban|viem da)/, label: 'Ngứa/mẩn đỏ/viêm da', explain: 'Triệu chứng da liễu, có thể do dị ứng/viêm da.' },
+    { rx: /(dau goi|dau got)/, label: 'Đau gối', explain: 'Đau vùng gối, thường liên quan khớp gối/cơ xương khớp.' },
     { rx: /(dau khop)/, label: 'Đau khớp', explain: 'Đau vùng khớp, có thể do viêm/thoái hóa/chấn thương.' },
     { rx: /(dau nguc)/, label: 'Đau ngực', explain: 'Đau tức ngực; nếu kèm khó thở/choáng cần cấp cứu.' },
     { rx: /(kho tho)/, label: 'Khó thở', explain: 'Thở hụt hơi/khó thở; nếu nặng cần khám cấp cứu.' },
@@ -361,6 +362,47 @@ function getOllamaModel() {
   return String(process.env.OLLAMA_MODEL || 'qwen2.5:7b').trim()
 }
 
+function getOllamaTimeoutMs() {
+  const n = Number(process.env.OLLAMA_TIMEOUT_MS || 12000)
+  return Number.isFinite(n) && n > 0 ? n : 12000
+}
+
+function turnOverridesSpecialtyState(userText) {
+  const text = String(userText || '').trim()
+  if (!text) return false
+  if (explicitSpecialtyFromText(text) || specialtyFromSymptoms(text)) return true
+  const symptom = translateSymptomsVi(text)
+  return Array.isArray(symptom?.items) && symptom.items.length > 0
+}
+
+function isBookingOnlyTurn(userText) {
+  const text = String(userText || '').trim()
+  if (!text) return false
+  if (turnOverridesSpecialtyState(text)) return false
+  const t = normalizeVi(text)
+  if (parseAppointmentDateFromText(text, todayIsoDate())) return true
+  if (/(dat lich|hen kham|lich hen|chon bac si|chon khoa)/.test(t)) return true
+  if (looksLikeTimeHHmm(text)) return true
+  return false
+}
+
+function shouldCallOllamaForChat({ userText }) {
+  const text = String(userText || '').trim()
+  if (!text) return false
+  if (explicitSpecialtyFromText(text) || specialtyFromSymptoms(text)) return false
+
+  const symptom = translateSymptomsVi(text)
+  const hasSymptomSignals = Array.isArray(symptom?.items) && symptom.items.length > 0
+  const bookingOnly =
+    /(dat lich|hen kham|lich hen|chon bac si|chon khoa)/.test(normalizeVi(text)) && !hasSymptomSignals
+  if (bookingOnly) return false
+
+  const parsedDate = parseAppointmentDateFromText(text, todayIsoDate())
+  if (parsedDate && !hasSymptomSignals && !isMedicalRelated(text)) return false
+
+  return hasSymptomSignals || isMedicalRelated(text)
+}
+
 async function ollamaChatJson({ userText }) {
   const base = getOllamaBaseUrl()
   const model = getOllamaModel()
@@ -384,7 +426,8 @@ Không thêm markdown, không thêm chữ ngoài JSON.`
       { role: 'user', content: String(userText || '') },
     ],
     options: {
-      temperature: 0.2,
+      temperature: 0.1,
+      num_predict: 220,
     },
   }
 
@@ -392,6 +435,7 @@ Không thêm markdown, không thêm chữ ngoài JSON.`
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
+    signal: AbortSignal.timeout(getOllamaTimeoutMs()),
   })
 
   if (!res.ok) {
@@ -1474,29 +1518,28 @@ app.post('/api/ai/chat', authBearer, async (req, res) => {
 
     await client.connect()
     const db = client.db(dbName)
-    const patient = await findUserByIdFlexible(db, String(req.auth.sub || '').trim())
+    const patientId = String(req.auth.sub || '').trim()
+    const needLlm = aiProvider === 'ollama' && userText && shouldCallOllamaForChat({ userText })
+    const [patient, doctorsAll, llm] = await Promise.all([
+      findUserByIdFlexible(db, patientId),
+      getCachedPublicDoctors(db),
+      needLlm
+        ? ollamaChatJson({ userText }).catch((e) => {
+            console.warn('[ai] ollama failed, fallback to rule:', e?.message || e)
+            return null
+          })
+        : Promise.resolve(null),
+    ])
     if (!patient || userTypeOf(patient) !== 'patient') {
       res.status(401).json({ message: 'Token không hợp lệ hoặc không phải tài khoản bệnh nhân.' })
       return
     }
-
-    const doctorsAll = await listPublicDoctors(db)
 
     const desiredDateRaw = isNonEmptyString(stateIn?.appointmentDate) ? String(stateIn.appointmentDate).slice(0, 10) : ''
     const desiredTimeRaw = isNonEmptyString(stateIn?.startTime) ? String(stateIn.startTime).slice(0, 5) : ''
     const desiredSpecialtyRaw = isNonEmptyString(stateIn?.specialty) ? String(stateIn.specialty).trim() : ''
     const desiredDoctorIdRaw = isNonEmptyString(stateIn?.doctorId) ? String(stateIn.doctorId).trim() : ''
     const confirm = stateIn?.confirm === true || stateIn?.confirm === 'true'
-
-    let llm = null
-    if (aiProvider === 'ollama' && userText) {
-      try {
-        llm = await ollamaChatJson({ userText })
-      } catch (e) {
-        console.warn('[ai] ollama failed, fallback to rule:', e?.message || e)
-        llm = null
-      }
-    }
 
     const symptom =
       llm && llm.symptoms && Array.isArray(llm.symptoms)
@@ -1514,11 +1557,15 @@ app.post('/api/ai/chat', authBearer, async (req, res) => {
     const specialtyFromExplicit = explicitSpecialtyFromText(userText)
     const specialtyFromSymptomsHit = specialtyFromSymptoms(userText)
     const specialtyFromLlm =
-      llm?.specialty && (hasSymptomSignals || specialtyFromExplicit)
+      llm?.specialty && !specialtyFromSymptomsHit && (hasSymptomSignals || specialtyFromExplicit)
         ? String(llm.specialty).trim()
         : ''
+    const specialtyFromTurn = specialtyFromExplicit || specialtyFromSymptomsHit || specialtyFromLlm
     const specialty =
-      desiredSpecialtyRaw || specialtyFromExplicit || specialtyFromSymptomsHit || specialtyFromLlm || ''
+      specialtyFromTurn ||
+      (isBookingOnlyTurn(userText) ? desiredSpecialtyRaw : '') ||
+      desiredSpecialtyRaw ||
+      ''
     const doctorsBySpec = specialty ? filterDoctorsBySpecialty(doctorsAll, specialty) : []
     const doctorsTop = uniqueBy(doctorsBySpec, (d) => String(d?.id || '').trim()).slice(0, 6)
 
@@ -1541,13 +1588,21 @@ app.post('/api/ai/chat', authBearer, async (req, res) => {
     }
 
     let chosenDoctor = null
-    if (desiredDoctorIdRaw) {
+    if (desiredDoctorIdRaw && !turnOverridesSpecialtyState(userText)) {
       chosenDoctor = doctorsAll.find((d) => String(d?.id || '').trim() === desiredDoctorIdRaw) || null
+      if (chosenDoctor && specialty && doctorsTop.length) {
+        const stillSuggested = doctorsTop.some(
+          (d) => String(d?.id || '').trim() === String(chosenDoctor?.id || '').trim(),
+        )
+        if (!stillSuggested) chosenDoctor = null
+      }
     }
     if (!chosenDoctor && specialty && doctorsTop.length) chosenDoctor = doctorsTop[0] || null
 
     const noteFromState = isNonEmptyString(stateIn?.note) ? String(stateIn.note).trim() : ''
-    const note = noteFromState || (userText ? `AI intake: ${userText}` : '')
+    const note = turnOverridesSpecialtyState(userText) && userText
+      ? `AI intake: ${userText}`
+      : noteFromState || (userText ? `AI intake: ${userText}` : '')
 
     const nextState = {
       ...stateIn,
@@ -1657,7 +1712,7 @@ app.post('/api/ai/chat', authBearer, async (req, res) => {
     }
     if (specialty) {
       lines.push(
-        `Bạn có thể chọn bác sĩ (gợi ý: ${docName}) hoặc chọn ở danh sách bên phải, rồi bấm “Xác nhận đặt lịch”.`,
+        `Bạn có thể xem bác sĩ gợi ý (vd: ${docName}) ở danh sách bên phải và bấm “Đặt lịch ngay”.`,
       )
     } else if (appointmentDate) {
       lines.push('Sau khi xác định khoa khám, mình sẽ gợi ý bác sĩ và khung giờ cụ thể.')
@@ -2513,6 +2568,20 @@ async function listPublicDoctors(db) {
   const doctors = rows.filter(isDoctorUser).slice(0, 120).map(mapDoctorPublic)
   await enrichPublicDoctorsSpecialtyNames(client, doctors)
   return doctors
+}
+
+const publicDoctorsCache = { at: 0, data: [] }
+const PUBLIC_DOCTORS_CACHE_MS = 60_000
+
+async function getCachedPublicDoctors(db) {
+  const now = Date.now()
+  if (publicDoctorsCache.data.length && now - publicDoctorsCache.at < PUBLIC_DOCTORS_CACHE_MS) {
+    return publicDoctorsCache.data
+  }
+  const data = await listPublicDoctors(db)
+  publicDoctorsCache.at = now
+  publicDoctorsCache.data = data
+  return data
 }
 
 function filterDoctorsBySpecialty(doctors, specialtyName) {
