@@ -715,6 +715,19 @@ function fallbackPatientCodeFromUserId(userId) {
   return `YM${yy}${pad}`
 }
 
+function displayPatientCodeFromUserDoc(p) {
+  if (!p || typeof p !== 'object') return ''
+  const codeRaw = p.patientCode != null ? String(p.patientCode).trim() : ''
+  return codeRaw || fallbackPatientCodeFromUserId(p._id)
+}
+
+function patientCodeMatchesQuery(userDoc, codeQuery) {
+  const q = String(codeQuery || '').trim()
+  if (!q) return true
+  const code = displayPatientCodeFromUserDoc(userDoc)
+  return new RegExp(escapeRegex(q), 'i').test(code)
+}
+
 function looksLikeEmail(s) {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(s || '').trim())
 }
@@ -878,8 +891,7 @@ async function mergePatientProfileFromStaffPayload(db, patientDoc, payload) {
 function patientEmbedFromUserDoc(p) {
   if (!p || typeof p !== 'object') return null
   const id = String(p._id)
-  const codeRaw = p.patientCode != null ? String(p.patientCode).trim() : ''
-  const patientCode = codeRaw || fallbackPatientCodeFromUserId(id)
+  const patientCode = displayPatientCodeFromUserDoc(p)
   const dobIso = patientDobIso(p)
   const ageStored = p.age
   const ageNum =
@@ -1955,9 +1967,6 @@ app.get('/api/appointments/patients', authBearer, async (req, res) => {
         $or: [{ userType: { $regex: /^patient$/i } }, { role: { $regex: /^patient$/i } }],
       },
     ]
-    if (patientCode) {
-      and.push({ patientCode: new RegExp(escapeRegex(patientCode), 'i') })
-    }
     if (name) {
       const rx = new RegExp(escapeRegex(name), 'i')
       and.push({
@@ -1972,16 +1981,18 @@ app.get('/api/appointments/patients', authBearer, async (req, res) => {
     }
 
     const filter = { $and: and }
-    const total = await col.countDocuments(filter)
-    const rows = await col
+    let rows = await col
       .find(filter)
       .project({ password: 0, passwordHash: 0, hash: 0 })
       .sort({ updatedAt: -1, _id: -1 })
-      .skip((page - 1) * pageSize)
-      .limit(pageSize)
       .toArray()
-    const patients = rows.map((u) => patientEmbedFromUserDoc(u)).filter(Boolean)
-    res.json({ patients, total })
+    if (patientCode) {
+      rows = rows.filter((u) => patientCodeMatchesQuery(u, patientCode))
+    }
+    const total = rows.length
+    const paged = rows.slice((page - 1) * pageSize, (page - 1) * pageSize + pageSize)
+    const patients = paged.map((u) => patientEmbedFromUserDoc(u)).filter(Boolean)
+    res.json({ patients, total, page, pageSize })
   } catch (e) {
     console.error(e)
     res.status(503).json({ message: mongoHint(e) })
@@ -2042,16 +2053,22 @@ app.get('/api/appointments/patient-by-code', authBearer, async (req, res) => {
     }
     const db = client.db(dbName)
     const col = db.collection(usersColl)
-    const patientOr = [{ patientCode: code }, { patientCode: code.toUpperCase() }]
-    if (code.includes('@')) {
-      patientOr.push({ email: code.toLowerCase() })
+    const codeNorm = code.toUpperCase()
+    const rows = await col
+      .find({
+        $or: [{ userType: { $regex: /^patient$/i } }, { role: { $regex: /^patient$/i } }],
+      })
+      .project({ password: 0, passwordHash: 0, hash: 0 })
+      .toArray()
+    let pat = rows.find((u) => displayPatientCodeFromUserDoc(u).toUpperCase() === codeNorm) || null
+    if (!pat && code.includes('@')) {
+      pat = await col.findOne({
+        $and: [
+          { $or: [{ userType: { $regex: /^patient$/i } }, { role: { $regex: /^patient$/i } }] },
+          { email: code.toLowerCase() },
+        ],
+      })
     }
-    const pat = await col.findOne({
-      $and: [
-        { $or: [{ userType: { $regex: /^patient$/i } }, { role: { $regex: /^patient$/i } }] },
-        { $or: patientOr },
-      ],
-    })
     if (!pat) {
       res.json({ patient: null })
       return
