@@ -45,6 +45,10 @@ const appointmentSchema = new mongoose.Schema(
       email: { type: String, trim: true },
       userType: { type: String, trim: true },
     },
+    /** Số thứ tự tiếp nhận khi BN đến quầy (lễ tân). */
+    visitQueueNumber: { type: Number, min: 1 },
+    /** Phòng khám / phòng chỉ định (text). */
+    clinicRoom: { type: String, default: '', trim: true },
   },
   { timestamps: true }
 )

@@ -4,6 +4,7 @@ import cors from 'cors'
 import { connectDb } from './config/db.js'
 import authRoutes from './routes/authRoutes.js'
 import doctorsRoutes from './routes/doctorsRoutes.js'
+import clinicRoomsRoutes from './routes/clinicRoomsRoutes.js'
 import appointmentsRoutes from './routes/appointmentsRoutes.js'
 import examinationsRoutes from './routes/examinationsRoutes.js'
 
@@ -55,6 +56,7 @@ app.get('/api/health', (_req, res) => {
 
 app.use('/api/auth', authRoutes)
 app.use('/api/doctors', doctorsRoutes)
+app.use('/api/clinic-rooms', clinicRoomsRoutes)
 app.use('/api/appointments', appointmentsRoutes)
 app.use('/api/examinations', examinationsRoutes)
 

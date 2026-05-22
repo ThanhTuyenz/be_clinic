@@ -4,6 +4,7 @@ import {
   createAppointment,
   createAppointmentReception,
   getAvailability,
+  getDoctorScheduleDates,
   listDoctorAppointments,
   listMyAppointments,
   listPatientHistoryReception,
@@ -25,6 +26,7 @@ router.get('/patients', requireAuth, listPatientsReception)
 router.get('/patient-history', requireAuth, listPatientHistoryReception)
 router.get('/reception', requireAuth, listReceptionAppointments)
 router.get('/availability', requireAuth, getAvailability)
+router.get('/schedule-dates', requireAuth, getDoctorScheduleDates)
 router.post('/reception', requireAuth, createAppointmentReception)
 router.patch('/:id/status', requireAuth, updateAppointmentStatusReception)
 router.patch('/:id/cancel', requireAuth, cancelAppointment)

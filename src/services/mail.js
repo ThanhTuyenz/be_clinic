@@ -29,10 +29,9 @@ function createTransport() {
 }
 
 /**
- * Gửi mã OTP qua Gmail (SMTP).
- * - Nếu **không** có SMTP_USER + SMTP_PASS trong `.env` → **không gửi mail**,
- *   mã OTP chỉ in ra **cửa sổ terminal** nơi chạy `npm run dev` (be_clinic).
- * - Nếu có SMTP nhưng gửi lỗi → throw kèm thông báo để bạn sửa cấu hình.
+ * Gửi mã OTP đăng ký qua SMTP.
+ * - Có SMTP_USER + SMTP_PASS → gửi email thật; lỗi SMTP → throw.
+ * - Không có SMTP → không gửi, in OTP ra terminal (dev), không throw.
  */
 export async function sendOtpEmail(to, otp, recipientName) {
   const addr = process.env.SMTP_FROM || process.env.SMTP_USER
@@ -41,7 +40,7 @@ export async function sendOtpEmail(to, otp, recipientName) {
 
 Mã xác thực đăng ký tài khoản ${CLINIC_NAME} của bạn là: ${otp}
 
-Mã có hiệu lực trong 10 phút. Không chia sẻ mã này cho người khác.
+Mã có hiệu lực trong 30 phút. Không chia sẻ mã này cho người khác.
 
 Trân trọng,
 ${CLINIC_NAME}`
@@ -79,6 +78,63 @@ ${CLINIC_NAME}`
   } catch (err) {
     const msg = err?.message || String(err)
     console.error('[be_clinic] Gửi email thất bại:', msg)
+    if (err?.response) console.error('[be_clinic] SMTP response:', err.response)
+    throw new Error(
+      `Không gửi được email (${msg}). ` +
+        'Với Gmail: bật 2FA, tạo "Mật khẩu ứng dụng" 16 ký tự và dán vào SMTP_PASS — không dùng mật khẩu đăng nhập Gmail thường.'
+    )
+  }
+}
+
+/**
+ * Gửi mã OTP đặt lại mật khẩu qua SMTP (cùng cấu hình SMTP_USER / SMTP_PASS).
+ * Không có SMTP → chỉ log ra terminal (dev), không throw.
+ */
+export async function sendForgotPasswordOtpEmail(to, otp, recipientName) {
+  const addr = process.env.SMTP_FROM || process.env.SMTP_USER
+
+  const text = `Xin chào${recipientName ? ` ${recipientName}` : ''},
+
+Bạn vừa yêu cầu đặt lại mật khẩu tài khoản ${CLINIC_NAME}.
+
+Mã xác thực (OTP) của bạn là: ${otp}
+
+Mã có hiệu lực trong 30 phút. Nếu bạn không thực hiện yêu cầu này, hãy bỏ qua email và mật khẩu vẫn giữ nguyên.
+
+Trân trọng,
+${CLINIC_NAME}`
+
+  if (!hasSmtp()) {
+    console.warn('')
+    console.warn(
+      '┌──────────────────────────────────────────────────────────────────────────┐'
+    )
+    console.warn(
+      '│  OTP quên mật khẩu — CHƯA gửi Gmail (thiếu SMTP_USER / SMTP_PASS trong .env)  │'
+    )
+    console.warn(
+      '└──────────────────────────────────────────────────────────────────────────┘'
+    )
+    console.warn(`  Email đích: ${to}`)
+    console.warn(`  Mã OTP: ${otp}`)
+    console.warn('  → Thêm SMTP vào .env rồi khởi động lại be_clinic.\n')
+    return { sent: false, devLog: true }
+  }
+
+  const transporter = createTransport()
+
+  try {
+    await transporter.sendMail({
+      from: addr ? `"${CLINIC_NAME}" <${addr}>` : process.env.SMTP_USER,
+      to,
+      subject: `Mã đặt lại mật khẩu — ${CLINIC_NAME}`,
+      text,
+    })
+    console.log(`[be_clinic] Đã gửi email OTP quên mật khẩu tới ${to}`)
+    return { sent: true }
+  } catch (err) {
+    const msg = err?.message || String(err)
+    console.error('[be_clinic] Gửi email OTP quên mật khẩu thất bại:', msg)
     if (err?.response) console.error('[be_clinic] SMTP response:', err.response)
     throw new Error(
       `Không gửi được email (${msg}). ` +

@@ -9,6 +9,7 @@ const DEFAULT_DOCTORS = [
     email: 'dr.nguyen@clinicabc.vn',
     phone: '0901002003',
     bio: 'Bác sĩ Nội tổng quát — kinh nghiệm 10 năm.',
+    consultationFee: 150_000,
   },
   {
     firstName: 'Quang',
@@ -16,6 +17,7 @@ const DEFAULT_DOCTORS = [
     email: 'dr.tran@clinicabc.vn',
     phone: '0901002004',
     bio: 'Bác sĩ Ngoại — chuyên về khám ngoại trú.',
+    consultationFee: 150_000,
   },
   {
     firstName: 'Minh',
@@ -23,6 +25,7 @@ const DEFAULT_DOCTORS = [
     email: 'dr.le@clinicabc.vn',
     phone: '0901002005',
     bio: 'Bác sĩ Da liễu — điều trị các vấn đề da thường gặp.',
+    consultationFee: 150_000,
   },
 ]
 
@@ -53,6 +56,7 @@ export async function seedDoctors() {
       lastName: d.lastName,
       phone: d.phone,
       bio: d.bio,
+      consultationFee: d.consultationFee ?? null,
       // Các field khác theo class diagram có thể seed sau (specialtyId, shiftId, ...).
     })
   }

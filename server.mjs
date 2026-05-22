@@ -5,19 +5,26 @@ import express from 'express'
 import bcrypt from 'bcryptjs'
 import jwt from 'jsonwebtoken'
 import { MongoClient, ObjectId } from 'mongodb'
-import { sendAppointmentConfirmationEmail } from './src/services/mail.js'
+import { sendAppointmentConfirmationEmail, sendForgotPasswordOtpEmail, sendOtpEmail } from './src/services/mail.js'
 import { extractChuyenKhoaFromMessage } from './src/services/aiReceptionSpecialty.js'
 import { suggestDoctorsBySpecialty } from './src/controllers/aiDoctorController.js'
+import {
+  computeAvailabilityFromSchedule,
+  findDoctorScheduleDateKeys,
+  isValidIsoDateOnly as isValidScheduleDate,
+} from './src/services/scheduleAvailability.js'
 
 const uri = String(process.env.MONGODB_URI || '').trim()
 const dbName = String(process.env.MONGO_DB_NAME || 'clinic').trim()
 const collName = String(process.env.MONGO_MED_COLLECTION || 'medicine').trim()
 const usersColl = String(process.env.MONGO_USERS_COLLECTION || 'users').trim()
 const apptsCollName = String(process.env.MONGO_APPOINTMENTS_COLLECTION || 'appointments').trim()
+const clinicRoomsCollName = String(process.env.MONGO_CLINIC_ROOMS_COLLECTION || 'clinicRoom').trim()
 const specialtiesColl = String(process.env.MONGO_SPECIALTIES_COLLECTION || 'specialties').trim()
 const departmentsColl = String(process.env.MONGO_DEPARTMENTS_COLLECTION || 'department').trim()
 const jwtSecret = String(process.env.JWT_SECRET || '').trim()
 const port = Number(process.env.PORT || 5000)
+const DEFAULT_CONSULTATION_FEE = Number(process.env.CONSULTATION_FEE || 150000)
 
 if (!uri) {
   console.error('Thiếu MONGODB_URI trong .env')
@@ -29,11 +36,16 @@ const app = express()
 app.use(cors({ origin: true }))
 app.use(express.json())
 
-/** OTP đăng ký bệnh nhân (RAM — dev; production nên dùng email/SMS thật). */
+/** OTP đăng ký bệnh nhân (RAM); mã gửi qua SMTP khi có SMTP_USER/SMTP_PASS. */
 const OTP_TTL_MS = 30 * 60 * 1000
 const regByVerifyToken = new Map()
 const regByEmail = new Map()
 const completeByToken = new Map()
+
+/** Quên mật khẩu bệnh nhân — chỉ email; OTP lưu RAM, gửi qua SMTP khi có SMTP_USER/SMTP_PASS. */
+const fpByVerifyToken = new Map()
+const fpByEmail = new Map()
+const fpResetByToken = new Map()
 
 function randomOtp6() {
   return String(100000 + Math.floor(Math.random() * 900000))
@@ -55,6 +67,21 @@ function clearPendingReg(emailLower) {
   regByEmail.delete(emailLower)
 }
 
+function clearPendingFp(sessionKey) {
+  const prev = fpByEmail.get(sessionKey)
+  if (prev?.verificationToken) fpByVerifyToken.delete(prev.verificationToken)
+  fpByEmail.delete(sessionKey)
+}
+
+function maskLoginHint(userDoc) {
+  if (!userDoc || typeof userDoc !== 'object') return ''
+  const em = String(userDoc.email || '').trim()
+  if (em) return maskEmail(em)
+  const ph = String(userDoc.phone || '').replace(/\D/g, '')
+  if (ph.length >= 4) return `***${ph.slice(-3)}`
+  return '***'
+}
+
 function mongoHint(err) {
   const code = err?.code || ''
   const msg = String(err?.message || err)
@@ -66,6 +93,18 @@ function mongoHint(err) {
   }
   if (code === 'EAUTH' || msg.includes('bad auth')) {
     return 'Sai user/mật khẩu trong MONGODB_URI (Atlas → Database Access).'
+  }
+  if (
+    msg.includes('SSL') ||
+    msg.includes('TLS') ||
+    msg.includes('ERR_SSL') ||
+    code === 'ERR_SSL_TLSV1_ALERT_INTERNAL_ERROR'
+  ) {
+    return (
+      'Không kết nối được MongoDB Atlas (lỗi SSL/TLS). Thử: (1) Atlas → Network Access → thêm IP máy bạn hoặc 0.0.0.0/0 (dev); ' +
+      '(2) cluster không bị Pause; (3) MONGODB_URI đúng user/mật khẩu (mật khẩu có @#%… thì encode URL); ' +
+      '(4) tắt VPN/antivirus chặn SSL; (5) thử mạng khác (hotspot).'
+    )
   }
   return msg
 }
@@ -134,6 +173,9 @@ function publicUser(doc) {
   const id = String(doc._id)
   u.id = id
   u._id = id
+  const ut = userTypeOf(doc)
+  if (ut && !u.role) u.role = ut
+  if (ut && !u.userType) u.userType = ut
   return u
 }
 
@@ -955,6 +997,36 @@ function doctorFromSnapshotDoc(doc) {
   }
 }
 
+function buildDefaultPayment() {
+  return {
+    status: 'unpaid',
+    amount: DEFAULT_CONSULTATION_FEE,
+    method: '',
+    paidAt: null,
+    paidBy: null,
+    note: '',
+  }
+}
+
+function serializePayment(doc) {
+  const p = doc?.payment && typeof doc.payment === 'object' ? doc.payment : {}
+  const status = String(p.status || 'unpaid').trim().toLowerCase() === 'paid' ? 'paid' : 'unpaid'
+  const amountRaw = p.amount != null && p.amount !== '' ? Number(p.amount) : DEFAULT_CONSULTATION_FEE
+  return {
+    status,
+    amount: Number.isFinite(amountRaw) ? amountRaw : DEFAULT_CONSULTATION_FEE,
+    method: p.method != null ? String(p.method) : '',
+    paidAt:
+      p.paidAt instanceof Date
+        ? p.paidAt.toISOString()
+        : p.paidAt
+          ? String(p.paidAt)
+          : null,
+    paidBy: p.paidBy && typeof p.paidBy === 'object' ? p.paidBy : null,
+    note: p.note != null ? String(p.note) : '',
+  }
+}
+
 function serializeAppointment(doc, doctorUser, patientUser) {
   const id = String(doc._id)
   const doctor = doctorResolvedForAppointment(doc, doctorUser)
@@ -992,6 +1064,10 @@ function serializeAppointment(doc, doctorUser, patientUser) {
           ? String(doc.confirmedAt)
           : null,
     confirmedBy: doc.confirmedBy && typeof doc.confirmedBy === 'object' ? doc.confirmedBy : null,
+    visitQueueNumber:
+      doc.visitQueueNumber != null && doc.visitQueueNumber !== '' ? Number(doc.visitQueueNumber) : null,
+    clinicRoom: doc.clinicRoom != null ? String(doc.clinicRoom).trim() : '',
+    payment: serializePayment(doc),
   }
   const pe = patientEmbedFromUserDoc(patientUser)
   if (pe) out.patient = pe
@@ -1121,7 +1197,7 @@ app.post('/api/auth/register', async (req, res) => {
   }
 })
 
-/** Bước 1 đăng ký bệnh nhân — OTP in log console (dev) */
+/** Bước 1 đăng ký bệnh nhân — OTP gửi email (SMTP) hoặc log terminal nếu chưa cấu hình. */
 app.post('/api/auth/start-register', async (req, res) => {
   try {
     await client.connect()
@@ -1140,9 +1216,14 @@ app.post('/api/auth/start-register', async (req, res) => {
     const otp = randomOtp6()
     const verificationToken = randomBytes(20).toString('hex')
     const expires = Date.now() + OTP_TTL_MS
+    try {
+      await sendOtpEmail(email, otp, '')
+    } catch (mailErr) {
+      res.status(503).json({ message: mailErr?.message || String(mailErr) })
+      return
+    }
     regByVerifyToken.set(verificationToken, { email, otp, expires })
     regByEmail.set(email, { verificationToken, otp, expires })
-    console.log(`[be_clinic] OTP đăng ký ${email}: ${otp}`)
     res.json({ verificationToken, emailMask: maskEmail(email) })
   } catch (e) {
     console.error(e)
@@ -1164,6 +1245,12 @@ app.post('/api/auth/resend-otp', async (req, res) => {
     }
     const otp = randomOtp6()
     const expires = Date.now() + OTP_TTL_MS
+    try {
+      await sendOtpEmail(email, otp, '')
+    } catch (mailErr) {
+      res.status(503).json({ message: mailErr?.message || String(mailErr) })
+      return
+    }
     pending.otp = otp
     pending.expires = expires
     const s = regByVerifyToken.get(pending.verificationToken)
@@ -1171,7 +1258,6 @@ app.post('/api/auth/resend-otp', async (req, res) => {
       s.otp = otp
       s.expires = expires
     }
-    console.log(`[be_clinic] OTP đăng ký (gửi lại) ${email}: ${otp}`)
     res.json({ verificationToken: pending.verificationToken, emailMask: maskEmail(email) })
   } catch (e) {
     console.error(e)
@@ -1332,6 +1418,165 @@ app.post('/api/auth/login', async (req, res) => {
   }
 })
 
+/** Bước 1 quên mật khẩu — chỉ email; chỉ gửi OTP khi email thuộc tài khoản bệnh nhân trong CSDL. */
+app.post('/api/auth/forgot-password', async (req, res) => {
+  try {
+    const raw = String(req.body?.email || '').trim()
+    if (!raw || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(raw)) {
+      res.status(400).json({ message: 'Vui lòng nhập đúng định dạng email đã đăng ký.' })
+      return
+    }
+    const sessionKey = raw.toLowerCase()
+    await client.connect()
+    const db = client.db(dbName)
+    const user = await findUserByLogin(db, sessionKey)
+    if (!user || userTypeOf(user) !== 'patient') {
+      res.status(404).json({ message: 'Không tìm thấy tài khoản bệnh nhân với email này.' })
+      return
+    }
+    clearPendingFp(sessionKey)
+    const verificationToken = randomBytes(20).toString('hex')
+    const expires = Date.now() + OTP_TTL_MS
+    const emailMask = maskLoginHint(user)
+    const otp = randomOtp6()
+    const userId = String(user._id)
+    const emailStored = String(user.email || sessionKey).trim().toLowerCase()
+    const display = [user.lastName, user.firstName]
+      .map((x) => String(x || '').trim())
+      .filter(Boolean)
+      .join(' ')
+    try {
+      await sendForgotPasswordOtpEmail(sessionKey, otp, display)
+    } catch (mailErr) {
+      res.status(503).json({ message: mailErr?.message || String(mailErr) })
+      return
+    }
+    fpByVerifyToken.set(verificationToken, { sessionKey, email: emailStored, otp, expires, userId })
+    fpByEmail.set(sessionKey, { verificationToken, otp, expires, userId })
+    res.json({ verificationToken, emailMask })
+  } catch (e) {
+    console.error(e)
+    res.status(503).json({ message: mongoHint(e) })
+  }
+})
+
+app.post('/api/auth/forgot-password-resend-otp', async (req, res) => {
+  try {
+    const raw = String(req.body?.email || '').trim()
+    if (!raw || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(raw)) {
+      res.status(400).json({ message: 'Vui lòng nhập đúng định dạng email.' })
+      return
+    }
+    const sessionKey = raw.toLowerCase()
+    const pending = fpByEmail.get(sessionKey)
+    if (!pending?.verificationToken) {
+      res.status(400).json({ message: 'Chưa có phiên đặt lại mật khẩu. Hãy thử lại từ đầu.' })
+      return
+    }
+    await client.connect()
+    const db = client.db(dbName)
+    const user = await findUserByLogin(db, sessionKey)
+    if (!user || userTypeOf(user) !== 'patient') {
+      clearPendingFp(sessionKey)
+      res.status(404).json({ message: 'Không tìm thấy tài khoản bệnh nhân với email này.' })
+      return
+    }
+    const expires = Date.now() + OTP_TTL_MS
+    const otp = randomOtp6()
+    const display = [user.lastName, user.firstName]
+      .map((x) => String(x || '').trim())
+      .filter(Boolean)
+      .join(' ')
+    try {
+      await sendForgotPasswordOtpEmail(sessionKey, otp, display)
+    } catch (mailErr) {
+      res.status(503).json({ message: mailErr?.message || String(mailErr) })
+      return
+    }
+    pending.otp = otp
+    pending.expires = expires
+    const s = fpByVerifyToken.get(pending.verificationToken)
+    if (s) {
+      s.otp = otp
+      s.expires = expires
+    }
+    res.json({
+      verificationToken: pending.verificationToken,
+      emailMask: maskLoginHint(user),
+    })
+  } catch (e) {
+    console.error(e)
+    res.status(503).json({ message: mongoHint(e) })
+  }
+})
+
+app.post('/api/auth/forgot-password-verify-otp', async (req, res) => {
+  try {
+    const verificationToken = String(req.body?.verificationToken || '').trim()
+    const otp = String(req.body?.otp || '').trim()
+    if (!verificationToken || !/^\d{6}$/.test(otp)) {
+      res.status(400).json({ message: 'Thiếu token hoặc OTP không hợp lệ (6 chữ số).' })
+      return
+    }
+    const s = fpByVerifyToken.get(verificationToken)
+    if (!s || Date.now() > s.expires) {
+      res.status(400).json({ message: 'OTP hết hạn hoặc phiên không hợp lệ.' })
+      return
+    }
+    if (String(s.otp) !== otp) {
+      res.status(401).json({ message: 'OTP không đúng.' })
+      return
+    }
+    fpByVerifyToken.delete(verificationToken)
+    if (s.sessionKey) fpByEmail.delete(s.sessionKey)
+    const resetToken = randomBytes(24).toString('hex')
+    fpResetByToken.set(resetToken, { userId: s.userId, expires: Date.now() + OTP_TTL_MS })
+    res.json({ resetToken, emailMask: maskEmail(s.email) })
+  } catch (e) {
+    console.error(e)
+    res.status(503).json({ message: mongoHint(e) })
+  }
+})
+
+app.post('/api/auth/forgot-password-reset', async (req, res) => {
+  try {
+    if (!jwtSecret) {
+      res.status(500).json({ message: 'Thiếu JWT_SECRET trong .env.' })
+      return
+    }
+    const resetToken = String(req.body?.resetToken || '').trim()
+    const newPassword = String(req.body?.newPassword || '')
+    if (!resetToken || newPassword.length < 6) {
+      res.status(400).json({ message: 'Token không hợp lệ hoặc mật khẩu quá ngắn (≥6 ký tự).' })
+      return
+    }
+    const sess = fpResetByToken.get(resetToken)
+    if (!sess || Date.now() > sess.expires) {
+      res.status(400).json({ message: 'Liên kết đặt lại mật khẩu đã hết hạn. Vui lòng thử lại.' })
+      return
+    }
+    await client.connect()
+    const db = client.db(dbName)
+    const col = db.collection(usersColl)
+    const user = await findUserByIdFlexible(db, sess.userId)
+    if (!user || userTypeOf(user) !== 'patient') {
+      fpResetByToken.delete(resetToken)
+      res.status(400).json({ message: 'Không tìm thấy tài khoản.' })
+      return
+    }
+    const hash = await bcrypt.hash(newPassword, 10)
+    const id = user._id
+    await col.updateOne({ _id: id }, { $set: { password: hash } })
+    fpResetByToken.delete(resetToken)
+    const fresh = await col.findOne({ _id: id })
+    const token = signUserToken(fresh)
+    res.json({ token, user: publicUser(fresh) })
+  } catch (e) {
+    console.error(e)
+    res.status(503).json({ message: mongoHint(e) })
+  }
+})
+
 app.get('/api/auth/me', authBearer, async (req, res) => {
   try {
     await client.connect()
@@ -1381,6 +1626,10 @@ app.patch('/api/auth/me', authBearer, async (req, res) => {
       'firstName',
       'lastName',
       'displayName',
+      'education',
+      'experience',
+      'skills',
+      'avatarUrl',
     ]
     const updates = {}
     for (const k of allowed) {
@@ -1652,6 +1901,7 @@ app.post('/api/ai/chat', authBearer, async (req, res) => {
         source: 'ai',
         bookingSource: 'ai',
         note: String(nextState.note || ''),
+        payment: buildDefaultPayment(),
         createdAt: now,
         updatedAt: now,
       })
@@ -1765,10 +2015,290 @@ function staffReceptionOrRegistration(req) {
   return ut === 'receptionist' || ut === 'registration'
 }
 
-function stubFreeSlots() {
-  return {
-    freeSlots: ['08:00', '08:30', '09:00', '09:30', '10:00', '10:30', '13:30', '14:00', '14:30', '15:00', '15:30'],
+function statsDateYmd(d = new Date()) {
+  const x = d instanceof Date ? d : new Date(d)
+  const pad = (n) => String(n).padStart(2, '0')
+  return `${x.getFullYear()}-${pad(x.getMonth() + 1)}-${pad(x.getDate())}`
+}
+
+function statsWeekRangeYmd(ref = new Date()) {
+  const d = ref instanceof Date ? ref : new Date(ref)
+  const day = d.getDay()
+  const mon = new Date(d)
+  mon.setHours(12, 0, 0, 0)
+  mon.setDate(d.getDate() - ((day + 6) % 7))
+  const sun = new Date(mon)
+  sun.setDate(mon.getDate() + 6)
+  return { from: statsDateYmd(mon), to: statsDateYmd(sun) }
+}
+
+function statsNormalizeStatus(st) {
+  const s = String(st || '').toLowerCase()
+  if (s === 'done' || s === 'completed') return 'examined'
+  if (s === 'cancelled' || s === 'canceled') return 'cancelled'
+  if (s === 'confirmed') return 'confirmed'
+  return 'pending'
+}
+
+function statsEmptyCounts() {
+  return { pending: 0, confirmed: 0, examined: 0, cancelled: 0, total: 0 }
+}
+
+function statsMergeStatusRows(rows) {
+  const counts = statsEmptyCounts()
+  for (const r of rows || []) {
+    const key = statsNormalizeStatus(r._id)
+    const n = Number(r.count) || 0
+    if (Object.prototype.hasOwnProperty.call(counts, key)) counts[key] += n
+    else counts.pending += n
+    counts.total += n
   }
+  return counts
+}
+
+async function statsCountAppointmentsByStatus(db, match) {
+  const rows = await appointmentsCollection(db)
+    .aggregate([{ $match: match }, { $group: { _id: '$status', count: { $sum: 1 } } }])
+    .toArray()
+  return statsMergeStatusRows(rows)
+}
+
+async function statsCountBookingSources(db, match) {
+  const rows = await appointmentsCollection(db)
+    .aggregate([
+      { $match: match },
+      {
+        $group: {
+          _id: { $ifNull: ['$bookingSource', '$source'] },
+          count: { $sum: 1 },
+        },
+      },
+    ])
+    .toArray()
+  const out = { clinic: 0, online: 0, other: 0 }
+  for (const r of rows || []) {
+    const raw = String(r._id || '')
+      .trim()
+      .toLowerCase()
+    const n = Number(r.count) || 0
+    if (raw === 'clinic' || raw === 'offline' || raw === 'walkin' || raw === 'walk-in') out.clinic += n
+    else if (raw === 'online' || raw === 'app' || raw === 'web') out.online += n
+    else out.other += n
+  }
+  return out
+}
+
+const STATS_SLOT_MINUTES = 12
+
+function statsAppointmentSlotEnd(dateStr, startTime, endTime) {
+  const dk = String(dateStr || '').slice(0, 10)
+  if (!dk) return null
+  const en = String(endTime || '').trim()
+  if (en.length >= 5) {
+    const d = new Date(`${dk}T${en.slice(0, 5)}:00`)
+    return Number.isNaN(d.getTime()) ? null : d
+  }
+  const st = String(startTime || '00:00').slice(0, 5)
+  const d = new Date(`${dk}T${st}:00`)
+  if (Number.isNaN(d.getTime())) return null
+  d.setMinutes(d.getMinutes() + STATS_SLOT_MINUTES)
+  return d
+}
+
+function statsIsPendingPastSlot(doc) {
+  if (String(doc?.status || '').toLowerCase() !== 'pending') return false
+  const end = statsAppointmentSlotEnd(doc.appointmentDate, doc.startTime, doc.endTime)
+  return Boolean(end && end.getTime() < Date.now())
+}
+
+function statsPaymentPaid(doc) {
+  const p = doc?.payment && typeof doc.payment === 'object' ? doc.payment : {}
+  return String(p.status || '').toLowerCase() === 'paid'
+}
+
+function statsPatientLabelFromUser(p) {
+  if (!p) return 'Bệnh nhân'
+  const fromParts = [p.lastName, p.firstName].filter(Boolean).join(' ').trim()
+  return String(p.displayName || '').trim() || fromParts || 'Bệnh nhân'
+}
+
+async function statsTodayActions(db, apptBase, today) {
+  const rows = await appointmentsCollection(db)
+    .find({ ...apptBase, appointmentDate: today, status: { $regex: /^pending$/i } })
+    .project({
+      ticket: 1,
+      patientId: 1,
+      startTime: 1,
+      endTime: 1,
+      appointmentDate: 1,
+      payment: 1,
+      clinicRoom: 1,
+      doctorId: 1,
+      status: 1,
+    })
+    .limit(250)
+    .toArray()
+
+  let unpaidPending = 0
+  let pendingNoRoom = 0
+  let readyToConfirm = 0
+  const alertCandidates = []
+
+  for (const doc of rows) {
+    const isPaid = statsPaymentPaid(doc)
+    const room = String(doc.clinicRoom || '').trim()
+    if (!isPaid) unpaidPending += 1
+    if (!room) pendingNoRoom += 1
+    if (isPaid && room) readyToConfirm += 1
+    if (statsIsPendingPastSlot(doc)) {
+      alertCandidates.push(doc)
+    }
+  }
+
+  const patientIds = [...new Set(alertCandidates.map((r) => String(r.patientId || '')).filter(Boolean))]
+  const pUsers = patientIds.length ? await findUsersByIds(db, patientIds) : []
+  const pMap = new Map(pUsers.map((u) => [String(u._id), u]))
+
+  const alerts = alertCandidates
+    .sort((a, b) => String(a.startTime || '').localeCompare(String(b.startTime || '')))
+    .slice(0, 8)
+    .map((doc) => {
+      const pu = doc.patientId ? pMap.get(String(doc.patientId)) : null
+      return {
+        id: String(doc._id),
+        ticket: doc.ticket != null ? String(doc.ticket) : '',
+        patientName: statsPatientLabelFromUser(pu),
+        startTime: doc.startTime != null ? String(doc.startTime).slice(0, 5) : '',
+      }
+    })
+
+  return {
+    unpaidPending,
+    pendingNoRoom,
+    readyToConfirm,
+    expiringSoon: alertCandidates.length,
+    alerts,
+  }
+}
+
+async function statsRevenueToday(db, apptBase, today) {
+  const rows = await appointmentsCollection(db)
+    .find({ ...apptBase, appointmentDate: today })
+    .project({ payment: 1 })
+    .toArray()
+  let count = 0
+  let total = 0
+  let cash = 0
+  let transfer = 0
+  for (const doc of rows) {
+    const p = serializePayment(doc)
+    if (p.status !== 'paid') continue
+    count += 1
+    const amt = Number(p.amount) || 0
+    total += amt
+    const m = String(p.method || '').toLowerCase()
+    if (m === 'transfer') transfer += amt
+    else cash += amt
+  }
+  return { count, total, cash, transfer }
+}
+
+async function statsByRoomToday(db, apptBase, today) {
+  const rows = await appointmentsCollection(db)
+    .find({ ...apptBase, appointmentDate: today })
+    .project({ clinicRoom: 1, status: 1 })
+    .toArray()
+  const map = new Map()
+  for (const doc of rows) {
+    const raw = String(doc.clinicRoom || '').trim()
+    const key = raw || '(Chưa gán phòng)'
+    const st = statsNormalizeStatus(doc.status)
+    let e = map.get(key)
+    if (!e) e = { room: key, total: 0, pending: 0, confirmed: 0 }
+    e.total += 1
+    if (st === 'pending') e.pending += 1
+    if (st === 'confirmed') e.confirmed += 1
+    map.set(key, e)
+  }
+  return [...map.values()].sort((a, b) => b.total - a.total).slice(0, 12)
+}
+
+/** Thống kê tổng quan — dashboard nhân viên / bác sĩ */
+app.get('/api/stats/dashboard', authBearer, async (req, res) => {
+  const ut = String(req.auth?.userType || '').toLowerCase()
+  const allowed = ['doctor', 'receptionist', 'registration']
+  if (!allowed.includes(ut)) {
+    res.status(403).json({ message: 'Không có quyền xem thống kê.' })
+    return
+  }
+  try {
+    await client.connect()
+    const db = client.db(dbName)
+    const today = statsDateYmd()
+    const week = statsWeekRangeYmd()
+    const dateRange = { $gte: week.from, $lte: week.to }
+    let apptBase = {}
+    let patientsTotal = null
+
+    if (ut === 'doctor') {
+      const doctor = await findUserByIdFlexible(db, String(req.auth.sub || '').trim())
+      if (!doctor || !isDoctorUser(doctor)) {
+        res.status(401).json({ message: 'Token không hợp lệ hoặc không phải bác sĩ.' })
+        return
+      }
+      apptBase = { doctorId: doctor._id }
+    } else {
+      const col = db.collection(usersColl)
+      patientsTotal = await col.countDocuments({
+        $or: [{ userType: { $regex: /^patient$/i } }, { role: { $regex: /^patient$/i } }],
+      })
+    }
+
+    const staffExtras =
+      ut === 'doctor'
+        ? []
+        : [
+            statsTodayActions(db, apptBase, today),
+            statsRevenueToday(db, apptBase, today),
+            statsByRoomToday(db, apptBase, today),
+          ]
+
+    const [todayCounts, weekCounts, sourcesToday, ...staffResults] = await Promise.all([
+      statsCountAppointmentsByStatus(db, { ...apptBase, appointmentDate: today }),
+      statsCountAppointmentsByStatus(db, { ...apptBase, appointmentDate: dateRange }),
+      statsCountBookingSources(db, { ...apptBase, appointmentDate: today }),
+      ...staffExtras,
+    ])
+
+    const payload = {
+      role: ut,
+      today,
+      week,
+      patientsTotal,
+      appointments: {
+        today: todayCounts,
+        week: weekCounts,
+      },
+      sourcesToday,
+    }
+
+    if (ut !== 'doctor') {
+      const [todayActions, revenueToday, byRoomToday] = staffResults
+      payload.todayActions = todayActions
+      payload.revenueToday = revenueToday
+      payload.byRoomToday = byRoomToday
+    }
+
+    res.json(payload)
+  } catch (e) {
+    console.error(e)
+    res.status(503).json({ message: mongoHint(e) })
+  }
+})
+
+function stubFreeSlots() {
+  const freeSlots = ['08:00', '08:30', '09:00', '09:30', '10:00', '10:30', '13:30', '14:00', '14:30', '15:00', '15:30']
+  return { freeSlots, slots: freeSlots, availableSlots: freeSlots }
 }
 
 /** Danh sách lịch — tiếp đón / đăng ký (ReceptionHome, RegistrationHome) */
@@ -1787,7 +2317,10 @@ app.get('/api/appointments/reception', authBearer, async (req, res) => {
     else if (from) filter.appointmentDate = { $gte: from }
     else if (to) filter.appointmentDate = { $lte: to }
     const st = String(req.query.status || '').trim()
-    if (st && st !== 'all') filter.status = st
+    if (st && st !== 'all') {
+      if (st === 'examined') filter.status = { $in: ['examined', 'completed', 'done'] }
+      else filter.status = st
+    }
     const rows = await appointmentsCollection(db).find(filter).sort({ createdAt: -1 }).limit(400).toArray()
     const patientIds = [...new Set(rows.map((r) => (r.patientId ? String(r.patientId) : '')).filter(Boolean))]
     const doctorIds = [...new Set(rows.map((r) => String(r.doctorId)).filter(Boolean))]
@@ -1812,6 +2345,64 @@ app.get('/api/appointments/reception', authBearer, async (req, res) => {
     }
     await enrichAppointmentsSpecialtyNames(client, list)
     res.json({ appointments: list })
+  } catch (e) {
+    console.error(e)
+    res.status(503).json({ message: mongoHint(e) })
+  }
+})
+
+/**
+ * STT kế tiếp trong ngày khám + phòng (max hiện có + 1, có loại trừ lịch đang sửa).
+ * Đồng bộ cách đếm với tự gán phía server khi xác nhận lịch.
+ */
+app.get('/api/appointments/next-visit-queue', authBearer, async (req, res) => {
+  try {
+    if (!staffReceptionOrRegistration(req)) {
+      res.status(403).json({ message: 'Chỉ tiếp đón/đăng ký.' })
+      return
+    }
+    const dateStr = String(req.query.appointmentDate || '').trim().slice(0, 10)
+    if (!dateStr || !looksLikeIsoDate(dateStr)) {
+      res.status(400).json({ message: 'Thiếu hoặc sai appointmentDate (YYYY-MM-DD).' })
+      return
+    }
+    const room = String(req.query.clinicRoom ?? '').trim()
+    const exId = String(req.query.excludeAppointmentId || '').trim()
+    await client.connect()
+    const db = client.db(dbName)
+    const dayStart = new Date(`${dateStr}T00:00:00`)
+    const dayEnd = new Date(`${dateStr}T23:59:59.999`)
+    const query = {
+      status: { $in: ['confirmed', 'examined', 'completed', 'done'] },
+      visitQueueNumber: { $gte: 1 },
+      $and: [
+        {
+          $or: [{ appointmentDate: dateStr }, { appointmentDate: { $gte: dayStart, $lte: dayEnd } }],
+        },
+      ],
+    }
+    if (room === '') {
+      query.$and.push({
+        $or: [{ clinicRoom: '' }, { clinicRoom: { $exists: false } }, { clinicRoom: null }],
+      })
+    } else {
+      query.$and.push({ clinicRoom: room })
+    }
+    if (exId) {
+      try {
+        query._id = { $ne: new ObjectId(exId) }
+      } catch {
+        /* bỏ qua exclude không hợp lệ */
+      }
+    }
+    const top = await appointmentsCollection(db)
+      .find(query)
+      .sort({ visitQueueNumber: -1 })
+      .limit(1)
+      .project({ visitQueueNumber: 1 })
+      .toArray()
+    const max = top[0]?.visitQueueNumber != null ? Number(top[0].visitQueueNumber) : 0
+    res.json({ nextVisitQueueNumber: max + 1 })
   } catch (e) {
     console.error(e)
     res.status(503).json({ message: mongoHint(e) })
@@ -1919,6 +2510,7 @@ app.post('/api/appointments/reception', authBearer, async (req, res) => {
       bookingSource: 'clinic',
       note,
       createdByStaff: req.body?.createdByStaff || null,
+      payment: buildDefaultPayment(),
       createdAt: now,
       updatedAt: now,
     })
@@ -2117,11 +2709,204 @@ app.get('/api/appointments/lookup-ticket', authBearer, async (req, res) => {
   }
 })
 
-/** Khung giờ trống — bệnh nhân & nhân viên */
-app.get('/api/appointments/availability', authBearer, async (_req, res) => {
+/** Ngày bác sĩ có lịch (doctorSchedule) */
+app.get('/api/appointments/schedule-dates', authBearer, async (req, res) => {
   try {
+    const ut = String(req.auth?.userType || '').toLowerCase()
+    const doctorId = String(req.query.doctorId || '').trim()
+    if (!doctorId) {
+      res.status(400).json({ message: 'Thiếu doctorId.' })
+      return
+    }
+    if (ut === 'doctor' && doctorId !== String(req.auth.sub || '').trim()) {
+      res.status(403).json({ message: 'Bác sĩ chỉ xem lịch của chính mình.' })
+      return
+    }
+    if (ut !== 'patient' && ut !== 'doctor' && ut !== 'receptionist' && ut !== 'registration') {
+      res.status(403).json({ message: 'Không có quyền.' })
+      return
+    }
+    const today = todayIsoDate()
+    const end = new Date()
+    end.setDate(end.getDate() + 27)
+    const defaultTo = `${end.getFullYear()}-${String(end.getMonth() + 1).padStart(2, '0')}-${String(end.getDate()).padStart(2, '0')}`
+    const from = String(req.query.from || '').trim() || today
+    const to = String(req.query.to || '').trim() || defaultTo
+    if (!isValidScheduleDate(from) || !isValidScheduleDate(to)) {
+      res.status(400).json({ message: 'from/to phải dạng YYYY-MM-DD.' })
+      return
+    }
     await client.connect()
-    res.json(stubFreeSlots())
+    const db = client.db(dbName)
+    const dates = await findDoctorScheduleDateKeys(db, doctorId, from, to)
+    res.json({ doctorId, from, to, dates })
+  } catch (e) {
+    console.error(e)
+    res.status(503).json({ message: mongoHint(e) })
+  }
+})
+
+/** Khung giờ trống — từ doctorSchedule + shift, trừ lịch đã đặt */
+app.get('/api/appointments/availability', authBearer, async (req, res) => {
+  try {
+    const ut = String(req.auth?.userType || '').toLowerCase()
+    const doctorId = String(req.query.doctorId || '').trim()
+    const dateStr = String(req.query.date || '').trim()
+    if (!doctorId || !dateStr) {
+      res.status(400).json({ message: 'Thiếu doctorId hoặc date.' })
+      return
+    }
+    if (ut === 'doctor' && doctorId !== String(req.auth.sub || '').trim()) {
+      res.status(403).json({ message: 'Bác sĩ chỉ xem lịch của chính mình.' })
+      return
+    }
+    if (ut !== 'patient' && ut !== 'doctor' && ut !== 'receptionist' && ut !== 'registration') {
+      res.status(403).json({ message: 'Không có quyền.' })
+      return
+    }
+    if (!isValidScheduleDate(dateStr)) {
+      res.status(400).json({ message: 'date phải dạng YYYY-MM-DD.' })
+      return
+    }
+    await client.connect()
+    const db = client.db(dbName)
+    const dayStart = new Date(`${dateStr}T00:00:00`)
+    const dayEnd = new Date(`${dateStr}T23:59:59.999`)
+    const bookedRows = await appointmentsCollection(db)
+      .find({
+        doctorId,
+        status: { $in: ['pending', 'confirmed'] },
+        $or: [{ appointmentDate: dateStr }, { appointmentDate: { $gte: dayStart, $lte: dayEnd } }],
+      })
+      .project({ startTime: 1 })
+      .toArray()
+    const bookedStartTimes = bookedRows
+      .map((r) => String(r.startTime || '').trim().slice(0, 5))
+      .filter(Boolean)
+      .sort()
+    const bookedSet = new Set(bookedStartTimes)
+
+    const { slots, shifts, hasSchedule } = await computeAvailabilityFromSchedule({
+      db,
+      doctorId,
+      dateStr,
+      bookedSet,
+    })
+
+    let freeSlots = slots
+    if (!hasSchedule) {
+      const stub = stubFreeSlots().freeSlots || []
+      const isToday = dateStr === todayIsoDate()
+      const now = new Date()
+      const nowMin = now.getHours() * 60 + now.getMinutes()
+      freeSlots = stub.filter((t) => {
+        if (bookedSet.has(t)) return false
+        if (!isToday) return true
+        const [h, m] = t.split(':').map(Number)
+        return h * 60 + m > nowMin
+      })
+    }
+
+    res.json({
+      doctorId,
+      date: dateStr,
+      bookedStartTimes,
+      busySlots: bookedStartTimes,
+      freeSlots,
+      slots: freeSlots,
+      availableSlots: freeSlots,
+      shifts,
+      hasSchedule,
+    })
+  } catch (e) {
+    console.error(e)
+    res.status(503).json({ message: mongoHint(e) })
+  }
+})
+
+/** Ghi nhận đã thu phí khám (chỉ khi lịch còn Chờ). */
+app.post('/api/appointments/:id/payment', authBearer, async (req, res) => {
+  try {
+    if (!staffReceptionOrRegistration(req)) {
+      res.status(403).json({ message: 'Chỉ tiếp đón/đăng ký.' })
+      return
+    }
+    await client.connect()
+    const db = client.db(dbName)
+    const id = String(req.params.id || '').trim()
+    let oid
+    try {
+      oid = new ObjectId(id)
+    } catch {
+      res.status(400).json({ message: 'Id lịch không hợp lệ.' })
+      return
+    }
+
+    const appt = await appointmentsCollection(db).findOne({ _id: oid })
+    if (!appt) {
+      res.status(404).json({ message: 'Không tìm thấy lịch.' })
+      return
+    }
+
+    const st = String(appt.status || 'pending').trim().toLowerCase()
+    if (st !== 'pending') {
+      res.status(400).json({ message: 'Chỉ thu phí khi lịch đang ở trạng thái Chờ xác nhận.' })
+      return
+    }
+
+    const existingPay = serializePayment(appt)
+    if (existingPay.status === 'paid') {
+      res.status(400).json({ message: 'Lịch này đã được ghi nhận thanh toán.' })
+      return
+    }
+
+    const method = String(req.body?.method || '').trim().toLowerCase()
+    if (!['cash', 'transfer'].includes(method)) {
+      res.status(400).json({ message: 'Phương thức thanh toán phải là tiền mặt (cash) hoặc chuyển khoản (transfer).' })
+      return
+    }
+
+    const amountRaw = req.body?.amount != null && req.body?.amount !== '' ? Number(req.body.amount) : DEFAULT_CONSULTATION_FEE
+    if (!Number.isFinite(amountRaw) || amountRaw < 1) {
+      res.status(400).json({ message: 'Số tiền không hợp lệ.' })
+      return
+    }
+
+    const staffOidRaw = String(req.auth?.sub || '').trim()
+    const staffDoc = staffOidRaw ? await findUserByIdFlexible(db, staffOidRaw) : null
+    const staffEmail = String(req.auth?.email || staffDoc?.email || '').trim()
+    const staffDisplayName = String(
+      staffDoc?.displayName ||
+        [staffDoc?.lastName, staffDoc?.firstName].filter(Boolean).join(' ').trim() ||
+        staffEmail ||
+        'Nhân viên phòng khám',
+    ).trim()
+
+    const now = new Date()
+    const payment = {
+      status: 'paid',
+      amount: amountRaw,
+      method,
+      paidAt: now,
+      paidBy: {
+        role: 'staff',
+        id: staffOidRaw || String(staffDoc?._id || ''),
+        displayName: staffDisplayName,
+        email: staffEmail,
+        userType: String(req.auth?.userType || staffDoc?.userType || 'staff'),
+      },
+      note: String(req.body?.note || '').trim(),
+    }
+
+    await appointmentsCollection(db).updateOne({ _id: oid }, { $set: { payment, updatedAt: now } })
+    const doc = await appointmentsCollection(db).findOne({ _id: oid })
+    const [doctor, patient] = await Promise.all([
+      doc ? findDoctorByIdFlexible(db, String(doc.doctorId ?? '').trim()) : null,
+      doc?.patientId ? db.collection(usersColl).findOne({ _id: doc.patientId }) : null,
+    ])
+    const ap = doc ? serializeAppointment(doc, doctor, patient) : { id, payment }
+    if (ap && typeof ap === 'object' && ap.doctor) await enrichAppointmentsSpecialtyNames(client, [ap])
+    res.json({ ok: true, appointment: ap })
   } catch (e) {
     console.error(e)
     res.status(503).json({ message: mongoHint(e) })
@@ -2154,6 +2939,22 @@ app.patch('/api/appointments/:id/status', authBearer, async (req, res) => {
       return
     }
     const normStatus = status === 'done' || status === 'completed' ? 'examined' : status
+
+    const existingAppt = await appointmentsCollection(db).findOne({ _id: oid })
+    if (!existingAppt) {
+      res.status(404).json({ message: 'Không tìm thấy lịch.' })
+      return
+    }
+
+    if (normStatus === 'confirmed') {
+      const payStatus = serializePayment(existingAppt).status
+      if (payStatus !== 'paid') {
+        res.status(400).json({
+          message: 'Chưa thu phí khám. Vui lòng ghi nhận thanh toán trước khi xác nhận.',
+        })
+        return
+      }
+    }
 
     const staffOidRaw = String(req.auth?.sub || '').trim()
     const staffDoc = staffOidRaw ? await findUserByIdFlexible(db, staffOidRaw) : null
@@ -2195,6 +2996,8 @@ app.patch('/api/appointments/:id/status', authBearer, async (req, res) => {
       // Clear confirm metadata when cancelled
       setDoc.confirmedAt = null
       setDoc.confirmedBy = null
+      setDoc.clinicRoom = ''
+      setDoc.visitQueueNumber = null
     } else if (normStatus === 'confirmed') {
       setDoc.cancelReason = ''
       setDoc.cancelledAt = null
@@ -2213,6 +3016,34 @@ app.patch('/api/appointments/:id/status', authBearer, async (req, res) => {
       setDoc.cancelledBy = null
       setDoc.confirmedAt = null
       setDoc.confirmedBy = null
+    }
+
+    /** Phòng khám + STT — chỉ cập nhật khi có key trong body (lễ tân xác nhận kèm lịch hẹn). */
+    if (normStatus !== 'cancelled') {
+      const body = req.body && typeof req.body === 'object' ? req.body : {}
+      if (Object.prototype.hasOwnProperty.call(body, 'visitQueueNumber')) {
+        const raw = body.visitQueueNumber
+        if (raw === null || raw === undefined || raw === '') {
+          setDoc.visitQueueNumber = null
+        } else {
+          const n = Number.parseInt(String(raw), 10)
+          if (!Number.isFinite(n) || n < 1) {
+            res.status(400).json({
+              message: 'Số thứ tự phải là số nguyên dương hoặc để trống.',
+            })
+            return
+          }
+          setDoc.visitQueueNumber = n
+        }
+      }
+      if (Object.prototype.hasOwnProperty.call(body, 'clinicRoom')) {
+        const room = String(body.clinicRoom ?? '').trim()
+        if (room.length > 80) {
+          res.status(400).json({ message: 'Tên phòng quá dài (tối đa 80 ký tự).' })
+          return
+        }
+        setDoc.clinicRoom = room
+      }
     }
 
     const r = await appointmentsCollection(db).updateOne({ _id: oid }, { $set: setDoc })
@@ -2333,6 +3164,7 @@ app.post('/api/appointments', authBearer, async (req, res) => {
       source: String(req.body?.source || 'online'),
       bookingSource: String(req.body?.bookingSource || 'online'),
       note: String(req.body?.note || ''),
+      payment: buildDefaultPayment(),
       createdAt: now,
       updatedAt: now,
     })
@@ -2685,6 +3517,40 @@ function queueAppointmentConfirmationEmail({ patient, doctor, appointment, ticke
   })
 }
 
+/** Danh sách phòng khám — collection clinicRoom (public, giống src/index.js) */
+app.get('/api/clinic-rooms', async (req, res) => {
+  try {
+    await client.connect()
+    const db = client.db(dbName)
+    const activeOnly = String(req.query.activeOnly || 'true').toLowerCase() !== 'false'
+    const q = activeOnly ? { $nor: [{ isActive: false }] } : {}
+    const rows = await db
+      .collection(clinicRoomsCollName)
+      .find(q)
+      .project({ roomID: 1, name: 1, building: 1, floor: 1, notes: 1, sortOrder: 1, isActive: 1 })
+      .sort({ sortOrder: 1, name: 1, roomID: 1 })
+      .limit(500)
+      .toArray()
+
+    const rooms = (rows || [])
+      .map((r) => ({
+        roomID: String(r?.roomID || '').trim(),
+        name: String(r?.name || '').trim(),
+        building: String(r?.building || '').trim(),
+        floor: String(r?.floor || '').trim(),
+        notes: String(r?.notes || '').trim(),
+        sortOrder: Number(r.sortOrder) || 0,
+        isActive: r.isActive !== false,
+      }))
+      .filter((r) => r.roomID && r.name)
+
+    res.json({ rooms })
+  } catch (e) {
+    console.error(e)
+    res.status(503).json({ message: mongoHint(e) })
+  }
+})
+
 /** Danh sách bác sĩ (userType doctor trong Mongo) — đủ trường cho landing fe_clinic */
 app.get('/api/doctors', async (_req, res) => {
   try {
@@ -2954,10 +3820,10 @@ async function ensureUsersEmailUniqueIndex() {
   }
 }
 
-const server = app.listen(port, () => {
+const server = app.listen(port, '0.0.0.0', () => {
   console.log(`[be_clinic] http://localhost:${port}`)
   console.log(
-    `[be_clinic] POST /api/auth/login | staff-login | register + OTP (start-register, verify-email, complete-register) | GET/PATCH /api/auth/me`,
+    `[be_clinic] POST /api/auth/login | staff-login | register + OTP | forgot-password (+resend, verify-otp, reset) | GET/PATCH /api/auth/me`,
   )
   console.log(`[be_clinic] appointments → Mongo collection "${apptsCollName}"`)
   console.log(`[be_clinic] db=${dbName}  users=${usersColl}  medicine=${collName}`)

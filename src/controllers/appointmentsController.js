@@ -6,6 +6,18 @@ import Role from '../models/Role.js'
 import Specialty from '../models/Specialty.js'
 import Department from '../models/Department.js'
 import { sendAppointmentConfirmationEmail } from '../services/mail.js'
+import {
+  computeAvailabilityFromSchedule,
+  findDoctorScheduleDateKeys,
+  isValidIsoDateOnly as isValidIsoDateOnlySchedule,
+} from '../services/scheduleAvailability.js'
+import { DEFAULT_CONSULTATION_FEE } from '../constants/consultationFee.js'
+import { getClinicRoomMetaMap, clinicRoomDisplayLabel } from '../services/clinicRoomHelper.js'
+
+function resolveConsultationFee(value) {
+  const n = Number(value)
+  return Number.isFinite(n) && n > 0 ? Math.round(n) : DEFAULT_CONSULTATION_FEE
+}
 
 function isMongoObjectId(id) {
   return typeof id === 'string' && /^[a-fA-F0-9]{24}$/.test(id)
@@ -101,6 +113,68 @@ function getSlotEndDateFromAppt(appt) {
   if (Number.isNaN(start.getTime())) return null
   start.setMinutes(start.getMinutes() + SLOT_END_MINUTES)
   return start
+}
+
+/** Lịch đã qua tiếp nhận, tính vào max STT theo phòng trong ngày. */
+const VISIT_QUEUE_COUNT_STATUSES = ['confirmed', 'examined', 'completed', 'done']
+
+/** Client có gửi số thứ tự cụ thể (không dùng tự động). */
+function hasExplicitVisitQueueNumberInBody(body) {
+  if (!body || typeof body !== 'object') return false
+  if (!Object.prototype.hasOwnProperty.call(body, 'visitQueueNumber')) return false
+  const raw = body.visitQueueNumber
+  if (raw === null || raw === undefined || raw === '') return false
+  const n = Number.parseInt(String(raw), 10)
+  return Number.isFinite(n) && n >= 1
+}
+
+/**
+ * Có tự gán STT hay không: lần đầu xác nhận luôn gán nếu không có số cụ thể;
+ * đã confirmed chỉ gán lại khi client gửi visitQueueNumber rỗng (xin cấp lại).
+ */
+function shouldAutoAssignVisitQueueNumber(body, prevStatus) {
+  if (hasExplicitVisitQueueNumberInBody(body)) return false
+  const prev = String(prevStatus || '').toLowerCase()
+  if (prev !== 'confirmed') return true
+  if (!body || typeof body !== 'object') return false
+  if (!Object.prototype.hasOwnProperty.call(body, 'visitQueueNumber')) return false
+  const raw = body.visitQueueNumber
+  return raw === null || raw === undefined || raw === ''
+}
+
+/**
+ * STT kế tiếp trong ngày khám + phòng: 1 nếu chưa ai, max+1 nếu đã có.
+ * Phòng so khớp sau trim; phòng trống gộp chung một dãy số trong ngày.
+ */
+async function getNextVisitQueueNumberForRoom({ appointmentDate, clinicRoom, excludeAppointmentId }) {
+  const dk = dateKeyFromAppointmentDoc(appointmentDate)
+  if (!dk) return 1
+  const dayStart = new Date(`${dk}T00:00:00`)
+  const dayEnd = new Date(`${dk}T23:59:59.999`)
+  const room = String(clinicRoom ?? '').trim()
+
+  const query = {
+    appointmentDate: { $gte: dayStart, $lte: dayEnd },
+    status: { $in: VISIT_QUEUE_COUNT_STATUSES },
+    visitQueueNumber: { $gte: 1 },
+  }
+  if (room === '') {
+    query.$or = [{ clinicRoom: '' }, { clinicRoom: { $exists: false } }, { clinicRoom: null }]
+  } else {
+    query.clinicRoom = room
+  }
+  const ex = String(excludeAppointmentId || '').trim()
+  if (ex && isMongoObjectId(ex)) {
+    query._id = { $ne: new mongoose.Types.ObjectId(ex) }
+  }
+
+  const top = await Appointment.findOne(query)
+    .sort({ visitQueueNumber: -1 })
+    .select({ visitQueueNumber: 1 })
+    .lean()
+
+  const max = top && top.visitQueueNumber != null ? Number(top.visitQueueNumber) : 0
+  return max + 1
 }
 
 /** Lịch pending đã qua hết khung giờ khám (dùng cho tự động hủy an toàn phía server). */
@@ -636,8 +710,8 @@ export async function getAvailability(req, res) {
       }
     } else if (userType === 'patient') {
       /* ok — xem theo bác sĩ được chọn */
-    } else if (userType === 'receptionist') {
-      /* Lễ tân xem khung giờ để hỗ trợ đặt lịch */
+    } else if (userType === 'receptionist' || userType === 'registration') {
+      /* Lễ tân / đăng ký xem khung giờ để hỗ trợ đặt lịch */
     } else {
       return res.status(403).json({ message: 'Không có quyền xem khung giờ.' })
     }
@@ -667,9 +741,30 @@ export async function getAvailability(req, res) {
       new Set((rows || []).map((r) => String(r.startTime || '').trim()).filter(Boolean)),
     ).sort()
 
-    const allSlots = generateDaySlotTimes()
     const bookedSet = new Set(bookedStartTimes)
-    const freeSlots = allSlots.filter((t) => !bookedSet.has(t))
+    const db = mongoose.connection.db
+
+    const { slots, shifts, hasSchedule } = await computeAvailabilityFromSchedule({
+      db,
+      doctorId,
+      dateStr,
+      bookedSet,
+    })
+
+    let freeSlots = slots
+    if (!hasSchedule) {
+      const allSlots = generateDaySlotTimes()
+      const todayKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`
+      const isToday = dateStr === todayKey
+      const now = new Date()
+      const nowMinutes = now.getHours() * 60 + now.getMinutes()
+      freeSlots = allSlots.filter((t) => {
+        if (bookedSet.has(t)) return false
+        if (!isToday) return true
+        const [h, m] = t.split(':').map(Number)
+        return h * 60 + m > nowMinutes
+      })
+    }
 
     return res.status(200).json({
       doctorId,
@@ -677,7 +772,54 @@ export async function getAvailability(req, res) {
       bookedStartTimes,
       busySlots: bookedStartTimes,
       freeSlots,
+      slots: freeSlots,
+      availableSlots: freeSlots,
+      shifts,
+      hasSchedule,
     })
+  } catch (err) {
+    console.error(err)
+    return res.status(500).json({ message: 'Lỗi máy chủ.' })
+  }
+}
+
+/** Ngày có lịch làm việc của bác sĩ (từ doctorSchedule). */
+export async function getDoctorScheduleDates(req, res) {
+  try {
+    const userType = String(req.user?.userType || '').toLowerCase()
+    const doctorId = String(req.query.doctorId || '').trim()
+    const fromStr = String(req.query.from || '').trim()
+    const toStr = String(req.query.to || '').trim()
+
+    if (!req.user?.id) {
+      return res.status(401).json({ message: 'Thiếu thông tin đăng nhập.' })
+    }
+    if (userType === 'patient' || userType === 'receptionist' || userType === 'registration') {
+      /* ok */
+    } else if (userType === 'doctor') {
+      if (doctorId !== String(req.user.id).trim()) {
+        return res.status(403).json({ message: 'Bác sĩ chỉ xem được lịch của chính mình.' })
+      }
+    } else {
+      return res.status(403).json({ message: 'Không có quyền xem lịch bác sĩ.' })
+    }
+
+    if (!doctorId) {
+      return res.status(400).json({ message: 'Thiếu doctorId.' })
+    }
+
+    const today = new Date()
+    const defaultFrom = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`
+    const end = new Date(today)
+    end.setDate(end.getDate() + 27)
+    const defaultTo = `${end.getFullYear()}-${String(end.getMonth() + 1).padStart(2, '0')}-${String(end.getDate()).padStart(2, '0')}`
+
+    const from = fromStr && isValidIsoDateOnlySchedule(fromStr) ? fromStr : defaultFrom
+    const to = toStr && isValidIsoDateOnlySchedule(toStr) ? toStr : defaultTo
+
+    const dates = await findDoctorScheduleDateKeys(mongoose.connection.db, doctorId, from, to)
+
+    return res.status(200).json({ doctorId, from, to, dates })
   } catch (err) {
     console.error(err)
     return res.status(500).json({ message: 'Lỗi máy chủ.' })
@@ -911,6 +1053,8 @@ export async function lookupAppointmentByTicket(req, res) {
                   specialty: 1,
                   deptName: 1,
                   deptID: 1,
+                  clinicRoomID: 1,
+                  consultationFee: 1,
                 },
               },
             )
@@ -926,6 +1070,10 @@ export async function lookupAppointmentByTicket(req, res) {
     } else {
       specialtyName = String(doc?.specialtyName || doc?.specialty || '').trim()
     }
+
+    const doctorRoomId = doc ? String(doc.clinicRoomID || '').trim() : ''
+    const doctorRoomMetaMap = doctorRoomId ? await getClinicRoomMetaMap([doctorRoomId]) : new Map()
+    const doctorRoomMeta = doctorRoomId ? doctorRoomMetaMap.get(doctorRoomId) : null
 
     const ticket = buildTicketCode(a._id, a.appointmentDate)
 
@@ -947,6 +1095,8 @@ export async function lookupAppointmentByTicket(req, res) {
         confirmedAt: a.confirmedAt || null,
         confirmedBy: a.confirmedBy || null,
         createdAt: a.createdAt,
+        visitQueueNumber: a.visitQueueNumber ?? null,
+        clinicRoom: a.clinicRoom || '',
       },
       patient: patientDoc
         ? {
@@ -974,8 +1124,12 @@ export async function lookupAppointmentByTicket(req, res) {
             avatarUrl: doc.avatarUrl,
             specialtyName,
             bio: doc.bio,
+            clinicRoomID: doctorRoomId,
+            clinicRoomName: doctorRoomMeta ? clinicRoomDisplayLabel(doctorRoomId, doctorRoomMeta) : doctorRoomId,
+            consultationFee: resolveConsultationFee(doc.consultationFee),
           }
         : null,
+      consultationFee: doc ? resolveConsultationFee(doc.consultationFee) : DEFAULT_CONSULTATION_FEE,
     })
   } catch (err) {
     console.error(err)
@@ -985,8 +1139,8 @@ export async function lookupAppointmentByTicket(req, res) {
 
 export async function createAppointmentReception(req, res) {
   try {
-    if (String(req.user?.userType || '') !== 'receptionist') {
-      return res.status(403).json({ message: 'Chỉ nhân viên tiếp nhận mới đặt lịch thay bệnh nhân.' })
+    if (String(req.user?.userType || '') !== 'receptionist' && String(req.user?.userType || '') !== 'registration') {
+      return res.status(403).json({ message: 'Chỉ nhân viên tiếp nhận / đăng ký mới đặt lịch thay bệnh nhân.' })
     }
 
     const { patientEmailOrPhone, patient: patientInfo, doctorId, appointmentDate, startTime, note } = req.body
@@ -1149,8 +1303,8 @@ function buildPatientCode(userId) {
 /** Tiếp nhận: tra BN theo mã hiển thị (YM…), khớp buildPatientCode. */
 export async function lookupPatientByCode(req, res) {
   try {
-    if (String(req.user?.userType || '') !== 'receptionist') {
-      return res.status(403).json({ message: 'Chỉ nhân viên tiếp nhận mới tra cứu được mã bệnh nhân.' })
+    if (String(req.user?.userType || '') !== 'receptionist' && String(req.user?.userType || '') !== 'registration') {
+      return res.status(403).json({ message: 'Chỉ nhân viên tiếp nhận / đăng ký mới tra cứu được mã bệnh nhân.' })
     }
     const code = String(req.query.code || '').trim()
     if (!code) {
@@ -1192,8 +1346,8 @@ export async function lookupPatientByCode(req, res) {
 /** Tiếp nhận: danh sách bệnh nhân (lọc + phân trang) để chọn nhanh. */
 export async function listPatientsReception(req, res) {
   try {
-    if (String(req.user?.userType || '') !== 'receptionist') {
-      return res.status(403).json({ message: 'Chỉ nhân viên tiếp nhận mới xem được danh sách bệnh nhân.' })
+    if (String(req.user?.userType || '') !== 'receptionist' && String(req.user?.userType || '') !== 'registration') {
+      return res.status(403).json({ message: 'Chỉ nhân viên tiếp nhận / đăng ký mới xem được danh sách bệnh nhân.' })
     }
 
     const pageRaw = Number(req.query.page || 1)
@@ -1289,8 +1443,8 @@ export async function listPatientsReception(req, res) {
 
 export async function listPatientHistoryReception(req, res) {
   try {
-    if (String(req.user?.userType || '') !== 'receptionist') {
-      return res.status(403).json({ message: 'Chỉ nhân viên tiếp nhận mới xem được lịch sử khám.' })
+    if (String(req.user?.userType || '') !== 'receptionist' && String(req.user?.userType || '') !== 'registration') {
+      return res.status(403).json({ message: 'Chỉ nhân viên tiếp nhận / đăng ký mới xem được lịch sử khám.' })
     }
 
     const patientId = String(req.query.patientId || '').trim()
@@ -1415,8 +1569,9 @@ function escapeRegex(s) {
 
 export async function listReceptionAppointments(req, res) {
   try {
-    if (String(req.user?.userType || '') !== 'receptionist') {
-      return res.status(403).json({ message: 'Chỉ nhân viên tiếp nhận mới xem được danh sách này.' })
+    const ut = String(req.user?.userType || '').trim().toLowerCase()
+    if (ut !== 'receptionist' && ut !== 'registration') {
+      return res.status(403).json({ message: 'Chỉ nhân viên tiếp nhận / đăng ký mới xem được danh sách này.' })
     }
 
     const fromStr = String(req.query.from || '').trim()
@@ -1492,6 +1647,8 @@ export async function listReceptionAppointments(req, res) {
                   specialtyId: 1,
                   specialtyName: 1,
                   specialty: 1,
+                  clinicRoomID: 1,
+                  consultationFee: 1,
                 },
               },
             )
@@ -1517,6 +1674,9 @@ export async function listReceptionAppointments(req, res) {
     const specialtyNameById = new Map(
       specialties.map((s) => [String(s.specialtyID), String(s.specialtyName || '').trim()]),
     )
+
+    const doctorRoomIdsForList = doctors.map((d) => d.clinicRoomID).filter(Boolean).map(String)
+    const doctorRoomMetaMap = await getClinicRoomMetaMap(doctorRoomIdsForList)
 
     const qRaw = String(req.query.q || '').trim().toLowerCase()
 
@@ -1559,6 +1719,8 @@ export async function listReceptionAppointments(req, res) {
         bookingSource: a.source || '',
         createdByStaff: a.createdByStaff || null,
         note: a.note || '',
+        visitQueueNumber: a.visitQueueNumber ?? null,
+        clinicRoom: a.clinicRoom || '',
         cancelReason: a.cancelReason || '',
         cancelledAt: a.cancelledAt || null,
         cancelledBy: a.cancelledBy || null,
@@ -1575,8 +1737,16 @@ export async function listReceptionAppointments(req, res) {
               email: doc.email,
               avatarUrl: doc.avatarUrl,
               specialtyName,
+              clinicRoomID: String(doc.clinicRoomID || '').trim(),
+              clinicRoomName: (() => {
+                const rid = String(doc.clinicRoomID || '').trim()
+                const m = rid ? doctorRoomMetaMap.get(rid) : null
+                return m ? clinicRoomDisplayLabel(rid, m) : rid
+              })(),
+              consultationFee: resolveConsultationFee(doc.consultationFee),
             }
           : null,
+        consultationFee: doc ? resolveConsultationFee(doc.consultationFee) : DEFAULT_CONSULTATION_FEE,
       }
     })
 
@@ -1604,10 +1774,40 @@ export async function listReceptionAppointments(req, res) {
   }
 }
 
+/**
+ * Cập nhật visitQueueNumber / clinicRoom từ body (chỉ khi có key tương ứng).
+ * @throws {Error} message VISIT_QUEUE_INVALID | CLINIC_ROOM_TOO_LONG
+ */
+function applyVisitFieldsFromRequest(appt, body) {
+  const b = body && typeof body === 'object' ? body : {}
+  if (Object.prototype.hasOwnProperty.call(b, 'visitQueueNumber')) {
+    const raw = b.visitQueueNumber
+    if (raw === null || raw === undefined || raw === '') {
+      appt.set('visitQueueNumber', undefined)
+    } else {
+      const n = Number.parseInt(String(raw), 10)
+      if (!Number.isFinite(n) || n < 1) {
+        const err = new Error('VISIT_QUEUE_INVALID')
+        throw err
+      }
+      appt.visitQueueNumber = n
+    }
+  }
+  if (Object.prototype.hasOwnProperty.call(b, 'clinicRoom')) {
+    const room = String(b.clinicRoom ?? '').trim()
+    if (room.length > 80) {
+      const err = new Error('CLINIC_ROOM_TOO_LONG')
+      throw err
+    }
+    appt.clinicRoom = room
+  }
+}
+
 export async function updateAppointmentStatusReception(req, res) {
   try {
-    if (String(req.user?.userType || '') !== 'receptionist') {
-      return res.status(403).json({ message: 'Chỉ nhân viên tiếp nhận mới cập nhật được trạng thái.' })
+    const role = String(req.user?.userType || '').trim().toLowerCase()
+    if (role !== 'receptionist' && role !== 'registration') {
+      return res.status(403).json({ message: 'Chỉ nhân viên tiếp nhận / đăng ký mới cập nhật được trạng thái lịch.' })
     }
 
     const rawId = String(req.params.id || '').trim()
@@ -1624,6 +1824,8 @@ export async function updateAppointmentStatusReception(req, res) {
     if (!appt) {
       return res.status(404).json({ message: 'Không tìm thấy lịch khám.' })
     }
+
+    const prevStatus = String(appt.status || '').toLowerCase()
 
     if (status === 'cancelled') {
       const reasonRaw = String(req.body?.cancelReason ?? req.body?.reason ?? '').trim()
@@ -1670,30 +1872,59 @@ export async function updateAppointmentStatusReception(req, res) {
       }
       appt.confirmedBy = null
       appt.confirmedAt = null
+      appt.clinicRoom = ''
+      appt.set('visitQueueNumber', undefined)
     } else if (status === 'confirmed') {
       appt.cancelReason = ''
       appt.cancelledAt = null
       appt.cancelledBy = null
-      const staffDoc = await findUserByIdFlexible(req.user.id, {
-        firstName: 1,
-        lastName: 1,
-        email: 1,
-        userType: 1,
-      })
-      const who = staffSummary(staffDoc) || {
-        id: String(req.user.id || ''),
-        displayName: 'Nhân viên phòng khám',
-        email: '',
-        userType: String(req.user.userType || ''),
+      if (prevStatus !== 'confirmed') {
+        const staffDoc = await findUserByIdFlexible(req.user.id, {
+          firstName: 1,
+          lastName: 1,
+          email: 1,
+          userType: 1,
+        })
+        const who = staffSummary(staffDoc) || {
+          id: String(req.user.id || ''),
+          displayName: 'Nhân viên phòng khám',
+          email: '',
+          userType: String(req.user.userType || ''),
+        }
+        appt.confirmedBy = { role: 'staff', ...who }
+        appt.confirmedAt = new Date()
       }
-      appt.confirmedBy = { role: 'staff', ...who }
-      appt.confirmedAt = new Date()
+      if (role === 'receptionist') {
+        try {
+          applyVisitFieldsFromRequest(appt, req.body)
+        } catch (e) {
+          if (e?.message === 'VISIT_QUEUE_INVALID') {
+            return res.status(400).json({
+              message: 'Số thứ tự phải là số nguyên dương, hoặc để trống để hệ thống tự gán theo phòng trong ngày.',
+            })
+          }
+          if (e?.message === 'CLINIC_ROOM_TOO_LONG') {
+            return res.status(400).json({ message: 'Tên phòng quá dài (tối đa 80 ký tự).' })
+          }
+          throw e
+        }
+        if (shouldAutoAssignVisitQueueNumber(req.body, prevStatus)) {
+          const nextN = await getNextVisitQueueNumberForRoom({
+            appointmentDate: appt.appointmentDate,
+            clinicRoom: appt.clinicRoom || '',
+            excludeAppointmentId: appt._id,
+          })
+          appt.visitQueueNumber = nextN
+        }
+      }
     } else {
       appt.cancelReason = ''
       appt.cancelledAt = null
       appt.cancelledBy = null
       appt.confirmedBy = null
       appt.confirmedAt = null
+      appt.clinicRoom = ''
+      appt.set('visitQueueNumber', undefined)
     }
 
     appt.status = status
@@ -1704,6 +1935,8 @@ export async function updateAppointmentStatusReception(req, res) {
       appointment: {
         id: appt._id,
         status: appt.status,
+        visitQueueNumber: appt.visitQueueNumber ?? null,
+        clinicRoom: appt.clinicRoom || '',
         cancelReason: appt.cancelReason || '',
         cancelledAt: appt.cancelledAt || null,
         cancelledBy: appt.cancelledBy || null,
