@@ -4,11 +4,14 @@ import cors from 'cors'
 import { connectDb } from './config/db.js'
 import authRoutes from './routes/authRoutes.js'
 import doctorsRoutes from './routes/doctorsRoutes.js'
+import clinicRoomsRoutes from './routes/clinicRoomsRoutes.js'
 import appointmentsRoutes from './routes/appointmentsRoutes.js'
+import examinationsRoutes from './routes/examinationsRoutes.js'
 
 const app = express()
 const PORT = Number(process.env.PORT) || 5000
-const corsOriginRaw = process.env.CORS_ORIGIN || 'http://localhost:5173'
+const corsOriginRaw =
+  process.env.CORS_ORIGIN || 'http://localhost:5173,http://localhost:5174'
 const corsAllowlist = String(corsOriginRaw)
   .split(',')
   .map((s) => s.trim())
@@ -53,7 +56,9 @@ app.get('/api/health', (_req, res) => {
 
 app.use('/api/auth', authRoutes)
 app.use('/api/doctors', doctorsRoutes)
+app.use('/api/clinic-rooms', clinicRoomsRoutes)
 app.use('/api/appointments', appointmentsRoutes)
+app.use('/api/examinations', examinationsRoutes)
 
 app.use((_req, res) => {
   res.status(404).json({ message: 'Không tìm thấy.' })

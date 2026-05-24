@@ -10,6 +10,8 @@ const userSchema = new mongoose.Schema(
       trim: true,
     },
     passwordHash: { type: String, required: true },
+    /** Tài khoản tạo theo luồng OTP trước, chưa đặt mật khẩu */
+    mustSetPassword: { type: Boolean, default: false },
     roleId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: 'Role',
@@ -31,6 +33,7 @@ const userSchema = new mongoose.Schema(
     phone: { type: String, trim: true },
     dob: { type: Date },
     gender: { type: Boolean },
+    ethnicity: { type: String, trim: true },
     address: { type: String, trim: true },
     citizenId: { type: String, trim: true },
     // In your Mongo, specialtyID is stored as string (e.g. "SPEC-001")
@@ -42,6 +45,10 @@ const userSchema = new mongoose.Schema(
     // Extra fields that may exist in Mongo (used by FE UI)
     avatarUrl: { type: String, trim: true },
     experienceYears: { type: Number },
+    /** Phí khám (VND) — hiển thị cho bệnh nhân khi đặt lịch. */
+    consultationFee: { type: Number, min: 0 },
+    /** Mã phòng khám mặc định (bảng clinicRoom.roomID) — lễ tân gợi ý khi tiếp nhận. */
+    clinicRoomID: { type: String, trim: true, default: '' },
   },
   { timestamps: true }
 )
