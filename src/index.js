@@ -7,6 +7,7 @@ import doctorsRoutes from './routes/doctorsRoutes.js'
 import clinicRoomsRoutes from './routes/clinicRoomsRoutes.js'
 import appointmentsRoutes from './routes/appointmentsRoutes.js'
 import examinationsRoutes from './routes/examinationsRoutes.js'
+import medicinesRoutes from './routes/medicinesRoutes.js'
 
 const app = express()
 const PORT = Number(process.env.PORT) || 5000
@@ -59,6 +60,7 @@ app.use('/api/doctors', doctorsRoutes)
 app.use('/api/clinic-rooms', clinicRoomsRoutes)
 app.use('/api/appointments', appointmentsRoutes)
 app.use('/api/examinations', examinationsRoutes)
+app.use('/api/medicines', medicinesRoutes)
 
 app.use((_req, res) => {
   res.status(404).json({ message: 'Không tìm thấy.' })

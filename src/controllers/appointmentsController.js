@@ -1,7 +1,9 @@
 import mongoose from 'mongoose'
 import bcrypt from 'bcryptjs'
 import Appointment from '../models/Appointment.js'
+import Examination from '../models/Examination.js'
 import User from '../models/User.js'
+import { serializeExamination } from './examinationsController.js'
 import Role from '../models/Role.js'
 import Specialty from '../models/Specialty.js'
 import Department from '../models/Department.js'
@@ -62,6 +64,49 @@ function staffSummary(user) {
     email: String(user.email || '').trim(),
     userType: String(user.userType || user.role || '').trim(),
   }
+}
+
+function serializePayment(appt) {
+  const p = appt?.payment
+  if (!p || typeof p !== 'object') {
+    return { status: 'unpaid' }
+  }
+  const status = String(p.status || 'unpaid').trim().toLowerCase()
+  if (status !== 'paid') {
+    return { status: 'unpaid' }
+  }
+  return {
+    status: 'paid',
+    amount: Number.isFinite(Number(p.amount)) ? Math.round(Number(p.amount)) : null,
+    method: String(p.method || '').trim().toLowerCase() || '',
+    paidAt: p.paidAt || null,
+    paidBy: p.paidBy || null,
+    note: String(p.note || '').trim(),
+    invoiceNo: String(p.invoiceNo || '').trim(),
+  }
+}
+
+function isAppointmentPaid(appt) {
+  return String(appt?.payment?.status || '').trim().toLowerCase() === 'paid'
+}
+
+async function nextPaymentInvoiceNo(appointmentDate) {
+  const d = appointmentDate instanceof Date ? appointmentDate : new Date(appointmentDate)
+  if (Number.isNaN(d.getTime())) {
+    return `HD${Date.now()}`
+  }
+  const y = d.getFullYear()
+  const m = String(d.getMonth() + 1).padStart(2, '0')
+  const day = String(d.getDate()).padStart(2, '0')
+  const prefix = `HD${String(y).slice(-2)}${m}${day}`
+  const dayStart = new Date(`${y}-${m}-${day}T00:00:00`)
+  const dayEnd = new Date(`${y}-${m}-${day}T23:59:59.999`)
+  const count = await Appointment.countDocuments({
+    'payment.status': 'paid',
+    'payment.paidAt': { $gte: dayStart, $lte: dayEnd },
+    'payment.invoiceNo': { $regex: `^${prefix}-` },
+  })
+  return `${prefix}-${String(count + 1).padStart(4, '0')}`
 }
 
 async function findUserByIdFlexible(userId, projection) {
@@ -462,6 +507,9 @@ export async function listDoctorAppointments(req, res) {
           confirmedAt: a.confirmedAt || null,
           confirmedBy: a.confirmedBy || null,
           createdAt: a.createdAt,
+          visitQueueNumber: a.visitQueueNumber ?? null,
+          clinicRoom: a.clinicRoom || '',
+          payment: serializePayment(a),
           doctorId: doctorIdStr,
           patient: doc
             ? {
@@ -1097,6 +1145,7 @@ export async function lookupAppointmentByTicket(req, res) {
         createdAt: a.createdAt,
         visitQueueNumber: a.visitQueueNumber ?? null,
         clinicRoom: a.clinicRoom || '',
+        payment: serializePayment(a),
       },
       patient: patientDoc
         ? {
@@ -1443,13 +1492,24 @@ export async function listPatientsReception(req, res) {
 
 export async function listPatientHistoryReception(req, res) {
   try {
-    if (String(req.user?.userType || '') !== 'receptionist' && String(req.user?.userType || '') !== 'registration') {
-      return res.status(403).json({ message: 'Chỉ nhân viên tiếp nhận / đăng ký mới xem được lịch sử khám.' })
+    const ut = String(req.user?.userType || '').trim().toLowerCase()
+    const isReception = ut === 'receptionist' || ut === 'registration'
+    const isDoctor = ut === 'doctor'
+    if (!isReception && !isDoctor) {
+      return res.status(403).json({ message: 'Không có quyền xem lịch sử khám.' })
     }
 
     const patientId = String(req.query.patientId || '').trim()
     if (!patientId) {
       return res.status(400).json({ message: 'Thiếu patientId.' })
+    }
+
+    if (isDoctor) {
+      const doctorIdStr = String(req.user?.id || '').trim()
+      const linked = await Appointment.exists({ patientId, doctorId: doctorIdStr })
+      if (!linked) {
+        return res.status(403).json({ message: 'Bạn chưa có lịch khám với bệnh nhân này.' })
+      }
     }
 
     const items = await Appointment.find({ patientId })
@@ -1503,6 +1563,12 @@ export async function listPatientHistoryReception(req, res) {
       specialties.map((s) => [String(s.specialtyID), String(s.specialtyName || '').trim()]),
     )
 
+    const apptIdKeys = (items || []).map((a) => String(a._id))
+    const examinations = apptIdKeys.length
+      ? await Examination.find({ appointmentId: { $in: apptIdKeys } }).lean()
+      : []
+    const examinationByApptId = new Map(examinations.map((ex) => [String(ex.appointmentId), ex]))
+
     return res.status(200).json({
       appointments: (items || []).map((a) => {
         const did = String(a?.doctorId || '').trim()
@@ -1516,6 +1582,8 @@ export async function listPatientHistoryReception(req, res) {
           : ''
 
         const specialtyId = specId ? String(specId).trim() : ''
+        const exRaw = examinationByApptId.get(String(a._id)) || null
+        const examination = exRaw ? serializeExamination(exRaw) : null
 
         return {
           id: a._id,
@@ -1529,6 +1597,7 @@ export async function listPatientHistoryReception(req, res) {
           specialtyId,
           doctorName,
           specialtyName,
+          examination,
           doctor: doc
             ? {
                 id: doc._id,
@@ -1542,6 +1611,62 @@ export async function listPatientHistoryReception(req, res) {
             : null,
         }
       }),
+    })
+  } catch (err) {
+    console.error(err)
+    return res.status(500).json({ message: 'Lỗi máy chủ.' })
+  }
+}
+
+/** Bác sĩ kết thúc khám — chuyển lịch sang trạng thái `examined`. */
+export async function finishExamAppointment(req, res) {
+  try {
+    if (String(req.user?.userType || '') !== 'doctor') {
+      return res.status(403).json({ message: 'Chỉ bác sĩ mới kết thúc khám được.' })
+    }
+
+    const doctorIdStr = String(req.user?.id || '').trim()
+    const rawId = String(req.params.id || '').trim()
+    if (!isMongoObjectId(rawId)) {
+      return res.status(400).json({ message: 'Mã lịch không hợp lệ.' })
+    }
+
+    const appt = await Appointment.findById(rawId)
+    if (!appt) {
+      return res.status(404).json({ message: 'Không tìm thấy lịch khám.' })
+    }
+
+    if (String(appt.doctorId || '').trim() !== doctorIdStr) {
+      return res.status(403).json({ message: 'Bạn không có quyền kết thúc khám lịch này.' })
+    }
+
+    const st = String(appt.status || '').toLowerCase()
+    if (st === 'cancelled') {
+      return res.status(400).json({ message: 'Lịch đã hủy, không thể kết thúc khám.' })
+    }
+    if (st === 'examined' || st === 'completed' || st === 'done') {
+      return res.status(200).json({
+        message: 'Lịch đã ở trạng thái đã khám.',
+        appointment: {
+          id: appt._id,
+          status: appt.status,
+        },
+      })
+    }
+    if (st !== 'confirmed') {
+      return res.status(400).json({ message: 'Chỉ kết thúc khám được lịch đang chờ khám (đã xác nhận).' })
+    }
+
+    appt.status = 'examined'
+    await appt.save()
+
+    return res.status(200).json({
+      message: 'Đã kết thúc khám.',
+      appointment: {
+        id: appt._id,
+        status: appt.status,
+        ticket: buildTicketCode(appt._id, appt.appointmentDate),
+      },
     })
   } catch (err) {
     console.error(err)
@@ -1747,6 +1872,7 @@ export async function listReceptionAppointments(req, res) {
             }
           : null,
         consultationFee: doc ? resolveConsultationFee(doc.consultationFee) : DEFAULT_CONSULTATION_FEE,
+        payment: serializePayment(a),
       }
     })
 
@@ -1875,6 +2001,9 @@ export async function updateAppointmentStatusReception(req, res) {
       appt.clinicRoom = ''
       appt.set('visitQueueNumber', undefined)
     } else if (status === 'confirmed') {
+      if (!isAppointmentPaid(appt)) {
+        return res.status(400).json({ message: 'Chưa thu phí khám.' })
+      }
       appt.cancelReason = ''
       appt.cancelledAt = null
       appt.cancelledBy = null
@@ -1942,6 +2071,117 @@ export async function updateAppointmentStatusReception(req, res) {
         cancelledBy: appt.cancelledBy || null,
         confirmedAt: appt.confirmedAt || null,
         confirmedBy: appt.confirmedBy || null,
+        payment: serializePayment(appt),
+      },
+    })
+  } catch (err) {
+    console.error(err)
+    return res.status(500).json({ message: 'Lỗi máy chủ.' })
+  }
+}
+
+/** Lễ tân / đăng ký: ghi nhận đã thu phí khám — lưu vào MongoDB trên document Appointment. */
+export async function recordAppointmentPayment(req, res) {
+  try {
+    const role = String(req.user?.userType || '').trim().toLowerCase()
+    if (role !== 'receptionist' && role !== 'registration') {
+      return res.status(403).json({ message: 'Chỉ nhân viên tiếp nhận / đăng ký mới thu phí được.' })
+    }
+
+    const rawId = String(req.params.id || '').trim()
+    if (!isMongoObjectId(rawId)) {
+      return res.status(400).json({ message: 'Mã lịch không hợp lệ.' })
+    }
+
+    const appt = await Appointment.findById(rawId)
+    if (!appt) {
+      return res.status(404).json({ message: 'Không tìm thấy lịch khám.' })
+    }
+
+    const st = String(appt.status || '').toLowerCase()
+    if (st === 'cancelled') {
+      return res.status(400).json({ message: 'Lịch đã hủy, không thể thu phí.' })
+    }
+    if (st !== 'pending') {
+      return res.status(400).json({ message: 'Chỉ thu phí khi lịch đang chờ xác nhận.' })
+    }
+
+    if (isAppointmentPaid(appt)) {
+      return res.status(409).json({
+        message: 'Lịch đã được ghi nhận thanh toán.',
+        appointment: {
+          id: appt._id,
+          ticket: buildTicketCode(appt._id, appt.appointmentDate),
+          status: appt.status,
+          payment: serializePayment(appt),
+        },
+      })
+    }
+
+    const method = String(req.body?.method || '').trim().toLowerCase()
+    if (!['cash', 'transfer'].includes(method)) {
+      return res.status(400).json({ message: 'Phương thức thanh toán không hợp lệ (cash hoặc transfer).' })
+    }
+
+    let doctor = await User.collection.findOne({ _id: String(appt.doctorId || '').trim() })
+    if (!doctor && isMongoObjectId(appt.doctorId)) {
+      doctor = await User.collection.findOne({ _id: new mongoose.Types.ObjectId(appt.doctorId) })
+    }
+
+    const amountRaw = req.body?.amount
+    let amount = resolveConsultationFee(doctor?.consultationFee)
+    if (amountRaw != null && amountRaw !== '') {
+      const n = Number(amountRaw)
+      if (!Number.isFinite(n) || n <= 0) {
+        return res.status(400).json({ message: 'Số tiền không hợp lệ.' })
+      }
+      amount = Math.round(n)
+    }
+
+    const staffDoc = await findUserByIdFlexible(req.user.id, {
+      firstName: 1,
+      lastName: 1,
+      email: 1,
+      userType: 1,
+    })
+    const who = staffSummary(staffDoc) || {
+      id: String(req.user.id || ''),
+      displayName: 'Nhân viên phòng khám',
+      email: '',
+      userType: String(req.user.userType || ''),
+    }
+
+    const note = String(req.body?.note || '').trim()
+    if (note.length > 300) {
+      return res.status(400).json({ message: 'Ghi chú thanh toán quá dài (tối đa 300 ký tự).' })
+    }
+
+    const invoiceNo = await nextPaymentInvoiceNo(appt.appointmentDate)
+    const paidAt = new Date()
+
+    appt.payment = {
+      status: 'paid',
+      amount,
+      method,
+      paidAt,
+      paidBy: who,
+      note,
+      invoiceNo,
+    }
+    await appt.save()
+
+    return res.status(200).json({
+      message: 'Đã ghi nhận thanh toán.',
+      appointment: {
+        id: appt._id,
+        ticket: buildTicketCode(appt._id, appt.appointmentDate),
+        status: appt.status,
+        appointmentDate: appt.appointmentDate,
+        startTime: appt.startTime,
+        visitQueueNumber: appt.visitQueueNumber ?? null,
+        clinicRoom: appt.clinicRoom || '',
+        payment: serializePayment(appt),
+        consultationFee: resolveConsultationFee(doctor?.consultationFee),
       },
     })
   } catch (err) {

@@ -17,6 +17,7 @@ import {
 const uri = String(process.env.MONGODB_URI || '').trim()
 const dbName = String(process.env.MONGO_DB_NAME || 'clinic').trim()
 const collName = String(process.env.MONGO_MED_COLLECTION || 'medicine').trim()
+const icd10CollName = String(process.env.MONGO_ICD_COLLECTION || 'icd10').trim()
 const usersColl = String(process.env.MONGO_USERS_COLLECTION || 'users').trim()
 const apptsCollName = String(process.env.MONGO_APPOINTMENTS_COLLECTION || 'appointments').trim()
 const clinicRoomsCollName = String(process.env.MONGO_CLINIC_ROOMS_COLLECTION || 'clinicRoom').trim()
@@ -121,6 +122,73 @@ function normalizeDoc(doc) {
     form: doc.form != null ? String(doc.form) : '',
     notes: doc.notes != null ? String(doc.notes) : '',
     active: doc.active !== false,
+  }
+}
+
+/** Chuẩn hoá đơn thuốc từ FE (prescriptionLines) hoặc payload cũ (prescription). */
+function mapPrescriptionLinesFromPayload(payload) {
+  const raw = payload?.prescriptionLines ?? payload?.prescription
+  if (!Array.isArray(raw)) return []
+  return raw
+    .map((it) => {
+      if (!it || typeof it !== 'object') return null
+      const name = String(it.medicineName || it.name || '').trim()
+      const code = String(it.medicineCode || it.code || '').trim()
+      const unit = String(it.unit || '').trim()
+      const usage = [it.dosage, it.frequency, it.duration, it.note, it.usage]
+        .map((x) => String(x || '').trim())
+        .filter(Boolean)
+        .join(' — ')
+      const qtyNum = Number(it.quantity ?? it.qty)
+      const qty = Number.isFinite(qtyNum) && qtyNum > 0 ? qtyNum : 1
+      if (!name && !code) return null
+      return { name, code, unit, qty, usage }
+    })
+    .filter(Boolean)
+}
+
+function normalizeIcdRow(doc) {
+  if (!doc || typeof doc !== 'object') return null
+  const code = String(doc.code ?? doc.icdCode ?? doc.ma ?? doc.ICD10 ?? '').trim()
+  const name = String(doc.name ?? doc.ten ?? doc.nameVi ?? doc.description ?? doc.title ?? '').trim()
+  if (!code || !name) return null
+  return {
+    id: doc._id != null ? String(doc._id) : code,
+    code,
+    name,
+    deptID: String(doc.deptID ?? '').trim(),
+    deptName: String(doc.deptName ?? '').trim(),
+  }
+}
+
+function examinationForClient(doc) {
+  if (!doc) return null
+  const prescription = Array.isArray(doc.prescription) ? doc.prescription : []
+  const prescriptionLines = prescription.map((it) => ({
+    medicineCode: String(it?.code || '').trim(),
+    medicineName: String(it?.name || '').trim(),
+    unit: String(it?.unit || '').trim(),
+    dosage: '',
+    frequency: '',
+    duration: '',
+    quantity: it?.qty != null ? String(it.qty) : '',
+    note: String(it?.usage || '').trim(),
+  }))
+  const notes = String(doc.notes ?? doc.note ?? '').trim()
+  const diagnosisCode = String(doc.diagnosisCode ?? doc.icdCode ?? '').trim()
+  const diagnosisName = String(doc.diagnosisName ?? '').trim()
+  const diagnosis =
+    String(doc.diagnosis || '').trim() ||
+    (diagnosisCode && diagnosisName ? `${diagnosisCode} - ${diagnosisName}` : '')
+  return {
+    ...doc,
+    diagnosis,
+    diagnosisCode,
+    diagnosisName,
+    treatment: String(doc.treat ?? doc.treatment ?? '').trim(),
+    notes,
+    note: notes,
+    prescriptionLines,
   }
 }
 
@@ -2015,6 +2083,11 @@ function staffReceptionOrRegistration(req) {
   return ut === 'receptionist' || ut === 'registration'
 }
 
+function staffCanViewPatientHistory(req) {
+  const ut = String(req.auth?.userType || '').toLowerCase()
+  return staffReceptionOrRegistration(req) || ut === 'doctor'
+}
+
 function statsDateYmd(d = new Date()) {
   const x = d instanceof Date ? d : new Date(d)
   const pad = (n) => String(n).padStart(2, '0')
@@ -2105,8 +2178,32 @@ function statsAppointmentSlotEnd(dateStr, startTime, endTime) {
   return d
 }
 
+function statsIsPendingStatus(st) {
+  return statsNormalizeStatus(st) === 'pending'
+}
+
+function statsMatchAppointmentDay(today) {
+  const dayStart = new Date(`${today}T00:00:00`)
+  const dayEnd = new Date(`${today}T23:59:59.999`)
+  return {
+    $or: [
+      { appointmentDate: today },
+      { appointmentDate: { $gte: dayStart, $lte: dayEnd } },
+    ],
+  }
+}
+
+function statsApptMatch(apptBase, extra) {
+  const parts = []
+  if (apptBase && Object.keys(apptBase).length) parts.push(apptBase)
+  if (extra) parts.push(extra)
+  if (parts.length === 0) return {}
+  if (parts.length === 1) return parts[0]
+  return { $and: parts }
+}
+
 function statsIsPendingPastSlot(doc) {
-  if (String(doc?.status || '').toLowerCase() !== 'pending') return false
+  if (!statsIsPendingStatus(doc?.status)) return false
   const end = statsAppointmentSlotEnd(doc.appointmentDate, doc.startTime, doc.endTime)
   return Boolean(end && end.getTime() < Date.now())
 }
@@ -2114,6 +2211,39 @@ function statsIsPendingPastSlot(doc) {
 function statsPaymentPaid(doc) {
   const p = doc?.payment && typeof doc.payment === 'object' ? doc.payment : {}
   return String(p.status || '').toLowerCase() === 'paid'
+}
+
+/** Bác sĩ chỉ lưu/kết thúc khám khi lễ tân đã xác nhận và thu phí. */
+function doctorExamEditGuard(appt) {
+  const st = String(appt?.status || '').toLowerCase()
+  if (st === 'cancelled') {
+    return { ok: false, status: 400, message: 'Lịch đã hủy nên không thể khám.' }
+  }
+  if (st === 'examined' || st === 'completed' || st === 'done') {
+    return { ok: false, status: 400, message: 'Lịch đã kết thúc khám — chỉ xem hồ sơ.' }
+  }
+  if (st === 'pending') {
+    return {
+      ok: false,
+      status: 403,
+      message: 'Lễ tân chưa xác nhận lịch. Chờ tiếp nhận thu phí và xác nhận trước khi khám.',
+    }
+  }
+  if (!statsPaymentPaid(appt)) {
+    return {
+      ok: false,
+      status: 403,
+      message: 'Chưa thu phí tại quầy. Nhờ lễ tân xác nhận thanh toán trước khi khám.',
+    }
+  }
+  if (st !== 'confirmed') {
+    return {
+      ok: false,
+      status: 403,
+      message: 'Lịch chưa sẵn sàng khám (cần trạng thái đã xác nhận sau khi thu phí).',
+    }
+  }
+  return { ok: true }
 }
 
 function statsPatientLabelFromUser(p) {
@@ -2124,7 +2254,7 @@ function statsPatientLabelFromUser(p) {
 
 async function statsTodayActions(db, apptBase, today) {
   const rows = await appointmentsCollection(db)
-    .find({ ...apptBase, appointmentDate: today, status: { $regex: /^pending$/i } })
+    .find(statsApptMatch(apptBase, statsMatchAppointmentDay(today)))
     .project({
       ticket: 1,
       patientId: 1,
@@ -2136,24 +2266,34 @@ async function statsTodayActions(db, apptBase, today) {
       doctorId: 1,
       status: 1,
     })
-    .limit(250)
+    .limit(500)
     .toArray()
+
+  const pendingRows = rows.filter((doc) => statsIsPendingStatus(doc.status))
 
   let unpaidPending = 0
   let pendingNoRoom = 0
   let readyToConfirm = 0
+  let expiringSoon = 0
   const alertCandidates = []
 
-  for (const doc of rows) {
+  for (const doc of pendingRows) {
     const isPaid = statsPaymentPaid(doc)
     const room = String(doc.clinicRoom || '').trim()
-    if (!isPaid) unpaidPending += 1
-    if (!room) pendingNoRoom += 1
-    if (isPaid && room) readyToConfirm += 1
-    if (statsIsPendingPastSlot(doc)) {
+    const expiring = statsIsPendingPastSlot(doc)
+    if (expiring) {
+      expiringSoon += 1
       alertCandidates.push(doc)
+    } else if (isPaid && room) {
+      readyToConfirm += 1
+    } else if (!isPaid) {
+      unpaidPending += 1
+    } else if (!room) {
+      pendingNoRoom += 1
     }
   }
+
+  const pendingTotal = unpaidPending + pendingNoRoom + readyToConfirm + expiringSoon
 
   const patientIds = [...new Set(alertCandidates.map((r) => String(r.patientId || '')).filter(Boolean))]
   const pUsers = patientIds.length ? await findUsersByIds(db, patientIds) : []
@@ -2176,14 +2316,15 @@ async function statsTodayActions(db, apptBase, today) {
     unpaidPending,
     pendingNoRoom,
     readyToConfirm,
-    expiringSoon: alertCandidates.length,
+    expiringSoon,
+    pendingTotal,
     alerts,
   }
 }
 
 async function statsRevenueToday(db, apptBase, today) {
   const rows = await appointmentsCollection(db)
-    .find({ ...apptBase, appointmentDate: today })
+    .find(statsApptMatch(apptBase, statsMatchAppointmentDay(today)))
     .project({ payment: 1 })
     .toArray()
   let count = 0
@@ -2205,7 +2346,7 @@ async function statsRevenueToday(db, apptBase, today) {
 
 async function statsByRoomToday(db, apptBase, today) {
   const rows = await appointmentsCollection(db)
-    .find({ ...apptBase, appointmentDate: today })
+    .find(statsApptMatch(apptBase, statsMatchAppointmentDay(today)))
     .project({ clinicRoom: 1, status: 1 })
     .toArray()
   const map = new Map()
@@ -2264,9 +2405,9 @@ app.get('/api/stats/dashboard', authBearer, async (req, res) => {
           ]
 
     const [todayCounts, weekCounts, sourcesToday, ...staffResults] = await Promise.all([
-      statsCountAppointmentsByStatus(db, { ...apptBase, appointmentDate: today }),
+      statsCountAppointmentsByStatus(db, statsApptMatch(apptBase, statsMatchAppointmentDay(today))),
       statsCountAppointmentsByStatus(db, { ...apptBase, appointmentDate: dateRange }),
-      statsCountBookingSources(db, { ...apptBase, appointmentDate: today }),
+      statsCountBookingSources(db, statsApptMatch(apptBase, statsMatchAppointmentDay(today))),
       ...staffExtras,
     ])
 
@@ -2287,6 +2428,19 @@ app.get('/api/stats/dashboard', authBearer, async (req, res) => {
       payload.todayActions = todayActions
       payload.revenueToday = revenueToday
       payload.byRoomToday = byRoomToday
+      const pendingFromActions = Number(todayActions?.pendingTotal) || 0
+      if (payload.appointments?.today) {
+        const t = payload.appointments.today
+        const other =
+          (Number(t.confirmed) || 0) +
+          (Number(t.examined) || 0) +
+          (Number(t.cancelled) || 0)
+        payload.appointments.today = {
+          ...t,
+          pending: pendingFromActions,
+          total: pendingFromActions + other,
+        }
+      }
     }
 
     res.json(payload)
@@ -2591,11 +2745,11 @@ app.get('/api/appointments/patients', authBearer, async (req, res) => {
   }
 })
 
-/** Lịch sử theo BN */
+/** Lịch sử theo BN (tiếp đón / đăng ký / bác sĩ) */
 app.get('/api/appointments/patient-history', authBearer, async (req, res) => {
   try {
-    if (!staffReceptionOrRegistration(req)) {
-      res.status(403).json({ message: 'Chỉ tiếp đón/đăng ký.' })
+    if (!staffCanViewPatientHistory(req)) {
+      res.status(403).json({ message: 'Không có quyền xem lịch sử khám.' })
       return
     }
     const patientId = String(req.query.patientId || '').trim()
@@ -2614,14 +2768,30 @@ app.get('/api/appointments/patient-history', authBearer, async (req, res) => {
     const db = client.db(dbName)
     const rows = await appointmentsCollection(db)
       .find({ patientId: poid })
-      .sort({ createdAt: -1 })
+      .sort({ appointmentDate: -1, startTime: -1, createdAt: -1 })
       .limit(200)
       .toArray()
     const doctorIds = [...new Set(rows.map((r) => String(r.doctorId)).filter(Boolean))]
     const dUsers = await findUsersByIds(db, doctorIds)
     const dMap = new Map(dUsers.map((u) => [String(u._id), u]))
     const patient = await db.collection(usersColl).findOne({ _id: poid })
-    const appointments = rows.map((r) => serializeAppointment(r, dMap.get(String(r.doctorId)), patient))
+    const apptOids = rows.map((r) => r._id)
+    const examRows =
+      apptOids.length > 0
+        ? await db
+            .collection('examination')
+            .find({ appointmentId: { $in: apptOids } })
+            .toArray()
+        : []
+    const examMap = new Map(examRows.map((ex) => [String(ex.appointmentId), ex]))
+    const appointments = rows.map((r) => {
+      const doctor = dMap.get(String(r.doctorId))
+      const ap = serializeAppointment(r, doctor, patient)
+      const examDoc = examMap.get(String(r._id))
+      if (examDoc) ap.examination = examinationForClient(examDoc)
+      ap.doctorName = safeDoctorName(doctor)
+      return ap
+    })
     await enrichAppointmentsSpecialtyNames(client, appointments)
     res.json({ appointments })
   } catch (e) {
@@ -3099,8 +3269,18 @@ app.patch('/api/appointments/:id/finish-exam', authBearer, async (req, res) => {
       res.status(403).json({ message: 'Bạn không có quyền kết thúc khám lịch này.' })
       return
     }
-    if (String(appt.status || '').toLowerCase() === 'cancelled') {
-      res.status(400).json({ message: 'Lịch đã hủy nên không thể kết thúc khám.' })
+    const finishGuard = doctorExamEditGuard(appt)
+    if (!finishGuard.ok) {
+      res.status(finishGuard.status).json({ message: finishGuard.message })
+      return
+    }
+
+    const exam = await db.collection('examination').findOne({ appointmentId: oid })
+    const diagnosisCode = String(exam?.diagnosisCode ?? exam?.icdCode ?? '').trim()
+    if (!diagnosisCode) {
+      res.status(400).json({
+        message: 'Chưa có chẩn đoán ICD-10. Vui lòng chọn chẩn đoán từ danh sách và bấm Lưu trước khi kết thúc khám.',
+      })
       return
     }
 
@@ -3664,6 +3844,11 @@ app.post('/api/examinations', authBearer, async (_req, res) => {
       res.status(403).json({ message: 'Bạn không có quyền lưu phiên khám cho lịch này.' })
       return
     }
+    const examGuard = doctorExamEditGuard(appt)
+    if (!examGuard.ok) {
+      res.status(examGuard.status).json({ message: examGuard.message })
+      return
+    }
 
     const now = new Date()
     const payload = _req.body && typeof _req.body === 'object' ? _req.body : {}
@@ -3683,25 +3868,28 @@ app.post('/api/examinations', authBearer, async (_req, res) => {
       bmi: payload.bmi != null ? String(payload.bmi || '').trim() : '',
       spo2: payload.spo2 != null ? String(payload.spo2 || '').trim() : '',
       symptoms: payload.symptoms != null ? String(payload.symptoms || '').trim() : '',
+      diagnosisCode:
+        payload.diagnosisCode != null
+          ? String(payload.diagnosisCode || '').trim()
+          : payload.icdCode != null
+            ? String(payload.icdCode || '').trim()
+            : '',
+      diagnosisName: payload.diagnosisName != null ? String(payload.diagnosisName || '').trim() : '',
+      diagnosis:
+        payload.diagnosis != null
+          ? String(payload.diagnosis || '').trim()
+          : payload.diagnosisCode && payload.diagnosisName
+            ? `${String(payload.diagnosisCode).trim()} - ${String(payload.diagnosisName).trim()}`
+            : '',
       notes: payload.notes != null ? String(payload.notes || '').trim() : '',
-      treat: payload.treat != null ? String(payload.treat || '').trim() : '',
+      treat:
+        payload.treat != null
+          ? String(payload.treat || '').trim()
+          : payload.treatment != null
+            ? String(payload.treatment || '').trim()
+            : '',
       reExamination: payload.reExamination != null ? payload.reExamination : null,
-      prescription:
-        Array.isArray(payload.prescription) && payload.prescription.length
-          ? payload.prescription
-              .map((it) => {
-                if (!it || typeof it !== 'object') return null
-                const name = String(it.name || '').trim()
-                const code = String(it.code || '').trim()
-                const unit = String(it.unit || '').trim()
-                const usage = String(it.usage || '').trim()
-                const qtyNum = Number(it.qty)
-                const qty = Number.isFinite(qtyNum) && qtyNum > 0 ? qtyNum : 1
-                if (!name && !code) return null
-                return { name, code, unit, qty, usage }
-              })
-              .filter(Boolean)
-          : [],
+      prescription: mapPrescriptionLinesFromPayload(payload),
       updatedAt: now,
     }
 
@@ -3714,7 +3902,7 @@ app.post('/api/examinations', authBearer, async (_req, res) => {
 
     // Lưu khám là thao tác lưu nháp (draft). Chỉ đổi trạng thái lịch sang "examined"
     // khi bác sĩ bấm "Kết thúc khám" (endpoint khác).
-    res.json({ ok: true, examination: r.value })
+    res.json({ ok: true, examination: examinationForClient(r.value) })
   } catch (e) {
     console.error(e)
     res.status(503).json({ message: mongoHint(e) })
@@ -3757,7 +3945,7 @@ app.get('/api/examinations', authBearer, async (req, res) => {
     }
 
     const doc = await db.collection('examination').findOne({ appointmentId: appointmentOid })
-    res.json({ ok: true, examination: doc || null })
+    res.json({ ok: true, examination: examinationForClient(doc) })
   } catch (e) {
     console.error(e)
     res.status(503).json({ message: mongoHint(e) })
@@ -3776,11 +3964,54 @@ app.get('/api/medicines', async (req, res) => {
     if (q) {
       const esc = q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
       const rx = new RegExp(esc, 'i')
-      filter.$or = [{ name: rx }, { code: rx }]
+      filter.$or = [
+        { name: rx },
+        { code: rx },
+        { strength: rx },
+        { genericName: rx },
+        { brandName: rx },
+        { activeIngredient: rx },
+        { hoatChat: rx },
+        { notes: rx },
+      ]
     }
 
     const rows = await col.find(filter).sort({ name: 1 }).limit(limit).toArray()
     res.json({ medicines: rows.map(normalizeDoc).filter(Boolean) })
+  } catch (e) {
+    console.error(e)
+    res.status(503).json({ message: mongoHint(e) })
+  }
+})
+
+/** Tra cứu ICD-10 (autocomplete chẩn đoán). Collection: MONGO_ICD_COLLECTION (mặc định icd10). */
+app.get('/api/icd10', authBearer, async (req, res) => {
+  try {
+    await client.connect()
+    const q = String(req.query.q || '').trim()
+    const limit = Math.min(50, Math.max(1, Number(req.query.limit) || 25))
+    const db = client.db(dbName)
+    const col = db.collection(icd10CollName)
+
+    const deptID = String(req.query.deptID || req.query.deptId || '').trim()
+    const filter = { active: { $ne: false } }
+    if (deptID) filter.deptID = deptID
+    if (q) {
+      const esc = q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+      const rx = new RegExp(esc, 'i')
+      filter.$or = [
+        { name: rx },
+        { ten: rx },
+        { nameVi: rx },
+        { code: rx },
+        { icdCode: rx },
+        { ma: rx },
+        { description: rx },
+      ]
+    }
+
+    const rows = await col.find(filter).sort({ deptID: 1, name: 1, code: 1 }).limit(limit).toArray()
+    res.json({ items: rows.map(normalizeIcdRow).filter(Boolean) })
   } catch (e) {
     console.error(e)
     res.status(503).json({ message: mongoHint(e) })

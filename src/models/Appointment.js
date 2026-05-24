@@ -49,6 +49,21 @@ const appointmentSchema = new mongoose.Schema(
     visitQueueNumber: { type: Number, min: 1 },
     /** Phòng khám / phòng chỉ định (text). */
     clinicRoom: { type: String, default: '', trim: true },
+    /** Thanh toán phí khám tại quầy (lễ tân). */
+    payment: {
+      status: { type: String, enum: ['unpaid', 'paid'], default: 'unpaid' },
+      amount: { type: Number, min: 0 },
+      method: { type: String, enum: ['cash', 'transfer', ''], default: '' },
+      paidAt: { type: Date },
+      paidBy: {
+        id: { type: String, trim: true },
+        displayName: { type: String, trim: true },
+        email: { type: String, trim: true },
+        userType: { type: String, trim: true },
+      },
+      note: { type: String, default: '', trim: true },
+      invoiceNo: { type: String, default: '', trim: true },
+    },
   },
   { timestamps: true }
 )
