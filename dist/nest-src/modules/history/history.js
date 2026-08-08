@@ -1,0 +1,12 @@
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.HISTORY_ACTIONS = void 0;
+exports.HISTORY_ACTIONS = {
+    USER_LOGIN_SUCCESS: 'USER_LOGIN_SUCCESS',
+    USER_REGISTERED: 'USER_REGISTERED',
+    USER_UPDATED: 'USER_UPDATED',
+    USER_DELETED: 'USER_DELETED',
+    USER_FORGOT_PASSWORD_REQUESTED: 'USER_FORGOT_PASSWORD_REQUESTED',
+    USER_RESET_PASSWORD_SUCCESS: 'USER_RESET_PASSWORD_SUCCESS',
+};
+//# sourceMappingURL=history.js.map

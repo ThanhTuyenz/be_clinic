@@ -1,0 +1,27 @@
+{
+  "compilerOptions": {
+    "module": "commonjs",
+    "declaration": true,
+    "removeComments": true,
+    "emitDecoratorMetadata": true,
+    "experimentalDecorators": true,
+    "allowSyntheticDefaultImports": true,
+    "target": "es2022",
+    "sourceMap": true,
+    "outDir": "./dist",
+    "baseUrl": ".",
+    "incremental": true,
+    "skipLibCheck": true,
+    "strict": false,
+    "esModuleInterop": true,
+    "allowJs": true,
+    "resolveJsonModule": true,
+    "moduleResolution": "node",
+    "paths": {
+      "src/*": ["nest-src/*"]
+    },
+    "types": ["node"]
+  },
+  "include": ["nest-src/**/*.ts", "src/**/*.js"],
+  "exclude": ["node_modules", "dist", "fe_*", "fe_clinic_*"]
+}

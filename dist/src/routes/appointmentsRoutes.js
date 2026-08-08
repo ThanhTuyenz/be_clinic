@@ -1,0 +1,21 @@
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+const express_1 = require("express");
+const appointmentsController_js_1 = require("../controllers/appointmentsController.js");
+const authMiddleware_js_1 = require("../middleware/authMiddleware.js");
+const router = (0, express_1.Router)();
+router.get('/my', authMiddleware_js_1.requireAuth, appointmentsController_js_1.listMyAppointments);
+router.get('/doctor', authMiddleware_js_1.requireAuth, appointmentsController_js_1.listDoctorAppointments);
+router.get('/lookup-ticket', authMiddleware_js_1.requireAuth, appointmentsController_js_1.lookupAppointmentByTicket);
+router.get('/patient-by-code', authMiddleware_js_1.requireAuth, appointmentsController_js_1.lookupPatientByCode);
+router.get('/patients', authMiddleware_js_1.requireAuth, appointmentsController_js_1.listPatientsReception);
+router.get('/patient-history', authMiddleware_js_1.requireAuth, appointmentsController_js_1.listPatientHistoryReception);
+router.get('/reception', authMiddleware_js_1.requireAuth, appointmentsController_js_1.listReceptionAppointments);
+router.get('/availability', authMiddleware_js_1.requireAuth, appointmentsController_js_1.getAvailability);
+router.get('/schedule-dates', authMiddleware_js_1.requireAuth, appointmentsController_js_1.getDoctorScheduleDates);
+router.post('/reception', authMiddleware_js_1.requireAuth, appointmentsController_js_1.createAppointmentReception);
+router.patch('/:id/status', authMiddleware_js_1.requireAuth, appointmentsController_js_1.updateAppointmentStatusReception);
+router.patch('/:id/cancel', authMiddleware_js_1.requireAuth, appointmentsController_js_1.cancelAppointment);
+router.post('/', authMiddleware_js_1.requireAuth, appointmentsController_js_1.createAppointment);
+exports.default = router;
+//# sourceMappingURL=appointmentsRoutes.js.map
