@@ -9,15 +9,12 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.ForgotPasswordModule = void 0;
 const common_1 = require("@nestjs/common");
 const forgot_password_service_1 = require("./forgot-password.service");
-const typeorm_1 = require("@nestjs/typeorm");
-const forgot_password_entity_1 = require("./entities/forgot-password.entity");
 const constants_1 = require("../../../common/utils/constants");
 let ForgotPasswordModule = class ForgotPasswordModule {
 };
 exports.ForgotPasswordModule = ForgotPasswordModule;
 exports.ForgotPasswordModule = ForgotPasswordModule = __decorate([
     (0, common_1.Module)({
-        imports: [typeorm_1.TypeOrmModule.forFeature([forgot_password_entity_1.ForgotPassword])],
         providers: [
             {
                 provide: constants_1.Services.FORGOT_PASSWORD,

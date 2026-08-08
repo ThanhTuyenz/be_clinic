@@ -4,6 +4,6 @@ import type { IRolesService } from './roles.js'
 @Injectable()
 export class RolesService implements IRolesService {
   async findOne(roleId: string) {
-    return { id: roleId, name: 'user' }
+    return { id: roleId, name: 'patient' }
   }
 }

@@ -14,199 +14,168 @@ var __param = (this && this.__param) || function (paramIndex, decorator) {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.UsersService = void 0;
 const common_1 = require("@nestjs/common");
-const typeorm_1 = require("@nestjs/typeorm");
-const typeorm_2 = require("typeorm");
-const user_entity_1 = require("./entities/user.entity");
-const history_service_1 = require("../../history/history.service");
-const history_1 = require("../../history/history");
-const constants_1 = require("../../../common/utils/constants");
-const permissions_service_1 = require("../../permissions/permissions.service");
+const client_1 = require("@prisma/client");
+const helpers_js_1 = require("../../../common/utils/helpers.js");
+const prisma_service_js_1 = require("../../../infrastructure/database/prisma/prisma.service.js");
+const user_entity_js_1 = require("./entities/user.entity.js");
+const history_service_js_1 = require("../../history/history.service.js");
+const history_js_1 = require("../../history/history.js");
+const constants_js_1 = require("../../../common/utils/constants.js");
+const permissions_service_js_1 = require("../../permissions/permissions.service.js");
 let UsersService = class UsersService {
-    usersRepository;
+    prisma;
     historyService;
     rolesService;
     permissionsService;
-    constructor(usersRepository, historyService, rolesService, permissionsService) {
-        this.usersRepository = usersRepository;
+    constructor(prisma, historyService, rolesService, permissionsService) {
+        this.prisma = prisma;
         this.historyService = historyService;
         this.rolesService = rolesService;
         this.permissionsService = permissionsService;
     }
-    async createUser(createUserDto) {
-        const email = createUserDto.email;
+    async createUser(dto) {
+        const email = dto.email?.trim().toLowerCase();
         if (!email)
             throw new Error('Email không được gửi tới server.');
-        const existingUser = await this.usersRepository.findOne({
-            where: { email: email },
-        });
-        if (existingUser)
+        if (await this.prisma.user.findUnique({ where: { email } })) {
             throw new common_1.HttpException('User already exists', common_1.HttpStatus.CONFLICT);
-        if (createUserDto.roleId) {
-            await this.rolesService.findOne(createUserDto.roleId);
         }
-        const user = this.usersRepository.create({
-            ...createUserDto,
-            status: createUserDto.status || user_entity_1.UserStatus.Active,
-            customPermissions: createUserDto.customPermissions || null,
+        if (dto.roleId)
+            await this.rolesService.findOne(dto.roleId);
+        const row = await this.prisma.user.create({
+            data: {
+                email,
+                password: dto.password ? await (0, helpers_js_1.hashPassword)(dto.password) : null,
+                fullName: dto.fullName,
+                role: this.toPrismaRole(dto.role ?? user_entity_js_1.UserRole.Patient),
+                status: this.toPrismaStatus(dto.status ?? user_entity_js_1.UserStatus.Active),
+                provider: this.toPrismaProvider(dto.provider ?? 'email'),
+                socialId: dto.socialId ?? null,
+                roleId: dto.roleId ?? null,
+                customPermissions: dto.customPermissions,
+                hash: dto.hash ?? null,
+                emailOtpHash: dto.emailOtpHash ?? null,
+                emailOtpExpiresAt: dto.emailOtpExpiresAt ?? null,
+                emailOtpLastSentAt: dto.emailOtpLastSentAt ?? null,
+                emailOtpAttempts: dto.emailOtpAttempts ?? 0,
+            },
         });
-        return this.usersRepository.save(user);
+        return this.toEntity(row);
     }
-    findOneUser(options) {
-        return this.usersRepository.findOne({
-            where: options,
-        });
-    }
-    escapeRegex(value) {
-        return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-    }
-    async findUsersWithPagination(options) {
-        const emailTerm = options.email?.trim();
-        const nameTerm = options.name?.trim();
-        const where = {};
-        const andConditions = [];
-        if (emailTerm) {
-            where.email = {
-                $regex: this.escapeRegex(emailTerm),
-                $options: 'i',
-            };
-        }
-        if (nameTerm) {
-            where.fullName = {
-                $regex: this.escapeRegex(nameTerm),
-                $options: 'i',
-            };
-        }
-        if (options.isBlocked !== undefined) {
-            where.isBlocked = options.isBlocked;
-        }
-        if (options.isDeleted === true) {
-            andConditions.push({ isDeleted: true });
-        }
-        else {
-            andConditions.push({
-                $or: [{ isDeleted: false }, { isDeleted: { $exists: false } }],
-            });
-        }
-        if (andConditions.length > 0) {
-            where.$and = andConditions;
-        }
-        const [data, total] = await this.usersRepository.findAndCount({
-            where: (Object.keys(where).length > 0 ? where : {}),
-            skip: (options.page - 1) * options.limit,
-            take: options.limit,
-            order: { createdAt: 'DESC' },
-        });
-        return { data, total };
+    async findOneUser(options) {
+        const where = this.toWhere(options);
+        const row = await this.prisma.user.findFirst({ where });
+        return row ? this.toEntity(row) : null;
     }
     async findByEmail(email) {
-        return await this.usersRepository.findOne({
-            where: { email: email },
-        });
+        const row = await this.prisma.user.findUnique({ where: { email: email.trim().toLowerCase() } });
+        return row ? this.toEntity(row) : null;
+    }
+    async findUsersWithPagination(options) {
+        const where = {
+            email: options.email ? { contains: options.email.trim(), mode: 'insensitive' } : undefined,
+            fullName: options.name ? { contains: options.name.trim(), mode: 'insensitive' } : undefined,
+            isBlocked: options.isBlocked,
+            isDeleted: options.isDeleted ?? false,
+        };
+        const [rows, total] = await this.prisma.$transaction([
+            this.prisma.user.findMany({ where, skip: (options.page - 1) * options.limit, take: options.limit, orderBy: { createdAt: 'desc' } }),
+            this.prisma.user.count({ where }),
+        ]);
+        return { data: rows.map((row) => this.toEntity(row)), total };
     }
     async updateUser(id, payload) {
-        const existingUser = await this.findOneUser({ id });
-        if (!existingUser) {
+        const existing = await this.findOneUser({ id });
+        if (!existing)
             throw new common_1.NotFoundException('Không tìm thấy người dùng');
-        }
-        if (payload.roleId !== undefined && payload.roleId !== null) {
+        if (payload.roleId)
             await this.rolesService.findOne(payload.roleId);
-        }
-        const nextPayload = { ...payload };
-        if (nextPayload.isBlocked === true) {
-            nextPayload.blockedAt = existingUser.blockedAt ?? new Date();
-        }
-        if (nextPayload.isBlocked === false) {
-            nextPayload.blockedAt = null;
-        }
-        if (nextPayload.isDeleted === true) {
-            nextPayload.status = user_entity_1.UserStatus.Inactive;
-        }
-        Object.assign(existingUser, nextPayload);
-        const updatedUser = await this.usersRepository.save(existingUser);
-        await this.historyService.create({
-            action: history_1.HISTORY_ACTIONS.USER_UPDATED,
-            message: `Cập nhật người dùng ${existingUser.email}`,
-            actorId: existingUser.id,
-            actorEmail: existingUser.email ?? undefined,
-            targetType: 'user',
-            targetId: existingUser.id,
-        });
-        try {
-            this.permissionsService.invalidateCache(existingUser.id);
-        }
-        catch (err) {
-        }
-        return updatedUser;
+        const next = { ...payload };
+        if (next.isBlocked === true)
+            next.blockedAt = existing.blockedAt ?? new Date();
+        if (next.isBlocked === false)
+            next.blockedAt = null;
+        if (next.isDeleted === true)
+            next.status = user_entity_js_1.UserStatus.Inactive;
+        const row = await this.prisma.user.update({ where: { id }, data: await this.toUpdateData(next, existing) });
+        await this.recordHistory(row, history_js_1.HISTORY_ACTIONS.USER_UPDATED, 'Cập nhật người dùng');
+        this.permissionsService.invalidateCache(id);
+        return this.toEntity(row);
     }
     async deleteUser(id) {
-        const existingUser = await this.findOneUser({ id });
-        if (!existingUser) {
+        const existing = await this.findOneUser({ id });
+        if (!existing)
             throw new common_1.NotFoundException('Không tìm thấy người dùng');
-        }
-        existingUser.isDeleted = true;
-        await this.usersRepository.save(existingUser);
-        await this.historyService.create({
-            action: history_1.HISTORY_ACTIONS.USER_DELETED,
-            message: `Xóa người dùng ${existingUser.email}`,
-            actorId: existingUser.id,
-            actorEmail: existingUser.email ?? undefined,
-            targetType: 'user',
-            targetId: existingUser.id,
-        });
+        const row = await this.prisma.user.update({ where: { id }, data: { isDeleted: true, status: 'INACTIVE' } });
+        await this.recordHistory(row, history_js_1.HISTORY_ACTIONS.USER_DELETED, 'Xóa người dùng');
     }
     async saveUser(user) {
-        return this.usersRepository.save(user);
+        const existing = await this.findOneUser({ id: user.id });
+        if (!existing)
+            throw new common_1.NotFoundException('Không tìm thấy người dùng');
+        const row = await this.prisma.user.update({ where: { id: user.id }, data: await this.toUpdateData(user, existing) });
+        return this.toEntity(row);
     }
     async assignRole(userId, roleId) {
-        const user = await this.findOneUser({ id: userId });
-        if (!user) {
-            throw new common_1.NotFoundException('Không tìm thấy người dùng');
-        }
         await this.rolesService.findOne(roleId);
-        user.roleId = roleId;
-        const updatedUser = await this.usersRepository.save(user);
-        await this.historyService.create({
-            action: history_1.HISTORY_ACTIONS.USER_UPDATED,
-            message: `Gán role cho người dùng ${user.email}`,
-            actorId: user.id,
-            actorEmail: user.email ?? undefined,
-            targetType: 'user',
-            targetId: user.id,
-        });
-        try {
-            this.permissionsService.invalidateCache(user.id);
-        }
-        catch (err) { }
-        return updatedUser;
+        return this.updateUser(userId, { roleId });
     }
     async removeRole(userId) {
-        const user = await this.findOneUser({ id: userId });
-        if (!user) {
-            throw new common_1.NotFoundException('Không tìm thấy người dùng');
-        }
-        user.roleId = null;
-        const updatedUser = await this.usersRepository.save(user);
-        await this.historyService.create({
-            action: history_1.HISTORY_ACTIONS.USER_UPDATED,
-            message: `Xóa role của người dùng ${user.email}`,
-            actorId: user.id,
-            actorEmail: user.email ?? undefined,
-            targetType: 'user',
-            targetId: user.id,
+        return this.updateUser(userId, { roleId: null });
+    }
+    toWhere(input) {
+        return {
+            id: input.id,
+            email: typeof input.email === 'string' ? input.email.trim().toLowerCase() : undefined,
+            socialId: input.socialId,
+            provider: input.provider ? this.toPrismaProvider(String(input.provider)) : undefined,
+            hash: input.hash,
+        };
+    }
+    async toUpdateData(payload, existing) {
+        const passwordChanged = payload.password != null && payload.password !== existing.password;
+        return {
+            email: payload.email === undefined ? undefined : payload.email?.trim().toLowerCase(),
+            password: passwordChanged ? await (0, helpers_js_1.hashPassword)(payload.password) : undefined,
+            fullName: payload.fullName,
+            provider: payload.provider ? this.toPrismaProvider(payload.provider) : undefined,
+            status: payload.status ? this.toPrismaStatus(payload.status) : undefined,
+            role: payload.role ? this.toPrismaRole(payload.role) : undefined,
+            socialId: payload.socialId,
+            roleId: payload.roleId,
+            customPermissions: payload.customPermissions === null ? client_1.Prisma.JsonNull : payload.customPermissions,
+            hash: payload.hash,
+            emailOtpHash: payload.emailOtpHash,
+            emailOtpExpiresAt: payload.emailOtpExpiresAt,
+            emailOtpLastSentAt: payload.emailOtpLastSentAt,
+            emailOtpAttempts: payload.emailOtpAttempts,
+            isBlocked: payload.isBlocked,
+            blockedAt: payload.blockedAt,
+            isDeleted: payload.isDeleted,
+            lastLoginAt: payload.lastLoginAt,
+        };
+    }
+    toEntity(row) {
+        return Object.assign(new user_entity_js_1.User(), row, {
+            role: row.role.toLowerCase(),
+            status: row.status.toLowerCase(),
+            provider: row.provider.toLowerCase(),
+            customPermissions: row.customPermissions,
+            previousPassword: row.password,
         });
-        try {
-            this.permissionsService.invalidateCache(user.id);
-        }
-        catch (err) { }
-        return updatedUser;
+    }
+    toPrismaRole(value) { return String(value).toUpperCase(); }
+    toPrismaStatus(value) { return String(value).toUpperCase(); }
+    toPrismaProvider(value) { return String(value).toUpperCase(); }
+    async recordHistory(row, action, prefix) {
+        await this.historyService.create({ action, message: `${prefix} ${row.email}`, actorId: row.id, actorEmail: row.email ?? undefined, targetType: 'user', targetId: row.id });
     }
 };
 exports.UsersService = UsersService;
 exports.UsersService = UsersService = __decorate([
     (0, common_1.Injectable)(),
-    __param(0, (0, typeorm_1.InjectRepository)(user_entity_1.User)),
-    __param(2, (0, common_1.Inject)(constants_1.Services.ROLES)),
-    __metadata("design:paramtypes", [typeorm_2.Repository,
-        history_service_1.HistoryService, Object, permissions_service_1.PermissionsService])
+    __param(2, (0, common_1.Inject)(constants_js_1.Services.ROLES)),
+    __metadata("design:paramtypes", [prisma_service_js_1.PrismaService,
+        history_service_js_1.HistoryService, Object, permissions_service_js_1.PermissionsService])
 ], UsersService);
 //# sourceMappingURL=users.service.js.map

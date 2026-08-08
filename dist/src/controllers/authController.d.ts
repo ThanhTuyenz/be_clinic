@@ -1,9 +1,0 @@
-export function me(req: any, res: any): Promise<any>;
-export function updateMe(req: any, res: any): Promise<any>;
-export function register(req: any, res: any): Promise<any>;
-export function startRegister(req: any, res: any): Promise<any>;
-export function verifyEmail(req: any, res: any): Promise<any>;
-export function completeRegister(req: any, res: any): Promise<any>;
-export function resendOtp(req: any, res: any): Promise<any>;
-export function login(req: any, res: any): Promise<any>;
-export function staffLogin(req: any, res: any): Promise<any>;

@@ -36,6 +36,8 @@ export class ForgotPassword extends EntityHelper {
   @Column({ type: Date })
   createdAt: Date;
 
+  expiresAt?: Date;
+
   @Column({ type: Date, nullable: true })
   deletedAt: Date | null;
 

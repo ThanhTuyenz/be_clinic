@@ -122,7 +122,7 @@ async function bootstrap() {
     const swaggerConfig = new DocumentBuilder()
       .setTitle('Clinic API')
       .setDescription(
-        'API cho hệ thống đặt lịch hẹn và quản lý khám bệnh trực tuyến đa bệnh viện.',
+        'API cho hệ thống một phòng khám đa cơ sở, đặt lịch, thanh toán và check-in.',
       )
       .setVersion('1.0')
       .addBearerAuth(
@@ -142,6 +142,10 @@ async function bootstrap() {
       .addTag('Clinic rooms', 'Danh sách phòng khám')
       .addTag('Examinations', 'Hồ sơ khám bệnh')
       .addTag('Permissions', 'Quyền của người dùng hiện tại')
+      .addTag('Payments', 'Thanh toán phí khám và webhook')
+      .addTag('Check-in', 'Quét QR và cấp số thứ tự')
+      .addTag('Branches', 'Danh sách cơ sở')
+      .addTag('Patient profiles', 'Hồ sơ bệnh nhân và người thân')
       .build()
     const swaggerDocument = SwaggerModule.createDocument(app, swaggerConfig)
     SwaggerModule.setup('docs', app, swaggerDocument, {

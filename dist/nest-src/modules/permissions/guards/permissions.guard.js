@@ -51,8 +51,7 @@ let PermissionsGuard = PermissionsGuard_1 = class PermissionsGuard {
             this.logger.warn('No user found in request');
             return false;
         }
-        if (userRole === enums_1.PermissionRole.SUPER_ADMIN ||
-            userRole === enums_1.PermissionRole.ADMIN) {
+        if (userRole === enums_1.PermissionRole.ADMIN) {
             return true;
         }
         if (!request.user?.id) {
@@ -77,10 +76,10 @@ let PermissionsGuard = PermissionsGuard_1 = class PermissionsGuard {
         let allowedResourcesIds = null;
         let deniedResourcesIds = null;
         if (requiredPermission.resourceTarget === enums_1.PermissionResourceTarget.SOME) {
-            if ([enums_1.PermissionRole.USER, enums_1.PermissionRole.STAFF].includes(role)) {
+            if ([enums_1.PermissionRole.PATIENT, enums_1.PermissionRole.EMPLOYEE].includes(role)) {
                 allowedResourcesIds = (0, permissions_helpers_1.getPermittedResourcesIds)(grantedPermissions, requiredPermission, enums_1.PermissionEffect.ALLOW);
             }
-            else if ([enums_1.PermissionRole.ADMIN, enums_1.PermissionRole.SUPER_ADMIN].includes(role)) {
+            else if (role === enums_1.PermissionRole.ADMIN) {
                 deniedResourcesIds = (0, permissions_helpers_1.getPermittedResourcesIds)(grantedPermissions, requiredPermission, enums_1.PermissionEffect.DENY);
             }
         }

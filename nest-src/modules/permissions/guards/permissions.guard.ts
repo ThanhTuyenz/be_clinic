@@ -72,10 +72,7 @@ export class PermissionsGuard implements CanActivate {
       return false;
     }
 
-    if (
-      userRole === PermissionRole.SUPER_ADMIN ||
-      userRole === PermissionRole.ADMIN
-    ) {
+    if (userRole === PermissionRole.ADMIN) {
       return true;
     }
 
@@ -144,15 +141,13 @@ export class PermissionsGuard implements CanActivate {
     let deniedResourcesIds: string[] | null = null;
 
     if (requiredPermission.resourceTarget === PermissionResourceTarget.SOME) {
-      if ([PermissionRole.USER, PermissionRole.STAFF].includes(role)) {
+      if ([PermissionRole.PATIENT, PermissionRole.EMPLOYEE].includes(role)) {
         allowedResourcesIds = getPermittedResourcesIds(
           grantedPermissions,
           requiredPermission,
           PermissionEffect.ALLOW,
         );
-      } else if (
-        [PermissionRole.ADMIN, PermissionRole.SUPER_ADMIN].includes(role)
-      ) {
+      } else if (role === PermissionRole.ADMIN) {
         deniedResourcesIds = getPermittedResourcesIds(
           grantedPermissions,
           requiredPermission,

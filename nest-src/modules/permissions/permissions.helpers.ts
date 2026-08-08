@@ -11,14 +11,6 @@ import { Permission } from './types/permission.type';
 
 export function generateGlobalPermissions(role: PermissionRole): Permission[] {
   switch (role) {
-    case PermissionRole.SUPER_ADMIN:
-      return [
-        generatePermission(
-          PermissionResource.ANY,
-          PermissionAction.ANY,
-          PermissionResourceTarget.ANY,
-        ),
-      ];
     case PermissionRole.ADMIN:
       return [
         generatePermission(
@@ -27,7 +19,7 @@ export function generateGlobalPermissions(role: PermissionRole): Permission[] {
           PermissionResourceTarget.ANY,
         ),
       ];
-    case PermissionRole.STAFF:
+    case PermissionRole.EMPLOYEE:
       return [
         generatePermission(
           PermissionResource.USER,
@@ -40,7 +32,7 @@ export function generateGlobalPermissions(role: PermissionRole): Permission[] {
           PermissionResourceTarget.SOME,
         ),
       ];
-    case PermissionRole.USER:
+    case PermissionRole.PATIENT:
       return [
         generatePermission(
           PermissionResource.USER,

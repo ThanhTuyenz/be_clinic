@@ -8,8 +8,6 @@ var __decorate = (this && this.__decorate) || function (decorators, target, key,
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.PermissionsModule = void 0;
 const common_1 = require("@nestjs/common");
-const typeorm_1 = require("@nestjs/typeorm");
-const user_entity_1 = require("../auth/users/entities/user.entity");
 const roles_module_1 = require("../roles/roles.module");
 const permissions_1 = require("./factories/permissions");
 const permissions_factory_1 = require("./factories/permissions.factory");
@@ -23,7 +21,7 @@ exports.PermissionsModule = PermissionsModule;
 exports.PermissionsModule = PermissionsModule = __decorate([
     (0, common_1.Global)(),
     (0, common_1.Module)({
-        imports: [typeorm_1.TypeOrmModule.forFeature([user_entity_1.User]), roles_module_1.RolesModule],
+        imports: [roles_module_1.RolesModule],
         providers: [
             permissions_service_1.PermissionsService,
             permissions_1.Permissions,

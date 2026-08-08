@@ -9,12 +9,17 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.AppointmentsModule = void 0;
 const common_1 = require("@nestjs/common");
 const appointments_controller_js_1 = require("../../controllers/appointments.controller.js");
+const booking_controller_js_1 = require("./booking.controller.js");
+const booking_service_js_1 = require("./booking.service.js");
+const payment_webhook_signature_service_js_1 = require("./payment-webhook-signature.service.js");
 let AppointmentsModule = class AppointmentsModule {
 };
 exports.AppointmentsModule = AppointmentsModule;
 exports.AppointmentsModule = AppointmentsModule = __decorate([
     (0, common_1.Module)({
-        controllers: [appointments_controller_js_1.AppointmentsController],
+        controllers: [appointments_controller_js_1.AppointmentsController, booking_controller_js_1.BookingController, booking_controller_js_1.PaymentWebhookController, booking_controller_js_1.CheckInController],
+        providers: [booking_service_js_1.BookingService, payment_webhook_signature_service_js_1.PaymentWebhookSignatureService],
+        exports: [booking_service_js_1.BookingService],
     })
 ], AppointmentsModule);
 //# sourceMappingURL=appointments.module.js.map

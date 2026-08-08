@@ -15,20 +15,18 @@ var PermissionsService_1;
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.PermissionsService = void 0;
 const common_1 = require("@nestjs/common");
-const typeorm_1 = require("@nestjs/typeorm");
-const typeorm_2 = require("typeorm");
-const user_entity_1 = require("../auth/users/entities/user.entity");
+const prisma_service_js_1 = require("../../infrastructure/database/prisma/prisma.service.js");
 const constants_1 = require("../../common/utils/constants");
 const enums_1 = require("./enums");
 const permissions_helpers_1 = require("./permissions.helpers");
 const permissions_cache_service_1 = require("./services/permissions-cache.service");
 let PermissionsService = PermissionsService_1 = class PermissionsService {
-    usersRepository;
+    prisma;
     cacheService;
     rolesService;
     logger = new common_1.Logger(PermissionsService_1.name);
-    constructor(usersRepository, cacheService, rolesService) {
-        this.usersRepository = usersRepository;
+    constructor(prisma, cacheService, rolesService) {
+        this.prisma = prisma;
         this.cacheService = cacheService;
         this.rolesService = rolesService;
     }
@@ -39,9 +37,7 @@ let PermissionsService = PermissionsService_1 = class PermissionsService {
             return { role: cached.role, permissions: cached.permissions };
         }
         const permissions = [];
-        const user = await this.usersRepository.findOne({
-            where: { id: userId },
-        });
+        const user = await this.prisma.user.findUnique({ where: { id: userId } });
         if (!user) {
             this.logger.warn(`User not found: ${userId}`);
             throw new common_1.NotFoundException('User not found');
@@ -54,7 +50,7 @@ let PermissionsService = PermissionsService_1 = class PermissionsService {
             this.logger.warn(`User is blocked: ${userId}`);
             throw new common_1.NotFoundException('User has been blocked');
         }
-        const permissionRole = (0, enums_1.mapUserRoleToPermissionRole)(user.role);
+        const permissionRole = (0, enums_1.mapUserRoleToPermissionRole)(user.role.toLowerCase());
         if (user.roleId) {
             try {
                 const role = await this.rolesService.findOne(user.roleId);
@@ -67,7 +63,7 @@ let PermissionsService = PermissionsService_1 = class PermissionsService {
                 this.logger.warn(`Unable to load role ${user.roleId} for user ${userId}, falling back to global role permissions`);
             }
         }
-        if (user.customPermissions?.length) {
+        if (Array.isArray(user.customPermissions) && user.customPermissions.length) {
             this.logger.log(`Found custom permissions with length ${user.customPermissions.length}`);
             permissions.push(...user.customPermissions);
         }
@@ -90,9 +86,8 @@ let PermissionsService = PermissionsService_1 = class PermissionsService {
 exports.PermissionsService = PermissionsService;
 exports.PermissionsService = PermissionsService = PermissionsService_1 = __decorate([
     (0, common_1.Injectable)(),
-    __param(0, (0, typeorm_1.InjectRepository)(user_entity_1.User)),
     __param(2, (0, common_1.Inject)(constants_1.Services.ROLES)),
-    __metadata("design:paramtypes", [typeorm_2.Repository,
+    __metadata("design:paramtypes", [prisma_service_js_1.PrismaService,
         permissions_cache_service_1.PermissionsCacheService, Object])
 ], PermissionsService);
 //# sourceMappingURL=permissions.service.js.map

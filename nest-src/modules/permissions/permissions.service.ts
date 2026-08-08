@@ -1,8 +1,5 @@
 import { Injectable, NotFoundException, Logger, Inject } from '@nestjs/common';
-import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
-
-import { User } from '../auth/users/entities/user.entity';
+import { PrismaService } from '../../infrastructure/database/prisma/prisma.service.js';
 import { Services } from 'src/common/utils/constants';
 import { IRolesService } from '../roles/roles';
 
@@ -16,8 +13,7 @@ export class PermissionsService {
   private readonly logger = new Logger(PermissionsService.name);
 
   constructor(
-    @InjectRepository(User)
-    private readonly usersRepository: Repository<User>,
+    private readonly prisma: PrismaService,
     private readonly cacheService: PermissionsCacheService,
     @Inject(Services.ROLES)
     private readonly rolesService: IRolesService,
@@ -35,9 +31,7 @@ export class PermissionsService {
 
     const permissions: Permission[] = [];
 
-    const user = await this.usersRepository.findOne({
-      where: { id: userId },
-    });
+    const user = await this.prisma.user.findUnique({ where: { id: userId } });
 
     if (!user) {
       this.logger.warn(`User not found: ${userId}`);
@@ -54,7 +48,7 @@ export class PermissionsService {
       throw new NotFoundException('User has been blocked');
     }
 
-    const permissionRole = mapUserRoleToPermissionRole(user.role);
+    const permissionRole = mapUserRoleToPermissionRole(user.role.toLowerCase() as never);
 
     if (user.roleId) {
       try {
@@ -70,7 +64,7 @@ export class PermissionsService {
       }
     }
 
-    if (user.customPermissions?.length) {
+    if (Array.isArray(user.customPermissions) && user.customPermissions.length) {
       this.logger.log(`Found custom permissions with length ${user.customPermissions.length}`);
       permissions.push(...(user.customPermissions as unknown as Permission[]));
     }

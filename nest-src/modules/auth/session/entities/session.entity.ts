@@ -24,6 +24,8 @@ export class Session extends EntityHelper {
   })
   user: User;
 
+  userId?: string;
+
   @Column({ type: Date })
   createdAt: Date;
 

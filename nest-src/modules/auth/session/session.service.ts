@@ -1,77 +1,75 @@
 import { Injectable } from '@nestjs/common';
-import { InjectRepository } from '@nestjs/typeorm';
-import { DeepPartial, Repository } from 'typeorm';
-import { Session } from './entities/session.entity';
-import { User } from '../users/entities/user.entity';
-import { FindOptions } from 'src/common/utils/types/find-options.type';
-import { NullableType } from 'src/common/utils/types/nullable.type';
-import { ISessionService } from './session';
+import { PrismaService } from '../../../infrastructure/database/prisma/prisma.service.js';
+import { Session } from './entities/session.entity.js';
+import { User } from '../users/entities/user.entity.js';
+import { FindOptions } from '../../../common/utils/types/find-options.type.js';
+import { NullableType } from '../../../common/utils/types/nullable.type.js';
+import { ISessionService, SessionCreate } from './session.js';
 
 @Injectable()
 export class SessionService implements ISessionService {
-  constructor(
-    @InjectRepository(Session)
-    private readonly sessionRepository: Repository<Session>,
-  ) {}
+  constructor(private readonly prisma: PrismaService) {}
+
   async findOne(options: FindOptions<Session>): Promise<NullableType<Session>> {
-    const session = await this.sessionRepository.findOne({
-      where: options.where,
-    });
-
-    if (!session || session.deletedAt) {
-      return null;
-    }
-
-    return session;
+    const where = this.toWhere((options.where ?? {}) as Record<string, unknown>);
+    const row = await this.prisma.session.findFirst({ where, include: { user: true } });
+    return row && !row.deletedAt ? this.toEntity(row) : null;
   }
 
   async findMany(options: FindOptions<Session>): Promise<Session[]> {
-    const sessions = await this.sessionRepository.find({
-      where: options.where,
+    const rows = await this.prisma.session.findMany({
+      where: { ...this.toWhere((options.where ?? {}) as Record<string, unknown>), deletedAt: null },
+      include: { user: true },
     });
-
-    return sessions.filter((session) => !session.deletedAt);
+    return rows.map((row) => this.toEntity(row));
   }
 
-  async create(data: DeepPartial<Session>): Promise<Session> {
-    const session = this.sessionRepository.create(data);
-    return this.sessionRepository.save(session);
+  async create(data: SessionCreate): Promise<Session> {
+    const userId = data.user?.id ?? data.userId;
+    if (!userId) throw new Error('Session requires userId');
+    const row = await this.prisma.session.create({
+      data: { userId, deletedAt: data.deletedAt ?? null },
+      include: { user: true },
+    });
+    return this.toEntity(row);
   }
 
-  async softDelete({
-    excludeId,
-    ...criteria
-  }: {
+  async softDelete({ excludeId, ...criteria }: {
     id?: Session['id'];
     user?: Pick<User, 'id'>;
     excludeId?: Session['id'];
   }): Promise<void> {
-    const sessions = await this.sessionRepository.find({
-      where: criteria,
+    await this.prisma.session.updateMany({
+      where: {
+        id: criteria.id,
+        userId: criteria.user?.id,
+        deletedAt: null,
+        ...(excludeId ? { id: { not: excludeId } } : {}),
+      },
+      data: { deletedAt: new Date() },
     });
+  }
 
-    const sessionsToDelete = sessions.filter((session) => {
-      if (session.deletedAt) {
-        return false;
-      }
+  private toWhere(where: Record<string, unknown>) {
+    const user = where.user as { id?: string } | undefined;
+    return { id: where.id as string | undefined, userId: user?.id };
+  }
 
-      if (excludeId && session.id === excludeId) {
-        return false;
-      }
-
-      return true;
+  private toEntity(row: any): Session {
+    return Object.assign(new Session(), {
+      id: row.id,
+      userId: row.userId,
+      user: row.user ? this.toUser(row.user) : undefined,
+      createdAt: row.createdAt,
+      deletedAt: row.deletedAt,
     });
+  }
 
-    if (!sessionsToDelete.length) {
-      return;
-    }
-
-    const deletedAt = new Date();
-    await this.sessionRepository.save(
-      sessionsToDelete.map((session) => ({
-        ...session,
-        deletedAt,
-      })),
-    );
+  private toUser(row: any): User {
+    return Object.assign(new User(), row, {
+      role: row.role?.toLowerCase(),
+      status: row.status?.toLowerCase(),
+      provider: row.provider?.toLowerCase(),
+    });
   }
 }

@@ -6,6 +6,8 @@ import appConfig from './config/app.config.js'
 import authConfig from './config/auth.config.js'
 import googleConfig from './config/google.config.js'
 import mailerConfig from './config/mailer.config.js'
+import rabbitMqConfig from './infrastructure/messaging/rabbitmq/rabbitmq.config.js'
+import redisConfig from './infrastructure/cache/redis/redis.config.js'
 import { AppFeatureModule } from './modules/app/app.module.js'
 import { AppointmentsModule } from './modules/appointments/appointments.module.js'
 import { AuthModule } from './modules/auth/auth-local/auth.module.js'
@@ -17,13 +19,17 @@ import { PermissionsGuard } from './modules/permissions/guards/permissions.guard
 import { JwtAuthGuard } from './modules/auth/auth-local/guards/jwt-auth.guard.js'
 import { DatabaseModule } from './database/database.module.js'
 import { ContactsModule } from './modules/contacts/contacts.module.js'
+import { PrismaModule } from './infrastructure/database/prisma/prisma.module.js'
+import { RabbitMqModule } from './infrastructure/messaging/rabbitmq/rabbitmq.module.js'
+import { PatientsModule } from './modules/patients/patients.module.js'
+import { RedisModule } from './infrastructure/cache/redis/redis.module.js'
 
 @Module({
   imports: [
     ConfigModule.forRoot({
       isGlobal: true,
       cache: true,
-      load: [appConfig, authConfig, mailerConfig, googleConfig],
+      load: [appConfig, authConfig, mailerConfig, googleConfig, rabbitMqConfig, redisConfig],
       envFilePath: [`.env.${process.env.NODE_ENV || 'development'}`, '.env'],
     }),
     ThrottlerModule.forRoot([
@@ -39,6 +45,8 @@ import { ContactsModule } from './modules/contacts/contacts.module.js'
       },
     ]),
     DatabaseModule,
+    PrismaModule,
+    RedisModule,
     AppFeatureModule,
     JwtAuthCoreModule,
     AuthModule,
@@ -47,6 +55,8 @@ import { ContactsModule } from './modules/contacts/contacts.module.js'
     AppointmentsModule,
     ExaminationsModule,
     ContactsModule,
+    RabbitMqModule,
+    PatientsModule,
   ],
   controllers: [],
   providers: [

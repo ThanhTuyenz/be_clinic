@@ -1,11 +1,11 @@
 import { User } from '../users/entities/user.entity';
 import { Session } from './entities/session.entity';
-import { DeepPartial } from 'typeorm';
+export type SessionCreate = Partial<Session>;
 import { FindOptions } from 'src/common/utils/types/find-options.type';
 import { NullableType } from 'src/common/utils/types/nullable.type';
 
 export interface ISessionService {
-  create(data: DeepPartial<Session>): Promise<Session>;
+  create(data: SessionCreate): Promise<Session>;
   findOne(options: FindOptions<Session>): Promise<NullableType<Session>>;
   findMany(options: FindOptions<Session>): Promise<Session[]>;
   softDelete({

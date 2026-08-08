@@ -23,7 +23,6 @@ export enum UserStatus {
 }
 
 export enum UserRole {
-  SuperAdmin = 'super_admin',
   Admin = 'admin',
   BranchManager = 'branch_manager',
   Doctor = 'doctor',
@@ -31,8 +30,6 @@ export enum UserRole {
   Cashier = 'cashier',
   Receptionist = 'receptionist',
   Patient = 'patient',
-  Staff = 'staff',
-  User = 'user',
 }
 
 @Entity()

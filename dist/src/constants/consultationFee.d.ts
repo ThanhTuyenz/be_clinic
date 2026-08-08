@@ -1,1 +1,0 @@
-export const DEFAULT_CONSULTATION_FEE: 150000;

@@ -8,66 +8,74 @@ var __decorate = (this && this.__decorate) || function (decorators, target, key,
 var __metadata = (this && this.__metadata) || function (k, v) {
     if (typeof Reflect === "object" && typeof Reflect.metadata === "function") return Reflect.metadata(k, v);
 };
-var __param = (this && this.__param) || function (paramIndex, decorator) {
-    return function (target, key) { decorator(target, key, paramIndex); }
-};
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.SessionService = void 0;
 const common_1 = require("@nestjs/common");
-const typeorm_1 = require("@nestjs/typeorm");
-const typeorm_2 = require("typeorm");
-const session_entity_1 = require("./entities/session.entity");
+const prisma_service_js_1 = require("../../../infrastructure/database/prisma/prisma.service.js");
+const session_entity_js_1 = require("./entities/session.entity.js");
+const user_entity_js_1 = require("../users/entities/user.entity.js");
 let SessionService = class SessionService {
-    sessionRepository;
-    constructor(sessionRepository) {
-        this.sessionRepository = sessionRepository;
+    prisma;
+    constructor(prisma) {
+        this.prisma = prisma;
     }
     async findOne(options) {
-        const session = await this.sessionRepository.findOne({
-            where: options.where,
-        });
-        if (!session || session.deletedAt) {
-            return null;
-        }
-        return session;
+        const where = this.toWhere((options.where ?? {}));
+        const row = await this.prisma.session.findFirst({ where, include: { user: true } });
+        return row && !row.deletedAt ? this.toEntity(row) : null;
     }
     async findMany(options) {
-        const sessions = await this.sessionRepository.find({
-            where: options.where,
+        const rows = await this.prisma.session.findMany({
+            where: { ...this.toWhere((options.where ?? {})), deletedAt: null },
+            include: { user: true },
         });
-        return sessions.filter((session) => !session.deletedAt);
+        return rows.map((row) => this.toEntity(row));
     }
     async create(data) {
-        const session = this.sessionRepository.create(data);
-        return this.sessionRepository.save(session);
+        const userId = data.user?.id ?? data.userId;
+        if (!userId)
+            throw new Error('Session requires userId');
+        const row = await this.prisma.session.create({
+            data: { userId, deletedAt: data.deletedAt ?? null },
+            include: { user: true },
+        });
+        return this.toEntity(row);
     }
     async softDelete({ excludeId, ...criteria }) {
-        const sessions = await this.sessionRepository.find({
-            where: criteria,
+        await this.prisma.session.updateMany({
+            where: {
+                id: criteria.id,
+                userId: criteria.user?.id,
+                deletedAt: null,
+                ...(excludeId ? { id: { not: excludeId } } : {}),
+            },
+            data: { deletedAt: new Date() },
         });
-        const sessionsToDelete = sessions.filter((session) => {
-            if (session.deletedAt) {
-                return false;
-            }
-            if (excludeId && session.id === excludeId) {
-                return false;
-            }
-            return true;
+    }
+    toWhere(where) {
+        const user = where.user;
+        return { id: where.id, userId: user?.id };
+    }
+    toEntity(row) {
+        return Object.assign(new session_entity_js_1.Session(), {
+            id: row.id,
+            userId: row.userId,
+            user: row.user ? this.toUser(row.user) : undefined,
+            createdAt: row.createdAt,
+            deletedAt: row.deletedAt,
         });
-        if (!sessionsToDelete.length) {
-            return;
-        }
-        const deletedAt = new Date();
-        await this.sessionRepository.save(sessionsToDelete.map((session) => ({
-            ...session,
-            deletedAt,
-        })));
+    }
+    toUser(row) {
+        return Object.assign(new user_entity_js_1.User(), row, {
+            role: row.role?.toLowerCase(),
+            status: row.status?.toLowerCase(),
+            provider: row.provider?.toLowerCase(),
+        });
     }
 };
 exports.SessionService = SessionService;
 exports.SessionService = SessionService = __decorate([
     (0, common_1.Injectable)(),
-    __param(0, (0, typeorm_1.InjectRepository)(session_entity_1.Session)),
-    __metadata("design:paramtypes", [typeorm_2.Repository])
+    __metadata("design:paramtypes", [prisma_service_js_1.PrismaService])
 ], SessionService);
 //# sourceMappingURL=session.service.js.map

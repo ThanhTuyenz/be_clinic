@@ -1,11 +1,12 @@
-import { IForgotPasswordService } from './forgot-password';
-import { FindOptions } from 'src/common/utils/types/find-options.type';
-import { ForgotPassword } from './entities/forgot-password.entity';
-import { DeepPartial, Repository } from 'typeorm';
+import { PrismaService } from '../../../infrastructure/database/prisma/prisma.service.js';
+import { IForgotPasswordService, ForgotPasswordCreate } from './forgot-password.js';
+import { FindOptions } from '../../../common/utils/types/find-options.type.js';
+import { ForgotPassword } from './entities/forgot-password.entity.js';
 export declare class ForgotPasswordService implements IForgotPasswordService {
-    private readonly forgotPasswordRepository;
-    constructor(forgotPasswordRepository: Repository<ForgotPassword>);
-    create(data: DeepPartial<ForgotPassword>): Promise<ForgotPassword>;
+    private readonly prisma;
+    constructor(prisma: PrismaService);
+    create(data: ForgotPasswordCreate): Promise<ForgotPassword>;
     findOne(options: FindOptions<ForgotPassword>): Promise<ForgotPassword | null>;
-    softDelete(id: ForgotPassword['id']): Promise<void>;
+    softDelete(id: string): Promise<void>;
+    private toEntity;
 }

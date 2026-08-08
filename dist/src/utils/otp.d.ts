@@ -1,1 +1,0 @@
-export function generateOtp(): string;

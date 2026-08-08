@@ -18,6 +18,8 @@ const app_config_js_1 = __importDefault(require("./config/app.config.js"));
 const auth_config_js_1 = __importDefault(require("./config/auth.config.js"));
 const google_config_js_1 = __importDefault(require("./config/google.config.js"));
 const mailer_config_js_1 = __importDefault(require("./config/mailer.config.js"));
+const rabbitmq_config_js_1 = __importDefault(require("./infrastructure/messaging/rabbitmq/rabbitmq.config.js"));
+const redis_config_js_1 = __importDefault(require("./infrastructure/cache/redis/redis.config.js"));
 const app_module_js_1 = require("./modules/app/app.module.js");
 const appointments_module_js_1 = require("./modules/appointments/appointments.module.js");
 const auth_module_js_1 = require("./modules/auth/auth-local/auth.module.js");
@@ -29,6 +31,10 @@ const permissions_guard_js_1 = require("./modules/permissions/guards/permissions
 const jwt_auth_guard_js_1 = require("./modules/auth/auth-local/guards/jwt-auth.guard.js");
 const database_module_js_1 = require("./database/database.module.js");
 const contacts_module_js_1 = require("./modules/contacts/contacts.module.js");
+const prisma_module_js_1 = require("./infrastructure/database/prisma/prisma.module.js");
+const rabbitmq_module_js_1 = require("./infrastructure/messaging/rabbitmq/rabbitmq.module.js");
+const patients_module_js_1 = require("./modules/patients/patients.module.js");
+const redis_module_js_1 = require("./infrastructure/cache/redis/redis.module.js");
 let AppModule = class AppModule {
 };
 exports.AppModule = AppModule;
@@ -38,7 +44,7 @@ exports.AppModule = AppModule = __decorate([
             config_1.ConfigModule.forRoot({
                 isGlobal: true,
                 cache: true,
-                load: [app_config_js_1.default, auth_config_js_1.default, mailer_config_js_1.default, google_config_js_1.default],
+                load: [app_config_js_1.default, auth_config_js_1.default, mailer_config_js_1.default, google_config_js_1.default, rabbitmq_config_js_1.default, redis_config_js_1.default],
                 envFilePath: [`.env.${process.env.NODE_ENV || 'development'}`, '.env'],
             }),
             throttler_1.ThrottlerModule.forRoot([
@@ -54,6 +60,8 @@ exports.AppModule = AppModule = __decorate([
                 },
             ]),
             database_module_js_1.DatabaseModule,
+            prisma_module_js_1.PrismaModule,
+            redis_module_js_1.RedisModule,
             app_module_js_1.AppFeatureModule,
             jwt_auth_core_module_js_1.JwtAuthCoreModule,
             auth_module_js_1.AuthModule,
@@ -62,6 +70,8 @@ exports.AppModule = AppModule = __decorate([
             appointments_module_js_1.AppointmentsModule,
             examinations_module_js_1.ExaminationsModule,
             contacts_module_js_1.ContactsModule,
+            rabbitmq_module_js_1.RabbitMqModule,
+            patients_module_js_1.PatientsModule,
         ],
         controllers: [],
         providers: [

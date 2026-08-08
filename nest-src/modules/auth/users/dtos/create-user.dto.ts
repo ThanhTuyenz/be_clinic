@@ -1,5 +1,4 @@
 import { Transform } from 'class-transformer';
-import { Column } from 'typeorm';
 
 import {
   IsEmail,
@@ -35,7 +34,6 @@ export class CreateUserDto {
 
   @ApiProperty({ example: UserRole.Patient, default: UserRole.Patient })
   @IsNotEmpty()
-  @Column({ default: UserRole.Patient })
   @IsEnum(UserRole, { message: 'Role không hợp lệ' })
   role?: UserRole;
 

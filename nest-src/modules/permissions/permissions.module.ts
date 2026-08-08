@@ -1,6 +1,4 @@
 import { Module, Global } from '@nestjs/common';
-import { TypeOrmModule } from '@nestjs/typeorm';
-import { User } from '../auth/users/entities/user.entity';
 import { RolesModule } from '../roles/roles.module';
 
 import { Permissions, PERMISSIONS } from './factories/permissions';
@@ -12,7 +10,7 @@ import { PermissionsCacheService } from './services/permissions-cache.service';
 
 @Global()
 @Module({
-  imports: [TypeOrmModule.forFeature([User]), RolesModule],
+  imports: [RolesModule],
   providers: [
     PermissionsService,
     Permissions,

@@ -8,7 +8,6 @@ const DEFAULT_ROLES = [
   { name: 'receptionist', description: 'Lễ tân' },
   { name: 'branch_manager', description: 'Quản lý chi nhánh' },
   { name: 'admin', description: 'Quản trị' },
-  { name: 'super_admin', description: 'Quản lý tổng hệ thống' },
 ]
 
 export async function seedRoles() {

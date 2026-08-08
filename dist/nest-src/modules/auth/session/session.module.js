@@ -9,15 +9,12 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.SessionModule = void 0;
 const common_1 = require("@nestjs/common");
 const session_service_1 = require("./session.service");
-const typeorm_1 = require("@nestjs/typeorm");
 const constants_1 = require("../../../common/utils/constants");
-const session_entity_1 = require("./entities/session.entity");
 let SessionModule = class SessionModule {
 };
 exports.SessionModule = SessionModule;
 exports.SessionModule = SessionModule = __decorate([
     (0, common_1.Module)({
-        imports: [typeorm_1.TypeOrmModule.forFeature([session_entity_1.Session])],
         providers: [
             {
                 provide: constants_1.Services.SESSION,

@@ -1,1 +1,0 @@
-{"version":3,"file":"permissions.factory.js","sourceRoot":"","sources":["../../../../../nest-src/modules/permissions/factories/permissions.factory.ts"],"names":[],"mappings":";;;AAAA,+CAAyD;AAE5C,QAAA,kBAAkB,GAAG;IAChC,OAAO,EAAE,yBAAW;IACpB,UAAU,EAAE,CAAC,WAAwB,EAAe,EAAE;QACpD,OAAO,WAAW,CAAC;IACrB,CAAC;IACD,MAAM,EAAE,CAAC,yBAAW,CAAC;CACtB,CAAC"}

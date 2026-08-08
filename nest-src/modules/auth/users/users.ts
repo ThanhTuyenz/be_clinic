@@ -3,7 +3,10 @@ import { CreateUserDto } from './dtos/create-user.dto';
 import { User } from './entities/user.entity';
 import { NullableType } from 'src/common/utils/types/nullable.type';
 import { IPaginationOptions } from 'src/common/utils/types/pagination-options';
-import { DeepPartial } from 'typeorm';
+
+export type UserUpdate = Omit<Partial<User>, 'customPermissions'> & {
+  customPermissions?: unknown[] | null;
+};
 
 export type UsersPaginatedResult = {
   data: User[];
@@ -24,7 +27,7 @@ export interface IUsersService {
   findUsersWithPagination(
     options: FindUsersOptions,
   ): Promise<UsersPaginatedResult>;
-  updateUser(id: User['id'], payload: DeepPartial<User>): Promise<User>;
+  updateUser(id: User['id'], payload: UserUpdate): Promise<User>;
   deleteUser(id: User['id']): Promise<void>;
   saveUser(user: User): Promise<User>;
   assignRole(userId: string, roleId: string): Promise<User>;

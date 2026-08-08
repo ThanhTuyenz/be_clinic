@@ -44,10 +44,30 @@ export type GoogleConfig = {
   callbackURL?: string;
 };
 
+export type RabbitMqConfig = {
+  enabled: boolean;
+  url?: string;
+  holdTtlMs: number;
+  prefetch: number;
+  outboxBatchSize: number;
+  outboxPollMs: number;
+};
+
+export type RedisConfig = {
+  enabled: boolean;
+  url?: string;
+  keyPrefix: string;
+  db: number;
+  defaultTtlSeconds: number;
+  connectTimeoutMs: number;
+};
+
 export type AllConfigType = {
   app: AppConfig;
   database: DatabaseConfig;
   auth: AuthConfig;
   mailer: MailerConfig;
   google: GoogleConfig;
+  rabbitmq: RabbitMqConfig;
+  redis: RedisConfig;
 };

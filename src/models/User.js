@@ -28,7 +28,6 @@ const userSchema = new mongoose.Schema(
         'receptionist',
         'branch_manager',
         'admin',
-        'super_admin',
       ],
     },
     isActive: { type: Boolean, default: true },
