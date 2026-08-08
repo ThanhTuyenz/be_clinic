@@ -27,6 +27,7 @@ type RequestUser = {
   sessionId: string;
   email?: string;
   role?: string;
+  userType?: string;
   permissions?: string[];
 };
 
@@ -95,6 +96,7 @@ export class JwtAuthGuard implements CanActivate {
         sessionId: decoded.sessionId || '',
         email: decoded.email,
         role: decoded.role,
+        userType: decoded.role,
       };
 
       // Token hiện tại chỉ có { id, sessionId } nên cần fallback lấy thêm thông tin.
@@ -117,7 +119,12 @@ export class JwtAuthGuard implements CanActivate {
 
         requestUser.email = user.email ?? undefined;
         requestUser.role = user.role ?? undefined;
+        requestUser.userType = user.role ?? undefined;
       }
+
+      // Các controller lịch hẹn cũ dùng `userType`; Nest Auth dùng `role`.
+      // Giữ cả hai key trong giai đoạn migrate để flow booking nhận đúng vai trò.
+      requestUser.userType ||= requestUser.role;
 
       request.user = requestUser;
       this.logger.log(`Xác thực thành công: ID ${decoded.id}`);

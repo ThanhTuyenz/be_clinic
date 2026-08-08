@@ -3,6 +3,7 @@ import { Module, OnModuleInit } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { MongooseModule } from '@nestjs/mongoose';
 import { TypeOrmModule } from '@nestjs/typeorm';
+import mongoose from 'mongoose';
 
 const buildMongoUriFromEnvUri = (
   mongoUri: string,
@@ -42,6 +43,7 @@ const buildMongoUriFromEnvUri = (
       inject: [ConfigService],
       useFactory: async (configService: ConfigService) => ({
         uri: configService.get<string>('MONGO_URI'),
+        dbName: configService.get<string>('MONGO_DB_NAME') || 'clinic',
       }),
     }),
     TypeOrmModule.forRootAsync({
@@ -81,13 +83,22 @@ const buildMongoUriFromEnvUri = (
   ],
 })
 export class DatabaseModule implements OnModuleInit {
+  constructor(private readonly configService: ConfigService) {}
+
   async onModuleInit() {
     // Đảm bảo kết nối MongoDB khởi tạo xong trước khi chạy các module tiếp theo
     // Với TypeORM và MongoDB, nếu pool chưa active, truy vấn đầu dễ chậm/timeout
     console.log('Đang kết nối MongoDB (Mongoose + TypeORM - Mongo) ...');
-    // TypeORM tự động quản lý pool – không cần gọi initialize thủ công nếu sử dụng forRootAsync
-    // Có thể chờ 1 truy vấn dummy để warm-up, hoặc chỉ log status :
-    // Nên chỉ log, không exit process tại đây, vì TypeORM throw error nếu kết nối lỗi lúc startup
+    // Các controller legacy import model Mongoose trực tiếp, nên chúng dùng
+    // default connection thay vì connection do MongooseModule quản lý.
+    // Kết nối default connection trong giai đoạn migrate để tránh query
+    // bị buffer và cuối cùng trả 504 Request timeout.
+    if (mongoose.connection.readyState !== 1) {
+      const uri = this.configService.get<string>('MONGO_URI');
+      const dbName = this.configService.get<string>('MONGO_DB_NAME') || 'clinic';
+      if (!uri) throw new Error('Thiếu MONGO_URI trong cấu hình database.');
+      await mongoose.connect(uri, { dbName });
+    }
     console.log('DatabaseModule đã khởi động và kết nối cấu hình xong.');
   }
 }

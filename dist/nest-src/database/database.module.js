@@ -5,12 +5,19 @@ var __decorate = (this && this.__decorate) || function (decorators, target, key,
     else for (var i = decorators.length - 1; i >= 0; i--) if (d = decorators[i]) r = (c < 3 ? d(r) : c > 3 ? d(target, key, r) : d(target, key)) || r;
     return c > 3 && r && Object.defineProperty(target, key, r), r;
 };
+var __metadata = (this && this.__metadata) || function (k, v) {
+    if (typeof Reflect === "object" && typeof Reflect.metadata === "function") return Reflect.metadata(k, v);
+};
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.DatabaseModule = void 0;
 const common_1 = require("@nestjs/common");
 const config_1 = require("@nestjs/config");
 const mongoose_1 = require("@nestjs/mongoose");
 const typeorm_1 = require("@nestjs/typeorm");
+const mongoose_2 = __importDefault(require("mongoose"));
 const buildMongoUriFromEnvUri = (mongoUri, databaseName) => {
     const [base, query] = mongoUri.split('?', 2);
     const schemeSeparatorIndex = base.indexOf('://');
@@ -31,8 +38,19 @@ const buildMongoUriFromEnvUri = (mongoUri, databaseName) => {
     return mongoUri;
 };
 let DatabaseModule = class DatabaseModule {
+    configService;
+    constructor(configService) {
+        this.configService = configService;
+    }
     async onModuleInit() {
         console.log('Đang kết nối MongoDB (Mongoose + TypeORM - Mongo) ...');
+        if (mongoose_2.default.connection.readyState !== 1) {
+            const uri = this.configService.get('MONGO_URI');
+            const dbName = this.configService.get('MONGO_DB_NAME') || 'clinic';
+            if (!uri)
+                throw new Error('Thiếu MONGO_URI trong cấu hình database.');
+            await mongoose_2.default.connect(uri, { dbName });
+        }
         console.log('DatabaseModule đã khởi động và kết nối cấu hình xong.');
     }
 };
@@ -45,6 +63,7 @@ exports.DatabaseModule = DatabaseModule = __decorate([
                 inject: [config_1.ConfigService],
                 useFactory: async (configService) => ({
                     uri: configService.get('MONGO_URI'),
+                    dbName: configService.get('MONGO_DB_NAME') || 'clinic',
                 }),
             }),
             typeorm_1.TypeOrmModule.forRootAsync({
@@ -78,6 +97,7 @@ exports.DatabaseModule = DatabaseModule = __decorate([
                 },
             }),
         ],
-    })
+    }),
+    __metadata("design:paramtypes", [config_1.ConfigService])
 ], DatabaseModule);
 //# sourceMappingURL=database.module.js.map

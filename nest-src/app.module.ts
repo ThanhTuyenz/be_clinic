@@ -16,6 +16,7 @@ import { ExaminationsModule } from './modules/examinations/examinations.module.j
 import { PermissionsGuard } from './modules/permissions/guards/permissions.guard.js'
 import { JwtAuthGuard } from './modules/auth/auth-local/guards/jwt-auth.guard.js'
 import { DatabaseModule } from './database/database.module.js'
+import { ContactsModule } from './modules/contacts/contacts.module.js'
 
 @Module({
   imports: [
@@ -45,6 +46,7 @@ import { DatabaseModule } from './database/database.module.js'
     ClinicRoomsModule,
     AppointmentsModule,
     ExaminationsModule,
+    ContactsModule,
   ],
   controllers: [],
   providers: [

@@ -70,6 +70,7 @@ let JwtAuthGuard = JwtAuthGuard_1 = class JwtAuthGuard {
                 sessionId: decoded.sessionId || '',
                 email: decoded.email,
                 role: decoded.role,
+                userType: decoded.role,
             };
             if (!requestUser.email || !requestUser.role) {
                 const user = await this.usersService.findOneUser({ id: decoded.id });
@@ -87,7 +88,9 @@ let JwtAuthGuard = JwtAuthGuard_1 = class JwtAuthGuard {
                 }
                 requestUser.email = user.email ?? undefined;
                 requestUser.role = user.role ?? undefined;
+                requestUser.userType = user.role ?? undefined;
             }
+            requestUser.userType ||= requestUser.role;
             request.user = requestUser;
             this.logger.log(`Xác thực thành công: ID ${decoded.id}`);
             return true;

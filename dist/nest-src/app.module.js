@@ -28,6 +28,7 @@ const examinations_module_js_1 = require("./modules/examinations/examinations.mo
 const permissions_guard_js_1 = require("./modules/permissions/guards/permissions.guard.js");
 const jwt_auth_guard_js_1 = require("./modules/auth/auth-local/guards/jwt-auth.guard.js");
 const database_module_js_1 = require("./database/database.module.js");
+const contacts_module_js_1 = require("./modules/contacts/contacts.module.js");
 let AppModule = class AppModule {
 };
 exports.AppModule = AppModule;
@@ -60,6 +61,7 @@ exports.AppModule = AppModule = __decorate([
             clinic_rooms_module_js_1.ClinicRoomsModule,
             appointments_module_js_1.AppointmentsModule,
             examinations_module_js_1.ExaminationsModule,
+            contacts_module_js_1.ContactsModule,
         ],
         controllers: [],
         providers: [

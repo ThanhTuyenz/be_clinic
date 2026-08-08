@@ -115,6 +115,7 @@ let AuthController = AuthController_1 = class AuthController {
         this.logger.log(`Refresh response issued, hasToken=${Boolean(response.token)}, hasRefreshToken=${Boolean(response.refreshToken)}`);
         const isProduction = process.env.NODE_ENV === 'production';
         const tokenMaxAge = this.getCookieMaxAge('auth.expires');
+        const refreshTokenMaxAge = this.getCookieMaxAge('auth.refreshExpires');
         const refreshCookieOptions = {
             httpOnly: true,
             secure: isProduction,
@@ -123,6 +124,13 @@ let AuthController = AuthController_1 = class AuthController {
             path: '/',
         };
         res.cookie('token', response.token, refreshCookieOptions);
+        res.cookie('refreshToken', response.refreshToken, {
+            httpOnly: true,
+            secure: isProduction,
+            sameSite: false,
+            maxAge: refreshTokenMaxAge,
+            path: '/',
+        });
         return {
             token: response.token,
             tokenExpires: response.tokenExpires,
