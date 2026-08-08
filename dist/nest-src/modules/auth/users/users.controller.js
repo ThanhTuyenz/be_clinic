@@ -62,7 +62,7 @@ exports.UsersController = UsersController;
 __decorate([
     (0, common_1.Post)(),
     (0, permissions_decorator_1.RequiresPermission)(permissions_decorator_1.PermissionResource.USER, permissions_decorator_1.PermissionAction.CREATE, permissions_decorator_1.PermissionResourceTarget.ANY),
-    (0, swagger_1.ApiBearerAuth)(),
+    (0, swagger_1.ApiBearerAuth)('access-token'),
     (0, swagger_1.ApiOperation)({ summary: 'Tạo mới người dùng (admin)' }),
     __param(0, (0, common_1.Body)()),
     __metadata("design:type", Function),
@@ -72,7 +72,7 @@ __decorate([
 __decorate([
     (0, common_1.Get)(),
     (0, permissions_decorator_1.RequiresPermission)(permissions_decorator_1.PermissionResource.USER, permissions_decorator_1.PermissionAction.GET, permissions_decorator_1.PermissionResourceTarget.ANY),
-    (0, swagger_1.ApiBearerAuth)(),
+    (0, swagger_1.ApiBearerAuth)('access-token'),
     (0, swagger_1.ApiOperation)({
         summary: 'Danh sách người dùng (phân trang, admin; lọc tùy chọn theo email, họ tên)',
     }),
@@ -84,7 +84,7 @@ __decorate([
 __decorate([
     (0, common_1.Patch)(':id'),
     (0, permissions_decorator_1.RequiresPermission)(permissions_decorator_1.PermissionResource.USER, permissions_decorator_1.PermissionAction.EDIT, permissions_decorator_1.PermissionResourceTarget.ANY),
-    (0, swagger_1.ApiBearerAuth)(),
+    (0, swagger_1.ApiBearerAuth)('access-token'),
     (0, swagger_1.ApiParam)({ name: 'id', description: 'UUID người dùng' }),
     (0, swagger_1.ApiOperation)({ summary: 'Cập nhật người dùng (admin)' }),
     __param(0, (0, common_1.Param)('id')),
@@ -96,7 +96,7 @@ __decorate([
 __decorate([
     (0, common_1.Delete)(':id'),
     (0, permissions_decorator_1.RequiresPermission)(permissions_decorator_1.PermissionResource.USER, permissions_decorator_1.PermissionAction.DELETE, permissions_decorator_1.PermissionResourceTarget.ANY),
-    (0, swagger_1.ApiBearerAuth)(),
+    (0, swagger_1.ApiBearerAuth)('access-token'),
     (0, common_1.HttpCode)(common_1.HttpStatus.NO_CONTENT),
     (0, swagger_1.ApiParam)({ name: 'id', description: 'UUID người dùng' }),
     (0, swagger_1.ApiOperation)({ summary: 'Xóa mềm người dùng (admin)' }),
@@ -108,7 +108,7 @@ __decorate([
 __decorate([
     (0, common_1.Patch)(':id/role'),
     (0, permissions_decorator_1.RequiresPermission)(permissions_decorator_1.PermissionResource.USER, permissions_decorator_1.PermissionAction.EDIT, permissions_decorator_1.PermissionResourceTarget.ANY),
-    (0, swagger_1.ApiBearerAuth)(),
+    (0, swagger_1.ApiBearerAuth)('access-token'),
     (0, swagger_1.ApiParam)({ name: 'id', description: 'UUID người dùng' }),
     (0, swagger_1.ApiOperation)({ summary: 'Gán role cho người dùng (admin)' }),
     __param(0, (0, common_1.Param)('id')),
@@ -120,7 +120,7 @@ __decorate([
 __decorate([
     (0, common_1.Delete)(':id/role'),
     (0, permissions_decorator_1.RequiresPermission)(permissions_decorator_1.PermissionResource.USER, permissions_decorator_1.PermissionAction.EDIT, permissions_decorator_1.PermissionResourceTarget.ANY),
-    (0, swagger_1.ApiBearerAuth)(),
+    (0, swagger_1.ApiBearerAuth)('access-token'),
     (0, common_1.HttpCode)(common_1.HttpStatus.NO_CONTENT),
     (0, swagger_1.ApiParam)({ name: 'id', description: 'UUID người dùng' }),
     (0, swagger_1.ApiOperation)({ summary: 'Xóa role của người dùng (admin)' }),
@@ -132,7 +132,7 @@ __decorate([
 __decorate([
     (0, common_1.Post)(':id/permissions'),
     (0, permissions_decorator_1.RequiresPermission)(permissions_decorator_1.PermissionResource.USER, permissions_decorator_1.PermissionAction.EDIT, permissions_decorator_1.PermissionResourceTarget.ANY),
-    (0, swagger_1.ApiBearerAuth)(),
+    (0, swagger_1.ApiBearerAuth)('access-token'),
     (0, swagger_1.ApiParam)({ name: 'id', description: 'UUID người dùng' }),
     (0, swagger_1.ApiOperation)({ summary: 'Gán quyền tùy chỉnh cho người dùng (admin)' }),
     __param(0, (0, common_1.Param)('id')),
@@ -144,7 +144,7 @@ __decorate([
 __decorate([
     (0, common_1.Delete)(':id/permissions'),
     (0, permissions_decorator_1.RequiresPermission)(permissions_decorator_1.PermissionResource.USER, permissions_decorator_1.PermissionAction.EDIT, permissions_decorator_1.PermissionResourceTarget.ANY),
-    (0, swagger_1.ApiBearerAuth)(),
+    (0, swagger_1.ApiBearerAuth)('access-token'),
     (0, common_1.HttpCode)(common_1.HttpStatus.NO_CONTENT),
     (0, swagger_1.ApiParam)({ name: 'id', description: 'UUID người dùng' }),
     (0, swagger_1.ApiOperation)({ summary: 'Xóa quyền tùy chỉnh của người dùng (admin)' }),

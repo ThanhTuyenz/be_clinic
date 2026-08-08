@@ -187,7 +187,7 @@ __decorate([
     __metadata("design:returntype", Promise)
 ], AuthController.prototype, "confirmEmailByHash", null);
 __decorate([
-    (0, swagger_1.ApiBearerAuth)(),
+    (0, swagger_1.ApiBearerAuth)('access-token'),
     (0, common_1.Get)('status'),
     (0, common_1.UseGuards)((0, passport_1.AuthGuard)('jwt')),
     (0, common_1.HttpCode)(common_1.HttpStatus.OK),
@@ -226,7 +226,7 @@ __decorate([
     __metadata("design:returntype", Promise)
 ], AuthController.prototype, "refresh", null);
 __decorate([
-    (0, swagger_1.ApiBearerAuth)(),
+    (0, swagger_1.ApiBearerAuth)('access-token'),
     (0, common_1.Post)('logout'),
     (0, skip_permissions_decorator_1.SkipPermissions)(),
     (0, common_1.HttpCode)(common_1.HttpStatus.NO_CONTENT),

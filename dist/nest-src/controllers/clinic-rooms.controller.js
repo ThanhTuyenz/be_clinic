@@ -16,6 +16,7 @@ exports.ClinicRoomsController = void 0;
 const common_1 = require("@nestjs/common");
 const public_decorator_js_1 = require("../common/decorators/public.decorator.js");
 const clinicRoomsController_js_1 = require("../../src/controllers/clinicRoomsController.js");
+const swagger_1 = require("@nestjs/swagger");
 let ClinicRoomsController = class ClinicRoomsController {
     listClinicRooms(req, res) {
         return (0, clinicRoomsController_js_1.listClinicRooms)(req, res);
@@ -24,6 +25,7 @@ let ClinicRoomsController = class ClinicRoomsController {
 exports.ClinicRoomsController = ClinicRoomsController;
 __decorate([
     (0, common_1.Get)(),
+    (0, swagger_1.ApiOperation)({ summary: 'Danh sách phòng khám' }),
     __param(0, (0, common_1.Req)()),
     __param(1, (0, common_1.Res)()),
     __metadata("design:type", Function),
@@ -32,6 +34,7 @@ __decorate([
 ], ClinicRoomsController.prototype, "listClinicRooms", null);
 exports.ClinicRoomsController = ClinicRoomsController = __decorate([
     (0, public_decorator_js_1.Public)(),
+    (0, swagger_1.ApiTags)('Clinic rooms'),
     (0, common_1.Controller)('clinic-rooms')
 ], ClinicRoomsController);
 //# sourceMappingURL=clinic-rooms.controller.js.map

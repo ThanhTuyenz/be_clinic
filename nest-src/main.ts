@@ -16,6 +16,7 @@ import { MetricsInterceptor } from './common/interceptors/metrics.interceptor.js
 import { TimeoutInterceptor } from './common/interceptors/timeout.interceptor.js'
 import { TransformInterceptor } from './common/interceptors/transform.interceptor.js'
 import validationOptions from './common/utils/validation-options.js'
+import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger'
 
 type AppConfigValue = {
   apiPrefix?: string
@@ -113,6 +114,41 @@ async function bootstrap() {
       defaultVersion: '1',
     })
 
+    const swaggerConfig = new DocumentBuilder()
+      .setTitle('Clinic API')
+      .setDescription(
+        'API cho hệ thống đặt lịch hẹn và quản lý khám bệnh trực tuyến đa bệnh viện.',
+      )
+      .setVersion('1.0')
+      .addBearerAuth(
+        {
+          type: 'http',
+          scheme: 'bearer',
+          bearerFormat: 'JWT',
+          description: 'Nhập access token, không cần thêm tiền tố Bearer',
+        },
+        'access-token',
+      )
+      .addTag('System', 'Kiểm tra trạng thái hệ thống')
+      .addTag('Auth', 'Đăng ký, đăng nhập và quản lý phiên')
+      .addTag('Users', 'Quản lý người dùng và phân quyền')
+      .addTag('Appointments', 'Đặt lịch và quản lý lịch khám')
+      .addTag('Doctors', 'Danh sách bác sĩ')
+      .addTag('Clinic rooms', 'Danh sách phòng khám')
+      .addTag('Examinations', 'Hồ sơ khám bệnh')
+      .addTag('Permissions', 'Quyền của người dùng hiện tại')
+      .build()
+    const swaggerDocument = SwaggerModule.createDocument(app, swaggerConfig)
+    SwaggerModule.setup('docs', app, swaggerDocument, {
+      jsonDocumentUrl: 'docs-json',
+      customSiteTitle: 'Clinic API Documentation',
+      swaggerOptions: {
+        persistAuthorization: true,
+        displayRequestDuration: true,
+        filter: true,
+      },
+    })
+
     app.useGlobalPipes(new ValidationPipe(validationOptions))
 
     app.useStaticAssets(join(process.cwd(), 'uploads'), {
@@ -124,6 +160,7 @@ async function bootstrap() {
     console.log(`Server running on port ${port}`)
     console.log(`Environment: ${nodeEnv}`)
     console.log(`API Allows Using: ${corsAllowlist.join(', ')}`)
+    console.log(`Swagger documentation: http://localhost:${port}/docs`)
 
     const signals = ['SIGTERM', 'SIGINT']
     signals.forEach((signal) => {

@@ -16,6 +16,7 @@ exports.ExaminationsController = void 0;
 const common_1 = require("@nestjs/common");
 const examinationsController_js_1 = require("../../src/controllers/examinationsController.js");
 const skip_permissions_decorator_js_1 = require("../modules/permissions/decorators/skip-permissions.decorator.js");
+const swagger_1 = require("@nestjs/swagger");
 let ExaminationsController = class ExaminationsController {
     upsertExamination(req, res) {
         return (0, examinationsController_js_1.upsertExamination)(req, res);
@@ -24,6 +25,8 @@ let ExaminationsController = class ExaminationsController {
 exports.ExaminationsController = ExaminationsController;
 __decorate([
     (0, common_1.Post)(),
+    (0, swagger_1.ApiOperation)({ summary: 'Tạo hoặc cập nhật hồ sơ khám bệnh' }),
+    (0, swagger_1.ApiBody)({ schema: { type: 'object', additionalProperties: true } }),
     __param(0, (0, common_1.Req)()),
     __param(1, (0, common_1.Res)()),
     __metadata("design:type", Function),
@@ -31,6 +34,8 @@ __decorate([
     __metadata("design:returntype", void 0)
 ], ExaminationsController.prototype, "upsertExamination", null);
 exports.ExaminationsController = ExaminationsController = __decorate([
+    (0, swagger_1.ApiTags)('Examinations'),
+    (0, swagger_1.ApiBearerAuth)('access-token'),
     (0, common_1.Controller)('examinations'),
     (0, skip_permissions_decorator_js_1.SkipPermissions)()
 ], ExaminationsController);

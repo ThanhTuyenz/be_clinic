@@ -17,6 +17,7 @@ const common_1 = require("@nestjs/common");
 const permissions_service_1 = require("./permissions.service");
 const constants_1 = require("../../common/utils/constants");
 const skip_permissions_decorator_1 = require("./decorators/skip-permissions.decorator");
+const swagger_1 = require("@nestjs/swagger");
 let PermissionsController = class PermissionsController {
     permissionsService;
     constructor(permissionsService) {
@@ -33,6 +34,7 @@ let PermissionsController = class PermissionsController {
 exports.PermissionsController = PermissionsController;
 __decorate([
     (0, common_1.Get)('/me'),
+    (0, swagger_1.ApiOperation)({ summary: 'Danh sách quyền của người dùng hiện tại' }),
     (0, skip_permissions_decorator_1.SkipPermissions)(),
     __param(0, (0, common_1.Request)()),
     __metadata("design:type", Function),
@@ -40,6 +42,8 @@ __decorate([
     __metadata("design:returntype", Promise)
 ], PermissionsController.prototype, "getManyForCurrentUser", null);
 exports.PermissionsController = PermissionsController = __decorate([
+    (0, swagger_1.ApiTags)('Permissions'),
+    (0, swagger_1.ApiBearerAuth)('access-token'),
     (0, common_1.Controller)(constants_1.Routes.PERMISSIONS),
     __metadata("design:paramtypes", [permissions_service_1.PermissionsService])
 ], PermissionsController);

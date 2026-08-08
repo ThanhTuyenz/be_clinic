@@ -49,9 +49,9 @@ __decorate([
     __metadata("design:type", String)
 ], CreateUserDto.prototype, "fullName", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ example: user_entity_1.UserRole.User, default: user_entity_1.UserRole.User }),
+    (0, swagger_1.ApiProperty)({ example: user_entity_1.UserRole.Patient, default: user_entity_1.UserRole.Patient }),
     (0, class_validator_1.IsNotEmpty)(),
-    (0, typeorm_1.Column)({ default: user_entity_1.UserRole.User }),
+    (0, typeorm_1.Column)({ default: user_entity_1.UserRole.Patient }),
     (0, class_validator_1.IsEnum)(user_entity_1.UserRole, { message: 'Role không hợp lệ' }),
     __metadata("design:type", String)
 ], CreateUserDto.prototype, "role", void 0);

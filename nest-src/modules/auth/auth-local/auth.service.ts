@@ -238,7 +238,7 @@ export class AuthService implements IAuthService {
       ...registerDto,
       email: registerDto.email,
       status: UserStatus.Active,
-      role: UserRole.User,
+      role: UserRole.Patient,
       hash,
     });
     await this.historyService.create({

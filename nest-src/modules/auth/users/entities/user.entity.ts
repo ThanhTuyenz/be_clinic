@@ -25,6 +25,12 @@ export enum UserStatus {
 export enum UserRole {
   SuperAdmin = 'super_admin',
   Admin = 'admin',
+  BranchManager = 'branch_manager',
+  Doctor = 'doctor',
+  Pharmacist = 'pharmacist',
+  Cashier = 'cashier',
+  Receptionist = 'receptionist',
+  Patient = 'patient',
   Staff = 'staff',
   User = 'user',
 }
@@ -74,7 +80,7 @@ export class User extends EntityHelper {
   @Column({ default: UserStatus.Active })
   status: UserStatus;
 
-  @Column({ default: UserRole.User })
+  @Column({ default: UserRole.Patient })
   role: UserRole;
 
   @Index()

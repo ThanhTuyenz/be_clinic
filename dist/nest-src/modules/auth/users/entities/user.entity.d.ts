@@ -7,6 +7,12 @@ export declare enum UserStatus {
 export declare enum UserRole {
     SuperAdmin = "super_admin",
     Admin = "admin",
+    BranchManager = "branch_manager",
+    Doctor = "doctor",
+    Pharmacist = "pharmacist",
+    Cashier = "cashier",
+    Receptionist = "receptionist",
+    Patient = "patient",
     Staff = "staff",
     User = "user"
 }

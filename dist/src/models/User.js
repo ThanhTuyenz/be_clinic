@@ -22,7 +22,16 @@ const userSchema = new mongoose_1.default.Schema({
     userType: {
         type: String,
         required: true,
-        enum: ['patient', 'doctor', 'receptionist'],
+        enum: [
+            'patient',
+            'doctor',
+            'pharmacist',
+            'cashier',
+            'receptionist',
+            'branch_manager',
+            'admin',
+            'super_admin',
+        ],
     },
     isActive: { type: Boolean, default: true },
     emailVerified: { type: Boolean, default: false },

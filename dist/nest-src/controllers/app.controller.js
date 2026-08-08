@@ -12,6 +12,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.AppController = void 0;
 const common_1 = require("@nestjs/common");
 const public_decorator_js_1 = require("../common/decorators/public.decorator.js");
+const swagger_1 = require("@nestjs/swagger");
 let AppController = class AppController {
     health() {
         return { ok: true, service: 'be_clinic' };
@@ -20,12 +21,14 @@ let AppController = class AppController {
 exports.AppController = AppController;
 __decorate([
     (0, common_1.Get)('health'),
+    (0, swagger_1.ApiOperation)({ summary: 'Kiểm tra trạng thái backend' }),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", []),
     __metadata("design:returntype", void 0)
 ], AppController.prototype, "health", null);
 exports.AppController = AppController = __decorate([
     (0, public_decorator_js_1.Public)(),
+    (0, swagger_1.ApiTags)('System'),
     (0, common_1.Controller)()
 ], AppController);
 //# sourceMappingURL=app.controller.js.map

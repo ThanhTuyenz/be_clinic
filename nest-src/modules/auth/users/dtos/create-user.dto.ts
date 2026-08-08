@@ -33,9 +33,9 @@ export class CreateUserDto {
   @IsNotEmpty()
   fullName: string | null;
 
-  @ApiProperty({ example: UserRole.User, default: UserRole.User })
+  @ApiProperty({ example: UserRole.Patient, default: UserRole.Patient })
   @IsNotEmpty()
-  @Column({ default: UserRole.User })
+  @Column({ default: UserRole.Patient })
   @IsEnum(UserRole, { message: 'Role không hợp lệ' })
   role?: UserRole;
 

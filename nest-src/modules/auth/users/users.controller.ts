@@ -46,7 +46,7 @@ export class UsersController {
     PermissionAction.CREATE,
     PermissionResourceTarget.ANY,
   )
-  @ApiBearerAuth()
+  @ApiBearerAuth('access-token')
   @ApiOperation({ summary: 'Tạo mới người dùng (admin)' })
   create(@Body() createUserDto: CreateUserDto) {
     return this.usersService.createUser(createUserDto);
@@ -58,7 +58,7 @@ export class UsersController {
     PermissionAction.GET,
     PermissionResourceTarget.ANY,
   )
-  @ApiBearerAuth()
+  @ApiBearerAuth('access-token')
   @ApiOperation({
     summary:
       'Danh sách người dùng (phân trang, admin; lọc tùy chọn theo email, họ tên)',
@@ -80,7 +80,7 @@ export class UsersController {
     PermissionAction.EDIT,
     PermissionResourceTarget.ANY,
   )
-  @ApiBearerAuth()
+  @ApiBearerAuth('access-token')
   @ApiParam({ name: 'id', description: 'UUID người dùng' })
   @ApiOperation({ summary: 'Cập nhật người dùng (admin)' })
   update(@Param('id') id: string, @Body() updateUserDto: UpdateUserAdminDto) {
@@ -93,7 +93,7 @@ export class UsersController {
     PermissionAction.DELETE,
     PermissionResourceTarget.ANY,
   )
-  @ApiBearerAuth()
+  @ApiBearerAuth('access-token')
   @HttpCode(HttpStatus.NO_CONTENT)
   @ApiParam({ name: 'id', description: 'UUID người dùng' })
   @ApiOperation({ summary: 'Xóa mềm người dùng (admin)' })
@@ -107,7 +107,7 @@ export class UsersController {
     PermissionAction.EDIT,
     PermissionResourceTarget.ANY,
   )
-  @ApiBearerAuth()
+  @ApiBearerAuth('access-token')
   @ApiParam({ name: 'id', description: 'UUID người dùng' })
   @ApiOperation({ summary: 'Gán role cho người dùng (admin)' })
   assignRole(@Param('id') id: string, @Body() assignRoleDto: AssignRoleDto) {
@@ -120,7 +120,7 @@ export class UsersController {
     PermissionAction.EDIT,
     PermissionResourceTarget.ANY,
   )
-  @ApiBearerAuth()
+  @ApiBearerAuth('access-token')
   @HttpCode(HttpStatus.NO_CONTENT)
   @ApiParam({ name: 'id', description: 'UUID người dùng' })
   @ApiOperation({ summary: 'Xóa role của người dùng (admin)' })
@@ -134,7 +134,7 @@ export class UsersController {
     PermissionAction.EDIT,
     PermissionResourceTarget.ANY,
   )
-  @ApiBearerAuth()
+  @ApiBearerAuth('access-token')
   @ApiParam({ name: 'id', description: 'UUID người dùng' })
   @ApiOperation({ summary: 'Gán quyền tùy chỉnh cho người dùng (admin)' })
   assignCustomPermissions(
@@ -150,7 +150,7 @@ export class UsersController {
     PermissionAction.EDIT,
     PermissionResourceTarget.ANY,
   )
-  @ApiBearerAuth()
+  @ApiBearerAuth('access-token')
   @HttpCode(HttpStatus.NO_CONTENT)
   @ApiParam({ name: 'id', description: 'UUID người dùng' })
   @ApiOperation({ summary: 'Xóa quyền tùy chỉnh của người dùng (admin)' })

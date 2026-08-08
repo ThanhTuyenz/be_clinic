@@ -187,7 +187,7 @@ let AuthService = AuthService_1 = class AuthService {
             ...registerDto,
             email: registerDto.email,
             status: user_entity_1.UserStatus.Active,
-            role: user_entity_1.UserRole.User,
+            role: user_entity_1.UserRole.Patient,
             hash,
         });
         await this.historyService.create({

@@ -16,6 +16,7 @@ exports.DoctorsController = void 0;
 const common_1 = require("@nestjs/common");
 const public_decorator_js_1 = require("../common/decorators/public.decorator.js");
 const doctorsController_js_1 = require("../../src/controllers/doctorsController.js");
+const swagger_1 = require("@nestjs/swagger");
 let DoctorsController = class DoctorsController {
     listDoctors(req, res) {
         return (0, doctorsController_js_1.listDoctors)(req, res);
@@ -24,6 +25,8 @@ let DoctorsController = class DoctorsController {
 exports.DoctorsController = DoctorsController;
 __decorate([
     (0, common_1.Get)(),
+    (0, swagger_1.ApiOperation)({ summary: 'Danh sách bác sĩ đang hoạt động' }),
+    (0, swagger_1.ApiQuery)({ name: 'specialtyId', required: false }),
     __param(0, (0, common_1.Req)()),
     __param(1, (0, common_1.Res)()),
     __metadata("design:type", Function),
@@ -32,6 +35,7 @@ __decorate([
 ], DoctorsController.prototype, "listDoctors", null);
 exports.DoctorsController = DoctorsController = __decorate([
     (0, public_decorator_js_1.Public)(),
+    (0, swagger_1.ApiTags)('Doctors'),
     (0, common_1.Controller)('doctors')
 ], DoctorsController);
 //# sourceMappingURL=doctors.controller.js.map

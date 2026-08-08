@@ -26,6 +26,12 @@ var UserRole;
 (function (UserRole) {
     UserRole["SuperAdmin"] = "super_admin";
     UserRole["Admin"] = "admin";
+    UserRole["BranchManager"] = "branch_manager";
+    UserRole["Doctor"] = "doctor";
+    UserRole["Pharmacist"] = "pharmacist";
+    UserRole["Cashier"] = "cashier";
+    UserRole["Receptionist"] = "receptionist";
+    UserRole["Patient"] = "patient";
     UserRole["Staff"] = "staff";
     UserRole["User"] = "user";
 })(UserRole || (exports.UserRole = UserRole = {}));
@@ -122,7 +128,7 @@ __decorate([
     __metadata("design:type", String)
 ], User.prototype, "status", void 0);
 __decorate([
-    (0, typeorm_1.Column)({ default: UserRole.User }),
+    (0, typeorm_1.Column)({ default: UserRole.Patient }),
     __metadata("design:type", String)
 ], User.prototype, "role", void 0);
 __decorate([

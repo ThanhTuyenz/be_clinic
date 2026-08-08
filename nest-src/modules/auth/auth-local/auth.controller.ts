@@ -138,7 +138,7 @@ export class AuthController {
     return this.authService.confirmEmail(hash);
   }
 
-  @ApiBearerAuth()
+  @ApiBearerAuth('access-token')
   @Get('status')
   @UseGuards(AuthGuard('jwt'))
   @HttpCode(HttpStatus.OK)
@@ -213,7 +213,7 @@ export class AuthController {
     };
   }
 
-  @ApiBearerAuth()
+  @ApiBearerAuth('access-token')
   @Post('logout')
   @SkipPermissions()
   @HttpCode(HttpStatus.NO_CONTENT)

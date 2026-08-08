@@ -14,10 +14,16 @@ export function mapUserRoleToPermissionRole(
     case UserRole.SuperAdmin:
       return PermissionRole.SUPER_ADMIN;
     case UserRole.Admin:
+    case UserRole.BranchManager:
       return PermissionRole.ADMIN;
     case UserRole.Staff:
+    case UserRole.Doctor:
+    case UserRole.Pharmacist:
+    case UserRole.Cashier:
+    case UserRole.Receptionist:
       return PermissionRole.STAFF;
     case UserRole.User:
+    case UserRole.Patient:
       return PermissionRole.USER;
     default:
       throw new Error(`Unsupported user role: ${userRole}`);

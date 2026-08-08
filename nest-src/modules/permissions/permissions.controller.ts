@@ -4,12 +4,16 @@ import { PermissionsService } from './permissions.service';
 import { Permission } from './types/permission.type';
 import { Routes } from 'src/common/utils/constants';
 import { SkipPermissions } from './decorators/skip-permissions.decorator';
+import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 
+@ApiTags('Permissions')
+@ApiBearerAuth('access-token')
 @Controller(Routes.PERMISSIONS)
 export class PermissionsController {
   constructor(private readonly permissionsService: PermissionsService) {}
 
   @Get('/me')
+  @ApiOperation({ summary: 'Danh sách quyền của người dùng hiện tại' })
   @SkipPermissions()
   async getManyForCurrentUser(
     @Request() { user }: ExpressRequest,

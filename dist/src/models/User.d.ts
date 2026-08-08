@@ -1,6 +1,6 @@
 declare const _default: mongoose.Model<{
     email: string;
-    userType: "patient" | "doctor" | "receptionist";
+    userType: "patient" | "doctor" | "pharmacist" | "cashier" | "receptionist" | "branch_manager" | "admin" | "super_admin";
     passwordHash: string;
     mustSetPassword: boolean;
     roleId: mongoose.Types.ObjectId;
@@ -26,7 +26,7 @@ declare const _default: mongoose.Model<{
     consultationFee?: number;
 } & mongoose.DefaultTimestampProps, {}, {}, {}, mongoose.Document<unknown, {}, {
     email: string;
-    userType: "patient" | "doctor" | "receptionist";
+    userType: "patient" | "doctor" | "pharmacist" | "cashier" | "receptionist" | "branch_manager" | "admin" | "super_admin";
     passwordHash: string;
     mustSetPassword: boolean;
     roleId: mongoose.Types.ObjectId;
@@ -54,7 +54,7 @@ declare const _default: mongoose.Model<{
     timestamps: true;
 }> & {
     email: string;
-    userType: "patient" | "doctor" | "receptionist";
+    userType: "patient" | "doctor" | "pharmacist" | "cashier" | "receptionist" | "branch_manager" | "admin" | "super_admin";
     passwordHash: string;
     mustSetPassword: boolean;
     roleId: mongoose.Types.ObjectId;
@@ -86,7 +86,7 @@ declare const _default: mongoose.Model<{
     timestamps: true;
 }, {
     email: string;
-    userType: "patient" | "doctor" | "receptionist";
+    userType: "patient" | "doctor" | "pharmacist" | "cashier" | "receptionist" | "branch_manager" | "admin" | "super_admin";
     passwordHash: string;
     mustSetPassword: boolean;
     roleId: mongoose.Types.ObjectId;
@@ -112,7 +112,7 @@ declare const _default: mongoose.Model<{
     consultationFee?: number;
 } & mongoose.DefaultTimestampProps, mongoose.Document<unknown, {}, mongoose.FlatRecord<{
     email: string;
-    userType: "patient" | "doctor" | "receptionist";
+    userType: "patient" | "doctor" | "pharmacist" | "cashier" | "receptionist" | "branch_manager" | "admin" | "super_admin";
     passwordHash: string;
     mustSetPassword: boolean;
     roleId: mongoose.Types.ObjectId;
@@ -140,7 +140,7 @@ declare const _default: mongoose.Model<{
     timestamps: true;
 }>> & mongoose.FlatRecord<{
     email: string;
-    userType: "patient" | "doctor" | "receptionist";
+    userType: "patient" | "doctor" | "pharmacist" | "cashier" | "receptionist" | "branch_manager" | "admin" | "super_admin";
     passwordHash: string;
     mustSetPassword: boolean;
     roleId: mongoose.Types.ObjectId;
