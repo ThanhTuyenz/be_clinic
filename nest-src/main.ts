@@ -35,12 +35,17 @@ async function bootstrap() {
     const port = appConfig?.port || configService.get<number>('PORT') || 5000
     const mediaLocalDir = configService.get<string>('MEDIA_LOCAL_DIR') || 'uploads'
 
-    const corsOriginRaw =
-      process.env.CORS_ORIGIN || appConfig?.frontendDomain || allowedOrigins
-    const corsAllowlist = String(corsOriginRaw)
+    const corsAllowlist = [
+      process.env.CORS_ORIGIN,
+      appConfig?.frontendDomain,
+      allowedOrigins,
+    ]
+      .filter(Boolean)
+      .join(',')
       .split(',')
       .map((value) => value.trim())
       .filter(Boolean)
+      .filter((value, index, origins) => origins.indexOf(value) === index)
 
     expressApp.set('etag', false)
     expressApp.set('trust proxy', 1)

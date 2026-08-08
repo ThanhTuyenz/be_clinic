@@ -27,6 +27,7 @@ const swagger_1 = require("@nestjs/swagger");
 const skip_permissions_decorator_1 = require("../../permissions/decorators/skip-permissions.decorator");
 const config_1 = require("@nestjs/config");
 const auth_config_1 = require("../../../config/auth.config");
+const auth_verify_otp_dto_1 = require("./dtos/auth-verify-otp.dto");
 let AuthController = AuthController_1 = class AuthController {
     authService;
     configService;
@@ -47,7 +48,6 @@ let AuthController = AuthController_1 = class AuthController {
         }
     }
     async checkEmail(email) {
-        console.log("trongngnghai ", email);
         if (!email) {
             throw new common_1.BadRequestException('Email không được để trống');
         }
@@ -76,8 +76,13 @@ let AuthController = AuthController_1 = class AuthController {
         return response;
     }
     async register(createUserDto) {
-        console.log("nguyen trong nghia ", createUserDto);
         return await this.authService.registerUser(createUserDto);
+    }
+    verifyOtp(dto) {
+        return this.authService.verifyRegistrationOtp(dto.email, dto.otp);
+    }
+    resendOtp(dto) {
+        return this.authService.resendRegistrationOtp(dto.email);
     }
     async confirmEmail(confirmEmailDto) {
         return this.authService.confirmEmail(confirmEmailDto.hash);
@@ -163,11 +168,32 @@ __decorate([
     (0, common_1.Post)('register'),
     (0, public_decorator_1.Public)(),
     (0, common_1.HttpCode)(common_1.HttpStatus.NO_CONTENT),
+    (0, swagger_1.ApiOperation)({ summary: 'Đăng ký và gửi OTP xác thực email' }),
     __param(0, (0, common_1.Body)()),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", [auth_register_dto_1.AuthRegisterDto]),
     __metadata("design:returntype", Promise)
 ], AuthController.prototype, "register", null);
+__decorate([
+    (0, common_1.Post)('verify-otp'),
+    (0, public_decorator_1.Public)(),
+    (0, common_1.HttpCode)(common_1.HttpStatus.NO_CONTENT),
+    (0, swagger_1.ApiOperation)({ summary: 'Xác thực OTP và kích hoạt tài khoản' }),
+    __param(0, (0, common_1.Body)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [auth_verify_otp_dto_1.AuthVerifyOtpDto]),
+    __metadata("design:returntype", Promise)
+], AuthController.prototype, "verifyOtp", null);
+__decorate([
+    (0, common_1.Post)('resend-otp'),
+    (0, public_decorator_1.Public)(),
+    (0, common_1.HttpCode)(common_1.HttpStatus.NO_CONTENT),
+    (0, swagger_1.ApiOperation)({ summary: 'Gửi lại OTP xác thực email' }),
+    __param(0, (0, common_1.Body)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [auth_verify_otp_dto_1.AuthResendOtpDto]),
+    __metadata("design:returntype", Promise)
+], AuthController.prototype, "resendOtp", null);
 __decorate([
     (0, common_1.Post)('confirm-email'),
     (0, public_decorator_1.Public)(),

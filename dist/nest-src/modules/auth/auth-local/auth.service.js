@@ -45,9 +45,7 @@ let AuthService = AuthService_1 = class AuthService {
         this.jwtService = jwtService;
     }
     async checkEmail(email) {
-        console.log("email nahn duco ", email);
         const user = await this.usersService.findByEmail(email);
-        console.log('user ', user);
         return !user;
     }
     async validateLogin(loginDto) {
@@ -180,22 +178,90 @@ let AuthService = AuthService_1 = class AuthService {
         };
     }
     async registerUser(registerDto) {
-        const hash = (0, crypto_1.createHash)('sha256')
-            .update((0, random_string_generator_util_1.randomStringGenerator)())
-            .digest('hex');
-        await this.usersService.createUser({
-            ...registerDto,
+        const existingUser = await this.usersService.findOneUser({
             email: registerDto.email,
-            status: user_entity_1.UserStatus.Active,
-            role: user_entity_1.UserRole.Patient,
-            hash,
         });
+        if (existingUser?.status === user_entity_1.UserStatus.Active) {
+            throw new common_1.HttpException('User already exists', common_1.HttpStatus.CONFLICT);
+        }
+        const otp = this.generateOtp();
+        const otpData = this.createOtpData(otp);
+        if (existingUser) {
+            existingUser.password = registerDto.password;
+            existingUser.fullName = registerDto.fullName;
+            existingUser.role = user_entity_1.UserRole.Patient;
+            existingUser.status = user_entity_1.UserStatus.Inactive;
+            Object.assign(existingUser, otpData);
+            await this.usersService.saveUser(existingUser);
+        }
+        else {
+            await this.usersService.createUser({
+                ...registerDto,
+                email: registerDto.email,
+                status: user_entity_1.UserStatus.Inactive,
+                role: user_entity_1.UserRole.Patient,
+                ...otpData,
+            });
+        }
         await this.historyService.create({
             action: history_1.HISTORY_ACTIONS.USER_REGISTERED,
             message: `Đăng ký tài khoản mới`,
             actorEmail: registerDto.email,
             targetType: 'user',
             targetId: registerDto.email,
+        });
+        await this.mailsService.confirmRegisterUser({
+            to: registerDto.email,
+            data: { otp, user: registerDto.fullName, expiresInMinutes: 10 },
+        });
+    }
+    async verifyRegistrationOtp(email, otp) {
+        const user = await this.usersService.findOneUser({ email });
+        if (!user || user.status === user_entity_1.UserStatus.Active) {
+            throw new common_1.HttpException('OTP không hợp lệ', common_1.HttpStatus.BAD_REQUEST);
+        }
+        if (!user.emailOtpHash || !user.emailOtpExpiresAt) {
+            throw new common_1.HttpException('OTP không tồn tại', common_1.HttpStatus.BAD_REQUEST);
+        }
+        if (user.emailOtpExpiresAt.getTime() < Date.now()) {
+            throw new common_1.HttpException('OTP đã hết hạn', common_1.HttpStatus.BAD_REQUEST);
+        }
+        if ((user.emailOtpAttempts || 0) >= 5) {
+            throw new common_1.HttpException('OTP đã bị khóa do nhập sai quá nhiều lần. Vui lòng gửi lại OTP.', common_1.HttpStatus.TOO_MANY_REQUESTS);
+        }
+        const suppliedHash = this.hashOtp(otp);
+        const expected = Buffer.from(user.emailOtpHash, 'hex');
+        const supplied = Buffer.from(suppliedHash, 'hex');
+        if (expected.length !== supplied.length || !(0, crypto_1.timingSafeEqual)(expected, supplied)) {
+            user.emailOtpAttempts = (user.emailOtpAttempts || 0) + 1;
+            await this.usersService.saveUser(user);
+            throw new common_1.HttpException('OTP không chính xác', common_1.HttpStatus.BAD_REQUEST);
+        }
+        user.status = user_entity_1.UserStatus.Active;
+        user.emailOtpHash = null;
+        user.emailOtpExpiresAt = null;
+        user.emailOtpLastSentAt = null;
+        user.emailOtpAttempts = 0;
+        await this.usersService.saveUser(user);
+    }
+    async resendRegistrationOtp(email) {
+        const user = await this.usersService.findOneUser({ email });
+        if (!user) {
+            throw new common_1.HttpException('Không tìm thấy tài khoản', common_1.HttpStatus.NOT_FOUND);
+        }
+        if (user.status === user_entity_1.UserStatus.Active) {
+            throw new common_1.HttpException('Email đã được xác thực', common_1.HttpStatus.CONFLICT);
+        }
+        if (user.emailOtpLastSentAt &&
+            Date.now() - user.emailOtpLastSentAt.getTime() < 60_000) {
+            throw new common_1.HttpException('Vui lòng chờ 60 giây trước khi gửi lại OTP', common_1.HttpStatus.TOO_MANY_REQUESTS);
+        }
+        const otp = this.generateOtp();
+        Object.assign(user, this.createOtpData(otp));
+        await this.usersService.saveUser(user);
+        await this.mailsService.confirmRegisterUser({
+            to: email,
+            data: { otp, user: user.fullName ?? undefined, expiresInMinutes: 10 },
         });
     }
     async status(userJwtPayload) {
@@ -436,6 +502,21 @@ let AuthService = AuthService_1 = class AuthService {
             token,
             refreshToken,
             tokenExpires,
+        };
+    }
+    generateOtp() {
+        return (0, crypto_1.randomInt)(0, 1_000_000).toString().padStart(6, '0');
+    }
+    hashOtp(otp) {
+        return (0, crypto_1.createHash)('sha256').update(otp).digest('hex');
+    }
+    createOtpData(otp) {
+        const now = new Date();
+        return {
+            emailOtpHash: this.hashOtp(otp),
+            emailOtpExpiresAt: new Date(now.getTime() + 10 * 60 * 1000),
+            emailOtpLastSentAt: now,
+            emailOtpAttempts: 0,
         };
     }
     parseDurationToMs(duration) {

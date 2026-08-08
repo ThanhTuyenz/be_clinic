@@ -10,6 +10,7 @@ import { AuthForgotPasswordDto } from './dtos/auth-forgot-password.dto';
 import { AuthResetPasswordDto } from './dtos/auth-reset-password.dto';
 import { ConfigService } from '@nestjs/config';
 import { AllConfigType } from 'src/config/config.type';
+import { AuthResendOtpDto, AuthVerifyOtpDto } from './dtos/auth-verify-otp.dto';
 export declare class AuthController {
     private readonly authService;
     private readonly configService;
@@ -21,6 +22,8 @@ export declare class AuthController {
     }>;
     login(loginDto: AuthEmailLoginDto, res: Response): Promise<LoginResponseType>;
     register(createUserDto: AuthRegisterDto): Promise<void>;
+    verifyOtp(dto: AuthVerifyOtpDto): Promise<void>;
+    resendOtp(dto: AuthResendOtpDto): Promise<void>;
     confirmEmail(confirmEmailDto: AuthConfirmEmailDto): Promise<void>;
     confirmEmailByHash(hash: string): Promise<void>;
     status(request: any): Promise<NullableType<User>>;

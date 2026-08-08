@@ -30,6 +30,8 @@ export declare class AuthService implements IAuthService {
     validateLogin(loginDto: AuthEmailLoginDto): Promise<LoginResponseType>;
     validateSocialLogin(authProvider: AuthProvidersEnum, socialData: SocialType): Promise<LoginResponseType>;
     registerUser(registerDto: AuthRegisterDto): Promise<void>;
+    verifyRegistrationOtp(email: string, otp: string): Promise<void>;
+    resendRegistrationOtp(email: string): Promise<void>;
     status(userJwtPayload: JwtPayloadType): Promise<NullableType<User>>;
     confirmEmail(hash: string): Promise<void>;
     forgotPassword(email: string): Promise<void>;
@@ -38,6 +40,9 @@ export declare class AuthService implements IAuthService {
     refreshTokenFromCookie(refreshToken: string): Promise<Omit<LoginResponseType, 'user'>>;
     logout(data: Pick<JwtRefreshPayloadType, 'sessionId'>): Promise<void>;
     private getTokensData;
+    private generateOtp;
+    private hashOtp;
+    private createOtpData;
     private parseDurationToMs;
     private resolveUserIdFromUnknown;
 }

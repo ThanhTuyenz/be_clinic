@@ -107,6 +107,22 @@ export class User extends EntityHelper {
   @Exclude({ toPlainOnly: true })
   hash: string | null;
 
+  @Column({ type: String, nullable: true })
+  @Exclude({ toPlainOnly: true })
+  emailOtpHash: string | null;
+
+  @Column({ type: Date, nullable: true })
+  @Exclude({ toPlainOnly: true })
+  emailOtpExpiresAt: Date | null;
+
+  @Column({ type: Date, nullable: true })
+  @Exclude({ toPlainOnly: true })
+  emailOtpLastSentAt: Date | null;
+
+  @Column({ type: Number, default: 0 })
+  @Exclude({ toPlainOnly: true })
+  emailOtpAttempts: number;
+
   @Column({ default: false })
   @Index()
   isBlocked: boolean;

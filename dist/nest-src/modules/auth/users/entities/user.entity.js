@@ -62,6 +62,10 @@ let User = class User extends entity_helper_1.EntityHelper {
     roleId;
     customPermissions;
     hash;
+    emailOtpHash;
+    emailOtpExpiresAt;
+    emailOtpLastSentAt;
+    emailOtpAttempts;
     isBlocked;
     blockedAt;
     isDeleted;
@@ -155,6 +159,26 @@ __decorate([
     (0, class_transformer_1.Exclude)({ toPlainOnly: true }),
     __metadata("design:type", String)
 ], User.prototype, "hash", void 0);
+__decorate([
+    (0, typeorm_1.Column)({ type: String, nullable: true }),
+    (0, class_transformer_1.Exclude)({ toPlainOnly: true }),
+    __metadata("design:type", String)
+], User.prototype, "emailOtpHash", void 0);
+__decorate([
+    (0, typeorm_1.Column)({ type: Date, nullable: true }),
+    (0, class_transformer_1.Exclude)({ toPlainOnly: true }),
+    __metadata("design:type", Date)
+], User.prototype, "emailOtpExpiresAt", void 0);
+__decorate([
+    (0, typeorm_1.Column)({ type: Date, nullable: true }),
+    (0, class_transformer_1.Exclude)({ toPlainOnly: true }),
+    __metadata("design:type", Date)
+], User.prototype, "emailOtpLastSentAt", void 0);
+__decorate([
+    (0, typeorm_1.Column)({ type: Number, default: 0 }),
+    (0, class_transformer_1.Exclude)({ toPlainOnly: true }),
+    __metadata("design:type", Number)
+], User.prototype, "emailOtpAttempts", void 0);
 __decorate([
     (0, typeorm_1.Column)({ default: false }),
     (0, typeorm_1.Index)(),

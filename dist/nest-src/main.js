@@ -31,11 +31,17 @@ async function bootstrap() {
         const nodeEnv = configService.get('NODE_ENV') || 'development';
         const port = appConfig?.port || configService.get('PORT') || 5000;
         const mediaLocalDir = configService.get('MEDIA_LOCAL_DIR') || 'uploads';
-        const corsOriginRaw = process.env.CORS_ORIGIN || appConfig?.frontendDomain || allowedOrigins;
-        const corsAllowlist = String(corsOriginRaw)
+        const corsAllowlist = [
+            process.env.CORS_ORIGIN,
+            appConfig?.frontendDomain,
+            allowedOrigins,
+        ]
+            .filter(Boolean)
+            .join(',')
             .split(',')
             .map((value) => value.trim())
-            .filter(Boolean);
+            .filter(Boolean)
+            .filter((value, index, origins) => origins.indexOf(value) === index);
         expressApp.set('etag', false);
         expressApp.set('trust proxy', 1);
         app.useGlobalFilters(new all_exception_filter_js_1.AllExceptionFilter(), new http_exception_filter_js_1.HttpExceptionFilter());

@@ -38,6 +38,10 @@ export declare class User extends EntityHelper {
         effect: string;
     }> | null;
     hash: string | null;
+    emailOtpHash: string | null;
+    emailOtpExpiresAt: Date | null;
+    emailOtpLastSentAt: Date | null;
+    emailOtpAttempts: number;
     isBlocked: boolean;
     blockedAt: Date | null;
     isDeleted: boolean;

@@ -11,6 +11,8 @@ import { JwtRefreshPayloadType } from './strategies/types/jwt-refresh-payload.ty
 export interface IAuthService {
   validateLogin(loginDto: AuthEmailLoginDto): Promise<LoginResponseType>;
   registerUser(registerDto: AuthRegisterDto): Promise<void>;
+  verifyRegistrationOtp(email: string, otp: string): Promise<void>;
+  resendRegistrationOtp(email: string): Promise<void>;
   checkEmail(email: string): Promise<boolean>;
   status(userJwtPayload: JwtPayloadType): Promise<NullableType<User>>;
   confirmEmail(hash: string): Promise<void>;

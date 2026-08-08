@@ -11,7 +11,7 @@ import { Services } from 'src/common/utils/constants';
 import { AuthEmailLoginDto } from './dtos/auth-email-login.dto';
 import { LoginResponseType } from './types/login-response.type';
 import { AuthProvidersEnum } from './enums/auth-providers.enum';
-import { createHash } from 'crypto';
+import { createHash, randomInt, timingSafeEqual } from 'crypto';
 import { ttlToMilliseconds } from '../../../config/auth.config';
 import { User, UserRole, UserStatus } from '../users/entities/user.entity';
 import { ISessionService } from '../session/session';
@@ -50,10 +50,7 @@ export class AuthService implements IAuthService {
 
   async checkEmail(email: string): Promise<boolean> {
 
-    console.log("email nahn duco ", email)
     const user = await this.usersService.findByEmail(email);
-
-    console.log('user ', user)
     return !user;
   }
 
@@ -230,17 +227,31 @@ export class AuthService implements IAuthService {
   }
 
   async registerUser(registerDto: AuthRegisterDto): Promise<void> {
-    const hash = createHash('sha256')
-      .update(randomStringGenerator())
-      .digest('hex');
-
-    await this.usersService.createUser({
-      ...registerDto,
+    const existingUser = await this.usersService.findOneUser({
       email: registerDto.email,
-      status: UserStatus.Active,
-      role: UserRole.Patient,
-      hash,
     });
+    if (existingUser?.status === UserStatus.Active) {
+      throw new HttpException('User already exists', HttpStatus.CONFLICT);
+    }
+
+    const otp = this.generateOtp();
+    const otpData = this.createOtpData(otp);
+    if (existingUser) {
+      existingUser.password = registerDto.password;
+      existingUser.fullName = registerDto.fullName;
+      existingUser.role = UserRole.Patient;
+      existingUser.status = UserStatus.Inactive;
+      Object.assign(existingUser, otpData);
+      await this.usersService.saveUser(existingUser);
+    } else {
+      await this.usersService.createUser({
+        ...registerDto,
+        email: registerDto.email,
+        status: UserStatus.Inactive,
+        role: UserRole.Patient,
+        ...otpData,
+      });
+    }
     await this.historyService.create({
       action: HISTORY_ACTIONS.USER_REGISTERED,
       message: `Đăng ký tài khoản mới`,
@@ -249,20 +260,72 @@ export class AuthService implements IAuthService {
       targetId: registerDto.email,
     });
 
-    // try {
-    //   await this.mailsService.confirmRegisterUser({
-    //     to: registerDto.email,
-    //     data: {
-    //       hash,
-    //       user: registerDto.fullName,
-    //     },
-    //   });
-    // } catch (error) {
-    //   this.logger.warn(
-    //     `Register mail send failed for ${registerDto.email}.`,
-    //     error instanceof Error ? error.stack : undefined,
-    //   );
-    // }
+    await this.mailsService.confirmRegisterUser({
+      to: registerDto.email,
+      data: { otp, user: registerDto.fullName, expiresInMinutes: 10 },
+    });
+  }
+
+  async verifyRegistrationOtp(email: string, otp: string): Promise<void> {
+    const user = await this.usersService.findOneUser({ email });
+    if (!user || user.status === UserStatus.Active) {
+      throw new HttpException('OTP không hợp lệ', HttpStatus.BAD_REQUEST);
+    }
+    if (!user.emailOtpHash || !user.emailOtpExpiresAt) {
+      throw new HttpException('OTP không tồn tại', HttpStatus.BAD_REQUEST);
+    }
+    if (user.emailOtpExpiresAt.getTime() < Date.now()) {
+      throw new HttpException('OTP đã hết hạn', HttpStatus.BAD_REQUEST);
+    }
+    if ((user.emailOtpAttempts || 0) >= 5) {
+      throw new HttpException(
+        'OTP đã bị khóa do nhập sai quá nhiều lần. Vui lòng gửi lại OTP.',
+        HttpStatus.TOO_MANY_REQUESTS,
+      );
+    }
+
+    const suppliedHash = this.hashOtp(otp);
+    const expected = Buffer.from(user.emailOtpHash, 'hex');
+    const supplied = Buffer.from(suppliedHash, 'hex');
+    if (expected.length !== supplied.length || !timingSafeEqual(expected, supplied)) {
+      user.emailOtpAttempts = (user.emailOtpAttempts || 0) + 1;
+      await this.usersService.saveUser(user);
+      throw new HttpException('OTP không chính xác', HttpStatus.BAD_REQUEST);
+    }
+
+    user.status = UserStatus.Active;
+    user.emailOtpHash = null;
+    user.emailOtpExpiresAt = null;
+    user.emailOtpLastSentAt = null;
+    user.emailOtpAttempts = 0;
+    await this.usersService.saveUser(user);
+  }
+
+  async resendRegistrationOtp(email: string): Promise<void> {
+    const user = await this.usersService.findOneUser({ email });
+    if (!user) {
+      throw new HttpException('Không tìm thấy tài khoản', HttpStatus.NOT_FOUND);
+    }
+    if (user.status === UserStatus.Active) {
+      throw new HttpException('Email đã được xác thực', HttpStatus.CONFLICT);
+    }
+    if (
+      user.emailOtpLastSentAt &&
+      Date.now() - user.emailOtpLastSentAt.getTime() < 60_000
+    ) {
+      throw new HttpException(
+        'Vui lòng chờ 60 giây trước khi gửi lại OTP',
+        HttpStatus.TOO_MANY_REQUESTS,
+      );
+    }
+
+    const otp = this.generateOtp();
+    Object.assign(user, this.createOtpData(otp));
+    await this.usersService.saveUser(user);
+    await this.mailsService.confirmRegisterUser({
+      to: email,
+      data: { otp, user: user.fullName ?? undefined, expiresInMinutes: 10 },
+    });
   }
 
   async status(userJwtPayload: JwtPayloadType): Promise<NullableType<User>> {
@@ -619,6 +682,30 @@ export class AuthService implements IAuthService {
       token,
       refreshToken,
       tokenExpires,
+    };
+  }
+
+  private generateOtp(): string {
+    return randomInt(0, 1_000_000).toString().padStart(6, '0');
+  }
+
+  private hashOtp(otp: string): string {
+    return createHash('sha256').update(otp).digest('hex');
+  }
+
+  private createOtpData(otp: string): Pick<
+    User,
+    | 'emailOtpHash'
+    | 'emailOtpExpiresAt'
+    | 'emailOtpLastSentAt'
+    | 'emailOtpAttempts'
+  > {
+    const now = new Date();
+    return {
+      emailOtpHash: this.hashOtp(otp),
+      emailOtpExpiresAt: new Date(now.getTime() + 10 * 60 * 1000),
+      emailOtpLastSentAt: now,
+      emailOtpAttempts: 0,
     };
   }
 

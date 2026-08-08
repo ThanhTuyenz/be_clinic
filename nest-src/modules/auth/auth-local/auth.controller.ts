@@ -28,11 +28,15 @@ import { NullableType } from 'src/common/utils/types/nullable.type';
 import { User } from '../users/entities/user.entity';
 import { AuthForgotPasswordDto } from './dtos/auth-forgot-password.dto';
 import { AuthResetPasswordDto } from './dtos/auth-reset-password.dto';
-import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
+import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { SkipPermissions } from '../../permissions/decorators/skip-permissions.decorator';
 import { ConfigService } from '@nestjs/config';
 import { AllConfigType } from 'src/config/config.type';
 import { ttlToMilliseconds } from '../../../config/auth.config';
+import {
+  AuthResendOtpDto,
+  AuthVerifyOtpDto,
+} from './dtos/auth-verify-otp.dto';
 
 @ApiTags('Auth')
 @SkipPermissions() // Skip permissions check for all routes in this controller
@@ -64,7 +68,6 @@ export class AuthController {
   @HttpCode(HttpStatus.OK)
   async checkEmail(@Query('email') email: string) {
 
-    console.log("trongngnghai ", email)
     if (!email) {
       throw new BadRequestException('Email không được để trống');
     }
@@ -111,11 +114,26 @@ export class AuthController {
   @Post('register')
   @Public()
   @HttpCode(HttpStatus.NO_CONTENT)
+  @ApiOperation({ summary: 'Đăng ký và gửi OTP xác thực email' })
   async register(@Body() createUserDto: AuthRegisterDto): Promise<void> {
 
-    console.log("nguyen trong nghia ", createUserDto)
-
     return await this.authService.registerUser(createUserDto);
+  }
+
+  @Post('verify-otp')
+  @Public()
+  @HttpCode(HttpStatus.NO_CONTENT)
+  @ApiOperation({ summary: 'Xác thực OTP và kích hoạt tài khoản' })
+  verifyOtp(@Body() dto: AuthVerifyOtpDto): Promise<void> {
+    return this.authService.verifyRegistrationOtp(dto.email, dto.otp);
+  }
+
+  @Post('resend-otp')
+  @Public()
+  @HttpCode(HttpStatus.NO_CONTENT)
+  @ApiOperation({ summary: 'Gửi lại OTP xác thực email' })
+  resendOtp(@Body() dto: AuthResendOtpDto): Promise<void> {
+    return this.authService.resendRegistrationOtp(dto.email);
   }
 
   @Post('confirm-email')
