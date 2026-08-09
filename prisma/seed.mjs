@@ -106,9 +106,11 @@ async function main() {
       create: { doctorId: doctor.id, branchId: branches[0].id, date: dateOnly(31), reason: 'Nghỉ đào tạo chuyên môn', isClosed: true },
     });
 
-    for (let day = 1; day <= 30; day += 1) {
+    for (let day = 0; day <= 30; day += 1) {
       const workDate = dateOnly(day);
-      if (workDate.getUTCDay() === 0) continue;
+      // Luôn tạo ca cho ngày seed hiện tại để có thể test hàng đợi ngay;
+      // các ngày Chủ nhật tương lai vẫn được nghỉ theo lịch phòng khám.
+      if (workDate.getUTCDay() === 0 && day !== 0) continue;
       const schedule = await prisma.doctorSchedule.upsert({
         where: { doctorId_branchId_workDate_startTime: { doctorId: doctor.id, branchId: branches[0].id, workDate, startTime: time(8) } },
         update: { status: 'OPEN' },
@@ -135,7 +137,8 @@ async function main() {
   });
 
   await seedAuthTables(users, patient);
-  console.log('Seed completed without appointments or payments. Test password: VitaCare@123');
+  await seedBookingTables({ users, doctors, slotsByDoctor, branches, mainProfile, childProfile });
+  console.log('Seed completed with doctor waiting queue. Test password: VitaCare@123');
 }
 
 async function seedAuthTables(users, patient) {
@@ -164,18 +167,28 @@ async function seedAuthTables(users, patient) {
 async function seedBookingTables({ users, doctors, slotsByDoctor, branches, mainProfile, childProfile }) {
   const cardioDoctor = doctors.get('doctor.cardio@vitacare.local');
   const slots = slotsByDoctor.get('doctor.cardio@vitacare.local');
+  const pediatricDoctor = doctors.get('doctor.pediatrics@vitacare.local');
+  const pediatricSlots = slotsByDoctor.get('doctor.pediatrics@vitacare.local');
   if (!cardioDoctor || slots.length < 3) throw new Error('Không đủ timeslot để seed booking');
+  if (!pediatricDoctor || pediatricSlots.length < 2) throw new Error('Không đủ timeslot Nhi khoa để seed booking');
   const cashier = users.get('cashier@vitacare.local');
   const receptionist = users.get('receptionist@vitacare.local');
-  const booked = await upsertAppointment({ code: 'VC-SEED-BOOKED', profile: mainProfile, doctor: cardioDoctor, branch: branches[0], slot: slots[0], status: 'BOOKED', symptoms: 'Đau ngực nhẹ khi vận động' });
+  const booked = await upsertAppointment({ code: 'VC-SEED-WAIT-01', profile: mainProfile, doctor: cardioDoctor, branch: branches[0], slot: slots[0], status: 'CHECKED_IN', symptoms: 'Đau ngực nhẹ khi vận động', queueNumber: 1, checkedInById: receptionist.id });
+  const waitingChild = await upsertAppointment({ code: 'VC-SEED-WAIT-02', profile: childProfile, doctor: cardioDoctor, branch: branches[0], slot: slots[0], status: 'CHECKED_IN', symptoms: 'Ho và sốt nhẹ', queueNumber: 2, checkedInById: receptionist.id });
+  const pediatricWaiting1 = await upsertAppointment({ code: 'VC-PED-WAIT-01', profile: childProfile, doctor: pediatricDoctor, branch: branches[0], slot: pediatricSlots[0], status: 'CHECKED_IN', symptoms: 'Ho, sốt nhẹ và sổ mũi', queueNumber: 1, checkedInById: receptionist.id });
+  const pediatricWaiting2 = await upsertAppointment({ code: 'VC-PED-WAIT-02', profile: mainProfile, doctor: pediatricDoctor, branch: branches[0], slot: pediatricSlots[0], status: 'CHECKED_IN', symptoms: 'Tái khám theo lịch hẹn', queueNumber: 2, checkedInById: receptionist.id });
   const completed = await upsertAppointment({ code: 'VC-SEED-DONE', profile: mainProfile, doctor: cardioDoctor, branch: branches[0], slot: slots[1], status: 'COMPLETED', symptoms: 'Tái khám huyết áp', queueNumber: 1, checkedInById: receptionist.id });
   const pending = await upsertAppointment({ code: 'VC-SEED-PENDING', profile: childProfile, doctor: cardioDoctor, branch: branches[0], slot: slots[2], status: 'PENDING_PAYMENT', symptoms: 'Khám sức khỏe tổng quát', holdExpiresAt: new Date(Date.now() + 10 * 60 * 1000) });
 
-  await prisma.doctorScheduleSlot.update({ where: { id: slots[0].id }, data: { occupiedCount: 1 } });
+  await prisma.doctorScheduleSlot.update({ where: { id: slots[0].id }, data: { occupiedCount: 2, nextQueueNumber: 2 } });
   await prisma.doctorScheduleSlot.update({ where: { id: slots[1].id }, data: { occupiedCount: 1, nextQueueNumber: 1 } });
   await prisma.doctorScheduleSlot.update({ where: { id: slots[2].id }, data: { occupiedCount: 1 } });
+  await prisma.doctorScheduleSlot.update({ where: { id: pediatricSlots[0].id }, data: { occupiedCount: 2, nextQueueNumber: 2 } });
 
   await seedPaidInvoice(booked, mainProfile, branches[0], cashier, 300000, 'seed-payment-booked');
+  await seedPaidInvoice(waitingChild, childProfile, branches[0], cashier, 300000, 'seed-payment-waiting-child');
+  await seedPaidInvoice(pediatricWaiting1, childProfile, branches[0], cashier, 250000, 'seed-payment-pediatric-1');
+  await seedPaidInvoice(pediatricWaiting2, mainProfile, branches[0], cashier, 250000, 'seed-payment-pediatric-2');
   await seedPaidInvoice(completed, mainProfile, branches[0], cashier, 300000, 'seed-payment-completed');
   const pendingInvoice = await prisma.invoice.upsert({
     where: { appointmentId: pending.id },

@@ -26,6 +26,7 @@ import { RedisModule } from './infrastructure/cache/redis/redis.module.js'
 import { PaymentsModule } from './modules/payments/payments.module.js'
 import { AdminDashboardModule } from './modules/admin-dashboard/admin-dashboard.module.js'
 import { ClinicalCatalogModule } from './modules/clinical-catalog/clinical-catalog.module.js'
+import { SystemCatalogModule } from './modules/system-catalog/system-catalog.module.js'
 
 @Module({
   imports: [
@@ -63,6 +64,7 @@ import { ClinicalCatalogModule } from './modules/clinical-catalog/clinical-catal
     PaymentsModule,
     AdminDashboardModule,
     ClinicalCatalogModule,
+    SystemCatalogModule,
   ],
   controllers: [],
   providers: [

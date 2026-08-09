@@ -38,6 +38,7 @@ const redis_module_js_1 = require("./infrastructure/cache/redis/redis.module.js"
 const payments_module_js_1 = require("./modules/payments/payments.module.js");
 const admin_dashboard_module_js_1 = require("./modules/admin-dashboard/admin-dashboard.module.js");
 const clinical_catalog_module_js_1 = require("./modules/clinical-catalog/clinical-catalog.module.js");
+const system_catalog_module_js_1 = require("./modules/system-catalog/system-catalog.module.js");
 let AppModule = class AppModule {
 };
 exports.AppModule = AppModule;
@@ -78,6 +79,7 @@ exports.AppModule = AppModule = __decorate([
             payments_module_js_1.PaymentsModule,
             admin_dashboard_module_js_1.AdminDashboardModule,
             clinical_catalog_module_js_1.ClinicalCatalogModule,
+            system_catalog_module_js_1.SystemCatalogModule,
         ],
         controllers: [],
         providers: [

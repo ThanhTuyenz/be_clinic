@@ -25,6 +25,7 @@ model Department {
   description String?
   doctors     Doctor[]
   specialties Specialty[]
+  services    MedicalService[]
 
   @@map("departments")
 }
@@ -47,7 +48,14 @@ model Doctor {
   departmentId       Int?                      @map("department_id")
   fullName           String                    @map("full_name") @db.VarChar(100)
   academicRank       String?                   @map("academic_rank") @db.VarChar(50)
+  licenseNumber      String?                   @unique @map("license_number") @db.VarChar(50)
+  experienceYears    Int                       @default(0) @map("experience_years")
+  biography          String?                   @db.Text
   consultationFee    Decimal                   @default(0) @map("consultation_fee") @db.Decimal(12, 2)
+  slotDuration       Int                       @default(30) @map("slot_duration")
+  ratingAverage      Float                     @default(0.0) @map("rating_average")
+  ratingCount        Int                       @default(0) @map("rating_count")
+  isFeatured         Boolean                   @default(false) @map("is_featured")
   isActive           Boolean                   @default(true) @map("is_active")
   createdAt          DateTime                  @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt          DateTime                  @updatedAt @map("updated_at") @db.Timestamptz(3)
@@ -59,9 +67,29 @@ model Doctor {
   scheduleExceptions DoctorScheduleException[]
   schedules          DoctorSchedule[]
   appointments       Appointment[]
+  reviews            Review[]
 
   @@index([departmentId, isActive])
+  @@index([isFeatured, isActive])
   @@map("doctors")
+}
+
+model Review {
+  id         String   @id @default(uuid()) @db.Uuid
+  doctorId   String   @map("doctor_id") @db.Uuid
+  reviewerId String   @map("reviewer_id") @db.Uuid
+  rating     Int
+  comment    String?  @db.Text
+  isActive   Boolean  @default(true) @map("is_active")
+  createdAt  DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt  DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+  doctor     Doctor   @relation(fields: [doctorId], references: [id], onDelete: Cascade)
+  reviewer   User     @relation(fields: [reviewerId], references: [id], onDelete: Cascade)
+
+  @@unique([doctorId, reviewerId])
+  @@index([doctorId, isActive, createdAt])
+  @@index([reviewerId])
+  @@map("reviews")
 }
 
 model DoctorSpecialty {

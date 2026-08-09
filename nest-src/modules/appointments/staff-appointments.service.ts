@@ -35,6 +35,7 @@ export class StaffAppointmentsService {
       startTime: this.time(row.scheduleSlot.startTime),
       endTime: this.time(row.scheduleSlot.endTime),
       status: this.statusForClient(row.status),
+      workflowStatus: row.status,
       symptoms: row.symptomsDescription || '',
       visitQueueNumber: row.queueNumber,
       clinicRoom: row.scheduleSlot.schedule.room?.name || row.scheduleSlot.schedule.room?.code || '',
@@ -153,7 +154,12 @@ export class StaffAppointmentsService {
   }
 
   async updateStatus(userId: string, appointmentId: string, input: Record<string, any>) {
-    const role = await this.roleOf(userId)
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: { role: true, doctor: { select: { id: true } } },
+    })
+    if (!user) throw new ForbiddenException('Tài khoản không hợp lệ')
+    const role = user.role
     if (!['ADMIN', 'BRANCH_MANAGER', 'RECEPTIONIST', 'DOCTOR'].includes(role)) throw new ForbiddenException('Không có quyền cập nhật lịch khám')
     const current = await this.prisma.appointment.findUnique({ where: { id: appointmentId } })
     if (!current) throw new NotFoundException('Không tìm thấy lịch khám')
@@ -161,6 +167,14 @@ export class StaffAppointmentsService {
     const status = statuses[String(input.status || '').toLowerCase()] || String(input.status || '').toUpperCase()
     const allowed = ['PENDING_PAYMENT', 'BOOKED', 'CHECKED_IN', 'IN_EXAMINATION', 'COMPLETED', 'CANCELLED']
     if (!allowed.includes(status)) throw new BadRequestException('Trạng thái lịch khám không hợp lệ')
+    if (role === 'DOCTOR') {
+      if (!user.doctor?.id || user.doctor.id !== current.doctorId) {
+        throw new ForbiddenException('Lịch khám không thuộc bác sĩ hiện tại')
+      }
+      if (status !== 'IN_EXAMINATION' || current.status !== 'CHECKED_IN') {
+        throw new BadRequestException('Bác sĩ chỉ có thể bắt đầu bệnh nhân đã check-in')
+      }
+    }
     await this.prisma.$transaction(async (tx) => {
       await tx.appointment.update({
         where: { id: appointmentId },

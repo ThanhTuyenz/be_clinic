@@ -1,0 +1,17 @@
+import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common'
+import { PrismaService } from '../../infrastructure/database/prisma/prisma.service.js'
+
+@Injectable()
+export class SystemCatalogService {
+  constructor(private readonly prisma: PrismaService) {}
+  private async manager(userId: string) { const user=await this.prisma.user.findUnique({where:{id:userId},select:{role:true}}); if(!user||!['ADMIN','BRANCH_MANAGER'].includes(user.role)) throw new ForbiddenException('Chỉ quản trị viên hoặc quản lý chi nhánh được thao tác') }
+  private model(resource:string):any { const map:any={branches:this.prisma.branch,specialties:this.prisma.specialty,services:(this.prisma as any).medicalService,medicines:this.prisma.medicine}; const model=map[resource]; if(!model)throw new BadRequestException('Danh mục không hợp lệ'); return model }
+  async list(userId:string,resource:string,q=''){await this.manager(userId);const term=q.trim();const model=this.model(resource);const where:any=term?{OR:[{name:{contains:term,mode:'insensitive'}},...(['branches','services','medicines'].includes(resource)?[{code:{contains:term,mode:'insensitive'}}]:[])]}:{};return {items:await model.findMany({where,orderBy:{name:'asc'},take:200})}}
+  async create(userId:string,resource:string,body:any){await this.manager(userId);const data=await this.payload(resource,body,true);return this.model(resource).create({data})}
+  async update(userId:string,resource:string,id:string,body:any){await this.manager(userId);const model=this.model(resource);const exists=await model.findUnique({where:{id:resource==='specialties'?Number(id):id}});if(!exists)throw new NotFoundException('Không tìm thấy dữ liệu');return model.update({where:{id:resource==='specialties'?Number(id):id},data:await this.payload(resource,body,false)})}
+  async remove(userId:string,resource:string,id:string){await this.manager(userId);const model=this.model(resource);const key=resource==='specialties'?Number(id):id;const exists=await model.findUnique({where:{id:key}});if(!exists)throw new NotFoundException('Không tìm thấy dữ liệu');if(resource==='specialties')return model.delete({where:{id:key}});return model.update({where:{id:key},data:{isActive:false}})}
+  private async payload(resource:string,b:any,creating:boolean){if(!String(b.name||'').trim())throw new BadRequestException('Tên không được để trống');if(resource==='branches'){let clinicId=b.clinicId;if(!clinicId){const clinic=await this.prisma.clinic.findFirst({where:{isActive:true}});if(!clinic)throw new BadRequestException('Chưa có phòng khám để gán chi nhánh');clinicId=clinic.id}return {name:String(b.name).trim(),code:String(b.code||'').trim(),address:b.address||null,phoneNumber:b.phoneNumber||null,timezone:b.timezone||'Asia/Ho_Chi_Minh',isActive:b.isActive??true,...(creating?{clinicId}:{})}}
+    if(resource==='specialties')return {name:String(b.name).trim(),description:b.description||null,departmentId:Number(b.departmentId)}
+    if(resource==='services')return {name:String(b.name).trim(),code:String(b.code||'').trim(),description:b.description||null,departmentId:b.departmentId?Number(b.departmentId):null,price:Number(b.price)||0,durationMin:Number(b.durationMin)||30,isActive:b.isActive??true}
+    return {name:String(b.name).trim(),code:String(b.code||'').trim(),activeIngredient:b.activeIngredient||null,strength:b.strength||null,unit:b.unit||null,unitPrice:Number(b.unitPrice)||0,stockQuantity:Number(b.stockQuantity)||0,isActive:b.isActive??true}}
+}

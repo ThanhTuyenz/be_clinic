@@ -32,6 +32,7 @@ model User {
   checkedInAppointments Appointment[]           @relation("CheckedInBy")
   auditLogs             AuditLog[]              @relation("AuditActor")
   examinationsCreated   Examination[]
+  doctorReviews         Review[]                 @relation
 
   @@index([role, status])
   @@index([isBlocked, isDeleted])
