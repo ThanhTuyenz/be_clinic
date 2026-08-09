@@ -8,7 +8,6 @@ import {
   Logger,
   Post,
   Get,
-  UseGuards,
   Query,
   BadRequestException,
   Req,
@@ -23,7 +22,6 @@ import { AuthEmailLoginDto } from './dtos/auth-email-login.dto';
 import { LoginResponseType } from './types/login-response.type';
 import { AuthRegisterDto } from './dtos/auth-register.dto';
 import { AuthConfirmEmailDto } from './dtos/auth-confirm-email.dto';
-import { AuthGuard } from '@nestjs/passport';
 import { NullableType } from 'src/common/utils/types/nullable.type';
 import { User } from '../users/entities/user.entity';
 import { AuthForgotPasswordDto } from './dtos/auth-forgot-password.dto';
@@ -158,7 +156,6 @@ export class AuthController {
 
   @ApiBearerAuth('access-token')
   @Get('status')
-  @UseGuards(AuthGuard('jwt'))
   @HttpCode(HttpStatus.OK)
   public status(@Req() request): Promise<NullableType<User>> {
     return this.authService.status(request.user);

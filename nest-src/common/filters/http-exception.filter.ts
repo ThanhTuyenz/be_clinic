@@ -38,6 +38,13 @@ export class HttpExceptionFilter implements ExceptionFilter {
       }
     }
 
+    // HttpException created with an object response but without `message`
+    // defaults to the unhelpful text "Http Exception". Derive a useful
+    // message from the validation/domain errors before sending it to clients.
+    if (message === 'Http Exception') {
+      message = this.getMessageFromErrors(errors) ?? this.getDefaultMessage(status);
+    }
+
     response.status(status as number).json({
       statusCode: status as number,
       errorCode: errorCode,
@@ -46,6 +53,44 @@ export class HttpExceptionFilter implements ExceptionFilter {
       timestamp: new Date().toISOString(),
       path: request.url,
     });
+  }
+
+  private getMessageFromErrors(errors: unknown): string | undefined {
+    if (typeof errors !== 'object' || errors === null) return undefined;
+
+    const messages: Record<string, string> = {
+      notFound: 'Không tìm thấy tài khoản với email này',
+      inactive: 'Tài khoản chưa được kích hoạt',
+      incorrectPassword: 'Mật khẩu không chính xác',
+    };
+
+    for (const value of Object.values(errors as Record<string, unknown>)) {
+      if (typeof value !== 'string') continue;
+      if (value.startsWith('needLoginViaProvider:')) {
+        const provider = value.split(':')[1];
+        return `Tài khoản này cần đăng nhập bằng ${provider}`;
+      }
+      return messages[value] ?? value;
+    }
+
+    return undefined;
+  }
+
+  private getDefaultMessage(status: HttpStatus): string {
+    switch (status) {
+      case HttpStatus.BAD_REQUEST:
+        return 'Yêu cầu không hợp lệ';
+      case HttpStatus.UNAUTHORIZED:
+        return 'Thông tin đăng nhập không chính xác';
+      case HttpStatus.FORBIDDEN:
+        return 'Bạn không có quyền thực hiện thao tác này';
+      case HttpStatus.NOT_FOUND:
+        return 'Không tìm thấy tài nguyên';
+      case HttpStatus.UNPROCESSABLE_ENTITY:
+        return 'Dữ liệu không hợp lệ';
+      default:
+        return 'Đã xảy ra lỗi máy chủ';
+    }
   }
 
   private getErrorCode(status: HttpStatus): string {

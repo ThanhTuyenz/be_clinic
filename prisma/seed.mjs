@@ -135,8 +135,7 @@ async function main() {
   });
 
   await seedAuthTables(users, patient);
-  await seedBookingTables({ users, doctors, slotsByDoctor, branches, mainProfile, childProfile });
-  console.log('Seed completed. Test password: VitaCare@123');
+  console.log('Seed completed without appointments or payments. Test password: VitaCare@123');
 }
 
 async function seedAuthTables(users, patient) {

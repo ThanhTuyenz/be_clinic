@@ -35,6 +35,7 @@ const prisma_module_js_1 = require("./infrastructure/database/prisma/prisma.modu
 const rabbitmq_module_js_1 = require("./infrastructure/messaging/rabbitmq/rabbitmq.module.js");
 const patients_module_js_1 = require("./modules/patients/patients.module.js");
 const redis_module_js_1 = require("./infrastructure/cache/redis/redis.module.js");
+const payments_module_js_1 = require("./modules/payments/payments.module.js");
 let AppModule = class AppModule {
 };
 exports.AppModule = AppModule;
@@ -72,6 +73,7 @@ exports.AppModule = AppModule = __decorate([
             contacts_module_js_1.ContactsModule,
             rabbitmq_module_js_1.RabbitMqModule,
             patients_module_js_1.PatientsModule,
+            payments_module_js_1.PaymentsModule,
         ],
         controllers: [],
         providers: [

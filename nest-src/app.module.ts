@@ -23,6 +23,7 @@ import { PrismaModule } from './infrastructure/database/prisma/prisma.module.js'
 import { RabbitMqModule } from './infrastructure/messaging/rabbitmq/rabbitmq.module.js'
 import { PatientsModule } from './modules/patients/patients.module.js'
 import { RedisModule } from './infrastructure/cache/redis/redis.module.js'
+import { PaymentsModule } from './modules/payments/payments.module.js'
 
 @Module({
   imports: [
@@ -57,6 +58,7 @@ import { RedisModule } from './infrastructure/cache/redis/redis.module.js'
     ContactsModule,
     RabbitMqModule,
     PatientsModule,
+    PaymentsModule,
   ],
   controllers: [],
   providers: [

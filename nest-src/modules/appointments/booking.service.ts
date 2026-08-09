@@ -1,6 +1,8 @@
 import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { AppointmentStatus, PaymentStatus, Prisma } from '@prisma/client';
 import { createHash, randomBytes } from 'crypto';
+import { RabbitMqConfig } from '../../config/config.type.js';
 import { PrismaService } from '../../infrastructure/database/prisma/prisma.service.js';
 import { CheckoutAppointmentDto } from './dtos/checkout-appointment.dto.js';
 import { PaymentWebhookDto } from './dtos/payment-webhook.dto.js';
@@ -11,7 +13,10 @@ const ACTIVE_APPOINTMENT_STATUSES: AppointmentStatus[] = [
 
 @Injectable()
 export class BookingService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly config: ConfigService,
+  ) {}
 
   async checkout(accountId: string, dto: CheckoutAppointmentDto) {
     try {
@@ -36,7 +41,9 @@ export class BookingService {
             status: { in: ACTIVE_APPOINTMENT_STATUSES },
           },
         });
-        if (duplicate) throw new ConflictException('PATIENT_TIME_CONFLICT');
+        if (duplicate) {
+          throw new ConflictException('Người bệnh đã có lịch hẹn trong khung giờ này');
+        }
 
         const reserved = await tx.$executeRaw`
           UPDATE "doctor_schedule_slots"
@@ -46,10 +53,13 @@ export class BookingService {
             AND "is_active" = TRUE
             AND "occupied_count" < "capacity"
         `;
-        if (reserved !== 1) throw new ConflictException('TIME_SLOT_FULL');
+        if (reserved !== 1) throw new ConflictException('Khung giờ này vừa hết chỗ');
 
+        const holdTtlMs = this.config.getOrThrow<RabbitMqConfig>('rabbitmq').holdTtlMs;
         const [{ now, expiresAt }] = await tx.$queryRaw<Array<{ now: Date; expiresAt: Date }>>`
-          SELECT NOW() AS "now", NOW() + INTERVAL '10 minutes' AS "expiresAt"
+          SELECT
+            NOW() AS "now",
+            NOW() + (${holdTtlMs} * INTERVAL '1 millisecond') AS "expiresAt"
         `;
         const appointment = await tx.appointment.create({
           data: {
@@ -93,7 +103,16 @@ export class BookingService {
     } catch (error) {
       if (error instanceof ConflictException || error instanceof NotFoundException) throw error;
       if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
-        throw new ConflictException('PATIENT_HAS_PENDING_OR_CONFLICTING_APPOINTMENT');
+        const target = String(error.meta?.target ?? '');
+        if (target.includes('appointments_one_pending_payment_per_patient')) {
+          throw new ConflictException(
+            'Người bệnh đang có một lịch chờ thanh toán. Vui lòng hoàn tất thanh toán hoặc thử lại sau khi thời gian giữ chỗ kết thúc',
+          );
+        }
+        if (target.includes('appointments_no_patient_slot_overlap')) {
+          throw new ConflictException('Người bệnh đã có lịch hẹn trong khung giờ này');
+        }
+        throw new ConflictException('Không thể tạo thêm lịch hẹn do thông tin bị trùng');
       }
       throw error;
     }

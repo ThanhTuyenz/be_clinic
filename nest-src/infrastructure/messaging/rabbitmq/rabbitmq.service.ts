@@ -45,14 +45,12 @@ export class RabbitMqService implements OnModuleInit, OnModuleDestroy {
   }
 
   private async declareTopology(): Promise<void> {
-    const rabbit = this.rabbitConfig();
     await this.channel.assertExchange(topology.holdExchange, 'direct', { durable: true });
     await this.channel.assertExchange(topology.expiredExchange, 'direct', { durable: true });
     await this.channel.assertExchange(topology.retryExchange, 'direct', { durable: true });
     await this.channel.assertQueue(topology.holdWaitQueue, {
       durable: true,
       arguments: {
-        'x-message-ttl': rabbit.holdTtlMs,
         'x-dead-letter-exchange': topology.expiredExchange,
         'x-dead-letter-routing-key': topology.expiredRoutingKey,
       },
@@ -65,7 +63,7 @@ export class RabbitMqService implements OnModuleInit, OnModuleDestroy {
     await this.channel.bindQueue(topology.expiredQueue, topology.expiredExchange, topology.expiredRoutingKey);
     await this.channel.assertQueue(topology.deadLetterQueue, { durable: true });
     await this.channel.bindQueue(topology.deadLetterQueue, topology.retryExchange, topology.failedRoutingKey);
-    await this.channel.prefetch(rabbit.prefetch);
+    await this.channel.prefetch(this.rabbitConfig().prefetch);
   }
 
   private async publishOutboxBatch(): Promise<void> {
@@ -77,11 +75,15 @@ export class RabbitMqService implements OnModuleInit, OnModuleDestroy {
     for (const event of events) {
       try {
         const isHold = event.eventType === 'appointment.hold.created';
+        const payload = event.payload as { holdExpiresAt?: string };
+        const expiration = isHold
+          ? String(Math.max(1, new Date(payload.holdExpiresAt ?? 0).getTime() - Date.now()))
+          : undefined;
         this.channel.publish(
           isHold ? topology.holdExchange : 'amq.topic',
           isHold ? topology.holdRoutingKey : event.eventType,
           Buffer.from(JSON.stringify({ eventId: event.id, ...event.payload as object })),
-          { persistent: true, messageId: event.id, contentType: 'application/json' },
+          { persistent: true, messageId: event.id, contentType: 'application/json', expiration },
         );
         await this.channel.waitForConfirms();
         await this.prisma.outboxEvent.update({ where: { id: event.id }, data: { status: 'PUBLISHED', publishedAt: new Date(), attempts: { increment: 1 } } });
