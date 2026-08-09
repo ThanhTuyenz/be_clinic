@@ -22,6 +22,7 @@ model Appointment {
   statusHistories     AppointmentStatusHistory[]
   qrToken             AppointmentQrToken?
   invoice             Invoice?
+  examination         Examination?
 
   @@unique([scheduleSlotId, queueNumber])
   @@index([patientProfileId, status])

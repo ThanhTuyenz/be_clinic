@@ -24,6 +24,8 @@ import { RabbitMqModule } from './infrastructure/messaging/rabbitmq/rabbitmq.mod
 import { PatientsModule } from './modules/patients/patients.module.js'
 import { RedisModule } from './infrastructure/cache/redis/redis.module.js'
 import { PaymentsModule } from './modules/payments/payments.module.js'
+import { AdminDashboardModule } from './modules/admin-dashboard/admin-dashboard.module.js'
+import { ClinicalCatalogModule } from './modules/clinical-catalog/clinical-catalog.module.js'
 
 @Module({
   imports: [
@@ -59,6 +61,8 @@ import { PaymentsModule } from './modules/payments/payments.module.js'
     RabbitMqModule,
     PatientsModule,
     PaymentsModule,
+    AdminDashboardModule,
+    ClinicalCatalogModule,
   ],
   controllers: [],
   providers: [

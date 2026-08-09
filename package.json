@@ -17,6 +17,7 @@
     "prisma:studio": "prisma studio",
     "seed:prisma": "node prisma/seed.mjs",
     "migrate:auth:mongo-to-prisma": "node scripts/migrate-auth-to-prisma.mjs",
+    "migrate:admin:mongo-to-prisma": "node scripts/migrate-admin-mongo-to-prisma.mjs",
     "seed:booking": "node scripts/seed-booking.mjs",
     "seed:users": "node scripts/seed-users.mjs",
     "start:legacy": "node server.mjs",

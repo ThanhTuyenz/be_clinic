@@ -31,6 +31,7 @@ model User {
   handledInvoices       Invoice[]               @relation("CashierInvoices")
   checkedInAppointments Appointment[]           @relation("CheckedInBy")
   auditLogs             AuditLog[]              @relation("AuditActor")
+  examinationsCreated   Examination[]
 
   @@index([role, status])
   @@index([isBlocked, isDeleted])

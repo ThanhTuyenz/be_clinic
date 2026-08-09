@@ -3,10 +3,12 @@ import { AppointmentsController } from '../../controllers/appointments.controlle
 import { BookingController, CheckInController, PaymentWebhookController } from './booking.controller.js'
 import { BookingService } from './booking.service.js'
 import { PaymentWebhookSignatureService } from './payment-webhook-signature.service.js'
+import { StaffAppointmentsController } from './staff-appointments.controller.js'
+import { StaffAppointmentsService } from './staff-appointments.service.js'
 
 @Module({
-  controllers: [AppointmentsController, BookingController, PaymentWebhookController, CheckInController],
-  providers: [BookingService, PaymentWebhookSignatureService],
+  controllers: [AppointmentsController, StaffAppointmentsController, BookingController, PaymentWebhookController, CheckInController],
+  providers: [BookingService, PaymentWebhookSignatureService, StaffAppointmentsService],
   exports: [BookingService],
 })
 export class AppointmentsModule {}

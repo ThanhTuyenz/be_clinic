@@ -6,8 +6,8 @@ export declare class BranchesController {
         name: string;
         id: string;
         address: string;
-        code: string;
         phoneNumber: string;
+        code: string;
         timezone: string;
     }[]>;
     departments(branchId: string): import(".prisma/client").Prisma.PrismaPromise<{
@@ -34,13 +34,13 @@ export declare class DoctorsController {
             id: number;
         };
         fullName: string;
-        academicRank: string;
         branchAssignments: {
             branch: {
                 name: string;
                 id: string;
             };
         }[];
+        academicRank: string;
     }[]>;
     availableDates(doctorId: string, branchId: string): Promise<string[]>;
     timeslots(doctorId: string, branchId: string, date: string): Promise<{

@@ -3,17 +3,8 @@ import type { Request, Response } from 'express'
 import {
   cancelAppointment as legacyCancelAppointment,
   createAppointment as legacyCreateAppointment,
-  createAppointmentReception as legacyCreateAppointmentReception,
-  getAvailability as legacyGetAvailability,
   getDoctorScheduleDates as legacyGetDoctorScheduleDates,
-  listDoctorAppointments as legacyListDoctorAppointments,
   listMyAppointments as legacyListMyAppointments,
-  listPatientHistoryReception as legacyListPatientHistoryReception,
-  listPatientsReception as legacyListPatientsReception,
-  listReceptionAppointments as legacyListReceptionAppointments,
-  lookupAppointmentByTicket as legacyLookupAppointmentByTicket,
-  lookupPatientByCode as legacyLookupPatientByCode,
-  updateAppointmentStatusReception as legacyUpdateAppointmentStatusReception,
 } from '../../src/controllers/appointmentsController.js'
 import { SkipPermissions } from '../modules/permissions/decorators/skip-permissions.decorator.js'
 import {
@@ -31,12 +22,15 @@ import {
   CreateReceptionAppointmentSwaggerDto,
   UpdateAppointmentStatusSwaggerDto,
 } from './dtos/appointment.swagger.dto.js'
+import { StaffAppointmentsService } from '../modules/appointments/staff-appointments.service.js'
 
 @ApiTags('Appointments')
 @ApiBearerAuth('access-token')
 @Controller('appointments')
 @SkipPermissions()
 export class AppointmentsController {
+  constructor(private readonly staffAppointments: StaffAppointmentsService) {}
+
   @Get('my')
   @ApiOperation({ summary: 'Danh sách lịch khám của bệnh nhân hiện tại' })
   @ApiResponse({ status: 200, description: 'Danh sách lịch khám' })
@@ -46,22 +40,22 @@ export class AppointmentsController {
 
   @Get('doctor')
   @ApiOperation({ summary: 'Danh sách lịch khám của bác sĩ hiện tại' })
-  listDoctorAppointments(@Req() req: Request, @Res() res: Response) {
-    return legacyListDoctorAppointments(req, res)
+  listDoctorAppointments(@Req() req: Request) {
+    return this.staffAppointments.doctorAppointments(req.user!.id)
   }
 
   @Get('lookup-ticket')
   @ApiOperation({ summary: 'Tra cứu lịch khám bằng mã vé (tiếp nhận)' })
   @ApiQuery({ name: 'ticket', example: '260810-ABC123' })
-  lookupAppointmentByTicket(@Req() req: Request, @Res() res: Response) {
-    return legacyLookupAppointmentByTicket(req, res)
+  lookupAppointmentByTicket(@Req() req: Request) {
+    return this.staffAppointments.lookupTicket(req.user!.id, String(req.query.ticket || ''))
   }
 
   @Get('patient-by-code')
   @ApiOperation({ summary: 'Tra cứu bệnh nhân bằng mã bệnh nhân' })
   @ApiQuery({ name: 'code' })
-  lookupPatientByCode(@Req() req: Request, @Res() res: Response) {
-    return legacyLookupPatientByCode(req, res)
+  lookupPatientByCode(@Req() req: Request) {
+    return this.staffAppointments.patientByCode(req.user!.id, String(req.query.code || ''))
   }
 
   @Get('patients')
@@ -71,15 +65,15 @@ export class AppointmentsController {
   @ApiQuery({ name: 'patientCode', required: false })
   @ApiQuery({ name: 'name', required: false })
   @ApiQuery({ name: 'phone', required: false })
-  listPatientsReception(@Req() req: Request, @Res() res: Response) {
-    return legacyListPatientsReception(req, res)
+  listPatientsReception(@Req() req: Request) {
+    return this.staffAppointments.patients(req.user!.id, req.query as Record<string, string | undefined>)
   }
 
   @Get('patient-history')
   @ApiOperation({ summary: 'Lịch sử khám của một bệnh nhân' })
   @ApiQuery({ name: 'patientId' })
-  listPatientHistoryReception(@Req() req: Request, @Res() res: Response) {
-    return legacyListPatientHistoryReception(req, res)
+  listPatientHistoryReception(@Req() req: Request) {
+    return this.staffAppointments.patientHistory(req.user!.id, String(req.query.patientId || ''))
   }
 
   @Get('reception')
@@ -88,16 +82,16 @@ export class AppointmentsController {
   @ApiQuery({ name: 'to', required: false, example: '2026-08-31' })
   @ApiQuery({ name: 'status', required: false, enum: ['all', 'pending', 'confirmed', 'cancelled'] })
   @ApiQuery({ name: 'q', required: false, description: 'Từ khóa tìm kiếm' })
-  listReceptionAppointments(@Req() req: Request, @Res() res: Response) {
-    return legacyListReceptionAppointments(req, res)
+  listReceptionAppointments(@Req() req: Request) {
+    return this.staffAppointments.receptionAppointments(req.user!.id, req.query as Record<string, string | undefined>)
   }
 
   @Get('availability')
   @ApiOperation({ summary: 'Lấy các khung giờ còn trống của bác sĩ' })
   @ApiQuery({ name: 'doctorId' })
   @ApiQuery({ name: 'date', example: '2026-08-10' })
-  getAvailability(@Req() req: Request, @Res() res: Response) {
-    return legacyGetAvailability(req, res)
+  getAvailability(@Req() req: Request) {
+    return this.staffAppointments.availability(req.user!.id, String(req.query.doctorId || ''), String(req.query.date || ''))
   }
 
   @Get('schedule-dates')
@@ -113,16 +107,16 @@ export class AppointmentsController {
   @ApiOperation({ summary: 'Tiếp nhận đặt lịch thay cho bệnh nhân' })
   @ApiBody({ type: CreateReceptionAppointmentSwaggerDto })
   @ApiResponse({ status: 201, description: 'Đặt lịch tại quầy thành công' })
-  createAppointmentReception(@Req() req: Request, @Res() res: Response) {
-    return legacyCreateAppointmentReception(req, res)
+  createAppointmentReception(@Req() req: Request) {
+    return this.staffAppointments.createReception(req.user!.id, req.body)
   }
 
   @Patch(':id/status')
   @ApiOperation({ summary: 'Cập nhật trạng thái lịch khám' })
   @ApiParam({ name: 'id', description: 'MongoDB ID của lịch khám' })
   @ApiBody({ type: UpdateAppointmentStatusSwaggerDto })
-  updateAppointmentStatusReception(@Req() req: Request, @Res() res: Response) {
-    return legacyUpdateAppointmentStatusReception(req, res)
+  updateAppointmentStatusReception(@Req() req: Request) {
+    return this.staffAppointments.updateStatus(req.user!.id, String(req.params.id), req.body)
   }
 
   @Patch(':id/cancel')
