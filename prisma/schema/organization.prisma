@@ -1,0 +1,65 @@
+model Clinic {
+  id        String   @id @default(uuid()) @db.Uuid
+  name      String   @db.VarChar(150)
+  slug      String   @unique @db.VarChar(150)
+  isActive  Boolean  @default(true) @map("is_active")
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+  branches  Branch[]
+
+  @@map("clinics")
+}
+
+model Branch {
+  id                 String                    @id @default(uuid()) @db.Uuid
+  clinicId           String                    @map("clinic_id") @db.Uuid
+  code               String                    @unique @db.VarChar(30)
+  name               String                    @db.VarChar(150)
+  address            String?
+  phoneNumber        String?                   @map("phone_number") @db.VarChar(20)
+  timezone           String                    @default("Asia/Ho_Chi_Minh") @db.VarChar(50)
+  isActive           Boolean                   @default(true) @map("is_active")
+  createdAt          DateTime                  @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt          DateTime                  @updatedAt @map("updated_at") @db.Timestamptz(3)
+  clinic             Clinic                    @relation(fields: [clinicId], references: [id], onDelete: Cascade)
+  rooms              ClinicRoom[]
+  userAssignments    UserBranchAssignment[]
+  doctorAssignments  DoctorBranchAssignment[]
+  scheduleTemplates  DoctorScheduleTemplate[]
+  scheduleExceptions DoctorScheduleException[]
+  schedules          DoctorSchedule[]
+  appointments       Appointment[]
+  invoices           Invoice[]
+
+  @@index([clinicId, isActive])
+  @@map("branches")
+}
+
+model ClinicRoom {
+  id        String           @id @default(uuid()) @db.Uuid
+  branchId  String           @map("branch_id") @db.Uuid
+  code      String           @db.VarChar(30)
+  name      String           @db.VarChar(100)
+  isActive  Boolean          @default(true) @map("is_active")
+  createdAt DateTime         @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt DateTime         @updatedAt @map("updated_at") @db.Timestamptz(3)
+  branch    Branch           @relation(fields: [branchId], references: [id], onDelete: Cascade)
+  schedules DoctorSchedule[]
+
+  @@unique([branchId, code])
+  @@map("clinic_rooms")
+}
+
+model UserBranchAssignment {
+  id        String   @id @default(uuid()) @db.Uuid
+  userId    String   @map("user_id") @db.Uuid
+  branchId  String   @map("branch_id") @db.Uuid
+  isPrimary Boolean  @default(false) @map("is_primary")
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  branch    Branch   @relation(fields: [branchId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, branchId])
+  @@index([branchId])
+  @@map("user_branch_assignments")
+}

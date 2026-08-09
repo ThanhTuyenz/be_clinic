@@ -1,0 +1,57 @@
+model Appointment {
+  id                  String                     @id @default(uuid()) @db.Uuid
+  bookingCode         String?                    @unique @map("booking_code") @db.VarChar(30)
+  patientProfileId    String                     @map("patient_profile_id") @db.Uuid
+  doctorId            String                     @map("doctor_id") @db.Uuid
+  branchId            String                     @map("branch_id") @db.Uuid
+  scheduleSlotId      String                     @map("schedule_slot_id") @db.Uuid
+  symptomsDescription String?                    @map("symptoms_description")
+  bookedViaAi         Boolean                    @default(false) @map("booked_via_ai")
+  status              AppointmentStatus          @default(PENDING_PAYMENT)
+  holdExpiresAt       DateTime?                  @map("hold_expires_at") @db.Timestamptz(3)
+  queueNumber         Int?                       @map("queue_number")
+  checkedInAt         DateTime?                  @map("checked_in_at") @db.Timestamptz(3)
+  checkedInById       String?                    @map("checked_in_by_id") @db.Uuid
+  createdAt           DateTime                   @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt           DateTime                   @updatedAt @map("updated_at") @db.Timestamptz(3)
+  patientProfile      PatientProfile             @relation(fields: [patientProfileId], references: [id], onDelete: Restrict)
+  doctor              Doctor                     @relation(fields: [doctorId], references: [id], onDelete: Restrict)
+  branch              Branch                     @relation(fields: [branchId], references: [id], onDelete: Restrict)
+  scheduleSlot        DoctorScheduleSlot         @relation(fields: [scheduleSlotId], references: [id], onDelete: Restrict)
+  checkedInBy         User?                      @relation("CheckedInBy", fields: [checkedInById], references: [id], onDelete: SetNull)
+  statusHistories     AppointmentStatusHistory[]
+  qrToken             AppointmentQrToken?
+  invoice             Invoice?
+
+  @@unique([scheduleSlotId, queueNumber])
+  @@index([patientProfileId, status])
+  @@index([branchId, status, createdAt])
+  @@index([scheduleSlotId, status])
+  @@map("appointments")
+}
+
+model AppointmentStatusHistory {
+  id            BigInt             @id @default(autoincrement())
+  appointmentId String             @map("appointment_id") @db.Uuid
+  fromStatus    AppointmentStatus? @map("from_status")
+  toStatus      AppointmentStatus  @map("to_status")
+  actorId       String?            @map("actor_id") @db.Uuid
+  reason        String?
+  createdAt     DateTime           @default(now()) @map("created_at") @db.Timestamptz(3)
+  appointment   Appointment        @relation(fields: [appointmentId], references: [id], onDelete: Cascade)
+
+  @@index([appointmentId, createdAt])
+  @@map("appointment_status_histories")
+}
+
+model AppointmentQrToken {
+  id            String      @id @default(uuid()) @db.Uuid
+  appointmentId String      @unique @map("appointment_id") @db.Uuid
+  tokenHash     String      @unique @map("token_hash") @db.VarChar(64)
+  expiresAt     DateTime    @map("expires_at") @db.Timestamptz(3)
+  usedAt        DateTime?   @map("used_at") @db.Timestamptz(3)
+  createdAt     DateTime    @default(now()) @map("created_at") @db.Timestamptz(3)
+  appointment   Appointment @relation(fields: [appointmentId], references: [id], onDelete: Cascade)
+
+  @@map("appointment_qr_tokens")
+}

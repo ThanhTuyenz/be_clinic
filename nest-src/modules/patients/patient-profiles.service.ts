@@ -17,10 +17,10 @@ export class PatientProfilesService {
         const count = await tx.patientProfile.count({ where: { accountId } });
         const makeMain = dto.isMainProfile === true || count === 0;
         if (makeMain) await tx.patientProfile.updateMany({ where: { accountId, isMainProfile: true }, data: { isMainProfile: false } });
-        return tx.patientProfile.create({ data: { accountId, fullName: dto.fullName.trim(), dateOfBirth: new Date(`${dto.dateOfBirth}T00:00:00.000Z`), gender: dto.gender, nationalId: dto.nationalId?.trim() || null, address: dto.address?.trim(), relationshipToAccount: dto.relationshipToAccount ?? (makeMain ? 'SELF' : 'OTHER'), isMainProfile: makeMain } });
+        return tx.patientProfile.create({ data: { accountId, fullName: dto.fullName.trim(), dateOfBirth: new Date(`${dto.dateOfBirth}T00:00:00.000Z`), gender: dto.gender, nationalId: dto.nationalId?.trim() || null, healthInsuranceNumber: dto.healthInsuranceNumber?.trim() || null, address: dto.address?.trim(), relationshipToAccount: dto.relationshipToAccount ?? (makeMain ? 'SELF' : 'OTHER'), isMainProfile: makeMain } });
       });
     } catch (error) {
-      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') throw new ConflictException('CCCD/định danh đã tồn tại');
+      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') throw new ConflictException('Số CCCD hoặc mã BHYT đã tồn tại');
       throw error;
     }
   }
