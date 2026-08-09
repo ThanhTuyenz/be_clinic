@@ -1,0 +1,41 @@
+"use strict";
+var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
+    var c = arguments.length, r = c < 3 ? target : desc === null ? desc = Object.getOwnPropertyDescriptor(target, key) : desc, d;
+    if (typeof Reflect === "object" && typeof Reflect.decorate === "function") r = Reflect.decorate(decorators, target, key, desc);
+    else for (var i = decorators.length - 1; i >= 0; i--) if (d = decorators[i]) r = (c < 3 ? d(r) : c > 3 ? d(target, key, r) : d(target, key)) || r;
+    return c > 3 && r && Object.defineProperty(target, key, r), r;
+};
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.PermissionsModule = void 0;
+const common_1 = require("@nestjs/common");
+const roles_module_1 = require("../roles/roles.module");
+const permissions_1 = require("./factories/permissions");
+const permissions_factory_1 = require("./factories/permissions.factory");
+const permissions_controller_1 = require("./permissions.controller");
+const permissions_service_1 = require("./permissions.service");
+const audit_log_service_1 = require("./services/audit-log.service");
+const permissions_cache_service_1 = require("./services/permissions-cache.service");
+let PermissionsModule = class PermissionsModule {
+};
+exports.PermissionsModule = PermissionsModule;
+exports.PermissionsModule = PermissionsModule = __decorate([
+    (0, common_1.Global)(),
+    (0, common_1.Module)({
+        imports: [roles_module_1.RolesModule],
+        providers: [
+            permissions_service_1.PermissionsService,
+            permissions_1.Permissions,
+            permissions_factory_1.PermissionsFactory,
+            audit_log_service_1.AuditLogService,
+            permissions_cache_service_1.PermissionsCacheService,
+        ],
+        controllers: [permissions_controller_1.PermissionsController],
+        exports: [
+            permissions_service_1.PermissionsService,
+            permissions_1.PERMISSIONS,
+            audit_log_service_1.AuditLogService,
+            permissions_cache_service_1.PermissionsCacheService,
+        ],
+    })
+], PermissionsModule);
+//# sourceMappingURL=permissions.module.js.map

@@ -1,0 +1,76 @@
+enum UserRole {
+  ADMIN          @map("admin")
+  BRANCH_MANAGER @map("branch_manager")
+  DOCTOR         @map("doctor")
+  PHARMACIST     @map("pharmacist")
+  CASHIER        @map("cashier")
+  RECEPTIONIST   @map("receptionist")
+  PATIENT        @map("patient")
+}
+
+enum UserStatus {
+  ACTIVE   @map("active")
+  INACTIVE @map("inactive")
+}
+
+enum AuthProvider {
+  EMAIL  @map("email")
+  GOOGLE @map("google")
+}
+
+enum Gender {
+  MALE
+  FEMALE
+  OTHER
+}
+
+enum ScheduleStatus {
+  OPEN
+  CLOSED
+  CANCELLED
+}
+
+enum AppointmentStatus {
+  PENDING_PAYMENT
+  BOOKED
+  CHECKED_IN
+  IN_EXAMINATION
+  COMPLETED
+  CANCELLED
+  EXPIRED
+  NO_SHOW
+  REFUND_REQUIRED
+  MANUAL_REVIEW
+}
+
+enum InvoiceStatus {
+  UNPAID
+  PAID
+  REFUNDED
+  CANCELLED
+}
+
+enum PaymentStatus {
+  PENDING
+  SUCCESS
+  FAILED
+  EXPIRED
+  CANCELLED
+  LATE_SUCCESS
+  REFUND_REQUIRED
+  REFUNDED
+  MANUAL_REVIEW
+}
+
+enum PaymentMethod {
+  CASH
+  VIETQR
+  POS_CARD
+  ONLINE
+}
+
+enum OutboxStatus {
+  PENDING
+  PUBLISHED
+  FAILED
+}

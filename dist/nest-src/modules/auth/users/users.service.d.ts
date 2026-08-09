@@ -1,0 +1,32 @@
+import { EntityCondition } from '../../../common/utils/types/entity-condition.type.js';
+import { NullableType } from '../../../common/utils/types/nullable.type.js';
+import { PrismaService } from '../../../infrastructure/database/prisma/prisma.service.js';
+import { CreateUserDto } from './dtos/create-user.dto.js';
+import { User } from './entities/user.entity.js';
+import { FindUsersOptions, IUsersService, UsersPaginatedResult, UserUpdate } from './users.js';
+import { HistoryService } from '../../history/history.service.js';
+import { IRolesService } from '../../roles/roles.js';
+import { PermissionsService } from '../../permissions/permissions.service.js';
+export declare class UsersService implements IUsersService {
+    private readonly prisma;
+    private readonly historyService;
+    private readonly rolesService;
+    private readonly permissionsService;
+    constructor(prisma: PrismaService, historyService: HistoryService, rolesService: IRolesService, permissionsService: PermissionsService);
+    createUser(dto: CreateUserDto): Promise<User>;
+    findOneUser(options: EntityCondition<User>): Promise<NullableType<User>>;
+    findByEmail(email: string): Promise<User | null>;
+    findUsersWithPagination(options: FindUsersOptions): Promise<UsersPaginatedResult>;
+    updateUser(id: string, payload: UserUpdate): Promise<User>;
+    deleteUser(id: string): Promise<void>;
+    saveUser(user: User): Promise<User>;
+    assignRole(userId: string, roleId: string): Promise<User>;
+    removeRole(userId: string): Promise<User>;
+    private toWhere;
+    private toUpdateData;
+    private toEntity;
+    private toPrismaRole;
+    private toPrismaStatus;
+    private toPrismaProvider;
+    private recordHistory;
+}

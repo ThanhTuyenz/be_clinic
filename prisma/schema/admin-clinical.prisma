@@ -1,0 +1,60 @@
+model Examination {
+  id            String      @id @default(uuid()) @db.Uuid
+  appointmentId String      @unique @map("appointment_id") @db.Uuid
+  createdById   String      @map("created_by_id") @db.Uuid
+  payload       Json
+  createdAt     DateTime    @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt     DateTime    @updatedAt @map("updated_at") @db.Timestamptz(3)
+  appointment   Appointment @relation(fields: [appointmentId], references: [id], onDelete: Cascade)
+  createdBy     User        @relation(fields: [createdById], references: [id], onDelete: Restrict)
+
+  @@index([createdById, updatedAt])
+  @@map("examinations")
+}
+
+model Medicine {
+  id        String   @id @default(uuid()) @db.Uuid
+  code      String   @unique @db.VarChar(50)
+  name      String   @db.VarChar(255)
+  activeIngredient String? @map("active_ingredient") @db.VarChar(255)
+  strength  String?  @db.VarChar(100)
+  unit      String?  @db.VarChar(50)
+  unitPrice Decimal  @default(0) @map("unit_price") @db.Decimal(12, 2)
+  stockQuantity Int  @default(0) @map("stock_quantity")
+  isActive  Boolean  @default(true) @map("is_active")
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  @@index([name, isActive])
+  @@map("medicines")
+}
+
+model MedicalService {
+  id           String      @id @default(uuid()) @db.Uuid
+  departmentId Int?        @map("department_id")
+  code         String      @unique @db.VarChar(50)
+  name         String      @db.VarChar(200)
+  description  String?     @db.Text
+  price        Decimal     @default(0) @db.Decimal(12, 2)
+  durationMin  Int         @default(30) @map("duration_min")
+  isActive     Boolean     @default(true) @map("is_active")
+  createdAt    DateTime    @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt    DateTime    @updatedAt @map("updated_at") @db.Timestamptz(3)
+  department   Department? @relation(fields: [departmentId], references: [id], onDelete: SetNull)
+
+  @@index([departmentId, isActive])
+  @@index([name, isActive])
+  @@map("medical_services")
+}
+
+model Icd10Code {
+  id           String   @id @default(uuid()) @db.Uuid
+  code         String   @unique @db.VarChar(20)
+  description  String   @db.VarChar(500)
+  departmentId Int?     @map("department_id")
+  isActive     Boolean  @default(true) @map("is_active")
+  createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  @@index([description, isActive])
+  @@map("icd10_codes")
+}

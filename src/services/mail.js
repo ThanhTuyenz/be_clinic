@@ -4,16 +4,19 @@ import QRCode from 'qrcode'
 const CLINIC_NAME = 'Phòng khám VitaCare Clinic'
 
 function hasSmtp() {
-  return Boolean(process.env.SMTP_USER && process.env.SMTP_PASS)
+  const user = process.env.SMTP_USER || process.env.MAILER_USER
+  const pass = process.env.SMTP_PASS || process.env.MAILER_PASSWORD
+  return Boolean(user && pass)
 }
 
 function createTransport() {
-  const user = process.env.SMTP_USER
-  const pass = process.env.SMTP_PASS
-  const host = (process.env.SMTP_HOST || '').toLowerCase()
+  const user = process.env.SMTP_USER || process.env.MAILER_USER
+  const pass = process.env.SMTP_PASS || process.env.MAILER_PASSWORD
+  const configuredHost = process.env.SMTP_HOST || process.env.MAILER_HOST || ''
+  const host = configuredHost.toLowerCase()
 
   // Dùng preset Gmail — thường ổn định hơn chỉ gắn host/port tay.
-  if (!process.env.SMTP_HOST || host === 'smtp.gmail.com' || host.includes('gmail')) {
+  if (!configuredHost || host === 'smtp.gmail.com' || host.includes('gmail')) {
     return nodemailer.createTransport({
       service: 'gmail',
       auth: { user, pass },
@@ -21,9 +24,11 @@ function createTransport() {
   }
 
   return nodemailer.createTransport({
-    host: process.env.SMTP_HOST,
-    port: Number(process.env.SMTP_PORT) || 587,
-    secure: process.env.SMTP_SECURE === 'true',
+    host: configuredHost,
+    port: Number(process.env.SMTP_PORT || process.env.MAILER_PORT) || 587,
+    secure: (process.env.SMTP_SECURE || process.env.MAILER_SECURE) === 'true',
+    requireTLS: process.env.MAILER_REQUIRE_TLS === 'true',
+    ignoreTLS: process.env.MAILER_IGNORE_TLS === 'true',
     auth: { user, pass },
   })
 }
@@ -162,6 +167,41 @@ function escapeHtml(value) {
     .replace(/</g, '&lt;')
     .replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;')
+}
+
+/** Gửi OTP xác thực email khi đăng ký tài khoản. */
+export async function sendRegistrationOtpEmail({
+  to,
+  recipientName,
+  otp,
+  expiresInMinutes = 10,
+}) {
+  const email = String(to || '').trim().toLowerCase()
+  const code = String(otp || '').trim()
+  const name = String(recipientName || '').trim()
+
+  if (!email || !code) throw new Error('Thiếu email hoặc OTP đăng ký.')
+
+  if (!hasSmtp()) {
+    console.warn(`[be_clinic] OTP đăng ký cho ${email}: ${code} (hết hạn ${expiresInMinutes} phút)`)
+    return { sent: false, devLog: true }
+  }
+
+  const addr =
+    process.env.SMTP_FROM ||
+    process.env.SMTP_USER ||
+    process.env.MAILER_USER ||
+    process.env.MAILER_DEFAULT_EMAIL
+  const transporter = createTransport()
+  const greeting = name ? ` ${name}` : ''
+  await transporter.sendMail({
+    from: addr ? `"${process.env.MAILER_DEFAULT_NAME || CLINIC_NAME}" <${addr}>` : undefined,
+    to: email,
+    subject: `Mã xác thực đăng ký — ${CLINIC_NAME}`,
+    text: `Xin chào${greeting},\n\nMã OTP xác thực tài khoản của bạn là: ${code}\nMã có hiệu lực trong ${expiresInMinutes} phút.\n\nKhông chia sẻ mã này cho người khác.`,
+    html: `<!DOCTYPE html><html lang="vi"><body style="font-family:Segoe UI,Arial,sans-serif;color:#1f2937"><p>Xin chào${escapeHtml(greeting)},</p><p>Mã OTP xác thực tài khoản của bạn:</p><p style="font-size:32px;font-weight:700;letter-spacing:8px">${escapeHtml(code)}</p><p>Mã có hiệu lực trong ${expiresInMinutes} phút. Không chia sẻ mã này cho người khác.</p></body></html>`,
+  })
+  return { sent: true }
 }
 
 /**

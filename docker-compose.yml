@@ -1,0 +1,46 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: vitacare-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: vitacare
+      POSTGRES_USER: vitacare
+      POSTGRES_PASSWORD: vitacare_local
+    ports: ["5432:5432"]
+    volumes: ["vitacare_postgres_data:/var/lib/postgresql/data"]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U vitacare -d vitacare"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+  rabbitmq:
+    image: rabbitmq:3.13-management-alpine
+    container_name: vitacare-rabbitmq
+    restart: unless-stopped
+    ports: ["5672:5672", "15672:15672"]
+    environment:
+      RABBITMQ_DEFAULT_USER: vitacare
+      RABBITMQ_DEFAULT_PASS: vitacare_local
+    volumes: ["vitacare_rabbitmq_data:/var/lib/rabbitmq"]
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+  redis:
+    image: redis:7.4-alpine
+    container_name: vitacare-redis
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes", "--requirepass", "vitacare_local"]
+    ports: ["6379:6379"]
+    volumes: ["vitacare_redis_data:/data"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "vitacare_local", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+volumes:
+  vitacare_postgres_data:
+  vitacare_rabbitmq_data:
+  vitacare_redis_data:
