@@ -37,11 +37,7 @@ lerna-debug.log*
 !.vscode/extensions.json
 
 # dotenv environment variable files
-.env
-.env.development
-.env.test
-.env.production
-.env.local
+.env*
 # Allow committing example template
 !.env.example
 
