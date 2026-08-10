@@ -19,6 +19,31 @@ export class BranchesController {
 }
 
 @Public()
+@ApiTags('Public directory')
+@Controller('public')
+export class PublicDirectoryController {
+  constructor(private readonly directory: DirectoryService) {}
+
+  @Get('navigation')
+  @ApiOperation({ summary: 'Danh mục công khai dùng cho menu website bệnh nhân' })
+  navigation() { return this.directory.publicNavigation(); }
+
+  @Get('specialty-services')
+  @ApiOperation({ summary: 'Dịch vụ khám bắt buộc theo chi nhánh và chuyên khoa' })
+  specialtyServices(@Query('branchId') branchId: string, @Query('specialtyId') specialtyId: string) {
+    return this.directory.specialtyServices(branchId, Number(specialtyId));
+  }
+
+  @Get('health-packages')
+  @ApiOperation({ summary: 'Danh sách gói khám sức khỏe công khai' })
+  healthPackages(@Query('branchId') branchId?: string) { return this.directory.healthPackages(branchId); }
+
+  @Get('booking-methods')
+  @ApiOperation({ summary: 'Hình thức đặt khám đang bật tại một chi nhánh' })
+  bookingMethods(@Query('branchId') branchId: string) { return this.directory.bookingMethods(branchId); }
+}
+
+@Public()
 @ApiTags('Doctors')
 @Controller('doctors')
 export class DoctorsController {

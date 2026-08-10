@@ -94,6 +94,19 @@ enum ClinicalOrderStatus {
   CANCELLED
 }
 
+enum MedicalServiceCategory {
+  LAB_TEST
+  IMAGING
+  PROCEDURE
+}
+
+enum BookingMethodType {
+  SPECIALTY_EXAM
+  HEALTH_PACKAGE
+  CONSULTATION
+  AFTER_HOURS
+}
+
 enum InventoryMovementType {
   IMPORT
   DISPENSE

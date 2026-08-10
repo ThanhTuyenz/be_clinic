@@ -9,10 +9,60 @@ export class DirectoryService {
     return this.prisma.branch.findMany({ where: { isActive: true }, orderBy: { name: 'asc' }, select: { id: true, code: true, name: true, address: true, phoneNumber: true, timezone: true } });
   }
 
+  async publicNavigation() {
+    const [departments, branches] = await Promise.all([
+      this.prisma.department.findMany({
+        orderBy: { name: 'asc' },
+        select: {
+          id: true,
+          name: true,
+          specialties: { orderBy: { name: 'asc' }, select: { id: true, name: true } },
+        },
+      }),
+      this.prisma.branch.findMany({
+        where: { isActive: true },
+        orderBy: { name: 'asc' },
+        select: { id: true, code: true, name: true, address: true, phoneNumber: true },
+      }),
+    ]);
+
+    return { departments, branches };
+  }
+
   departments(branchId: string) {
     return this.prisma.department.findMany({
       where: { doctors: { some: { isActive: true, user: { branchAssignments: { some: { branchId } } } } } },
       orderBy: { name: 'asc' }, select: { id: true, name: true, description: true },
+    });
+  }
+
+  specialtyServices(branchId: string, specialtyId: number) {
+    if (!branchId || !Number.isInteger(specialtyId)) throw new BadRequestException('Thiếu chi nhánh hoặc chuyên khoa');
+    return this.prisma.specialtyService.findMany({
+      where: { branchId, specialtyId, isActive: true },
+      orderBy: [{ price: 'asc' }, { name: 'asc' }],
+      select: { id: true, code: true, name: true, description: true, price: true, durationMin: true, branchId: true, specialtyId: true },
+    });
+  }
+
+  healthPackages(branchId?: string) {
+    return this.prisma.healthPackage.findMany({
+      where: { branchId, isActive: true },
+      orderBy: { name: 'asc' },
+      select: {
+        id: true, code: true, name: true, description: true, price: true, branchId: true,
+        items: { orderBy: { sortOrder: 'asc' }, select: { quantity: true, medicalService: { select: { id: true, code: true, name: true, category: true } } } },
+        schedules: { where: { isActive: true, examDate: { gte: this.today() } }, orderBy: { examDate: 'asc' }, select: { id: true, examDate: true, capacity: true, room: { select: { id: true, code: true, name: true } } } },
+      },
+    });
+  }
+
+  bookingMethods(branchId: string) {
+    if (!branchId) throw new BadRequestException('Thiếu chi nhánh');
+    return this.prisma.branchBookingMethod.findMany({
+      where: { branchId, isEnabled: true },
+      orderBy: { sortOrder: 'asc' },
+      select: { id: true, branchId: true, type: true, displayName: true, description: true, sortOrder: true },
     });
   }
 

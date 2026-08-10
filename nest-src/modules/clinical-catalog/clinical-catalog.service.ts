@@ -39,13 +39,16 @@ export class ClinicalCatalogService {
     return { items: rows }
   }
 
-  async clinicalServices(userId: string, q = '', limit = 25, departmentId?: number) {
+  async clinicalServices(userId: string, q = '', limit = 25, departmentId?: number, category?: string) {
     await this.assertStaff(userId)
     const term = q.trim()
+    const normalizedCategory = String(category || '').trim().toUpperCase()
+    const validCategory = ['LAB_TEST', 'IMAGING', 'PROCEDURE'].includes(normalizedCategory)
     const rows = await this.prisma.medicalService.findMany({
       where: {
         isActive: true,
         ...(departmentId ? { departmentId } : {}),
+        ...(validCategory ? { category: normalizedCategory as 'LAB_TEST' | 'IMAGING' | 'PROCEDURE' } : {}),
         ...(term ? {
           OR: [
             { code: { contains: term, mode: 'insensitive' } },

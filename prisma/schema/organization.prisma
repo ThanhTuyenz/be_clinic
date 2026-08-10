@@ -32,9 +32,29 @@ model Branch {
   medicalVisits      MedicalVisit[]
   inventoryStocks    InventoryStock[]
   inventoryMovements InventoryMovement[]
+  specialtyServices  SpecialtyService[]
+  healthPackages     HealthPackage[]
+  bookingMethods     BranchBookingMethod[]
 
   @@index([clinicId, isActive])
   @@map("branches")
+}
+
+model BranchBookingMethod {
+  id          String            @id @default(uuid()) @db.Uuid
+  branchId    String            @map("branch_id") @db.Uuid
+  type        BookingMethodType
+  displayName String            @map("display_name") @db.VarChar(150)
+  description String?           @db.Text
+  isEnabled   Boolean           @default(true) @map("is_enabled")
+  sortOrder   Int               @default(0) @map("sort_order")
+  createdAt   DateTime          @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt   DateTime          @updatedAt @map("updated_at") @db.Timestamptz(3)
+  branch      Branch            @relation(fields: [branchId], references: [id], onDelete: Cascade)
+
+  @@unique([branchId, type])
+  @@index([branchId, isEnabled, sortOrder])
+  @@map("branch_booking_methods")
 }
 
 model InventoryStock {
@@ -78,6 +98,7 @@ model ClinicRoom {
   updatedAt DateTime         @updatedAt @map("updated_at") @db.Timestamptz(3)
   branch    Branch           @relation(fields: [branchId], references: [id], onDelete: Cascade)
   schedules DoctorSchedule[]
+  healthPackageSchedules HealthPackageSchedule[]
 
   @@unique([branchId, code])
   @@map("clinic_rooms")
