@@ -29,6 +29,30 @@ export class DirectoryService {
     return { departments, branches };
   }
 
+  specialties() {
+    return this.prisma.department.findMany({
+      orderBy: { name: 'asc' },
+      select: { id: true, name: true, description: true, specialties: { orderBy: { name: 'asc' }, select: { id: true, name: true, description: true } } },
+    });
+  }
+
+  async homepage(branchId?: string) {
+    const selectedBranch = branchId
+      ? await this.prisma.branch.findFirst({ where: { id: branchId, isActive: true }, select: { id: true, code: true, name: true, address: true, phoneNumber: true } })
+      : await this.prisma.branch.findFirst({ where: { isActive: true }, orderBy: { name: 'asc' }, select: { id: true, code: true, name: true, address: true, phoneNumber: true } });
+    const activeBranchId = selectedBranch?.id;
+    const [navigation, featuredDoctors, healthPackages, bookingMethods, doctorCount, specialtyCount, reviewAggregate] = await Promise.all([
+      this.publicNavigation(),
+      this.doctors(activeBranchId, undefined, undefined, undefined, true),
+      this.healthPackages(activeBranchId),
+      activeBranchId ? this.bookingMethods(activeBranchId) : Promise.resolve([]),
+      this.prisma.doctor.count({ where: { isActive: true, user: activeBranchId ? { branchAssignments: { some: { branchId: activeBranchId } } } : undefined } }),
+      this.prisma.specialty.count(),
+      this.prisma.review.aggregate({ where: { isActive: true, doctor: { isActive: true } }, _avg: { rating: true }, _count: { id: true } }),
+    ]);
+    return { selectedBranch, branches: navigation.branches, departments: navigation.departments, featuredDoctors: featuredDoctors.slice(0, 6), healthPackages: healthPackages.slice(0, 6), bookingMethods, stats: { doctorCount, branchCount: navigation.branches.length, specialtyCount, reviewCount: reviewAggregate._count.id, averageRating: reviewAggregate._avg.rating ?? 0 } };
+  }
+
   departments(branchId: string) {
     return this.prisma.department.findMany({
       where: { doctors: { some: { isActive: true, user: { branchAssignments: { some: { branchId } } } } } },
@@ -36,25 +60,27 @@ export class DirectoryService {
     });
   }
 
-  specialtyServices(branchId: string, specialtyId: number) {
+  async specialtyServices(branchId: string, specialtyId: number) {
     if (!branchId || !Number.isInteger(specialtyId)) throw new BadRequestException('Thiếu chi nhánh hoặc chuyên khoa');
-    return this.prisma.specialtyService.findMany({
-      where: { branchId, specialtyId, isActive: true },
+    const rows = await this.prisma.specialtyService.findMany({
+      where: { specialtyId, isActive: true, branchBookingMethod: { branchId, isEnabled: true, bookingMethod: { isActive: true } } },
       orderBy: [{ price: 'asc' }, { name: 'asc' }],
-      select: { id: true, code: true, name: true, description: true, price: true, durationMin: true, branchId: true, specialtyId: true },
+      select: { id: true, code: true, name: true, description: true, price: true, durationMin: true, specialtyId: true, branchBookingMethod: { select: { id: true, branchId: true, bookingMethod: { select: { id: true, code: true, name: true } } } } },
     });
+    return rows.map(({ branchBookingMethod, ...service }) => ({ ...service, branchId: branchBookingMethod.branchId, branchBookingMethodId: branchBookingMethod.id, bookingMethod: branchBookingMethod.bookingMethod }));
   }
 
-  healthPackages(branchId?: string) {
-    return this.prisma.healthPackage.findMany({
-      where: { branchId, isActive: true },
+  async healthPackages(branchId?: string) {
+    const rows = await this.prisma.healthPackage.findMany({
+      where: { isActive: true, branchBookingMethod: { branchId, isEnabled: true, bookingMethod: { code: 'HEALTH_PACKAGE', isActive: true } } },
       orderBy: { name: 'asc' },
       select: {
-        id: true, code: true, name: true, description: true, price: true, branchId: true,
+        id: true, code: true, name: true, description: true, price: true, branchBookingMethod: { select: { id: true, branchId: true } },
         items: { orderBy: { sortOrder: 'asc' }, select: { quantity: true, medicalService: { select: { id: true, code: true, name: true, category: true } } } },
         schedules: { where: { isActive: true, examDate: { gte: this.today() } }, orderBy: { examDate: 'asc' }, select: { id: true, examDate: true, capacity: true, room: { select: { id: true, code: true, name: true } } } },
       },
     });
+    return rows.map(({ branchBookingMethod, ...healthPackage }) => ({ ...healthPackage, branchId: branchBookingMethod.branchId, branchBookingMethodId: branchBookingMethod.id }));
   }
 
   bookingMethods(branchId: string) {
@@ -62,15 +88,18 @@ export class DirectoryService {
     return this.prisma.branchBookingMethod.findMany({
       where: { branchId, isEnabled: true },
       orderBy: { sortOrder: 'asc' },
-      select: { id: true, branchId: true, type: true, displayName: true, description: true, sortOrder: true },
-    });
+      select: { id: true, branchId: true, isEnabled: true, sortOrder: true, bookingMethod: { select: { id: true, code: true, name: true, description: true, route: true } } },
+    }).then((rows) => rows.map(({ bookingMethod, ...item }) => ({ ...item, bookingMethodId: bookingMethod.id, type: bookingMethod.code, code: bookingMethod.code, displayName: bookingMethod.name, description: bookingMethod.description, route: bookingMethod.route })));
   }
 
-  async doctors(branchId?: string, departmentId?: number) {
+  async doctors(branchId?: string, departmentId?: number, specialtyId?: number, q?: string, featuredOnly = false) {
+    if (departmentId !== undefined && !Number.isInteger(departmentId)) throw new BadRequestException('departmentId không hợp lệ');
+    if (specialtyId !== undefined && !Number.isInteger(specialtyId)) throw new BadRequestException('specialtyId không hợp lệ');
+    const term = q?.trim();
     const rows = await this.prisma.doctor.findMany({
-      where: { isActive: true, departmentId, user: branchId ? { branchAssignments: { some: { branchId } } } : undefined },
-      orderBy: { fullName: 'asc' },
-      select: { id: true, fullName: true, academicRank: true, consultationFee: true, department: { select: { id: true, name: true } }, user: { select: { branchAssignments: { select: { isPrimary: true, branch: { select: { id: true, name: true } } } } } }, specialties: { select: { isPrimary: true, specialty: { select: { id: true, name: true } } } } },
+      where: { isActive: true, isFeatured: featuredOnly ? true : undefined, departmentId, fullName: term ? { contains: term, mode: 'insensitive' } : undefined, specialties: specialtyId ? { some: { specialtyId } } : undefined, user: branchId ? { branchAssignments: { some: { branchId } } } : undefined },
+      orderBy: featuredOnly ? [{ ratingAverage: 'desc' }, { fullName: 'asc' }] : [{ isFeatured: 'desc' }, { ratingAverage: 'desc' }, { fullName: 'asc' }],
+      select: { id: true, fullName: true, academicRank: true, experienceYears: true, biography: true, consultationFee: true, ratingAverage: true, ratingCount: true, isFeatured: true, department: { select: { id: true, name: true } }, user: { select: { branchAssignments: { where: branchId ? { branchId } : undefined, select: { isPrimary: true, branch: { select: { id: true, name: true, address: true } } } } } }, specialties: { select: { isPrimary: true, specialty: { select: { id: true, name: true } } } } },
     });
     return rows.map(({ user, ...doctor }) => ({ ...doctor, branchAssignments: user.branchAssignments }));
   }

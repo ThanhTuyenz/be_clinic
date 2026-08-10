@@ -100,13 +100,6 @@ enum MedicalServiceCategory {
   PROCEDURE
 }
 
-enum BookingMethodType {
-  SPECIALTY_EXAM
-  HEALTH_PACKAGE
-  CONSULTATION
-  AFTER_HOURS
-}
-
 enum InventoryMovementType {
   IMPORT
   DISPENSE

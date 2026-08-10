@@ -32,28 +32,43 @@ model Branch {
   medicalVisits      MedicalVisit[]
   inventoryStocks    InventoryStock[]
   inventoryMovements InventoryMovement[]
-  specialtyServices  SpecialtyService[]
-  healthPackages     HealthPackage[]
   bookingMethods     BranchBookingMethod[]
 
   @@index([clinicId, isActive])
   @@map("branches")
 }
 
-model BranchBookingMethod {
-  id          String            @id @default(uuid()) @db.Uuid
-  branchId    String            @map("branch_id") @db.Uuid
-  type        BookingMethodType
-  displayName String            @map("display_name") @db.VarChar(150)
-  description String?           @db.Text
-  isEnabled   Boolean           @default(true) @map("is_enabled")
-  sortOrder   Int               @default(0) @map("sort_order")
-  createdAt   DateTime          @default(now()) @map("created_at") @db.Timestamptz(3)
-  updatedAt   DateTime          @updatedAt @map("updated_at") @db.Timestamptz(3)
-  branch      Branch            @relation(fields: [branchId], references: [id], onDelete: Cascade)
+model BookingMethod {
+  id          String   @id @default(uuid()) @db.Uuid
+  code        String   @unique @db.VarChar(50)
+  name        String   @db.VarChar(150)
+  description String?  @db.Text
+  route       String?  @db.VarChar(255)
+  isActive    Boolean  @default(true) @map("is_active")
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt   DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+  branches    BranchBookingMethod[]
 
-  @@unique([branchId, type])
+  @@index([isActive, name])
+  @@map("booking_methods")
+}
+
+model BranchBookingMethod {
+  id              String   @id @default(uuid()) @db.Uuid
+  branchId        String   @map("branch_id") @db.Uuid
+  bookingMethodId String   @map("booking_method_id") @db.Uuid
+  isEnabled       Boolean  @default(true) @map("is_enabled")
+  sortOrder       Int      @default(0) @map("sort_order")
+  createdAt       DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt       DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+  branch          Branch   @relation(fields: [branchId], references: [id], onDelete: Cascade)
+  bookingMethod   BookingMethod @relation(fields: [bookingMethodId], references: [id], onDelete: Restrict)
+  specialtyServices SpecialtyService[]
+  healthPackages    HealthPackage[]
+
+  @@unique([branchId, bookingMethodId])
   @@index([branchId, isEnabled, sortOrder])
+  @@index([bookingMethodId])
   @@map("branch_booking_methods")
 }
 

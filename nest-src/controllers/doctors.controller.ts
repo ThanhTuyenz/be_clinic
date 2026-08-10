@@ -28,6 +28,14 @@ export class PublicDirectoryController {
   @ApiOperation({ summary: 'Danh mục công khai dùng cho menu website bệnh nhân' })
   navigation() { return this.directory.publicNavigation(); }
 
+  @Get('homepage')
+  @ApiOperation({ summary: 'Dữ liệu tổng hợp cho trang chủ website bệnh nhân' })
+  homepage(@Query('branchId') branchId?: string) { return this.directory.homepage(branchId); }
+
+  @Get('specialties')
+  @ApiOperation({ summary: 'Danh sách khoa và chuyên khoa công khai' })
+  specialties() { return this.directory.specialties(); }
+
   @Get('specialty-services')
   @ApiOperation({ summary: 'Dịch vụ khám bắt buộc theo chi nhánh và chuyên khoa' })
   specialtyServices(@Query('branchId') branchId: string, @Query('specialtyId') specialtyId: string) {
@@ -53,8 +61,10 @@ export class DoctorsController {
   @ApiOperation({ summary: 'Danh sách bác sĩ theo cơ sở/chuyên khoa' })
   @ApiQuery({ name: 'branchId', required: false })
   @ApiQuery({ name: 'departmentId', required: false, type: Number })
-  doctors(@Query('branchId') branchId?: string, @Query('departmentId') departmentId?: string) {
-    return this.directory.doctors(branchId, departmentId ? Number(departmentId) : undefined);
+  @ApiQuery({ name: 'specialtyId', required: false, type: Number })
+  @ApiQuery({ name: 'q', required: false })
+  doctors(@Query('branchId') branchId?: string, @Query('departmentId') departmentId?: string, @Query('specialtyId') specialtyId?: string, @Query('q') q?: string) {
+    return this.directory.doctors(branchId, departmentId ? Number(departmentId) : undefined, specialtyId ? Number(specialtyId) : undefined, q);
   }
 
   @Get(':doctorId/available-dates')

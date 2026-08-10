@@ -43,20 +43,43 @@ export class SystemCatalogService {
     await this.manager(userId)
     const term = q.trim()
     const model = this.model(resource)
-    if (resource === 'booking-methods') return { items: await model.findMany({ where: term ? { displayName: { contains: term, mode: 'insensitive' } } : {}, include: { branch: { select: { id: true, name: true } } }, orderBy: [{ branch: { name: 'asc' } }, { sortOrder: 'asc' }] }) }
+    if (resource === 'booking-methods') {
+      const rows = await model.findMany({ where: term ? { bookingMethod: { name: { contains: term, mode: 'insensitive' } } } : {}, include: { branch: { select: { id: true, name: true } }, bookingMethod: true }, orderBy: [{ branch: { name: 'asc' } }, { sortOrder: 'asc' }] })
+      return { items: rows.map(({ bookingMethod, ...row }: any) => ({ ...row, bookingMethodId: bookingMethod.id, type: bookingMethod.code, code: bookingMethod.code, displayName: bookingMethod.name, description: bookingMethod.description, route: bookingMethod.route })) }
+    }
     const where: any = term ? { OR: [{ name: { contains: term, mode: 'insensitive' } }, ...(['branches','services','medicines','specialty-services','health-packages'].includes(resource) ? [{ code: { contains: term, mode: 'insensitive' } }] : [])] } : {}
     const include = resource === 'specialty-services'
-      ? { branch: { select: { id: true, name: true } }, specialty: { select: { id: true, name: true } } }
+      ? { branchBookingMethod: { include: { branch: { select: { id: true, name: true } }, bookingMethod: { select: { id: true, code: true, name: true } } } }, specialty: { select: { id: true, name: true } } }
       : resource === 'health-packages'
-        ? { branch: { select: { id: true, name: true } }, items: { include: { medicalService: { select: { id: true, code: true, name: true } } }, orderBy: { sortOrder: 'asc' } }, schedules: { include: { room: { select: { id: true, name: true, branchId: true } } }, orderBy: { examDate: 'asc' } } }
+        ? { branchBookingMethod: { include: { branch: { select: { id: true, name: true } }, bookingMethod: { select: { id: true, code: true, name: true } } } }, items: { include: { medicalService: { select: { id: true, code: true, name: true } } }, orderBy: { sortOrder: 'asc' } }, schedules: { include: { room: { select: { id: true, name: true, branchId: true } } }, orderBy: { examDate: 'asc' } } }
         : undefined
     return { items: await model.findMany({ where, include, orderBy: { name: 'asc' }, take: 200 }) }
   }
 
-  async create(userId: string, resource: string, body: any) { await this.manager(userId); return this.model(resource).create({ data: await this.payload(resource, body, true) }) }
+  async create(userId: string, resource: string, body: any) {
+    await this.manager(userId)
+    if (resource === 'booking-methods') {
+      const branchId = String(body.branchId || ''), code = String(body.code || body.type || '').trim().toUpperCase(), name = String(body.displayName || body.name || '').trim()
+      if (!branchId || !code || !name) throw new BadRequestException('Thiếu chi nhánh, mã hoặc tên hình thức đặt khám')
+      return this.prisma.$transaction(async (tx) => {
+        const bookingMethod = await tx.bookingMethod.upsert({ where: { code }, update: { name, description: body.description || null, route: body.route || null, isActive: true }, create: { code, name, description: body.description || null, route: body.route || null } })
+        const exists = await tx.branchBookingMethod.findUnique({ where: { branchId_bookingMethodId: { branchId, bookingMethodId: bookingMethod.id } } })
+        if (exists) throw new BadRequestException('Chi nhánh đã có hình thức đặt khám này')
+        const row = await tx.branchBookingMethod.create({ data: { branchId, bookingMethodId: bookingMethod.id, isEnabled: body.isEnabled ?? true, sortOrder: Number(body.sortOrder) || 0 }, include: { bookingMethod: true } })
+        return { ...row, type: bookingMethod.code, code: bookingMethod.code, displayName: bookingMethod.name, description: bookingMethod.description, route: bookingMethod.route }
+      })
+    }
+    return this.model(resource).create({ data: await this.payload(resource, body, true) })
+  }
   async update(userId: string, resource: string, id: string, body: any) {
     await this.manager(userId); const model = this.model(resource); const key = resource === 'specialties' ? Number(id) : id
-    if (!await model.findUnique({ where: { id: key } })) throw new NotFoundException('Không tìm thấy dữ liệu')
+    const existing = await model.findUnique({ where: { id: key } })
+    if (!existing) throw new NotFoundException('Không tìm thấy dữ liệu')
+    if (resource === 'booking-methods') {
+      const name = String(body.displayName || body.name || '').trim()
+      if (name) await this.prisma.bookingMethod.update({ where: { id: existing.bookingMethodId }, data: { name, description: body.description || null, route: body.route || null, isActive: true } })
+      return model.update({ where: { id: key }, data: { isEnabled: body.isEnabled ?? existing.isEnabled, sortOrder: Number(body.sortOrder) || 0 } })
+    }
     return model.update({ where: { id: key }, data: await this.payload(resource, body, false) })
   }
   async remove(userId: string, resource: string, id: string) {
@@ -67,12 +90,6 @@ export class SystemCatalogService {
   }
 
   private async payload(resource: string, b: any, creating: boolean) {
-    if (resource === 'booking-methods') {
-      const type = String(b.type || '').toUpperCase()
-      if (!['SPECIALTY_EXAM','HEALTH_PACKAGE','CONSULTATION','AFTER_HOURS'].includes(type)) throw new BadRequestException('Hình thức đặt khám không hợp lệ')
-      if (!String(b.branchId || '') || !String(b.displayName || '').trim()) throw new BadRequestException('Thiếu chi nhánh hoặc tên hiển thị')
-      return { branchId: String(b.branchId), type, displayName: String(b.displayName).trim(), description: b.description || null, isEnabled: b.isEnabled ?? true, sortOrder: Number(b.sortOrder) || 0 }
-    }
     if (!String(b.name || '').trim()) throw new BadRequestException('Tên không được để trống')
     if (resource === 'branches') {
       let clinicId = b.clinicId
@@ -84,14 +101,27 @@ export class SystemCatalogService {
       const category = String(b.category || '').trim().toUpperCase(); if (!['LAB_TEST','IMAGING','PROCEDURE'].includes(category)) throw new BadRequestException('Nhóm dịch vụ không hợp lệ')
       return { name: String(b.name).trim(), code: String(b.code || '').trim(), description: b.description || null, category, departmentId: b.departmentId ? Number(b.departmentId) : null, price: Number(b.price) || 0, durationMin: Number(b.durationMin) || 30, isActive: b.isActive ?? true }
     }
-    if (resource === 'specialty-services') return { name: String(b.name).trim(), code: String(b.code || '').trim(), description: b.description || null, branchId: String(b.branchId || ''), specialtyId: Number(b.specialtyId), price: Number(b.price) || 0, durationMin: Number(b.durationMin) || 30, isActive: b.isActive ?? true }
+    if (resource === 'specialty-services') {
+      const branchBookingMethodId = await this.resolveBranchMethod(b, 'SPECIALTY_EXAM')
+      return { name: String(b.name).trim(), code: String(b.code || '').trim(), description: b.description || null, branchBookingMethodId, specialtyId: Number(b.specialtyId), price: Number(b.price) || 0, durationMin: Number(b.durationMin) || 30, isActive: b.isActive ?? true }
+    }
     if (resource === 'health-packages') {
       const serviceIds = Array.isArray(b.medicalServiceIds) ? [...new Set<string>(b.medicalServiceIds.map(String).filter(Boolean))] : []
       if (!String(b.branchId || '') || !serviceIds.length) throw new BadRequestException('Vui lòng chọn chi nhánh và dịch vụ trong gói')
+      const branchBookingMethodId = await this.resolveBranchMethod(b, 'HEALTH_PACKAGE')
       const room = await this.prisma.clinicRoom.findFirst({ where: { id: String(b.roomId || ''), branchId: String(b.branchId), isActive: true } }); if (!room) throw new BadRequestException('Phòng khám không thuộc chi nhánh đã chọn')
       const examDate = new Date(`${String(b.examDate || '')}T00:00:00.000Z`); if (Number.isNaN(examDate.getTime())) throw new BadRequestException('Ngày khám không hợp lệ')
-      return { name: String(b.name).trim(), code: String(b.code || '').trim(), description: b.description || null, branchId: String(b.branchId), price: Number(b.price) || 0, isActive: b.isActive ?? true, items: creating ? { create: serviceIds.map((medicalServiceId, sortOrder) => ({ medicalServiceId, sortOrder })) } : { deleteMany: {}, create: serviceIds.map((medicalServiceId, sortOrder) => ({ medicalServiceId, sortOrder })) }, schedules: creating ? { create: { roomId: room.id, examDate, capacity: Number(b.capacity) || 20 } } : { deleteMany: {}, create: { roomId: room.id, examDate, capacity: Number(b.capacity) || 20 } } }
+      return { name: String(b.name).trim(), code: String(b.code || '').trim(), description: b.description || null, branchBookingMethodId, price: Number(b.price) || 0, isActive: b.isActive ?? true, items: creating ? { create: serviceIds.map((medicalServiceId, sortOrder) => ({ medicalServiceId, sortOrder })) } : { deleteMany: {}, create: serviceIds.map((medicalServiceId, sortOrder) => ({ medicalServiceId, sortOrder })) }, schedules: creating ? { create: { roomId: room.id, examDate, capacity: Number(b.capacity) || 20 } } : { deleteMany: {}, create: { roomId: room.id, examDate, capacity: Number(b.capacity) || 20 } } }
     }
     return { name: String(b.name).trim(), code: String(b.code || '').trim(), activeIngredient: b.activeIngredient || null, strength: b.strength || null, unit: b.unit || null, unitPrice: Number(b.unitPrice) || 0, stockQuantity: Number(b.stockQuantity) || 0, isActive: b.isActive ?? true }
+  }
+
+  private async resolveBranchMethod(body: any, fallbackCode: string) {
+    if (body.branchBookingMethodId) return String(body.branchBookingMethodId)
+    const branchId = String(body.branchId || '')
+    const code = String(body.bookingMethodCode || fallbackCode).toUpperCase()
+    const row = await this.prisma.branchBookingMethod.findFirst({ where: { branchId, isEnabled: true, bookingMethod: { code, isActive: true } } })
+    if (!row) throw new BadRequestException(`Chi nhánh chưa bật hình thức đặt khám ${code}`)
+    return row.id
   }
 }

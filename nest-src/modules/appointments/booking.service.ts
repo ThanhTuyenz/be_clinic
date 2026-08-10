@@ -37,8 +37,8 @@ export class BookingService {
         const specialtyService = await tx.specialtyService.findFirst({
           where: {
             id: dto.specialtyServiceId,
-            branchId: slot.schedule.branchId,
             isActive: true,
+            branchBookingMethod: { branchId: slot.schedule.branchId, isEnabled: true, bookingMethod: { isActive: true } },
             specialty: { doctors: { some: { doctorId: slot.schedule.doctorId } } },
           },
         });

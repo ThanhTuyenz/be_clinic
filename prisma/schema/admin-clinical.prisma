@@ -156,8 +156,8 @@ model MedicalService {
 }
 
 model SpecialtyService {
-  id          String   @id @default(uuid()) @db.Uuid
-  branchId    String   @map("branch_id") @db.Uuid
+  id                    String   @id @default(uuid()) @db.Uuid
+  branchBookingMethodId String   @map("branch_booking_method_id") @db.Uuid
   specialtyId Int      @map("specialty_id")
   code        String   @unique @db.VarChar(50)
   name        String   @db.VarChar(150)
@@ -168,18 +168,18 @@ model SpecialtyService {
   createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt   DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
 
-  branch       Branch        @relation(fields: [branchId], references: [id], onDelete: Restrict)
+  branchBookingMethod BranchBookingMethod @relation(fields: [branchBookingMethodId], references: [id], onDelete: Restrict)
   specialty    Specialty     @relation(fields: [specialtyId], references: [id], onDelete: Restrict)
   appointments Appointment[]
 
-  @@unique([branchId, specialtyId, name])
-  @@index([branchId, specialtyId, isActive])
+  @@unique([branchBookingMethodId, specialtyId, name])
+  @@index([branchBookingMethodId, specialtyId, isActive])
   @@map("specialty_services")
 }
 
 model HealthPackage {
-  id          String   @id @default(uuid()) @db.Uuid
-  branchId    String   @map("branch_id") @db.Uuid
+  id                    String   @id @default(uuid()) @db.Uuid
+  branchBookingMethodId String   @map("branch_booking_method_id") @db.Uuid
   code        String   @unique @db.VarChar(50)
   name        String   @db.VarChar(200)
   description String?  @db.Text
@@ -188,12 +188,12 @@ model HealthPackage {
   createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt   DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
 
-  branch Branch              @relation(fields: [branchId], references: [id], onDelete: Restrict)
+  branchBookingMethod BranchBookingMethod @relation(fields: [branchBookingMethodId], references: [id], onDelete: Restrict)
   items  HealthPackageItem[]
   schedules HealthPackageSchedule[]
 
-  @@unique([branchId, code])
-  @@index([branchId, isActive, name])
+  @@unique([branchBookingMethodId, code])
+  @@index([branchBookingMethodId, isActive, name])
   @@map("health_packages")
 }
 

@@ -53,6 +53,8 @@ let PublicDirectoryController = class PublicDirectoryController {
         this.directory = directory;
     }
     navigation() { return this.directory.publicNavigation(); }
+    homepage(branchId) { return this.directory.homepage(branchId); }
+    specialties() { return this.directory.specialties(); }
     specialtyServices(branchId, specialtyId) {
         return this.directory.specialtyServices(branchId, Number(specialtyId));
     }
@@ -67,6 +69,21 @@ __decorate([
     __metadata("design:paramtypes", []),
     __metadata("design:returntype", void 0)
 ], PublicDirectoryController.prototype, "navigation", null);
+__decorate([
+    (0, common_1.Get)('homepage'),
+    (0, swagger_1.ApiOperation)({ summary: 'Dữ liệu tổng hợp cho trang chủ website bệnh nhân' }),
+    __param(0, (0, common_1.Query)('branchId')),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String]),
+    __metadata("design:returntype", void 0)
+], PublicDirectoryController.prototype, "homepage", null);
+__decorate([
+    (0, common_1.Get)('specialties'),
+    (0, swagger_1.ApiOperation)({ summary: 'Danh sách khoa và chuyên khoa công khai' }),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", []),
+    __metadata("design:returntype", void 0)
+], PublicDirectoryController.prototype, "specialties", null);
 __decorate([
     (0, common_1.Get)('specialty-services'),
     (0, swagger_1.ApiOperation)({ summary: 'Dịch vụ khám bắt buộc theo chi nhánh và chuyên khoa' }),
@@ -103,8 +120,8 @@ let DoctorsController = class DoctorsController {
     constructor(directory) {
         this.directory = directory;
     }
-    doctors(branchId, departmentId) {
-        return this.directory.doctors(branchId, departmentId ? Number(departmentId) : undefined);
+    doctors(branchId, departmentId, specialtyId, q) {
+        return this.directory.doctors(branchId, departmentId ? Number(departmentId) : undefined, specialtyId ? Number(specialtyId) : undefined, q);
     }
     availableDates(doctorId, branchId) {
         return this.directory.availableDates(doctorId, branchId);
@@ -119,10 +136,14 @@ __decorate([
     (0, swagger_1.ApiOperation)({ summary: 'Danh sách bác sĩ theo cơ sở/chuyên khoa' }),
     (0, swagger_1.ApiQuery)({ name: 'branchId', required: false }),
     (0, swagger_1.ApiQuery)({ name: 'departmentId', required: false, type: Number }),
+    (0, swagger_1.ApiQuery)({ name: 'specialtyId', required: false, type: Number }),
+    (0, swagger_1.ApiQuery)({ name: 'q', required: false }),
     __param(0, (0, common_1.Query)('branchId')),
     __param(1, (0, common_1.Query)('departmentId')),
+    __param(2, (0, common_1.Query)('specialtyId')),
+    __param(3, (0, common_1.Query)('q')),
     __metadata("design:type", Function),
-    __metadata("design:paramtypes", [String, String]),
+    __metadata("design:paramtypes", [String, String, String, String]),
     __metadata("design:returntype", void 0)
 ], DoctorsController.prototype, "doctors", null);
 __decorate([

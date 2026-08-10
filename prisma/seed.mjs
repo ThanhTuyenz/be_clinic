@@ -51,17 +51,26 @@ async function main() {
     }));
   }
   const bookingMethodSeeds = [
-    ['SPECIALTY_EXAM', 'Đặt khám theo chuyên khoa', 'Chọn chuyên khoa, dịch vụ, bác sĩ và thời gian khám.', 1],
-    ['HEALTH_PACKAGE', 'Gói khám sức khỏe', 'Đăng ký gói khám sức khỏe theo lịch của cơ sở.', 2],
-    ['CONSULTATION', 'Tư vấn khám bệnh', 'Tư vấn ban đầu với bác sĩ trước khi đặt lịch khám.', 3],
-    ['AFTER_HOURS', 'Đặt khám ngoài giờ', 'Đặt lịch khám ngoài khung giờ hành chính.', 4],
+    ['SPECIALTY_EXAM', 'Đặt khám theo chuyên khoa', 'Chọn chuyên khoa, dịch vụ, bác sĩ và thời gian khám.', '/dat-lich?type=specialty', 1],
+    ['HEALTH_PACKAGE', 'Gói khám sức khỏe', 'Đăng ký gói khám sức khỏe theo lịch của cơ sở.', '/dich-vu?view=health-packages', 2],
+    ['CONSULTATION', 'Tư vấn khám bệnh', 'Tư vấn ban đầu với bác sĩ trước khi đặt lịch khám.', '/dat-lich?type=consultation', 3],
+    ['AFTER_HOURS', 'Đặt khám ngoài giờ', 'Đặt lịch khám ngoài khung giờ hành chính.', '/dat-lich?type=after-hours', 4],
   ];
+  const bookingMethods = new Map();
+  for (const [code, name, description, route] of bookingMethodSeeds) {
+    bookingMethods.set(code, await prisma.bookingMethod.upsert({
+      where: { code },
+      update: { name, description, route, isActive: true },
+      create: { code, name, description, route },
+    }));
+  }
   for (const branch of branches) {
-    for (const [type, displayName, description, sortOrder] of bookingMethodSeeds) {
+    for (const [code, , , , sortOrder] of bookingMethodSeeds) {
+      const bookingMethod = bookingMethods.get(code);
       await prisma.branchBookingMethod.upsert({
-        where: { branchId_type: { branchId: branch.id, type } },
-        update: { displayName, description, sortOrder, isEnabled: true },
-        create: { branchId: branch.id, type, displayName, description, sortOrder },
+        where: { branchId_bookingMethodId: { branchId: branch.id, bookingMethodId: bookingMethod.id } },
+        update: { sortOrder, isEnabled: true },
+        create: { branchId: branch.id, bookingMethodId: bookingMethod.id, sortOrder },
       });
     }
   }
@@ -289,6 +298,8 @@ async function seedBookingTables({ users, doctors, slotsByDoctor, branches, room
   if (!cardioDoctor || slots.length < 3) throw new Error('Không đủ timeslot để seed booking');
   if (!pediatricDoctor || pediatricSlots.length < 2) throw new Error('Không đủ timeslot Nhi khoa để seed booking');
   if (!rooms[0] || rooms[0].branchId !== branches[0].id) throw new Error('Không tìm thấy phòng khám hợp lệ tại chi nhánh chính để seed gói khám');
+  const configuredMethods = await prisma.branchBookingMethod.findMany({ where: { branchId: branches[0].id }, include: { bookingMethod: true } });
+  const branchMethodByCode = new Map(configuredMethods.map((item) => [item.bookingMethod.code, item]));
   const cashier = users.get('cashier@vitacare.local');
   const receptionist = users.get('receptionist@vitacare.local');
   const pharmacist = users.get('pharmacist@vitacare.local');
@@ -380,10 +391,13 @@ async function seedBookingTables({ users, doctors, slotsByDoctor, branches, room
       { code: `CONSULT-${codeSuffix}-ADVICE`, name: 'Tư vấn khám bệnh', price: 150000, durationMin: 20, description: 'Tư vấn ban đầu với bác sĩ chuyên khoa trước khi quyết định lịch khám phù hợp.' },
     ];
     for (const service of specialtyServices) {
+      const methodCode = service.code.endsWith('-AFTER') ? 'AFTER_HOURS' : service.code.endsWith('-ADVICE') ? 'CONSULTATION' : 'SPECIALTY_EXAM';
+      const branchBookingMethod = branchMethodByCode.get(methodCode);
+      if (!branchBookingMethod) throw new Error(`Chi nhánh chưa cấu hình hình thức ${methodCode}`);
       await prisma.specialtyService.upsert({
         where: { code: service.code },
-        update: { ...service, branchId: branches[0].id, specialtyId: specialty.id, isActive: true },
-        create: { ...service, branchId: branches[0].id, specialtyId: specialty.id },
+        update: { ...service, branchBookingMethodId: branchBookingMethod.id, specialtyId: specialty.id, isActive: true },
+        create: { ...service, branchBookingMethodId: branchBookingMethod.id, specialtyId: specialty.id },
       });
     }
   }
@@ -396,10 +410,12 @@ async function seedBookingTables({ users, doctors, slotsByDoctor, branches, room
   ];
   for (const [packageIndex, seed] of healthPackageSeeds.entries()) {
     const { itemCodes, ...packageData } = seed;
+    const healthPackageMethod = branchMethodByCode.get('HEALTH_PACKAGE');
+    if (!healthPackageMethod) throw new Error('Chi nhánh chưa cấu hình hình thức HEALTH_PACKAGE');
     const healthPackage = await prisma.healthPackage.upsert({
       where: { code: seed.code },
-      update: { ...packageData, branchId: branches[0].id, isActive: true },
-      create: { ...packageData, branchId: branches[0].id },
+      update: { ...packageData, branchBookingMethodId: healthPackageMethod.id, isActive: true },
+      create: { ...packageData, branchBookingMethodId: healthPackageMethod.id },
     });
     await prisma.healthPackageItem.deleteMany({ where: { healthPackageId: healthPackage.id } });
     const items = itemCodes.map((code, sortOrder) => {
