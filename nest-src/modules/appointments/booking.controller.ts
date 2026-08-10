@@ -27,6 +27,12 @@ export class BookingController {
   paymentStatus(@Req() request: Request, @Param('id') id: string) {
     return this.bookingService.paymentStatus(id, request.user!.id);
   }
+
+  @Get(':id/check-in-pass')
+  @ApiOperation({ summary: 'Lấy QR check-in, số thứ tự dự kiến và phòng khám sau thanh toán' })
+  checkInPass(@Req() request: Request, @Param('id') id: string) {
+    return this.bookingService.issueCheckInPass(id, request.user!.id);
+  }
 }
 
 @ApiTags('Payments')
@@ -53,6 +59,19 @@ export class CheckInController {
   @Post('qr/:token')
   @ApiOperation({ summary: 'Check-in bằng QR và cấp số thứ tự atomic theo timeslot' })
   checkIn(@Req() request: Request, @Param('token') token: string) {
-    return this.bookingService.checkIn(token, request.user!.id);
+    return this.bookingService.checkIn(token, request.user!.id, 'RECEPTIONIST');
+  }
+
+  @Post('scan')
+  @ApiOperation({ summary: 'Nhân viên tiếp nhận quét QR của bệnh nhân' })
+  staffScan(@Req() request: Request, @Body() body: { token: string }) {
+    return this.bookingService.checkIn(body.token, request.user!.id, 'RECEPTIONIST');
+  }
+
+  @Public()
+  @Post('kiosk/scan')
+  @ApiOperation({ summary: 'Máy kiosk tự phục vụ quét QR check-in' })
+  kioskScan(@Body() body: { token: string }) {
+    return this.bookingService.checkIn(body.token, null, 'KIOSK');
   }
 }
