@@ -1,31 +1,51 @@
 model PatientProfile {
-  id                    String        @id @default(uuid()) @db.Uuid
-  accountId             String?       @map("account_id") @db.Uuid
-  fullName              String        @map("full_name") @db.VarChar(100)
-  nationalId            String?       @unique @map("national_id") @db.VarChar(20)
-  healthInsuranceNumber String?       @unique @map("health_insurance_number") @db.VarChar(20)
-  dateOfBirth           DateTime      @map("date_of_birth") @db.Date
+  id                    String         @id @default(uuid()) @db.Uuid
+  accountId             String?        @map("account_id") @db.Uuid
+  fullName              String         @map("full_name") @db.VarChar(100)
+  nationalId            String?        @unique @map("national_id") @db.VarChar(20)
+  healthInsuranceNumber String?        @unique @map("health_insurance_number") @db.VarChar(20)
+  dateOfBirth           DateTime       @map("date_of_birth") @db.Date
   gender                Gender?
   address               String?
-  relationshipToAccount String        @default("SELF") @map("relationship_to_account") @db.VarChar(50)
-  isMainProfile         Boolean       @default(false) @map("is_main_profile")
-  createdAt             DateTime      @default(now()) @map("created_at") @db.Timestamptz(3)
-  updatedAt             DateTime      @updatedAt @map("updated_at") @db.Timestamptz(3)
-  account               User?         @relation(fields: [accountId], references: [id], onDelete: SetNull)
+  relationshipToAccount String         @default("SELF") @map("relationship_to_account") @db.VarChar(50)
+  isMainProfile         Boolean        @default(false) @map("is_main_profile")
+  createdAt             DateTime       @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt             DateTime       @updatedAt @map("updated_at") @db.Timestamptz(3)
+  account               User?          @relation(fields: [accountId], references: [id], onDelete: SetNull)
   appointments          Appointment[]
-  invoices              Invoice[]
+  medicalRecord         MedicalRecord?
 
   @@index([accountId, isMainProfile])
   @@map("patient_profiles")
 }
 
+model MedicalRecord {
+  id                String         @id @default(uuid()) @db.Uuid
+  patientProfileId  String         @unique @map("patient_profile_id") @db.Uuid
+  recordCode        String         @unique @map("record_code") @db.VarChar(30)
+  bloodType         String?        @map("blood_type") @db.VarChar(10)
+  allergies         String?        @db.Text
+  chronicConditions String?        @map("chronic_conditions") @db.Text
+  medicalHistory    String?        @map("medical_history") @db.Text
+  familyHistory     String?        @map("family_history") @db.Text
+  surgicalHistory   String?        @map("surgical_history") @db.Text
+  notes             String?        @db.Text
+  createdAt         DateTime       @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt         DateTime       @updatedAt @map("updated_at") @db.Timestamptz(3)
+  patientProfile    PatientProfile @relation(fields: [patientProfileId], references: [id], onDelete: Restrict)
+  visits            MedicalVisit[]
+
+  @@map("medical_records")
+}
+
 model Department {
-  id          Int         @id @default(autoincrement())
-  name        String      @unique @db.VarChar(100)
+  id          Int              @id @default(autoincrement())
+  name        String           @unique @db.VarChar(100)
   description String?
   doctors     Doctor[]
   specialties Specialty[]
   services    MedicalService[]
+  icd10Codes  Icd10Code[]
 
   @@map("departments")
 }
@@ -62,12 +82,12 @@ model Doctor {
   user               User                      @relation(fields: [userId], references: [id], onDelete: Cascade)
   department         Department?               @relation(fields: [departmentId], references: [id], onDelete: SetNull)
   specialties        DoctorSpecialty[]
-  branchAssignments  DoctorBranchAssignment[]
   scheduleTemplates  DoctorScheduleTemplate[]
   scheduleExceptions DoctorScheduleException[]
   schedules          DoctorSchedule[]
   appointments       Appointment[]
   reviews            Review[]
+  medicalVisits      MedicalVisit[]
 
   @@index([departmentId, isActive])
   @@index([isFeatured, isActive])
@@ -101,18 +121,4 @@ model DoctorSpecialty {
 
   @@id([doctorId, specialtyId])
   @@map("doctor_specialties")
-}
-
-model DoctorBranchAssignment {
-  id        String   @id @default(uuid()) @db.Uuid
-  doctorId  String   @map("doctor_id") @db.Uuid
-  branchId  String   @map("branch_id") @db.Uuid
-  isPrimary Boolean  @default(false) @map("is_primary")
-  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
-  doctor    Doctor   @relation(fields: [doctorId], references: [id], onDelete: Cascade)
-  branch    Branch   @relation(fields: [branchId], references: [id], onDelete: Cascade)
-
-  @@unique([doctorId, branchId])
-  @@index([branchId])
-  @@map("doctor_branch_assignments")
 }

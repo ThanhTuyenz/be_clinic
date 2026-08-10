@@ -92,7 +92,11 @@ async function main() {
     doctors.set(input.email, doctor);
     slotsByDoctor.set(input.email, []);
     await prisma.doctorSpecialty.upsert({ where: { doctorId_specialtyId: { doctorId: doctor.id, specialtyId: input.specialty.id } }, update: { isPrimary: true }, create: { doctorId: doctor.id, specialtyId: input.specialty.id, isPrimary: true } });
-    await prisma.doctorBranchAssignment.upsert({ where: { doctorId_branchId: { doctorId: doctor.id, branchId: branches[0].id } }, update: {}, create: { doctorId: doctor.id, branchId: branches[0].id, isPrimary: true } });
+    await prisma.userBranchAssignment.upsert({
+      where: { userId_branchId: { userId: user.id, branchId: branches[0].id } },
+      update: { isPrimary: true },
+      create: { userId: user.id, branchId: branches[0].id, isPrimary: true },
+    });
 
     const existingTemplate = await prisma.doctorScheduleTemplate.findFirst({
       where: { doctorId: doctor.id, branchId: branches[0].id, dayOfWeek: 1, isActive: true },
@@ -176,6 +180,26 @@ async function seedBookingTables({ users, doctors, slotsByDoctor, branches, main
   if (!pediatricDoctor || pediatricSlots.length < 2) throw new Error('Không đủ timeslot Nhi khoa để seed booking');
   const cashier = users.get('cashier@vitacare.local');
   const receptionist = users.get('receptionist@vitacare.local');
+  const hypertension = await prisma.icd10Code.upsert({
+    where: { code: 'I10' },
+    update: { description: 'Tăng huyết áp vô căn', isActive: true },
+    create: { code: 'I10', description: 'Tăng huyết áp vô căn', isActive: true },
+  });
+  const amlodipine = await prisma.medicine.upsert({
+    where: { code: 'MED-AMLO-5' },
+    update: { name: 'Amlodipine', activeIngredient: 'Amlodipine', strength: '5 mg', unit: 'viên', unitPrice: 1200, stockQuantity: 500, isActive: true },
+    create: { code: 'MED-AMLO-5', name: 'Amlodipine', activeIngredient: 'Amlodipine', strength: '5 mg', unit: 'viên', unitPrice: 1200, stockQuantity: 500 },
+  });
+  const ecgService = await prisma.medicalService.upsert({
+    where: { code: 'ECG-REST' },
+    update: { name: 'Điện tâm đồ lúc nghỉ', price: 150000, durationMin: 20, isActive: true },
+    create: { code: 'ECG-REST', name: 'Điện tâm đồ lúc nghỉ', price: 150000, durationMin: 20 },
+  });
+  await prisma.inventoryStock.upsert({
+    where: { branchId_medicineId: { branchId: branches[0].id, medicineId: amlodipine.id } },
+    update: { quantity: 500 },
+    create: { branchId: branches[0].id, medicineId: amlodipine.id, quantity: 500 },
+  });
   const booked = await upsertAppointment({ code: 'VC-SEED-WAIT-01', profile: mainProfile, doctor: cardioDoctor, branch: branches[0], slot: slots[0], status: 'CHECKED_IN', symptoms: 'Đau ngực nhẹ khi vận động', queueNumber: 1, checkedInById: receptionist.id });
   const waitingChild = await upsertAppointment({ code: 'VC-SEED-WAIT-02', profile: childProfile, doctor: cardioDoctor, branch: branches[0], slot: slots[0], status: 'CHECKED_IN', symptoms: 'Ho và sốt nhẹ', queueNumber: 2, checkedInById: receptionist.id });
   const pediatricWaiting1 = await upsertAppointment({ code: 'VC-PED-WAIT-01', profile: childProfile, doctor: pediatricDoctor, branch: branches[0], slot: pediatricSlots[0], status: 'CHECKED_IN', symptoms: 'Ho, sốt nhẹ và sổ mũi', queueNumber: 1, checkedInById: receptionist.id });
@@ -196,10 +220,84 @@ async function seedBookingTables({ users, doctors, slotsByDoctor, branches, main
   await seedPaidInvoice(pediatricWaiting2, mainProfile, branches[0], cashier, 250000, 'seed-payment-pediatric-2');
   await seedPaidInvoice(pediatricBookedQr, childProfile, branches[0], cashier, 250000, 'seed-payment-pediatric-qr');
   await seedPaidInvoice(completed, mainProfile, branches[0], cashier, 300000, 'seed-payment-completed');
+
+  const mainMedicalRecord = await prisma.medicalRecord.upsert({
+    where: { patientProfileId: mainProfile.id },
+    update: { bloodType: 'O+', allergies: 'Chưa ghi nhận dị ứng thuốc', chronicConditions: 'Tăng huyết áp đang theo dõi' },
+    create: {
+      patientProfileId: mainProfile.id,
+      recordCode: medicalRecordCode(mainProfile.id),
+      bloodType: 'O+',
+      allergies: 'Chưa ghi nhận dị ứng thuốc',
+      chronicConditions: 'Tăng huyết áp đang theo dõi',
+    },
+  });
+  await prisma.medicalRecord.upsert({
+    where: { patientProfileId: childProfile.id },
+    update: {},
+    create: { patientProfileId: childProfile.id, recordCode: medicalRecordCode(childProfile.id) },
+  });
+  const completedVisit = await prisma.medicalVisit.upsert({
+    where: { appointmentId: completed.id },
+    update: {
+      medicalRecordId: mainMedicalRecord.id,
+      doctorId: cardioDoctor.id,
+      branchId: branches[0].id,
+      status: 'FINALIZED',
+      symptoms: 'Tái khám huyết áp',
+      treatmentPlan: 'Theo dõi huyết áp tại nhà và tái khám đúng hẹn',
+      finalizedAt: new Date(),
+    },
+    create: {
+      medicalRecordId: mainMedicalRecord.id,
+      appointmentId: completed.id,
+      doctorId: cardioDoctor.id,
+      branchId: branches[0].id,
+      createdById: cardioDoctor.userId,
+      status: 'FINALIZED',
+      symptoms: 'Tái khám huyết áp',
+      treatmentPlan: 'Theo dõi huyết áp tại nhà và tái khám đúng hẹn',
+      finalizedAt: new Date(),
+      payload: {
+        symptoms: 'Tái khám huyết áp',
+        diagnosisCode: 'I10',
+        diagnosisName: 'Tăng huyết áp vô căn',
+        diagnosis: 'I10 – Tăng huyết áp vô căn',
+        treatment: 'Theo dõi huyết áp tại nhà và tái khám đúng hẹn',
+        bp: '135/85',
+        pulse: '78',
+        prescriptionLines: [],
+        clinicalOrders: [],
+      },
+    },
+  });
+  await prisma.visitVitals.upsert({
+    where: { medicalVisitId: completedVisit.id },
+    update: { systolicBp: 135, diastolicBp: 85, pulse: 78 },
+    create: { medicalVisitId: completedVisit.id, systolicBp: 135, diastolicBp: 85, pulse: 78 },
+  });
+  await prisma.visitDiagnosis.upsert({
+    where: { medicalVisitId_icd10CodeId: { medicalVisitId: completedVisit.id, icd10CodeId: hypertension.id } },
+    update: { isPrimary: true },
+    create: { medicalVisitId: completedVisit.id, icd10CodeId: hypertension.id, isPrimary: true },
+  });
+  const seedPrescription = await prisma.prescription.upsert({
+    where: { medicalVisitId: completedVisit.id },
+    update: { status: 'ISSUED', issuedAt: new Date() },
+    create: { medicalVisitId: completedVisit.id, status: 'ISSUED', issuedAt: new Date() },
+  });
+  await prisma.prescriptionItem.deleteMany({ where: { prescriptionId: seedPrescription.id } });
+  await prisma.prescriptionItem.create({
+    data: { prescriptionId: seedPrescription.id, medicineId: amlodipine.id, medicineName: amlodipine.name, strength: amlodipine.strength, unit: amlodipine.unit, quantity: 30, dosageAmount: '1 viên/lần', frequencyPerDay: 1, durationDays: 30, instructions: 'Uống buổi sáng sau ăn' },
+  });
+  await prisma.clinicalOrder.deleteMany({ where: { medicalVisitId: completedVisit.id } });
+  await prisma.clinicalOrder.create({
+    data: { medicalVisitId: completedVisit.id, medicalServiceId: ecgService.id, serviceName: ecgService.name, price: ecgService.price, status: 'COMPLETED', completedAt: new Date() },
+  });
   const pendingInvoice = await prisma.invoice.upsert({
     where: { appointmentId: pending.id },
-    update: { status: 'UNPAID', totalAmount: 300000, cashierId: null, paidAt: null },
-    create: { appointmentId: pending.id, patientProfileId: childProfile.id, branchId: branches[0].id, totalAmount: 300000 },
+    update: { issuedBranchId: branches[0].id, status: 'UNPAID', totalAmount: 300000, cashierId: null, paidAt: null },
+    create: { appointmentId: pending.id, issuedBranchId: branches[0].id, totalAmount: 300000 },
   });
   await replaceInvoiceItem(pendingInvoice.id, 300000);
   await prisma.paymentTransaction.upsert({
@@ -223,6 +321,10 @@ async function seedBookingTables({ users, doctors, slotsByDoctor, branches, main
   ] });
 }
 
+function medicalRecordCode(patientProfileId) {
+  return `MR-${String(patientProfileId).replaceAll('-', '').slice(0, 12).toUpperCase()}`;
+}
+
 async function upsertAppointment({ code, profile, doctor, branch, slot, status, symptoms, queueNumber, checkedInById, holdExpiresAt }) {
   const appointment = await prisma.appointment.upsert({
     where: { bookingCode: code },
@@ -235,7 +337,7 @@ async function upsertAppointment({ code, profile, doctor, branch, slot, status, 
 }
 
 async function seedPaidInvoice(appointment, profile, branch, cashier, amount, idempotencyKey) {
-  const invoice = await prisma.invoice.upsert({ where: { appointmentId: appointment.id }, update: { patientProfileId: profile.id, branchId: branch.id, cashierId: cashier.id, totalAmount: amount, status: 'PAID', paidAt: new Date() }, create: { appointmentId: appointment.id, patientProfileId: profile.id, branchId: branch.id, cashierId: cashier.id, totalAmount: amount, status: 'PAID', paidAt: new Date() } });
+  const invoice = await prisma.invoice.upsert({ where: { appointmentId: appointment.id }, update: { issuedBranchId: branch.id, cashierId: cashier.id, totalAmount: amount, status: 'PAID', paidAt: new Date() }, create: { appointmentId: appointment.id, issuedBranchId: branch.id, cashierId: cashier.id, totalAmount: amount, status: 'PAID', paidAt: new Date() } });
   await replaceInvoiceItem(invoice.id, amount);
   await prisma.paymentTransaction.upsert({ where: { idempotencyKey }, update: { invoiceId: invoice.id, status: 'SUCCESS', paidAt: new Date(), amount }, create: { invoiceId: invoice.id, provider: 'VIETQR_SANDBOX', providerTransactionId: `provider-${idempotencyKey}`, idempotencyKey, method: 'VIETQR', amount, status: 'SUCCESS', paidAt: new Date(), rawPayload: { seed: true } } });
 }

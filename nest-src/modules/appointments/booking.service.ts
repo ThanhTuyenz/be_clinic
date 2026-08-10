@@ -76,8 +76,7 @@ export class BookingService {
         const invoice = await tx.invoice.create({
           data: {
             appointmentId: appointment.id,
-            patientProfileId: profile.id,
-            branchId: slot.schedule.branchId,
+            issuedBranchId: slot.schedule.branchId,
             totalAmount: slot.schedule.doctor.consultationFee,
             items: { create: { description: 'Phí khám', quantity: 1, unitPrice: slot.schedule.doctor.consultationFee, amount: slot.schedule.doctor.consultationFee } },
           },

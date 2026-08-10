@@ -11,17 +11,18 @@ export class DirectoryService {
 
   departments(branchId: string) {
     return this.prisma.department.findMany({
-      where: { doctors: { some: { isActive: true, branchAssignments: { some: { branchId } } } } },
+      where: { doctors: { some: { isActive: true, user: { branchAssignments: { some: { branchId } } } } } },
       orderBy: { name: 'asc' }, select: { id: true, name: true, description: true },
     });
   }
 
-  doctors(branchId?: string, departmentId?: number) {
-    return this.prisma.doctor.findMany({
-      where: { isActive: true, departmentId, branchAssignments: branchId ? { some: { branchId } } : undefined },
+  async doctors(branchId?: string, departmentId?: number) {
+    const rows = await this.prisma.doctor.findMany({
+      where: { isActive: true, departmentId, user: branchId ? { branchAssignments: { some: { branchId } } } : undefined },
       orderBy: { fullName: 'asc' },
-      select: { id: true, fullName: true, academicRank: true, consultationFee: true, department: { select: { id: true, name: true } }, branchAssignments: { select: { branch: { select: { id: true, name: true } } } }, specialties: { select: { isPrimary: true, specialty: { select: { id: true, name: true } } } } },
+      select: { id: true, fullName: true, academicRank: true, consultationFee: true, department: { select: { id: true, name: true } }, user: { select: { branchAssignments: { select: { isPrimary: true, branch: { select: { id: true, name: true } } } } } }, specialties: { select: { isPrimary: true, specialty: { select: { id: true, name: true } } } } },
     });
+    return rows.map(({ user, ...doctor }) => ({ ...doctor, branchAssignments: user.branchAssignments }));
   }
 
   async availableDates(doctorId: string, branchId: string) {

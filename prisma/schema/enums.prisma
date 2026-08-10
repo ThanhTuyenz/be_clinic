@@ -74,3 +74,30 @@ enum OutboxStatus {
   PUBLISHED
   FAILED
 }
+
+enum MedicalVisitStatus {
+  DRAFT
+  FINALIZED
+  AMENDED
+}
+
+enum PrescriptionStatus {
+  DRAFT
+  ISSUED
+  CANCELLED
+}
+
+enum ClinicalOrderStatus {
+  ORDERED
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+}
+
+enum InventoryMovementType {
+  IMPORT
+  DISPENSE
+  ADJUSTMENT
+  RETURN
+  EXPIRED
+}

@@ -1,22 +1,20 @@
 model Invoice {
-  id               String               @id @default(uuid()) @db.Uuid
-  appointmentId    String               @unique @map("appointment_id") @db.Uuid
-  patientProfileId String               @map("patient_profile_id") @db.Uuid
-  branchId         String               @map("branch_id") @db.Uuid
-  cashierId        String?              @map("cashier_id") @db.Uuid
-  totalAmount      Decimal              @map("total_amount") @db.Decimal(12, 2)
-  status           InvoiceStatus        @default(UNPAID)
-  paidAt           DateTime?            @map("paid_at") @db.Timestamptz(3)
-  createdAt        DateTime             @default(now()) @map("created_at") @db.Timestamptz(3)
-  updatedAt        DateTime             @updatedAt @map("updated_at") @db.Timestamptz(3)
-  appointment      Appointment          @relation(fields: [appointmentId], references: [id], onDelete: Restrict)
-  patientProfile   PatientProfile       @relation(fields: [patientProfileId], references: [id], onDelete: Restrict)
-  branch           Branch               @relation(fields: [branchId], references: [id], onDelete: Restrict)
-  cashier          User?                @relation("CashierInvoices", fields: [cashierId], references: [id], onDelete: SetNull)
-  items            InvoiceItem[]
-  payments         PaymentTransaction[]
+  id             String               @id @default(uuid()) @db.Uuid
+  appointmentId  String               @unique @map("appointment_id") @db.Uuid
+  issuedBranchId String               @map("issued_branch_id") @db.Uuid
+  cashierId      String?              @map("cashier_id") @db.Uuid
+  totalAmount    Decimal              @map("total_amount") @db.Decimal(12, 2)
+  status         InvoiceStatus        @default(UNPAID)
+  paidAt         DateTime?            @map("paid_at") @db.Timestamptz(3)
+  createdAt      DateTime             @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt      DateTime             @updatedAt @map("updated_at") @db.Timestamptz(3)
+  appointment    Appointment          @relation(fields: [appointmentId], references: [id], onDelete: Restrict)
+  issuedBranch   Branch               @relation(fields: [issuedBranchId], references: [id], onDelete: Restrict)
+  cashier        User?                @relation("CashierInvoices", fields: [cashierId], references: [id], onDelete: SetNull)
+  items          InvoiceItem[]
+  payments       PaymentTransaction[]
 
-  @@index([branchId, status, createdAt])
+  @@index([issuedBranchId, status, createdAt])
   @@map("invoices")
 }
 

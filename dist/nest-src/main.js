@@ -114,7 +114,7 @@ async function bootstrap() {
             .addTag('Appointments', 'Đặt lịch và quản lý lịch khám')
             .addTag('Doctors', 'Danh sách bác sĩ')
             .addTag('Clinic rooms', 'Danh sách phòng khám')
-            .addTag('Examinations', 'Hồ sơ khám bệnh')
+            .addTag('Medical visits', 'Hồ sơ từng lần khám')
             .addTag('Permissions', 'Quyền của người dùng hiện tại')
             .addTag('Payments', 'Thanh toán phí khám và webhook')
             .addTag('Check-in', 'Quét QR và cấp số thứ tự')

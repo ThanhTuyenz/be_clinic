@@ -1,4 +1,4 @@
-import { Controller, Get, Patch, Post, Req, Res } from '@nestjs/common'
+import { Controller, Get, Patch, Post, Query, Req, Res } from '@nestjs/common'
 import type { Request, Response } from 'express'
 import {
   cancelAppointment as legacyCancelAppointment,
@@ -40,8 +40,14 @@ export class AppointmentsController {
 
   @Get('doctor')
   @ApiOperation({ summary: 'Danh sách lịch khám của bác sĩ hiện tại' })
-  listDoctorAppointments(@Req() req: Request) {
-    return this.staffAppointments.doctorAppointments(req.user!.id)
+  @ApiQuery({ name: 'date', required: false, example: '2026-08-10' })
+  @ApiQuery({ name: 'status', required: false, enum: ['all', 'booked', 'checked_in', 'in_examination', 'completed'] })
+  listDoctorAppointments(
+    @Req() req: Request,
+    @Query('date') date?: string,
+    @Query('status') status?: string,
+  ) {
+    return this.staffAppointments.doctorAppointments(req.user!.id, { date, status })
   }
 
   @Get('lookup-ticket')

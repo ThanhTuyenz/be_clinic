@@ -19,7 +19,14 @@ export declare class BranchesController {
 export declare class DoctorsController {
     private readonly directory;
     constructor(directory: DirectoryService);
-    doctors(branchId?: string, departmentId?: string): import(".prisma/client").Prisma.PrismaPromise<{
+    doctors(branchId?: string, departmentId?: string): Promise<{
+        branchAssignments: {
+            branch: {
+                name: string;
+                id: string;
+            };
+            isPrimary: boolean;
+        }[];
         id: string;
         consultationFee: import("@prisma/client/runtime/library.js").Decimal;
         specialties: {
@@ -34,12 +41,6 @@ export declare class DoctorsController {
             id: number;
         };
         fullName: string;
-        branchAssignments: {
-            branch: {
-                name: string;
-                id: string;
-            };
-        }[];
         academicRank: string;
     }[]>;
     availableDates(doctorId: string, branchId: string): Promise<string[]>;

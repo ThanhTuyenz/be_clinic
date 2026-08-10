@@ -26,7 +26,7 @@ const auth_module_js_1 = require("./modules/auth/auth-local/auth.module.js");
 const jwt_auth_core_module_js_1 = require("./modules/auth/jwt-auth-core/jwt-auth-core.module.js");
 const clinic_rooms_module_js_1 = require("./modules/clinic-rooms/clinic-rooms.module.js");
 const doctors_module_js_1 = require("./modules/doctors/doctors.module.js");
-const examinations_module_js_1 = require("./modules/examinations/examinations.module.js");
+const medical_visits_module_js_1 = require("./modules/medical-visits/medical-visits.module.js");
 const permissions_guard_js_1 = require("./modules/permissions/guards/permissions.guard.js");
 const jwt_auth_guard_js_1 = require("./modules/auth/auth-local/guards/jwt-auth.guard.js");
 const database_module_js_1 = require("./database/database.module.js");
@@ -38,7 +38,9 @@ const redis_module_js_1 = require("./infrastructure/cache/redis/redis.module.js"
 const payments_module_js_1 = require("./modules/payments/payments.module.js");
 const admin_dashboard_module_js_1 = require("./modules/admin-dashboard/admin-dashboard.module.js");
 const clinical_catalog_module_js_1 = require("./modules/clinical-catalog/clinical-catalog.module.js");
+const medical_records_module_js_1 = require("./modules/medical-records/medical-records.module.js");
 const system_catalog_module_js_1 = require("./modules/system-catalog/system-catalog.module.js");
+const inventory_module_js_1 = require("./modules/inventory/inventory.module.js");
 let AppModule = class AppModule {
 };
 exports.AppModule = AppModule;
@@ -72,14 +74,16 @@ exports.AppModule = AppModule = __decorate([
             doctors_module_js_1.DoctorsModule,
             clinic_rooms_module_js_1.ClinicRoomsModule,
             appointments_module_js_1.AppointmentsModule,
-            examinations_module_js_1.ExaminationsModule,
+            medical_visits_module_js_1.MedicalVisitsModule,
             contacts_module_js_1.ContactsModule,
             rabbitmq_module_js_1.RabbitMqModule,
             patients_module_js_1.PatientsModule,
             payments_module_js_1.PaymentsModule,
             admin_dashboard_module_js_1.AdminDashboardModule,
             clinical_catalog_module_js_1.ClinicalCatalogModule,
+            medical_records_module_js_1.MedicalRecordsModule,
             system_catalog_module_js_1.SystemCatalogModule,
+            inventory_module_js_1.InventoryModule,
         ],
         controllers: [],
         providers: [

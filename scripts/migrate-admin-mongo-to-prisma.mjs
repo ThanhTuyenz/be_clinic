@@ -53,7 +53,7 @@ async function migrateMedicines(db) {
   return { source: rows.length, migrated }
 }
 
-async function migrateExaminations(db) {
+async function migrateMedicalVisits(db) {
   const rows = await db.collection('examination').find({}).toArray()
   let migrated = 0
   let skippedIncompatibleAppointmentId = 0
@@ -63,16 +63,27 @@ async function migrateExaminations(db) {
       skippedIncompatibleAppointmentId++
       continue
     }
-    const appointment = await prisma.appointment.findUnique({ where: { id: appointmentId }, select: { doctor: { select: { userId: true } } } })
+    const appointment = await prisma.appointment.findUnique({
+      where: { id: appointmentId },
+      select: { patientProfileId: true, doctor: { select: { userId: true } } },
+    })
     if (!appointment) {
       skippedIncompatibleAppointmentId++
       continue
     }
     const { _id, appointmentId: _legacyAppointmentId, createdAt, updatedAt, ...payload } = row
-    await prisma.examination.upsert({
+    const medicalRecord = await prisma.medicalRecord.upsert({
+      where: { patientProfileId: appointment.patientProfileId },
+      update: {},
+      create: {
+        patientProfileId: appointment.patientProfileId,
+        recordCode: `MR-${appointment.patientProfileId.replaceAll('-', '').slice(0, 12).toUpperCase()}`,
+      },
+    })
+    await prisma.medicalVisit.upsert({
       where: { appointmentId },
       update: { payload },
-      create: { appointmentId, createdById: appointment.doctor.userId, payload },
+      create: { medicalRecordId: medicalRecord.id, appointmentId, createdById: appointment.doctor.userId, payload },
     })
     migrated++
   }
@@ -83,8 +94,8 @@ try {
   await mongo.connect()
   const db = mongo.db(mongoDbName)
   const medicines = await migrateMedicines(db)
-  const examinations = await migrateExaminations(db)
-  console.log(JSON.stringify({ medicines, examinations }, null, 2))
+  const medicalVisits = await migrateMedicalVisits(db)
+  console.log(JSON.stringify({ medicines, medicalVisits }, null, 2))
 } finally {
   await Promise.allSettled([mongo.close(), prisma.$disconnect()])
 }

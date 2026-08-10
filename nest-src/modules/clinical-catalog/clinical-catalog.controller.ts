@@ -20,4 +20,19 @@ export class ClinicalCatalogController {
   icd10(@Req() request: Request, @Query('q') q = '', @Query('limit') limit = '20', @Query('deptID') departmentId?: string) {
     return this.catalog.icd10(request.user!.id, q, Number(limit), departmentId ? Number(departmentId) : undefined)
   }
+
+  @Get('clinical-services')
+  clinicalServices(
+    @Req() request: Request,
+    @Query('q') q = '',
+    @Query('limit') limit = '25',
+    @Query('departmentId') departmentId?: string,
+  ) {
+    return this.catalog.clinicalServices(
+      request.user!.id,
+      q,
+      Number(limit),
+      departmentId ? Number(departmentId) : undefined,
+    )
+  }
 }

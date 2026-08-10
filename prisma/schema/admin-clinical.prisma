@@ -1,60 +1,168 @@
-model Examination {
-  id            String      @id @default(uuid()) @db.Uuid
-  appointmentId String      @unique @map("appointment_id") @db.Uuid
-  createdById   String      @map("created_by_id") @db.Uuid
-  payload       Json
-  createdAt     DateTime    @default(now()) @map("created_at") @db.Timestamptz(3)
-  updatedAt     DateTime    @updatedAt @map("updated_at") @db.Timestamptz(3)
-  appointment   Appointment @relation(fields: [appointmentId], references: [id], onDelete: Cascade)
-  createdBy     User        @relation(fields: [createdById], references: [id], onDelete: Restrict)
+model MedicalVisit {
+  id              String             @id @default(uuid()) @db.Uuid
+  medicalRecordId String             @map("medical_record_id") @db.Uuid
+  appointmentId   String?            @unique @map("appointment_id") @db.Uuid
+  doctorId        String             @map("doctor_id") @db.Uuid
+  branchId        String             @map("branch_id") @db.Uuid
+  createdById     String             @map("created_by_id") @db.Uuid
+  status          MedicalVisitStatus @default(DRAFT)
+  symptoms        String?            @db.Text
+  clinicalNotes   String?            @map("clinical_notes") @db.Text
+  treatmentPlan   String?            @map("treatment_plan") @db.Text
+  followUpAt      DateTime?          @map("follow_up_at") @db.Timestamptz(3)
+  finalizedAt     DateTime?          @map("finalized_at") @db.Timestamptz(3)
+  payload         Json // Legacy compatibility during dual-write migration.
+  createdAt       DateTime           @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt       DateTime           @updatedAt @map("updated_at") @db.Timestamptz(3)
+  medicalRecord   MedicalRecord      @relation(fields: [medicalRecordId], references: [id], onDelete: Restrict)
+  appointment     Appointment?       @relation(fields: [appointmentId], references: [id], onDelete: SetNull)
+  doctor          Doctor             @relation(fields: [doctorId], references: [id], onDelete: Restrict)
+  branch          Branch             @relation(fields: [branchId], references: [id], onDelete: Restrict)
+  createdBy       User               @relation(fields: [createdById], references: [id], onDelete: Restrict)
+  vitals          VisitVitals?
+  diagnoses       VisitDiagnosis[]
+  prescription    Prescription?
+  clinicalOrders  ClinicalOrder[]
 
+  @@index([medicalRecordId, createdAt])
+  @@index([doctorId, status, createdAt])
+  @@index([branchId, createdAt])
   @@index([createdById, updatedAt])
-  @@map("examinations")
+  @@map("medical_visits")
+}
+
+model VisitVitals {
+  medicalVisitId  String       @id @map("medical_visit_id") @db.Uuid
+  temperature     Decimal?     @db.Decimal(4, 1)
+  respiratoryRate Int?         @map("respiratory_rate")
+  systolicBp      Int?         @map("systolic_bp")
+  diastolicBp     Int?         @map("diastolic_bp")
+  pulse           Int?
+  heightCm        Decimal?     @map("height_cm") @db.Decimal(5, 2)
+  weightKg        Decimal?     @map("weight_kg") @db.Decimal(5, 2)
+  spo2            Decimal?     @db.Decimal(5, 2)
+  medicalVisit    MedicalVisit @relation(fields: [medicalVisitId], references: [id], onDelete: Cascade)
+
+  @@map("visit_vitals")
+}
+
+model VisitDiagnosis {
+  id             BigInt       @id @default(autoincrement())
+  medicalVisitId String       @map("medical_visit_id") @db.Uuid
+  icd10CodeId    String       @map("icd10_code_id") @db.Uuid
+  isPrimary      Boolean      @default(false) @map("is_primary")
+  note           String?      @db.Text
+  medicalVisit   MedicalVisit @relation(fields: [medicalVisitId], references: [id], onDelete: Cascade)
+  icd10Code      Icd10Code    @relation(fields: [icd10CodeId], references: [id], onDelete: Restrict)
+
+  @@unique([medicalVisitId, icd10CodeId])
+  @@index([icd10CodeId])
+  @@map("visit_diagnoses")
+}
+
+model Prescription {
+  id             String             @id @default(uuid()) @db.Uuid
+  medicalVisitId String             @unique @map("medical_visit_id") @db.Uuid
+  status         PrescriptionStatus @default(DRAFT)
+  note           String?            @db.Text
+  issuedAt       DateTime?          @map("issued_at") @db.Timestamptz(3)
+  createdAt      DateTime           @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt      DateTime           @updatedAt @map("updated_at") @db.Timestamptz(3)
+  medicalVisit   MedicalVisit       @relation(fields: [medicalVisitId], references: [id], onDelete: Cascade)
+  items          PrescriptionItem[]
+
+  @@map("prescriptions")
+}
+
+model PrescriptionItem {
+  id              BigInt       @id @default(autoincrement())
+  prescriptionId  String       @map("prescription_id") @db.Uuid
+  medicineId      String       @map("medicine_id") @db.Uuid
+  medicineName    String       @map("medicine_name") @db.VarChar(255)
+  strength        String?      @db.VarChar(100)
+  unit            String?      @db.VarChar(50)
+  quantity        Decimal      @db.Decimal(10, 2)
+  dosageAmount    String       @map("dosage_amount") @db.VarChar(100)
+  frequencyPerDay Int?         @map("frequency_per_day")
+  durationDays    Int?         @map("duration_days")
+  instructions    String?      @db.Text
+  prescription    Prescription @relation(fields: [prescriptionId], references: [id], onDelete: Cascade)
+  medicine        Medicine     @relation(fields: [medicineId], references: [id], onDelete: Restrict)
+
+  @@index([prescriptionId])
+  @@index([medicineId])
+  @@map("prescription_items")
+}
+
+model ClinicalOrder {
+  id               String              @id @default(uuid()) @db.Uuid
+  medicalVisitId   String              @map("medical_visit_id") @db.Uuid
+  medicalServiceId String              @map("medical_service_id") @db.Uuid
+  status           ClinicalOrderStatus @default(ORDERED)
+  serviceName      String              @map("service_name") @db.VarChar(200)
+  price            Decimal             @db.Decimal(12, 2)
+  note             String?             @db.Text
+  resultPayload    Json?               @map("result_payload")
+  orderedAt        DateTime            @default(now()) @map("ordered_at") @db.Timestamptz(3)
+  completedAt      DateTime?           @map("completed_at") @db.Timestamptz(3)
+  medicalVisit     MedicalVisit        @relation(fields: [medicalVisitId], references: [id], onDelete: Cascade)
+  medicalService   MedicalService      @relation(fields: [medicalServiceId], references: [id], onDelete: Restrict)
+
+  @@index([medicalVisitId, status])
+  @@index([medicalServiceId, orderedAt])
+  @@map("clinical_orders")
 }
 
 model Medicine {
-  id        String   @id @default(uuid()) @db.Uuid
-  code      String   @unique @db.VarChar(50)
-  name      String   @db.VarChar(255)
-  activeIngredient String? @map("active_ingredient") @db.VarChar(255)
-  strength  String?  @db.VarChar(100)
-  unit      String?  @db.VarChar(50)
-  unitPrice Decimal  @default(0) @map("unit_price") @db.Decimal(12, 2)
-  stockQuantity Int  @default(0) @map("stock_quantity")
-  isActive  Boolean  @default(true) @map("is_active")
-  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
-  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+  id                String              @id @default(uuid()) @db.Uuid
+  code              String              @unique @db.VarChar(50)
+  name              String              @db.VarChar(255)
+  activeIngredient  String?             @map("active_ingredient") @db.VarChar(255)
+  strength          String?             @db.VarChar(100)
+  unit              String?             @db.VarChar(50)
+  unitPrice         Decimal             @default(0) @map("unit_price") @db.Decimal(12, 2)
+  stockQuantity     Int                 @default(0) @map("stock_quantity")
+  isActive          Boolean             @default(true) @map("is_active")
+  createdAt         DateTime            @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt         DateTime            @updatedAt @map("updated_at") @db.Timestamptz(3)
+  prescriptionItems PrescriptionItem[]
+  stocks            InventoryStock[]
+  movements         InventoryMovement[]
 
-  @@index([name, isActive])
+  @@index([isActive, name])
   @@map("medicines")
 }
 
 model MedicalService {
-  id           String      @id @default(uuid()) @db.Uuid
-  departmentId Int?        @map("department_id")
-  code         String      @unique @db.VarChar(50)
-  name         String      @db.VarChar(200)
-  description  String?     @db.Text
-  price        Decimal     @default(0) @db.Decimal(12, 2)
-  durationMin  Int         @default(30) @map("duration_min")
-  isActive     Boolean     @default(true) @map("is_active")
-  createdAt    DateTime    @default(now()) @map("created_at") @db.Timestamptz(3)
-  updatedAt    DateTime    @updatedAt @map("updated_at") @db.Timestamptz(3)
-  department   Department? @relation(fields: [departmentId], references: [id], onDelete: SetNull)
+  id             String          @id @default(uuid()) @db.Uuid
+  departmentId   Int?            @map("department_id")
+  code           String          @unique @db.VarChar(50)
+  name           String          @db.VarChar(200)
+  description    String?         @db.Text
+  price          Decimal         @default(0) @db.Decimal(12, 2)
+  durationMin    Int             @default(30) @map("duration_min")
+  isActive       Boolean         @default(true) @map("is_active")
+  createdAt      DateTime        @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt      DateTime        @updatedAt @map("updated_at") @db.Timestamptz(3)
+  department     Department?     @relation(fields: [departmentId], references: [id], onDelete: SetNull)
+  clinicalOrders ClinicalOrder[]
 
   @@index([departmentId, isActive])
-  @@index([name, isActive])
+  @@index([isActive, name])
   @@map("medical_services")
 }
 
 model Icd10Code {
-  id           String   @id @default(uuid()) @db.Uuid
-  code         String   @unique @db.VarChar(20)
-  description  String   @db.VarChar(500)
-  departmentId Int?     @map("department_id")
-  isActive     Boolean  @default(true) @map("is_active")
-  createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  id             String           @id @default(uuid()) @db.Uuid
+  code           String           @unique @db.VarChar(20)
+  description    String           @db.VarChar(500)
+  departmentId   Int?             @map("department_id")
+  isActive       Boolean          @default(true) @map("is_active")
+  createdAt      DateTime         @default(now()) @map("created_at") @db.Timestamptz(3)
+  department     Department?      @relation(fields: [departmentId], references: [id], onDelete: SetNull)
+  visitDiagnoses VisitDiagnosis[]
 
-  @@index([description, isActive])
+  @@index([departmentId, isActive])
+  @@index([isActive, code])
   @@map("icd10_codes")
 }
