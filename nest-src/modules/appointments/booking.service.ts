@@ -1,4 +1,4 @@
-import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ConflictException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { AppointmentStatus, PaymentStatus, Prisma } from '@prisma/client';
 import { createHash, randomBytes } from 'crypto';
@@ -76,8 +76,7 @@ export class BookingService {
         const invoice = await tx.invoice.create({
           data: {
             appointmentId: appointment.id,
-            patientProfileId: profile.id,
-            branchId: slot.schedule.branchId,
+            issuedBranchId: slot.schedule.branchId,
             totalAmount: slot.schedule.doctor.consultationFee,
             items: { create: { description: 'Phí khám', quantity: 1, unitPrice: slot.schedule.doctor.consultationFee, amount: slot.schedule.doctor.consultationFee } },
           },
@@ -173,18 +172,67 @@ export class BookingService {
   async paymentStatus(appointmentId: string, accountId: string) {
     const row = await this.prisma.appointment.findFirst({
       where: { id: appointmentId, patientProfile: { accountId } },
-      include: { invoice: { include: { payments: { orderBy: { createdAt: 'desc' }, take: 1 } } }, qrToken: true },
+      include: { invoice: { include: { payments: { orderBy: { createdAt: 'desc' }, take: 1 } } }, qrToken: true, scheduleSlot: { include: { schedule: { include: { room: true, branch: true } } } } },
     });
     if (!row) throw new NotFoundException('Không tìm thấy lịch hẹn');
-    return { appointmentId: row.id, status: row.status, holdExpiresAt: row.holdExpiresAt, paymentStatus: row.invoice?.payments[0]?.status ?? null, hasQr: Boolean(row.qrToken) };
+    return {
+      appointmentId: row.id, status: row.status, holdExpiresAt: row.holdExpiresAt,
+      paymentStatus: row.invoice?.payments[0]?.status ?? null, hasQr: Boolean(row.qrToken),
+      bookingCode: row.bookingCode,
+      estimatedQueueNumber: row.queueNumber ?? row.scheduleSlot.nextQueueNumber + 1,
+      room: row.scheduleSlot.schedule.room ? { id: row.scheduleSlot.schedule.room.id, code: row.scheduleSlot.schedule.room.code, name: row.scheduleSlot.schedule.room.name } : null,
+      branch: { id: row.scheduleSlot.schedule.branch.id, name: row.scheduleSlot.schedule.branch.name, address: row.scheduleSlot.schedule.branch.address },
+    };
   }
 
-  async checkIn(rawToken: string, actorId: string) {
+  async issueCheckInPass(appointmentId: string, accountId: string) {
+    const row = await this.prisma.appointment.findFirst({
+      where: { id: appointmentId, patientProfile: { accountId } },
+      include: { patientProfile: true, doctor: true, scheduleSlot: { include: { schedule: { include: { room: true, branch: true } } } } },
+    });
+    if (!row) throw new NotFoundException('Không tìm thấy lịch hẹn');
+    if (!['BOOKED', 'CHECKED_IN'].includes(row.status)) throw new ConflictException('Lịch hẹn chưa sẵn sàng check-in');
+    if (!row.scheduleSlot.schedule.room) throw new ConflictException('Ca khám chưa được phân phòng');
+
+    const rawToken = randomBytes(32).toString('base64url');
+    const tokenHash = createHash('sha256').update(rawToken).digest('hex');
+    const appointmentDate = row.scheduleSlot.schedule.workDate.toISOString().slice(0, 10);
+    const expiresAt = new Date(`${appointmentDate}T23:59:59.999+07:00`);
+    await this.prisma.appointmentQrToken.upsert({
+      where: { appointmentId: row.id },
+      update: { tokenHash, expiresAt, usedAt: row.status === 'CHECKED_IN' ? new Date() : null },
+      create: { appointmentId: row.id, tokenHash, expiresAt },
+    });
+    return {
+      appointmentId: row.id,
+      bookingCode: row.bookingCode,
+      qrPayload: `VITACARE_CHECKIN:${rawToken}`,
+      expiresAt,
+      status: row.status,
+      queueNumber: row.queueNumber,
+      estimatedQueueNumber: row.queueNumber ?? row.scheduleSlot.nextQueueNumber + 1,
+      appointmentDate,
+      startTime: row.scheduleSlot.startTime.toISOString().slice(11, 16),
+      endTime: row.scheduleSlot.endTime.toISOString().slice(11, 16),
+      room: { id: row.scheduleSlot.schedule.room.id, code: row.scheduleSlot.schedule.room.code, name: row.scheduleSlot.schedule.room.name },
+      branch: { id: row.scheduleSlot.schedule.branch.id, name: row.scheduleSlot.schedule.branch.name, address: row.scheduleSlot.schedule.branch.address },
+      doctor: { id: row.doctor.id, fullName: row.doctor.fullName },
+      patient: { id: row.patientProfile.id, fullName: row.patientProfile.fullName },
+    };
+  }
+
+  async checkIn(rawPayload: string, actorId: string | null, channel: 'KIOSK' | 'RECEPTIONIST') {
+    const rawToken = String(rawPayload || '').trim().replace(/^VITACARE_CHECKIN:/, '');
+    if (!rawToken) throw new BadRequestException('Thiếu mã QR check-in');
+    if (channel === 'RECEPTIONIST') {
+      const actor = await this.prisma.user.findUnique({ where: { id: actorId || '' }, select: { role: true } });
+      if (!actor || !['ADMIN', 'BRANCH_MANAGER', 'RECEPTIONIST'].includes(actor.role)) throw new ForbiddenException('Không có quyền check-in bệnh nhân');
+    }
     const tokenHash = createHash('sha256').update(rawToken).digest('hex');
     return this.prisma.$transaction(async (tx) => {
-      const qr = await tx.appointmentQrToken.findUnique({ where: { tokenHash }, include: { appointment: true } });
+      const qr = await tx.appointmentQrToken.findUnique({ where: { tokenHash }, include: { appointment: { include: { patientProfile: true, doctor: true, scheduleSlot: { include: { schedule: { include: { room: true } } } } } } } });
       if (!qr || qr.expiresAt <= new Date()) throw new NotFoundException('QR không hợp lệ hoặc đã hết hạn');
-      if (qr.appointment.status === 'CHECKED_IN') return { appointmentId: qr.appointment.id, queueNumber: qr.appointment.queueNumber, status: qr.appointment.status };
+      if (qr.appointment.status === 'CHECKED_IN') return this.checkInResult(qr.appointment, channel);
       if (qr.appointment.status !== 'BOOKED') throw new ConflictException('APPOINTMENT_NOT_CHECKIN_READY');
       const [counter] = await tx.$queryRaw<Array<{ nextQueueNumber: number }>>`
         UPDATE "doctor_schedule_slots"
@@ -192,10 +240,14 @@ export class BookingService {
         WHERE "id" = ${qr.appointment.scheduleSlotId}::uuid
         RETURNING "next_queue_number" AS "nextQueueNumber"
       `;
-      const appointment = await tx.appointment.update({ where: { id: qr.appointment.id }, data: { status: 'CHECKED_IN', queueNumber: counter.nextQueueNumber, checkedInAt: new Date(), checkedInById: actorId, statusHistories: { create: { fromStatus: 'BOOKED', toStatus: 'CHECKED_IN', actorId } } } });
+      const appointment = await tx.appointment.update({ where: { id: qr.appointment.id }, data: { status: 'CHECKED_IN', queueNumber: counter.nextQueueNumber, checkedInAt: new Date(), checkedInById: actorId, statusHistories: { create: { fromStatus: 'BOOKED', toStatus: 'CHECKED_IN', actorId, reason: `CHECK_IN_${channel}` } } }, include: { patientProfile: true, doctor: true, scheduleSlot: { include: { schedule: { include: { room: true } } } } } });
       await tx.appointmentQrToken.update({ where: { id: qr.id }, data: { usedAt: new Date() } });
-      return { appointmentId: appointment.id, queueNumber: appointment.queueNumber, status: appointment.status };
+      return this.checkInResult(appointment, channel);
     }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
+  }
+
+  private checkInResult(appointment: any, channel: 'KIOSK' | 'RECEPTIONIST') {
+    return { appointmentId: appointment.id, bookingCode: appointment.bookingCode, queueNumber: appointment.queueNumber, status: appointment.status, channel, checkedInAt: appointment.checkedInAt, patient: { fullName: appointment.patientProfile?.fullName }, doctor: { fullName: appointment.doctor?.fullName }, room: appointment.scheduleSlot?.schedule?.room ? { code: appointment.scheduleSlot.schedule.room.code, name: appointment.scheduleSlot.schedule.room.name } : null };
   }
 
   private async confirmPaid(tx: Prisma.TransactionClient, paymentId: string, invoiceId: string, appointmentId: string, provider: string, dto: PaymentWebhookDto, late: boolean) {

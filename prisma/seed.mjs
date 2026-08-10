@@ -15,10 +15,8 @@ const roles = [
 ];
 
 function dateOnly(daysFromNow) {
-  const value = new Date();
-  value.setUTCHours(0, 0, 0, 0);
-  value.setUTCDate(value.getUTCDate() + daysFromNow);
-  return value;
+  const localNow = new Date();
+  return new Date(Date.UTC(localNow.getFullYear(), localNow.getMonth(), localNow.getDate() + daysFromNow));
 }
 
 function time(hour, minute = 0) {
@@ -53,13 +51,18 @@ async function main() {
     }));
   }
 
-  for (const [index, branch] of branches.entries()) {
-    await prisma.clinicRoom.upsert({
-      where: { branchId_code: { branchId: branch.id, code: `P${index + 1}01` } },
-      update: { name: `Phòng khám ${index + 1}01`, isActive: true },
-      create: { branchId: branch.id, code: `P${index + 1}01`, name: `Phòng khám ${index + 1}01` },
-    });
+  const rooms = [];
+  for (const [code, name] of [['P101', 'Phòng khám Nội 101'], ['P102', 'Phòng khám Nhi 102']]) {
+    rooms.push(await prisma.clinicRoom.upsert({
+      where: { branchId_code: { branchId: branches[0].id, code } },
+      update: { name, isActive: true }, create: { branchId: branches[0].id, code, name },
+    }));
   }
+  await prisma.clinicRoom.upsert({
+    where: { branchId_code: { branchId: branches[1].id, code: 'P201' } },
+    update: { name: 'Phòng khám 201', isActive: true },
+    create: { branchId: branches[1].id, code: 'P201', name: 'Phòng khám 201' },
+  });
 
   for (const email of ['manager@vitacare.local', 'pharmacist@vitacare.local', 'cashier@vitacare.local', 'receptionist@vitacare.local']) {
     await prisma.userBranchAssignment.upsert({
@@ -74,8 +77,8 @@ async function main() {
   const pediatricSpecialty = await prisma.specialty.upsert({ where: { departmentId_name: { departmentId: pediatrics.id, name: 'Nhi tổng quát' } }, update: {}, create: { departmentId: pediatrics.id, name: 'Nhi tổng quát' } });
 
   const doctorInputs = [
-    { email: 'doctor.cardio@vitacare.local', department: cardio, specialty: cardioSpecialty, fee: 300000 },
-    { email: 'doctor.pediatrics@vitacare.local', department: pediatrics, specialty: pediatricSpecialty, fee: 250000 },
+    { email: 'doctor.cardio@vitacare.local', department: cardio, specialty: cardioSpecialty, fee: 300000, room: rooms[0] },
+    { email: 'doctor.pediatrics@vitacare.local', department: pediatrics, specialty: pediatricSpecialty, fee: 250000, room: rooms[1] },
   ];
   const doctors = new Map();
   const slotsByDoctor = new Map();
@@ -89,7 +92,11 @@ async function main() {
     doctors.set(input.email, doctor);
     slotsByDoctor.set(input.email, []);
     await prisma.doctorSpecialty.upsert({ where: { doctorId_specialtyId: { doctorId: doctor.id, specialtyId: input.specialty.id } }, update: { isPrimary: true }, create: { doctorId: doctor.id, specialtyId: input.specialty.id, isPrimary: true } });
-    await prisma.doctorBranchAssignment.upsert({ where: { doctorId_branchId: { doctorId: doctor.id, branchId: branches[0].id } }, update: {}, create: { doctorId: doctor.id, branchId: branches[0].id, isPrimary: true } });
+    await prisma.userBranchAssignment.upsert({
+      where: { userId_branchId: { userId: user.id, branchId: branches[0].id } },
+      update: { isPrimary: true },
+      create: { userId: user.id, branchId: branches[0].id, isPrimary: true },
+    });
 
     const existingTemplate = await prisma.doctorScheduleTemplate.findFirst({
       where: { doctorId: doctor.id, branchId: branches[0].id, dayOfWeek: 1, isActive: true },
@@ -113,8 +120,8 @@ async function main() {
       if (workDate.getUTCDay() === 0 && day !== 0) continue;
       const schedule = await prisma.doctorSchedule.upsert({
         where: { doctorId_branchId_workDate_startTime: { doctorId: doctor.id, branchId: branches[0].id, workDate, startTime: time(8) } },
-        update: { status: 'OPEN' },
-        create: { doctorId: doctor.id, branchId: branches[0].id, workDate, startTime: time(8), endTime: time(11, 30), status: 'OPEN' },
+        update: { status: 'OPEN', roomId: input.room.id },
+        create: { doctorId: doctor.id, branchId: branches[0].id, roomId: input.room.id, workDate, startTime: time(8), endTime: time(11, 30), status: 'OPEN' },
       });
       for (const [startHour, endHour, endMinute, capacity] of [[8, 9, 0, 5], [9, 10, 0, 5], [10, 11, 0, 5], [11, 11, 30, 2]]) {
         const slot = await prisma.doctorScheduleSlot.upsert({
@@ -173,10 +180,31 @@ async function seedBookingTables({ users, doctors, slotsByDoctor, branches, main
   if (!pediatricDoctor || pediatricSlots.length < 2) throw new Error('Không đủ timeslot Nhi khoa để seed booking');
   const cashier = users.get('cashier@vitacare.local');
   const receptionist = users.get('receptionist@vitacare.local');
+  const hypertension = await prisma.icd10Code.upsert({
+    where: { code: 'I10' },
+    update: { description: 'Tăng huyết áp vô căn', isActive: true },
+    create: { code: 'I10', description: 'Tăng huyết áp vô căn', isActive: true },
+  });
+  const amlodipine = await prisma.medicine.upsert({
+    where: { code: 'MED-AMLO-5' },
+    update: { name: 'Amlodipine', activeIngredient: 'Amlodipine', strength: '5 mg', unit: 'viên', unitPrice: 1200, stockQuantity: 500, isActive: true },
+    create: { code: 'MED-AMLO-5', name: 'Amlodipine', activeIngredient: 'Amlodipine', strength: '5 mg', unit: 'viên', unitPrice: 1200, stockQuantity: 500 },
+  });
+  const ecgService = await prisma.medicalService.upsert({
+    where: { code: 'ECG-REST' },
+    update: { name: 'Điện tâm đồ lúc nghỉ', price: 150000, durationMin: 20, isActive: true },
+    create: { code: 'ECG-REST', name: 'Điện tâm đồ lúc nghỉ', price: 150000, durationMin: 20 },
+  });
+  await prisma.inventoryStock.upsert({
+    where: { branchId_medicineId: { branchId: branches[0].id, medicineId: amlodipine.id } },
+    update: { quantity: 500 },
+    create: { branchId: branches[0].id, medicineId: amlodipine.id, quantity: 500 },
+  });
   const booked = await upsertAppointment({ code: 'VC-SEED-WAIT-01', profile: mainProfile, doctor: cardioDoctor, branch: branches[0], slot: slots[0], status: 'CHECKED_IN', symptoms: 'Đau ngực nhẹ khi vận động', queueNumber: 1, checkedInById: receptionist.id });
   const waitingChild = await upsertAppointment({ code: 'VC-SEED-WAIT-02', profile: childProfile, doctor: cardioDoctor, branch: branches[0], slot: slots[0], status: 'CHECKED_IN', symptoms: 'Ho và sốt nhẹ', queueNumber: 2, checkedInById: receptionist.id });
   const pediatricWaiting1 = await upsertAppointment({ code: 'VC-PED-WAIT-01', profile: childProfile, doctor: pediatricDoctor, branch: branches[0], slot: pediatricSlots[0], status: 'CHECKED_IN', symptoms: 'Ho, sốt nhẹ và sổ mũi', queueNumber: 1, checkedInById: receptionist.id });
   const pediatricWaiting2 = await upsertAppointment({ code: 'VC-PED-WAIT-02', profile: mainProfile, doctor: pediatricDoctor, branch: branches[0], slot: pediatricSlots[0], status: 'CHECKED_IN', symptoms: 'Tái khám theo lịch hẹn', queueNumber: 2, checkedInById: receptionist.id });
+  const pediatricBookedQr = await upsertAppointment({ code: 'VC-PED-BOOKED-QR', profile: childProfile, doctor: pediatricDoctor, branch: branches[0], slot: pediatricSlots[1], status: 'BOOKED', symptoms: 'Ca test QR kiosk', queueNumber: null, checkedInById: null });
   const completed = await upsertAppointment({ code: 'VC-SEED-DONE', profile: mainProfile, doctor: cardioDoctor, branch: branches[0], slot: slots[1], status: 'COMPLETED', symptoms: 'Tái khám huyết áp', queueNumber: 1, checkedInById: receptionist.id });
   const pending = await upsertAppointment({ code: 'VC-SEED-PENDING', profile: childProfile, doctor: cardioDoctor, branch: branches[0], slot: slots[2], status: 'PENDING_PAYMENT', symptoms: 'Khám sức khỏe tổng quát', holdExpiresAt: new Date(Date.now() + 10 * 60 * 1000) });
 
@@ -184,16 +212,92 @@ async function seedBookingTables({ users, doctors, slotsByDoctor, branches, main
   await prisma.doctorScheduleSlot.update({ where: { id: slots[1].id }, data: { occupiedCount: 1, nextQueueNumber: 1 } });
   await prisma.doctorScheduleSlot.update({ where: { id: slots[2].id }, data: { occupiedCount: 1 } });
   await prisma.doctorScheduleSlot.update({ where: { id: pediatricSlots[0].id }, data: { occupiedCount: 2, nextQueueNumber: 2 } });
+  await prisma.doctorScheduleSlot.update({ where: { id: pediatricSlots[1].id }, data: { occupiedCount: 1, nextQueueNumber: 0 } });
 
   await seedPaidInvoice(booked, mainProfile, branches[0], cashier, 300000, 'seed-payment-booked');
   await seedPaidInvoice(waitingChild, childProfile, branches[0], cashier, 300000, 'seed-payment-waiting-child');
   await seedPaidInvoice(pediatricWaiting1, childProfile, branches[0], cashier, 250000, 'seed-payment-pediatric-1');
   await seedPaidInvoice(pediatricWaiting2, mainProfile, branches[0], cashier, 250000, 'seed-payment-pediatric-2');
+  await seedPaidInvoice(pediatricBookedQr, childProfile, branches[0], cashier, 250000, 'seed-payment-pediatric-qr');
   await seedPaidInvoice(completed, mainProfile, branches[0], cashier, 300000, 'seed-payment-completed');
+
+  const mainMedicalRecord = await prisma.medicalRecord.upsert({
+    where: { patientProfileId: mainProfile.id },
+    update: { bloodType: 'O+', allergies: 'Chưa ghi nhận dị ứng thuốc', chronicConditions: 'Tăng huyết áp đang theo dõi' },
+    create: {
+      patientProfileId: mainProfile.id,
+      recordCode: medicalRecordCode(mainProfile.id),
+      bloodType: 'O+',
+      allergies: 'Chưa ghi nhận dị ứng thuốc',
+      chronicConditions: 'Tăng huyết áp đang theo dõi',
+    },
+  });
+  await prisma.medicalRecord.upsert({
+    where: { patientProfileId: childProfile.id },
+    update: {},
+    create: { patientProfileId: childProfile.id, recordCode: medicalRecordCode(childProfile.id) },
+  });
+  const completedVisit = await prisma.medicalVisit.upsert({
+    where: { appointmentId: completed.id },
+    update: {
+      medicalRecordId: mainMedicalRecord.id,
+      doctorId: cardioDoctor.id,
+      branchId: branches[0].id,
+      status: 'FINALIZED',
+      symptoms: 'Tái khám huyết áp',
+      treatmentPlan: 'Theo dõi huyết áp tại nhà và tái khám đúng hẹn',
+      finalizedAt: new Date(),
+    },
+    create: {
+      medicalRecordId: mainMedicalRecord.id,
+      appointmentId: completed.id,
+      doctorId: cardioDoctor.id,
+      branchId: branches[0].id,
+      createdById: cardioDoctor.userId,
+      status: 'FINALIZED',
+      symptoms: 'Tái khám huyết áp',
+      treatmentPlan: 'Theo dõi huyết áp tại nhà và tái khám đúng hẹn',
+      finalizedAt: new Date(),
+      payload: {
+        symptoms: 'Tái khám huyết áp',
+        diagnosisCode: 'I10',
+        diagnosisName: 'Tăng huyết áp vô căn',
+        diagnosis: 'I10 – Tăng huyết áp vô căn',
+        treatment: 'Theo dõi huyết áp tại nhà và tái khám đúng hẹn',
+        bp: '135/85',
+        pulse: '78',
+        prescriptionLines: [],
+        clinicalOrders: [],
+      },
+    },
+  });
+  await prisma.visitVitals.upsert({
+    where: { medicalVisitId: completedVisit.id },
+    update: { systolicBp: 135, diastolicBp: 85, pulse: 78 },
+    create: { medicalVisitId: completedVisit.id, systolicBp: 135, diastolicBp: 85, pulse: 78 },
+  });
+  await prisma.visitDiagnosis.upsert({
+    where: { medicalVisitId_icd10CodeId: { medicalVisitId: completedVisit.id, icd10CodeId: hypertension.id } },
+    update: { isPrimary: true },
+    create: { medicalVisitId: completedVisit.id, icd10CodeId: hypertension.id, isPrimary: true },
+  });
+  const seedPrescription = await prisma.prescription.upsert({
+    where: { medicalVisitId: completedVisit.id },
+    update: { status: 'ISSUED', issuedAt: new Date() },
+    create: { medicalVisitId: completedVisit.id, status: 'ISSUED', issuedAt: new Date() },
+  });
+  await prisma.prescriptionItem.deleteMany({ where: { prescriptionId: seedPrescription.id } });
+  await prisma.prescriptionItem.create({
+    data: { prescriptionId: seedPrescription.id, medicineId: amlodipine.id, medicineName: amlodipine.name, strength: amlodipine.strength, unit: amlodipine.unit, quantity: 30, dosageAmount: '1 viên/lần', frequencyPerDay: 1, durationDays: 30, instructions: 'Uống buổi sáng sau ăn' },
+  });
+  await prisma.clinicalOrder.deleteMany({ where: { medicalVisitId: completedVisit.id } });
+  await prisma.clinicalOrder.create({
+    data: { medicalVisitId: completedVisit.id, medicalServiceId: ecgService.id, serviceName: ecgService.name, price: ecgService.price, status: 'COMPLETED', completedAt: new Date() },
+  });
   const pendingInvoice = await prisma.invoice.upsert({
     where: { appointmentId: pending.id },
-    update: { status: 'UNPAID', totalAmount: 300000, cashierId: null, paidAt: null },
-    create: { appointmentId: pending.id, patientProfileId: childProfile.id, branchId: branches[0].id, totalAmount: 300000 },
+    update: { issuedBranchId: branches[0].id, status: 'UNPAID', totalAmount: 300000, cashierId: null, paidAt: null },
+    create: { appointmentId: pending.id, issuedBranchId: branches[0].id, totalAmount: 300000 },
   });
   await replaceInvoiceItem(pendingInvoice.id, 300000);
   await prisma.paymentTransaction.upsert({
@@ -217,6 +321,10 @@ async function seedBookingTables({ users, doctors, slotsByDoctor, branches, main
   ] });
 }
 
+function medicalRecordCode(patientProfileId) {
+  return `MR-${String(patientProfileId).replaceAll('-', '').slice(0, 12).toUpperCase()}`;
+}
+
 async function upsertAppointment({ code, profile, doctor, branch, slot, status, symptoms, queueNumber, checkedInById, holdExpiresAt }) {
   const appointment = await prisma.appointment.upsert({
     where: { bookingCode: code },
@@ -229,7 +337,7 @@ async function upsertAppointment({ code, profile, doctor, branch, slot, status, 
 }
 
 async function seedPaidInvoice(appointment, profile, branch, cashier, amount, idempotencyKey) {
-  const invoice = await prisma.invoice.upsert({ where: { appointmentId: appointment.id }, update: { patientProfileId: profile.id, branchId: branch.id, cashierId: cashier.id, totalAmount: amount, status: 'PAID', paidAt: new Date() }, create: { appointmentId: appointment.id, patientProfileId: profile.id, branchId: branch.id, cashierId: cashier.id, totalAmount: amount, status: 'PAID', paidAt: new Date() } });
+  const invoice = await prisma.invoice.upsert({ where: { appointmentId: appointment.id }, update: { issuedBranchId: branch.id, cashierId: cashier.id, totalAmount: amount, status: 'PAID', paidAt: new Date() }, create: { appointmentId: appointment.id, issuedBranchId: branch.id, cashierId: cashier.id, totalAmount: amount, status: 'PAID', paidAt: new Date() } });
   await replaceInvoiceItem(invoice.id, amount);
   await prisma.paymentTransaction.upsert({ where: { idempotencyKey }, update: { invoiceId: invoice.id, status: 'SUCCESS', paidAt: new Date(), amount }, create: { invoiceId: invoice.id, provider: 'VIETQR_SANDBOX', providerTransactionId: `provider-${idempotencyKey}`, idempotencyKey, method: 'VIETQR', amount, status: 'SUCCESS', paidAt: new Date(), rawPayload: { seed: true } } });
 }

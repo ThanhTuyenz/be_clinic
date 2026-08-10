@@ -62,6 +62,13 @@ export class StaffAppointmentsService {
         method: payment?.method?.toLowerCase(),
         paidAt: row.invoice.paidAt,
       } : null,
+      medicalVisit: row.medicalVisit ? {
+        ...(row.medicalVisit.payload as object),
+        id: row.medicalVisit.id,
+        appointmentId: row.medicalVisit.appointmentId,
+        medicalRecordId: row.medicalVisit.medicalRecordId,
+        updatedAt: row.medicalVisit.updatedAt,
+      } : null,
     }
   }
 
@@ -71,14 +78,39 @@ export class StaffAppointmentsService {
       doctor: { include: { department: true } },
       scheduleSlot: { include: { schedule: { include: { room: true } } } },
       invoice: { include: { payments: { orderBy: { createdAt: 'desc' as const }, take: 1 } } },
+      medicalVisit: true,
     }
   }
 
-  async doctorAppointments(userId: string) {
+  async doctorAppointments(userId: string, query: { date?: string; status?: string } = {}) {
     const user = await this.prisma.user.findUnique({ where: { id: userId }, select: { role: true, doctor: { select: { id: true } } } })
     if (!user || (user.role !== 'ADMIN' && user.role !== 'DOCTOR')) throw new ForbiddenException('Không có quyền xem lịch bác sĩ')
+    const requestedStatus = String(query.status || '').trim().toUpperCase()
+    const statusAliases: Record<string, string> = {
+      PENDING: 'PENDING_PAYMENT',
+      CONFIRMED: 'BOOKED',
+      EXAMINED: 'COMPLETED',
+    }
+    const status = statusAliases[requestedStatus] || requestedStatus
+    const allowedStatuses = ['PENDING_PAYMENT', 'BOOKED', 'CHECKED_IN', 'IN_EXAMINATION', 'COMPLETED', 'CANCELLED', 'NO_SHOW']
+    if (status && status !== 'ALL' && !allowedStatuses.includes(status)) {
+      throw new BadRequestException('Trạng thái lọc không hợp lệ')
+    }
+    let dateRange: { gte: Date; lt: Date } | undefined
+    if (query.date) {
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(query.date)) throw new BadRequestException('Ngày lọc không hợp lệ')
+      const start = new Date(`${query.date}T00:00:00.000Z`)
+      if (Number.isNaN(start.getTime())) throw new BadRequestException('Ngày lọc không hợp lệ')
+      const end = new Date(start)
+      end.setUTCDate(end.getUTCDate() + 1)
+      dateRange = { gte: start, lt: end }
+    }
     const rows = await this.prisma.appointment.findMany({
-      where: user.role === 'DOCTOR' ? { doctorId: user.doctor?.id || '__none__' } : {},
+      where: {
+        ...(user.role === 'DOCTOR' ? { doctorId: user.doctor?.id || '__none__' } : {}),
+        ...(status && status !== 'ALL' ? { status: status as any } : {}),
+        ...(dateRange ? { scheduleSlot: { schedule: { workDate: dateRange } } } : {}),
+      },
       include: this.appointmentInclude(),
       orderBy: { scheduleSlot: { schedule: { workDate: 'asc' } } },
     })
@@ -130,7 +162,25 @@ export class StaffAppointmentsService {
   }
 
   async patientHistory(userId: string, patientId: string) {
-    await this.roleOf(userId)
+    if (!patientId) throw new BadRequestException('Thiếu mã bệnh nhân')
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: { role: true, doctor: { select: { id: true } }, patientProfiles: { select: { id: true } } },
+    })
+    if (!user) throw new ForbiddenException('Tài khoản không hợp lệ')
+    if (user.role === 'DOCTOR') {
+      const assigned = await this.prisma.appointment.findFirst({
+        where: { patientProfileId: patientId, doctorId: user.doctor?.id || '__none__' },
+        select: { id: true },
+      })
+      if (!assigned) throw new ForbiddenException('Bệnh nhân chưa từng được phân công cho bác sĩ này')
+    } else if (user.role === 'PATIENT') {
+      if (!user.patientProfiles.some((profile) => profile.id === patientId)) {
+        throw new ForbiddenException('Không có quyền xem bệnh sử này')
+      }
+    } else if (!['ADMIN', 'BRANCH_MANAGER', 'RECEPTIONIST'].includes(user.role)) {
+      throw new ForbiddenException('Không có quyền xem bệnh sử')
+    }
     const rows = await this.prisma.appointment.findMany({ where: { patientProfileId: patientId }, include: this.appointmentInclude(), orderBy: { createdAt: 'desc' } })
     return { appointments: rows.map((row) => this.serialize(row)) }
   }
@@ -238,8 +288,7 @@ export class StaffAppointmentsService {
       await tx.invoice.create({
         data: {
           appointmentId,
-          patientProfileId,
-          branchId: slot.schedule.branchId,
+          issuedBranchId: slot.schedule.branchId,
           totalAmount: doctor.consultationFee,
           items: { create: { description: 'Phí khám', quantity: 1, unitPrice: doctor.consultationFee, amount: doctor.consultationFee } },
         },
@@ -315,12 +364,15 @@ export class StaffAppointmentsService {
     })
   }
 
-  async finishExamination(userId: string, appointmentId: string) {
+  async finishMedicalVisit(userId: string, appointmentId: string) {
     const user = await this.prisma.user.findUnique({
       where: { id: userId },
       select: { role: true, doctor: { select: { id: true } } },
     })
-    const appointment = await this.prisma.appointment.findUnique({ where: { id: appointmentId } })
+    const appointment = await this.prisma.appointment.findUnique({
+      where: { id: appointmentId },
+      include: { medicalVisit: { include: { diagnoses: true } } },
+    })
     if (!appointment) throw new NotFoundException('Không tìm thấy lịch khám')
     if (!user || (user.role !== 'ADMIN' && (user.role !== 'DOCTOR' || user.doctor?.id !== appointment.doctorId))) {
       throw new ForbiddenException('Không được kết thúc phiên khám này')
@@ -328,12 +380,28 @@ export class StaffAppointmentsService {
     if (!['CHECKED_IN', 'IN_EXAMINATION'].includes(appointment.status)) {
       throw new BadRequestException('Trạng thái lịch khám không cho phép kết thúc')
     }
+    if (appointment.status !== 'IN_EXAMINATION') {
+      throw new BadRequestException('Bác sĩ phải bắt đầu khám trước khi kết thúc')
+    }
+    const medicalVisit = appointment.medicalVisit?.payload as Record<string, unknown> | undefined
+    if (!medicalVisit) throw new BadRequestException('Chưa có hồ sơ lần khám')
+    if (!appointment.medicalVisit?.diagnoses.length && !String(medicalVisit.diagnosisCode || '').trim()) {
+      throw new BadRequestException('Chưa chọn chẩn đoán ICD-10')
+    }
     return this.prisma.$transaction(async (tx) => {
-      const updated = await tx.appointment.update({ where: { id: appointmentId }, data: { status: 'COMPLETED' } })
+      const result = await tx.appointment.updateMany({
+        where: { id: appointmentId, status: 'IN_EXAMINATION' },
+        data: { status: 'COMPLETED' },
+      })
+      if (result.count !== 1) throw new BadRequestException('Lịch khám vừa được cập nhật, vui lòng tải lại')
       await tx.appointmentStatusHistory.create({
         data: { appointmentId, fromStatus: appointment.status, toStatus: 'COMPLETED', actorId: userId },
       })
-      return updated
+      await tx.medicalVisit.update({
+        where: { appointmentId },
+        data: { status: 'FINALIZED', finalizedAt: new Date() },
+      })
+      return tx.appointment.findUniqueOrThrow({ where: { id: appointmentId }, include: this.appointmentInclude() })
     })
   }
 }

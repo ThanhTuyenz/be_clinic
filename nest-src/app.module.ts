@@ -14,7 +14,7 @@ import { AuthModule } from './modules/auth/auth-local/auth.module.js'
 import { JwtAuthCoreModule } from './modules/auth/jwt-auth-core/jwt-auth-core.module.js'
 import { ClinicRoomsModule } from './modules/clinic-rooms/clinic-rooms.module.js'
 import { DoctorsModule } from './modules/doctors/doctors.module.js'
-import { ExaminationsModule } from './modules/examinations/examinations.module.js'
+import { MedicalVisitsModule } from './modules/medical-visits/medical-visits.module.js'
 import { PermissionsGuard } from './modules/permissions/guards/permissions.guard.js'
 import { JwtAuthGuard } from './modules/auth/auth-local/guards/jwt-auth.guard.js'
 import { DatabaseModule } from './database/database.module.js'
@@ -26,7 +26,9 @@ import { RedisModule } from './infrastructure/cache/redis/redis.module.js'
 import { PaymentsModule } from './modules/payments/payments.module.js'
 import { AdminDashboardModule } from './modules/admin-dashboard/admin-dashboard.module.js'
 import { ClinicalCatalogModule } from './modules/clinical-catalog/clinical-catalog.module.js'
+import { MedicalRecordsModule } from './modules/medical-records/medical-records.module.js'
 import { SystemCatalogModule } from './modules/system-catalog/system-catalog.module.js'
+import { InventoryModule } from './modules/inventory/inventory.module.js'
 
 @Module({
   imports: [
@@ -57,14 +59,16 @@ import { SystemCatalogModule } from './modules/system-catalog/system-catalog.mod
     DoctorsModule,
     ClinicRoomsModule,
     AppointmentsModule,
-    ExaminationsModule,
+    MedicalVisitsModule,
     ContactsModule,
     RabbitMqModule,
     PatientsModule,
     PaymentsModule,
     AdminDashboardModule,
     ClinicalCatalogModule,
+    MedicalRecordsModule,
     SystemCatalogModule,
+    InventoryModule,
   ],
   controllers: [],
   providers: [

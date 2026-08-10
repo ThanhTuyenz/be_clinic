@@ -24,15 +24,48 @@ model Branch {
   clinic             Clinic                    @relation(fields: [clinicId], references: [id], onDelete: Cascade)
   rooms              ClinicRoom[]
   userAssignments    UserBranchAssignment[]
-  doctorAssignments  DoctorBranchAssignment[]
   scheduleTemplates  DoctorScheduleTemplate[]
   scheduleExceptions DoctorScheduleException[]
   schedules          DoctorSchedule[]
   appointments       Appointment[]
-  invoices           Invoice[]
+  issuedInvoices     Invoice[]
+  medicalVisits      MedicalVisit[]
+  inventoryStocks    InventoryStock[]
+  inventoryMovements InventoryMovement[]
 
   @@index([clinicId, isActive])
   @@map("branches")
+}
+
+model InventoryStock {
+  branchId   String   @map("branch_id") @db.Uuid
+  medicineId String   @map("medicine_id") @db.Uuid
+  quantity   Decimal  @default(0) @db.Decimal(14, 2)
+  updatedAt  DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+  branch     Branch   @relation(fields: [branchId], references: [id], onDelete: Restrict)
+  medicine   Medicine @relation(fields: [medicineId], references: [id], onDelete: Restrict)
+
+  @@id([branchId, medicineId])
+  @@map("inventory_stocks")
+}
+
+model InventoryMovement {
+  id          BigInt                @id @default(autoincrement())
+  branchId    String                @map("branch_id") @db.Uuid
+  medicineId  String                @map("medicine_id") @db.Uuid
+  type        InventoryMovementType
+  quantity    Decimal               @db.Decimal(14, 2)
+  referenceId String?               @map("reference_id") @db.VarChar(100)
+  note        String?               @db.Text
+  createdById String                @map("created_by_id") @db.Uuid
+  createdAt   DateTime              @default(now()) @map("created_at") @db.Timestamptz(3)
+  branch      Branch                @relation(fields: [branchId], references: [id], onDelete: Restrict)
+  medicine    Medicine              @relation(fields: [medicineId], references: [id], onDelete: Restrict)
+  createdBy   User                  @relation(fields: [createdById], references: [id], onDelete: Restrict)
+
+  @@index([branchId, medicineId, createdAt])
+  @@index([referenceId])
+  @@map("inventory_movements")
 }
 
 model ClinicRoom {

@@ -26,8 +26,8 @@ export class StaffAppointmentsController {
     return this.staffAppointments.recordPayment(request.user!.id, id, body)
   }
 
-  @Patch(':id/finish-exam')
+  @Patch(':id/finish-visit')
   finish(@Req() request: Request, @Param('id') id: string) {
-    return this.staffAppointments.finishExamination(request.user!.id, id)
+    return this.staffAppointments.finishMedicalVisit(request.user!.id, id)
   }
 }

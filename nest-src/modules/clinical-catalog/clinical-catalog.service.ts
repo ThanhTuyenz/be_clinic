@@ -38,4 +38,25 @@ export class ClinicalCatalogService {
     })
     return { items: rows }
   }
+
+  async clinicalServices(userId: string, q = '', limit = 25, departmentId?: number) {
+    await this.assertStaff(userId)
+    const term = q.trim()
+    const rows = await this.prisma.medicalService.findMany({
+      where: {
+        isActive: true,
+        ...(departmentId ? { departmentId } : {}),
+        ...(term ? {
+          OR: [
+            { code: { contains: term, mode: 'insensitive' } },
+            { name: { contains: term, mode: 'insensitive' } },
+          ],
+        } : {}),
+      },
+      include: { department: { select: { id: true, name: true } } },
+      orderBy: { name: 'asc' },
+      take: Math.min(Math.max(limit, 1), 100),
+    })
+    return { items: rows.map((row) => ({ ...row, price: Number(row.price) })) }
+  }
 }

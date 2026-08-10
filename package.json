@@ -3,9 +3,6 @@
   "private": true,
   "version": "0.0.1",
   "type": "commonjs",
-  "prisma": {
-    "schema": "prisma/schema"
-  },
   "scripts": {
     "start": "nest start",
     "dev": "nest start --watch",
@@ -15,6 +12,7 @@
     "prisma:migrate": "prisma migrate dev",
     "prisma:deploy": "prisma migrate deploy",
     "prisma:studio": "prisma studio",
+    "prisma:seed": "prisma db seed",
     "seed:prisma": "node prisma/seed.mjs",
     "migrate:auth:mongo-to-prisma": "node scripts/migrate-auth-to-prisma.mjs",
     "migrate:admin:mongo-to-prisma": "node scripts/migrate-admin-mongo-to-prisma.mjs",
