@@ -21,6 +21,12 @@ export class BookingController {
     return this.bookingService.checkout(request.user!.id, dto);
   }
 
+  @Get('my-bookings')
+  @ApiOperation({ summary: 'Danh sách lịch khám của tài khoản bệnh nhân' })
+  myAppointments(@Req() request: Request) {
+    return this.bookingService.myAppointments(request.user!.id);
+  }
+
   @Get(':id/payment-status')
   @ApiOperation({ summary: 'Kiểm tra trạng thái thanh toán/lịch hẹn' })
   @ApiParam({ name: 'id', format: 'uuid' })
