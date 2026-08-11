@@ -57,7 +57,8 @@ model Specialty {
   description  String?
   department   Department        @relation(fields: [departmentId], references: [id], onDelete: Restrict)
   doctors      DoctorSpecialty[]
-  services     SpecialtyService[]
+  servicePackages ServicePackage[]
+  branches     BranchSpecialty[]
 
   @@unique([departmentId, name])
   @@map("specialties")

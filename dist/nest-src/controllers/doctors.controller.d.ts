@@ -26,6 +26,9 @@ export declare class PublicDirectoryController {
             specialties: {
                 name: string;
                 id: number;
+                branches: {
+                    branchId: string;
+                }[];
             }[];
         }[];
         branches: {
@@ -57,6 +60,9 @@ export declare class PublicDirectoryController {
             specialties: {
                 name: string;
                 id: number;
+                branches: {
+                    branchId: string;
+                }[];
             }[];
         }[];
         featuredDoctors: {
@@ -89,6 +95,7 @@ export declare class PublicDirectoryController {
             ratingCount: number;
             isFeatured: boolean;
         }[];
+        specialtyPackages: any[];
         healthPackages: {
             branchId: string;
             branchBookingMethodId: string;
@@ -140,9 +147,12 @@ export declare class PublicDirectoryController {
             name: string;
             description: string;
             id: number;
+            branches: {
+                branchId: string;
+            }[];
         }[];
     }[]>;
-    specialtyServices(branchId: string, specialtyId: string): Promise<{
+    specialtyServices(branchId: string | undefined, specialtyId: string): Promise<{
         branchId: string;
         branchBookingMethodId: string;
         bookingMethod: {
@@ -157,6 +167,21 @@ export declare class PublicDirectoryController {
         code: string;
         price: import("@prisma/client/runtime/library.js").Decimal;
         durationMin: number;
+    }[]>;
+    servicePackageScheduleDates(packageId: string): Promise<string[]>;
+    servicePackageTimeslots(packageId: string, date: string): Promise<{
+        startTime: string;
+        endTime: string;
+        remainingCapacity: number;
+        isAvailable: boolean;
+        id: string;
+        createdAt: Date;
+        updatedAt: Date;
+        isActive: boolean;
+        scheduleId: string;
+        capacity: number;
+        occupiedCount: number;
+        nextQueueNumber: number;
     }[]>;
     healthPackages(branchId?: string): Promise<{
         branchId: string;

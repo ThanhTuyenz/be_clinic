@@ -37,10 +37,16 @@ export class PublicDirectoryController {
   specialties() { return this.directory.specialties(); }
 
   @Get('specialty-services')
-  @ApiOperation({ summary: 'Dịch vụ khám bắt buộc theo chi nhánh và chuyên khoa' })
-  specialtyServices(@Query('branchId') branchId: string, @Query('specialtyId') specialtyId: string) {
+  @ApiOperation({ summary: 'Dịch vụ khám theo chuyên khoa, có thể lọc theo chi nhánh' })
+  specialtyServices(@Query('branchId') branchId: string | undefined, @Query('specialtyId') specialtyId: string) {
     return this.directory.specialtyServices(branchId, Number(specialtyId));
   }
+
+  @Get('service-package-schedule-dates')
+  servicePackageScheduleDates(@Query('packageId') packageId: string) { return this.directory.servicePackageScheduleDates(packageId); }
+
+  @Get('service-package-timeslots')
+  servicePackageTimeslots(@Query('packageId') packageId: string, @Query('date') date: string) { return this.directory.servicePackageTimeslots(packageId, date); }
 
   @Get('health-packages')
   @ApiOperation({ summary: 'Danh sách gói khám sức khỏe công khai' })

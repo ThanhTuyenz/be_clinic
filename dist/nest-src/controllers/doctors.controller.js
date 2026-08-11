@@ -58,6 +58,8 @@ let PublicDirectoryController = class PublicDirectoryController {
     specialtyServices(branchId, specialtyId) {
         return this.directory.specialtyServices(branchId, Number(specialtyId));
     }
+    servicePackageScheduleDates(packageId) { return this.directory.servicePackageScheduleDates(packageId); }
+    servicePackageTimeslots(packageId, date) { return this.directory.servicePackageTimeslots(packageId, date); }
     healthPackages(branchId) { return this.directory.healthPackages(branchId); }
     bookingMethods(branchId) { return this.directory.bookingMethods(branchId); }
 };
@@ -86,13 +88,28 @@ __decorate([
 ], PublicDirectoryController.prototype, "specialties", null);
 __decorate([
     (0, common_1.Get)('specialty-services'),
-    (0, swagger_1.ApiOperation)({ summary: 'Dịch vụ khám bắt buộc theo chi nhánh và chuyên khoa' }),
+    (0, swagger_1.ApiOperation)({ summary: 'Dịch vụ khám theo chuyên khoa, có thể lọc theo chi nhánh' }),
     __param(0, (0, common_1.Query)('branchId')),
     __param(1, (0, common_1.Query)('specialtyId')),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", [String, String]),
     __metadata("design:returntype", void 0)
 ], PublicDirectoryController.prototype, "specialtyServices", null);
+__decorate([
+    (0, common_1.Get)('service-package-schedule-dates'),
+    __param(0, (0, common_1.Query)('packageId')),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String]),
+    __metadata("design:returntype", void 0)
+], PublicDirectoryController.prototype, "servicePackageScheduleDates", null);
+__decorate([
+    (0, common_1.Get)('service-package-timeslots'),
+    __param(0, (0, common_1.Query)('packageId')),
+    __param(1, (0, common_1.Query)('date')),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String, String]),
+    __metadata("design:returntype", void 0)
+], PublicDirectoryController.prototype, "servicePackageTimeslots", null);
 __decorate([
     (0, common_1.Get)('health-packages'),
     (0, swagger_1.ApiOperation)({ summary: 'Danh sách gói khám sức khỏe công khai' }),

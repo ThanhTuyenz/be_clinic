@@ -16,7 +16,7 @@ export class DirectoryService {
         select: {
           id: true,
           name: true,
-          specialties: { orderBy: { name: 'asc' }, select: { id: true, name: true } },
+          specialties: { orderBy: { name: 'asc' }, select: { id: true, name: true, branches: { where: { isActive: true }, select: { branchId: true } } } },
         },
       }),
       this.prisma.branch.findMany({
@@ -32,7 +32,7 @@ export class DirectoryService {
   specialties() {
     return this.prisma.department.findMany({
       orderBy: { name: 'asc' },
-      select: { id: true, name: true, description: true, specialties: { orderBy: { name: 'asc' }, select: { id: true, name: true, description: true } } },
+      select: { id: true, name: true, description: true, specialties: { orderBy: { name: 'asc' }, select: { id: true, name: true, description: true, branches: { where: { isActive: true }, select: { branchId: true } } } } },
     });
   }
 
@@ -41,16 +41,26 @@ export class DirectoryService {
       ? await this.prisma.branch.findFirst({ where: { id: branchId, isActive: true }, select: { id: true, code: true, name: true, address: true, phoneNumber: true } })
       : await this.prisma.branch.findFirst({ where: { isActive: true }, orderBy: [{ code: 'asc' }, { name: 'asc' }], select: { id: true, code: true, name: true, address: true, phoneNumber: true } });
     const activeBranchId = selectedBranch?.id;
-    const [navigation, featuredDoctors, healthPackages, bookingMethods, doctorCount, specialtyCount, reviewAggregate] = await Promise.all([
+    const [navigation, featuredDoctors, specialtyPackages, healthPackages, bookingMethods, doctorCount, specialtyCount, reviewAggregate] = await Promise.all([
       this.publicNavigation(),
       this.doctors(activeBranchId, undefined, undefined, undefined, true),
+      activeBranchId ? this.homepageSpecialtyPackages(activeBranchId) : Promise.resolve([]),
       this.healthPackages(activeBranchId),
       activeBranchId ? this.bookingMethods(activeBranchId) : Promise.resolve([]),
       this.prisma.doctor.count({ where: { isActive: true, user: activeBranchId ? { branchAssignments: { some: { branchId: activeBranchId } } } : undefined } }),
       this.prisma.specialty.count(),
       this.prisma.review.aggregate({ where: { isActive: true, doctor: { isActive: true } }, _avg: { rating: true }, _count: { id: true } }),
     ]);
-    return { selectedBranch, branches: navigation.branches, departments: navigation.departments, featuredDoctors: featuredDoctors.slice(0, 6), healthPackages: healthPackages.slice(0, 6), bookingMethods, stats: { doctorCount, branchCount: navigation.branches.length, specialtyCount, reviewCount: reviewAggregate._count.id, averageRating: reviewAggregate._avg.rating ?? 0 } };
+    return { selectedBranch, branches: navigation.branches, departments: navigation.departments, featuredDoctors: featuredDoctors.slice(0, 6), specialtyPackages: specialtyPackages.slice(0, 8), healthPackages: healthPackages.slice(0, 6), bookingMethods, stats: { doctorCount, branchCount: navigation.branches.length, specialtyCount, reviewCount: reviewAggregate._count.id, averageRating: reviewAggregate._avg.rating ?? 0 } };
+  }
+
+  private async homepageSpecialtyPackages(branchId: string) {
+    const rows = await this.prisma.servicePackage.findMany({
+      where: { isActive: true, branchBookingMethod: { branchId, isEnabled: true, bookingMethod: { code: 'SPECIALTY_EXAM', isActive: true } } },
+      orderBy: [{ specialty: { name: 'asc' } }, { price: 'asc' }],
+      select: { id: true, code: true, name: true, description: true, price: true, durationMin: true, specialtyId: true, specialty: { select: { id: true, name: true } }, branchBookingMethod: { select: { branchId: true } } },
+    });
+    return rows.map(({ branchBookingMethod, ...item }) => ({ ...item, branchId: branchBookingMethod.branchId }));
   }
 
   departments(branchId: string) {
@@ -60,18 +70,37 @@ export class DirectoryService {
     });
   }
 
-  async specialtyServices(branchId: string, specialtyId: number) {
-    if (!branchId || !Number.isInteger(specialtyId)) throw new BadRequestException('Thiếu chi nhánh hoặc chuyên khoa');
-    const rows = await this.prisma.specialtyService.findMany({
-      where: { specialtyId, isActive: true, branchBookingMethod: { branchId, isEnabled: true, bookingMethod: { isActive: true } } },
+  async specialtyServices(branchId: string | undefined, specialtyId: number) {
+    if (!Number.isInteger(specialtyId)) throw new BadRequestException('Thiếu chuyên khoa');
+    const rows = await this.prisma.servicePackage.findMany({
+      where: { specialtyId, isActive: true, branchBookingMethod: { ...(branchId ? { branchId } : {}), isEnabled: true, bookingMethod: { isActive: true } } },
       orderBy: [{ price: 'asc' }, { name: 'asc' }],
       select: { id: true, code: true, name: true, description: true, price: true, durationMin: true, specialtyId: true, branchBookingMethod: { select: { id: true, branchId: true, bookingMethod: { select: { id: true, code: true, name: true } } } } },
     });
     return rows.map(({ branchBookingMethod, ...service }) => ({ ...service, branchId: branchBookingMethod.branchId, branchBookingMethodId: branchBookingMethod.id, bookingMethod: branchBookingMethod.bookingMethod }));
   }
 
+  async servicePackageScheduleDates(packageId: string) {
+    if (!packageId) throw new BadRequestException('Thiếu gói dịch vụ');
+    const rows = await this.prisma.servicePackageSchedule.findMany({
+      where: { servicePackageId: packageId, isActive: true, examDate: { gte: this.today() }, slots: { some: { isActive: true } } },
+      select: { examDate: true }, orderBy: { examDate: 'asc' }, take: 90,
+    });
+    return rows.map(({ examDate }) => examDate.toISOString().slice(0, 10));
+  }
+
+  async servicePackageTimeslots(packageId: string, date: string) {
+    if (!packageId) throw new BadRequestException('Thiếu gói dịch vụ');
+    const examDate = this.parseDate(date);
+    const rows = await this.prisma.servicePackageScheduleSlot.findMany({
+      where: { isActive: true, schedule: { servicePackageId: packageId, examDate, isActive: true } },
+      orderBy: { startTime: 'asc' },
+    });
+    return rows.map((slot) => ({ ...slot, startTime: slot.startTime.toISOString().slice(11, 16), endTime: slot.endTime.toISOString().slice(11, 16), remainingCapacity: slot.capacity - slot.occupiedCount, isAvailable: slot.occupiedCount < slot.capacity }));
+  }
+
   async healthPackages(branchId?: string) {
-    const rows = await this.prisma.healthPackage.findMany({
+    const rows = await this.prisma.servicePackage.findMany({
       where: { isActive: true, branchBookingMethod: { branchId, isEnabled: true, bookingMethod: { code: 'HEALTH_PACKAGE', isActive: true } } },
       orderBy: { name: 'asc' },
       select: {
