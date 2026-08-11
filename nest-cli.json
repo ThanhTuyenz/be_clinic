@@ -1,6 +1,6 @@
 {
   "collection": "@nestjs/schematics",
-  "sourceRoot": "nest-src",
+  "sourceRoot": "src",
   "compilerOptions": {
     "deleteOutDir": true
   }

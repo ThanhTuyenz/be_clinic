@@ -1,5 +1,0 @@
--- RenameIndex
-ALTER INDEX IF EXISTS "specialty_services_branch_booking_method_id_specialty_id_is_act" RENAME TO "specialty_services_branch_booking_method_id_specialty_id_is_idx";
-
--- RenameIndex
-ALTER INDEX IF EXISTS "specialty_services_branch_booking_method_id_specialty_id_name_k" RENAME TO "specialty_services_branch_booking_method_id_specialty_id_na_key";

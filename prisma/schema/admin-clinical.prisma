@@ -9,6 +9,14 @@ model MedicalVisit {
   symptoms        String?            @db.Text
   clinicalNotes   String?            @map("clinical_notes") @db.Text
   treatmentPlan   String?            @map("treatment_plan") @db.Text
+  temperature     Decimal?           @db.Decimal(4, 1)
+  respiratoryRate Int?               @map("respiratory_rate")
+  systolicBp      Int?               @map("systolic_bp")
+  diastolicBp     Int?               @map("diastolic_bp")
+  pulse           Int?
+  heightCm        Decimal?           @map("height_cm") @db.Decimal(5, 2)
+  weightKg        Decimal?           @map("weight_kg") @db.Decimal(5, 2)
+  spo2            Decimal?           @db.Decimal(5, 2)
   followUpAt      DateTime?          @map("follow_up_at") @db.Timestamptz(3)
   finalizedAt     DateTime?          @map("finalized_at") @db.Timestamptz(3)
   payload         Json // Legacy compatibility during dual-write migration.
@@ -19,7 +27,6 @@ model MedicalVisit {
   doctor          Doctor             @relation(fields: [doctorId], references: [id], onDelete: Restrict)
   branch          Branch             @relation(fields: [branchId], references: [id], onDelete: Restrict)
   createdBy       User               @relation(fields: [createdById], references: [id], onDelete: Restrict)
-  vitals          VisitVitals?
   diagnoses       VisitDiagnosis[]
   prescription    Prescription?
   clinicalOrders  ClinicalOrder[]
@@ -29,21 +36,6 @@ model MedicalVisit {
   @@index([branchId, createdAt])
   @@index([createdById, updatedAt])
   @@map("medical_visits")
-}
-
-model VisitVitals {
-  medicalVisitId  String       @id @map("medical_visit_id") @db.Uuid
-  temperature     Decimal?     @db.Decimal(4, 1)
-  respiratoryRate Int?         @map("respiratory_rate")
-  systolicBp      Int?         @map("systolic_bp")
-  diastolicBp     Int?         @map("diastolic_bp")
-  pulse           Int?
-  heightCm        Decimal?     @map("height_cm") @db.Decimal(5, 2)
-  weightKg        Decimal?     @map("weight_kg") @db.Decimal(5, 2)
-  spo2            Decimal?     @db.Decimal(5, 2)
-  medicalVisit    MedicalVisit @relation(fields: [medicalVisitId], references: [id], onDelete: Cascade)
-
-  @@map("visit_vitals")
 }
 
 model VisitDiagnosis {

@@ -130,9 +130,26 @@ model ClinicRoom {
   branch    Branch           @relation(fields: [branchId], references: [id], onDelete: Cascade)
   schedules DoctorSchedule[]
   servicePackageSchedules ServicePackageSchedule[]
+  specialties ClinicRoomSpecialty[]
 
   @@unique([branchId, code])
   @@map("clinic_rooms")
+}
+
+model ClinicRoomSpecialty {
+  id          String     @id @default(uuid()) @db.Uuid
+  roomId      String     @map("room_id") @db.Uuid
+  specialtyId Int        @map("specialty_id")
+  priority    Int        @default(0)
+  isActive    Boolean    @default(true) @map("is_active")
+  createdAt   DateTime   @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt   DateTime   @updatedAt @map("updated_at") @db.Timestamptz(3)
+  room        ClinicRoom @relation(fields: [roomId], references: [id], onDelete: Cascade)
+  specialty   Specialty  @relation(fields: [specialtyId], references: [id], onDelete: Cascade)
+
+  @@unique([roomId, specialtyId])
+  @@index([specialtyId, isActive, priority])
+  @@map("clinic_room_specialties")
 }
 
 model UserBranchAssignment {

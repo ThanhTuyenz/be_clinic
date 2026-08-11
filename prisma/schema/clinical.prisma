@@ -59,6 +59,7 @@ model Specialty {
   doctors      DoctorSpecialty[]
   servicePackages ServicePackage[]
   branches     BranchSpecialty[]
+  rooms        ClinicRoomSpecialty[]
 
   @@unique([departmentId, name])
   @@map("specialties")

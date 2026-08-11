@@ -36,7 +36,26 @@ function servicePackageSlots() {
   return slots;
 }
 
+async function resetApplicationData() {
+  const tables = await prisma.$queryRaw`
+    SELECT tablename
+    FROM pg_tables
+    WHERE schemaname = 'public'
+      AND tablename <> '_prisma_migrations'
+    ORDER BY tablename
+  `;
+  if (!tables.length) return;
+
+  // Tên bảng được lấy trực tiếp từ PostgreSQL; quote identifier để an toàn.
+  const identifiers = tables
+    .map(({ tablename }) => `"${String(tablename).replaceAll('"', '""')}"`)
+    .join(', ');
+  await prisma.$executeRawUnsafe(`TRUNCATE TABLE ${identifiers} RESTART IDENTITY CASCADE`);
+  console.log(`Reset completed: cleared ${tables.length} application tables (kept _prisma_migrations).`);
+}
+
 async function main() {
+  await resetApplicationData();
   const password = await bcrypt.hash('VitaCare@123', 10);
   const users = new Map();
   for (const [email, fullName, role] of roles) {
@@ -347,11 +366,6 @@ async function seedBookingTables({ users, doctors, branches, rooms }) {
   const branchMethodByCode = new Map(configuredMethods.map((item) => [item.bookingMethod.code, item]));
   const pharmacist = users.get('pharmacist@vitacare.local');
   const patientUser = users.get('patient@vitacare.local');
-  await prisma.icd10Code.upsert({
-    where: { code: 'I10' },
-    update: { description: 'Tăng huyết áp vô căn', isActive: true },
-    create: { code: 'I10', description: 'Tăng huyết áp vô căn', isActive: true },
-  });
   const amlodipine = await prisma.medicine.upsert({
     where: { code: 'MED-AMLO-5' },
     update: { name: 'Amlodipine', activeIngredient: 'Amlodipine', strength: '5 mg', unit: 'viên', unitPrice: 1200, stockQuantity: 500, isActive: true },
@@ -362,6 +376,58 @@ async function seedBookingTables({ users, doctors, branches, rooms }) {
     select: { id: true, name: true },
   });
   const serviceDepartmentIds = new Map(serviceDepartmentRows.map((department) => [department.name, department.id]));
+  // Danh mục ICD-10 WHO thông dụng dùng cho tra cứu lâm sàng; mã lưu ở mức bệnh/chẩn đoán,
+  // mô tả tiếng Việt và khoa chỉ dùng để ưu tiên/lọc trên giao diện.
+  const icd10Catalog = [
+    ['A09', 'Viêm dạ dày-ruột và viêm đại tràng do nhiễm trùng, không xác định', 'Khoa Nội'],
+    ['B35.9', 'Bệnh nấm da, không xác định', 'Khoa Da liễu'],
+    ['E03.9', 'Suy giáp, không xác định', 'Khoa Nội'],
+    ['E11.9', 'Đái tháo đường típ 2 không có biến chứng', 'Khoa Nội'],
+    ['E78.5', 'Rối loạn lipid máu, không xác định', 'Khoa Nội'],
+    ['G43.9', 'Đau nửa đầu, không xác định', 'Khoa Nội'],
+    ['H10.9', 'Viêm kết mạc, không xác định', 'Khoa Chuyên khoa Giác quan & Răng Hàm Mặt'],
+    ['H66.9', 'Viêm tai giữa, không xác định', 'Khoa Chuyên khoa Giác quan & Răng Hàm Mặt'],
+    ['H81.1', 'Chóng mặt kịch phát lành tính', 'Khoa Nội'],
+    ['I10', 'Tăng huyết áp vô căn (nguyên phát)', 'Khoa Nội'],
+    ['I20.9', 'Cơn đau thắt ngực, không xác định', 'Khoa Nội'],
+    ['I25.1', 'Bệnh tim do xơ vữa động mạch', 'Khoa Nội'],
+    ['I50.9', 'Suy tim, không xác định', 'Khoa Nội'],
+    ['J00', 'Viêm mũi họng cấp (cảm thường)', 'Khoa Nội'],
+    ['J02.9', 'Viêm họng cấp, không xác định', 'Khoa Chuyên khoa Giác quan & Răng Hàm Mặt'],
+    ['J03.9', 'Viêm amiđan cấp, không xác định', 'Khoa Chuyên khoa Giác quan & Răng Hàm Mặt'],
+    ['J06.9', 'Nhiễm trùng đường hô hấp trên cấp, không xác định', 'Khoa Nội'],
+    ['J18.9', 'Viêm phổi, không xác định tác nhân', 'Khoa Nội'],
+    ['J20.9', 'Viêm phế quản cấp, không xác định', 'Khoa Nội'],
+    ['J30.4', 'Viêm mũi dị ứng, không xác định', 'Khoa Chuyên khoa Giác quan & Răng Hàm Mặt'],
+    ['J45.9', 'Hen phế quản, không xác định', 'Khoa Nội'],
+    ['K02.9', 'Sâu răng, không xác định', 'Khoa Chuyên khoa Giác quan & Răng Hàm Mặt'],
+    ['K04.0', 'Viêm tủy răng', 'Khoa Chuyên khoa Giác quan & Răng Hàm Mặt'],
+    ['K05.1', 'Viêm lợi mạn tính', 'Khoa Chuyên khoa Giác quan & Răng Hàm Mặt'],
+    ['K21.9', 'Bệnh trào ngược dạ dày-thực quản không viêm thực quản', 'Khoa Nội'],
+    ['K29.7', 'Viêm dạ dày, không xác định', 'Khoa Nội'],
+    ['K30', 'Khó tiêu chức năng', 'Khoa Nội'],
+    ['K52.9', 'Viêm dạ dày-ruột và đại tràng không nhiễm trùng, không xác định', 'Khoa Nội'],
+    ['L20.9', 'Viêm da cơ địa, không xác định', 'Khoa Da liễu'],
+    ['L30.9', 'Viêm da, không xác định', 'Khoa Da liễu'],
+    ['M17.9', 'Thoái hóa khớp gối, không xác định', 'Khoa Ngoại'],
+    ['M54.5', 'Đau vùng thắt lưng', 'Khoa Ngoại'],
+    ['N20.0', 'Sỏi thận', 'Khoa Ngoại'],
+    ['N39.0', 'Nhiễm trùng đường tiết niệu, vị trí không xác định', 'Khoa Ngoại'],
+    ['R05', 'Ho', 'Khoa Nội'],
+    ['R10.4', 'Đau bụng khác và không xác định', 'Khoa Nội'],
+    ['R11', 'Buồn nôn và nôn', 'Khoa Nội'],
+    ['R42', 'Chóng mặt và choáng váng', 'Khoa Nội'],
+    ['R50.9', 'Sốt, không xác định', 'Khoa Nội'],
+    ['R51', 'Đau đầu', 'Khoa Nội'],
+  ];
+  for (const [code, description, departmentName] of icd10Catalog) {
+    const departmentId = serviceDepartmentIds.get(departmentName) || null;
+    await prisma.icd10Code.upsert({
+      where: { code },
+      update: { description, departmentId, isActive: true },
+      create: { code, description, departmentId, isActive: true },
+    });
+  }
   const medicalServiceCatalog = [
     // Xét nghiệm máu, sinh hóa, nước tiểu và vi sinh.
     { code: 'LAB_CBC', name: 'Công thức máu toàn bộ (CBC)', description: 'Công thức máu 18/24 thông số, tầm soát thiếu máu và nhiễm trùng.', category: 'LAB_TEST', department: 'Khoa Nội', price: 120000, durationMin: 20 },
@@ -434,7 +500,18 @@ async function seedBookingTables({ users, doctors, branches, rooms }) {
       });
     }
   }
-  for (const specialty of bookingSpecialties) {
+  // Mỗi phòng có thể phục vụ nhiều chuyên khoa; không lặp lại branchId trong bảng nối.
+  const activeRooms = await prisma.clinicRoom.findMany({ where: { isActive: true }, orderBy: [{ branchId: 'asc' }, { code: 'asc' }] });
+  for (const room of activeRooms) {
+    for (const [priority, specialty] of bookingSpecialties.entries()) {
+      await prisma.clinicRoomSpecialty.upsert({
+        where: { roomId_specialtyId: { roomId: room.id, specialtyId: specialty.id } },
+        update: { isActive: true, priority: bookingSpecialties.length - priority },
+        create: { roomId: room.id, specialtyId: specialty.id, priority: bookingSpecialties.length - priority, isActive: true },
+      });
+    }
+  }
+  for (const [specialtyIndex, specialty] of bookingSpecialties.entries()) {
     const codeSuffix = String(specialty.id).padStart(3, '0');
     const specialtyServices = [
       { code: `CONSULT-${codeSuffix}-STANDARD`, name: 'Khám dịch vụ', price: 220000, durationMin: 30, description: 'Khám trong giờ hành chính theo lịch của chuyên khoa.' },
@@ -451,13 +528,14 @@ async function seedBookingTables({ users, doctors, branches, rooms }) {
         update: { ...service, branchBookingMethodId: branchBookingMethod.id, specialtyId: specialty.id, isActive: true },
         create: { ...service, branchBookingMethodId: branchBookingMethod.id, specialtyId: specialty.id },
       });
+      const roomId = rooms[specialtyIndex % rooms.length].id;
       let scheduleDays = 0;
       for (let day = 1; scheduleDays < 10; day += 1) {
         const examDate = dateOnly(day);
         if ([0, 6].includes(examDate.getUTCDay())) continue;
         const schedule = await prisma.servicePackageSchedule.upsert({
           where: { servicePackageId_examDate: { servicePackageId: servicePackage.id, examDate } },
-          update: { isActive: true }, create: { servicePackageId: servicePackage.id, examDate },
+          update: { roomId, isActive: true }, create: { servicePackageId: servicePackage.id, roomId, examDate },
         });
         for (const slot of servicePackageSlots()) {
           await prisma.servicePackageScheduleSlot.upsert({ where: { scheduleId_startTime: { scheduleId: schedule.id, startTime: slot.startTime } }, update: { endTime: slot.endTime, capacity: slot.capacity, isActive: true }, create: { scheduleId: schedule.id, ...slot } });
