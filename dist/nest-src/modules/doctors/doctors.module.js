@@ -15,7 +15,7 @@ let DoctorsModule = class DoctorsModule {
 exports.DoctorsModule = DoctorsModule;
 exports.DoctorsModule = DoctorsModule = __decorate([
     (0, common_1.Module)({
-        controllers: [doctors_controller_js_1.DoctorsController, doctors_controller_js_1.BranchesController],
+        controllers: [doctors_controller_js_1.DoctorsController, doctors_controller_js_1.BranchesController, doctors_controller_js_1.PublicDirectoryController],
         providers: [directory_service_js_1.DirectoryService],
     })
 ], DoctorsModule);

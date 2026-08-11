@@ -12,7 +12,7 @@ var __param = (this && this.__param) || function (paramIndex, decorator) {
     return function (target, key) { decorator(target, key, paramIndex); }
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.DoctorsController = exports.BranchesController = void 0;
+exports.DoctorsController = exports.PublicDirectoryController = exports.BranchesController = void 0;
 const common_1 = require("@nestjs/common");
 const swagger_1 = require("@nestjs/swagger");
 const public_decorator_js_1 = require("../common/decorators/public.decorator.js");
@@ -47,13 +47,81 @@ exports.BranchesController = BranchesController = __decorate([
     (0, common_1.Controller)('branches'),
     __metadata("design:paramtypes", [directory_service_js_1.DirectoryService])
 ], BranchesController);
+let PublicDirectoryController = class PublicDirectoryController {
+    directory;
+    constructor(directory) {
+        this.directory = directory;
+    }
+    navigation() { return this.directory.publicNavigation(); }
+    homepage(branchId) { return this.directory.homepage(branchId); }
+    specialties() { return this.directory.specialties(); }
+    specialtyServices(branchId, specialtyId) {
+        return this.directory.specialtyServices(branchId, Number(specialtyId));
+    }
+    healthPackages(branchId) { return this.directory.healthPackages(branchId); }
+    bookingMethods(branchId) { return this.directory.bookingMethods(branchId); }
+};
+exports.PublicDirectoryController = PublicDirectoryController;
+__decorate([
+    (0, common_1.Get)('navigation'),
+    (0, swagger_1.ApiOperation)({ summary: 'Danh mục công khai dùng cho menu website bệnh nhân' }),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", []),
+    __metadata("design:returntype", void 0)
+], PublicDirectoryController.prototype, "navigation", null);
+__decorate([
+    (0, common_1.Get)('homepage'),
+    (0, swagger_1.ApiOperation)({ summary: 'Dữ liệu tổng hợp cho trang chủ website bệnh nhân' }),
+    __param(0, (0, common_1.Query)('branchId')),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String]),
+    __metadata("design:returntype", void 0)
+], PublicDirectoryController.prototype, "homepage", null);
+__decorate([
+    (0, common_1.Get)('specialties'),
+    (0, swagger_1.ApiOperation)({ summary: 'Danh sách khoa và chuyên khoa công khai' }),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", []),
+    __metadata("design:returntype", void 0)
+], PublicDirectoryController.prototype, "specialties", null);
+__decorate([
+    (0, common_1.Get)('specialty-services'),
+    (0, swagger_1.ApiOperation)({ summary: 'Dịch vụ khám bắt buộc theo chi nhánh và chuyên khoa' }),
+    __param(0, (0, common_1.Query)('branchId')),
+    __param(1, (0, common_1.Query)('specialtyId')),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String, String]),
+    __metadata("design:returntype", void 0)
+], PublicDirectoryController.prototype, "specialtyServices", null);
+__decorate([
+    (0, common_1.Get)('health-packages'),
+    (0, swagger_1.ApiOperation)({ summary: 'Danh sách gói khám sức khỏe công khai' }),
+    __param(0, (0, common_1.Query)('branchId')),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String]),
+    __metadata("design:returntype", void 0)
+], PublicDirectoryController.prototype, "healthPackages", null);
+__decorate([
+    (0, common_1.Get)('booking-methods'),
+    (0, swagger_1.ApiOperation)({ summary: 'Hình thức đặt khám đang bật tại một chi nhánh' }),
+    __param(0, (0, common_1.Query)('branchId')),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String]),
+    __metadata("design:returntype", void 0)
+], PublicDirectoryController.prototype, "bookingMethods", null);
+exports.PublicDirectoryController = PublicDirectoryController = __decorate([
+    (0, public_decorator_js_1.Public)(),
+    (0, swagger_1.ApiTags)('Public directory'),
+    (0, common_1.Controller)('public'),
+    __metadata("design:paramtypes", [directory_service_js_1.DirectoryService])
+], PublicDirectoryController);
 let DoctorsController = class DoctorsController {
     directory;
     constructor(directory) {
         this.directory = directory;
     }
-    doctors(branchId, departmentId) {
-        return this.directory.doctors(branchId, departmentId ? Number(departmentId) : undefined);
+    doctors(branchId, departmentId, specialtyId, q) {
+        return this.directory.doctors(branchId, departmentId ? Number(departmentId) : undefined, specialtyId ? Number(specialtyId) : undefined, q);
     }
     availableDates(doctorId, branchId) {
         return this.directory.availableDates(doctorId, branchId);
@@ -68,10 +136,14 @@ __decorate([
     (0, swagger_1.ApiOperation)({ summary: 'Danh sách bác sĩ theo cơ sở/chuyên khoa' }),
     (0, swagger_1.ApiQuery)({ name: 'branchId', required: false }),
     (0, swagger_1.ApiQuery)({ name: 'departmentId', required: false, type: Number }),
+    (0, swagger_1.ApiQuery)({ name: 'specialtyId', required: false, type: Number }),
+    (0, swagger_1.ApiQuery)({ name: 'q', required: false }),
     __param(0, (0, common_1.Query)('branchId')),
     __param(1, (0, common_1.Query)('departmentId')),
+    __param(2, (0, common_1.Query)('specialtyId')),
+    __param(3, (0, common_1.Query)('q')),
     __metadata("design:type", Function),
-    __metadata("design:paramtypes", [String, String]),
+    __metadata("design:paramtypes", [String, String, String, String]),
     __metadata("design:returntype", void 0)
 ], DoctorsController.prototype, "doctors", null);
 __decorate([

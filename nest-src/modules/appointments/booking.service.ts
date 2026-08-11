@@ -34,10 +34,22 @@ export class BookingService {
           throw new NotFoundException('Khung giờ không khả dụng');
         }
 
+        const specialtyService = await tx.specialtyService.findFirst({
+          where: {
+            id: dto.specialtyServiceId,
+            isActive: true,
+            branchBookingMethod: { branchId: slot.schedule.branchId, isEnabled: true, bookingMethod: { isActive: true } },
+            specialty: { doctors: { some: { doctorId: slot.schedule.doctorId } } },
+          },
+        });
+        if (!specialtyService) throw new BadRequestException('Dịch vụ khám không phù hợp với bác sĩ, chuyên khoa hoặc chi nhánh đã chọn');
+
         const duplicate = await tx.appointment.findFirst({
           where: {
             patientProfileId: profile.id,
             scheduleSlotId: slot.id,
+            specialtyServiceId: specialtyService.id,
+            servicePrice: specialtyService.price,
             status: { in: ACTIVE_APPOINTMENT_STATUSES },
           },
         });
@@ -77,8 +89,8 @@ export class BookingService {
           data: {
             appointmentId: appointment.id,
             issuedBranchId: slot.schedule.branchId,
-            totalAmount: slot.schedule.doctor.consultationFee,
-            items: { create: { description: 'Phí khám', quantity: 1, unitPrice: slot.schedule.doctor.consultationFee, amount: slot.schedule.doctor.consultationFee } },
+            totalAmount: specialtyService.price,
+            items: { create: { description: specialtyService.name, quantity: 1, unitPrice: specialtyService.price, amount: specialtyService.price } },
           },
         });
         const payment = await tx.paymentTransaction.create({

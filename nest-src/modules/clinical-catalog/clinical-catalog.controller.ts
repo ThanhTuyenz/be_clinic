@@ -27,12 +27,14 @@ export class ClinicalCatalogController {
     @Query('q') q = '',
     @Query('limit') limit = '25',
     @Query('departmentId') departmentId?: string,
+    @Query('category') category?: string,
   ) {
     return this.catalog.clinicalServices(
       request.user!.id,
       q,
       Number(limit),
       departmentId ? Number(departmentId) : undefined,
+      category,
     )
   }
 }
