@@ -51,7 +51,7 @@ export class SystemCatalogService {
     const include = resource === 'specialty-services'
       ? { branchBookingMethod: { include: { branch: { select: { id: true, name: true } }, bookingMethod: { select: { id: true, code: true, name: true } } } }, specialty: { select: { id: true, name: true } } }
       : resource === 'health-packages'
-        ? { branchBookingMethod: { include: { branch: { select: { id: true, name: true } }, bookingMethod: { select: { id: true, code: true, name: true } } } }, items: { include: { medicalService: { select: { id: true, code: true, name: true } } }, orderBy: { sortOrder: 'asc' } }, schedules: { include: { room: { select: { id: true, name: true, branchId: true } } }, orderBy: { examDate: 'asc' } } }
+        ? { branchBookingMethod: { include: { branch: { select: { id: true, name: true } }, bookingMethod: { select: { id: true, code: true, name: true } } } }, items: { include: { medicalService: { select: { id: true, code: true, name: true } } }, orderBy: { sortOrder: 'asc' } }, schedules: { include: { room: { select: { id: true, name: true, branchId: true } }, slots: { orderBy: { startTime: 'asc' } } }, orderBy: { examDate: 'asc' } } }
         : undefined
     return { items: await model.findMany({ where, include, orderBy: { name: 'asc' }, take: 200 }) }
   }
@@ -109,9 +109,25 @@ export class SystemCatalogService {
       const serviceIds = Array.isArray(b.medicalServiceIds) ? [...new Set<string>(b.medicalServiceIds.map(String).filter(Boolean))] : []
       if (!String(b.branchId || '') || !serviceIds.length) throw new BadRequestException('Vui lòng chọn chi nhánh và dịch vụ trong gói')
       const branchBookingMethodId = await this.resolveBranchMethod(b, 'HEALTH_PACKAGE')
-      const room = await this.prisma.clinicRoom.findFirst({ where: { id: String(b.roomId || ''), branchId: String(b.branchId), isActive: true } }); if (!room) throw new BadRequestException('Phòng khám không thuộc chi nhánh đã chọn')
-      const examDate = new Date(`${String(b.examDate || '')}T00:00:00.000Z`); if (Number.isNaN(examDate.getTime())) throw new BadRequestException('Ngày khám không hợp lệ')
-      return { name: String(b.name).trim(), code: String(b.code || '').trim(), description: b.description || null, branchBookingMethodId, price: Number(b.price) || 0, isActive: b.isActive ?? true, items: creating ? { create: serviceIds.map((medicalServiceId, sortOrder) => ({ medicalServiceId, sortOrder })) } : { deleteMany: {}, create: serviceIds.map((medicalServiceId, sortOrder) => ({ medicalServiceId, sortOrder })) }, schedules: creating ? { create: { roomId: room.id, examDate, capacity: Number(b.capacity) || 20 } } : { deleteMany: {}, create: { roomId: room.id, examDate, capacity: Number(b.capacity) || 20 } } }
+      const inputSchedules = Array.isArray(b.schedules) ? b.schedules : []
+      if (!inputSchedules.length) throw new BadRequestException('Vui lòng cấu hình ít nhất một ngày hoạt động')
+      const roomIds = [...new Set<string>(inputSchedules.map((item: any) => String(item.roomId || '')).filter(Boolean))]
+      const validRoomCount = await this.prisma.clinicRoom.count({ where: { id: { in: roomIds }, branchId: String(b.branchId), isActive: true } })
+      if (validRoomCount !== roomIds.length) throw new BadRequestException('Có phòng khám không thuộc chi nhánh đã chọn')
+      const schedules = inputSchedules.map((item: any) => {
+        const examDate = new Date(`${String(item.examDate || '')}T00:00:00.000Z`)
+        if (Number.isNaN(examDate.getTime())) throw new BadRequestException('Ngày khám không hợp lệ')
+        const inputSlots = Array.isArray(item.slots) ? item.slots : []
+        if (!inputSlots.length) throw new BadRequestException('Mỗi ngày hoạt động phải có ít nhất một khung giờ')
+        const slots = inputSlots.map((slot: any) => {
+          const startTime = new Date(`1970-01-01T${String(slot.startTime || '')}:00.000Z`)
+          const endTime = new Date(`1970-01-01T${String(slot.endTime || '')}:00.000Z`)
+          if (Number.isNaN(startTime.getTime()) || Number.isNaN(endTime.getTime()) || endTime <= startTime) throw new BadRequestException('Khung giờ khám không hợp lệ')
+          return { startTime, endTime, capacity: Math.max(1, Number(slot.capacity) || 20) }
+        })
+        return { roomId: String(item.roomId), examDate, slots: { create: slots } }
+      })
+      return { name: String(b.name).trim(), code: String(b.code || '').trim(), description: b.description || null, branchBookingMethodId, price: Number(b.price) || 0, isActive: b.isActive ?? true, items: creating ? { create: serviceIds.map((medicalServiceId, sortOrder) => ({ medicalServiceId, sortOrder })) } : { deleteMany: {}, create: serviceIds.map((medicalServiceId, sortOrder) => ({ medicalServiceId, sortOrder })) }, schedules: creating ? { create: schedules } : { deleteMany: {}, create: schedules } }
     }
     return { name: String(b.name).trim(), code: String(b.code || '').trim(), activeIngredient: b.activeIngredient || null, strength: b.strength || null, unit: b.unit || null, unitPrice: Number(b.unitPrice) || 0, stockQuantity: Number(b.stockQuantity) || 0, isActive: b.isActive ?? true }
   }

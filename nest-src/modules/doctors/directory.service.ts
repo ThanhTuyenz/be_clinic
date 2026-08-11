@@ -39,7 +39,7 @@ export class DirectoryService {
   async homepage(branchId?: string) {
     const selectedBranch = branchId
       ? await this.prisma.branch.findFirst({ where: { id: branchId, isActive: true }, select: { id: true, code: true, name: true, address: true, phoneNumber: true } })
-      : await this.prisma.branch.findFirst({ where: { isActive: true }, orderBy: { name: 'asc' }, select: { id: true, code: true, name: true, address: true, phoneNumber: true } });
+      : await this.prisma.branch.findFirst({ where: { isActive: true }, orderBy: [{ code: 'asc' }, { name: 'asc' }], select: { id: true, code: true, name: true, address: true, phoneNumber: true } });
     const activeBranchId = selectedBranch?.id;
     const [navigation, featuredDoctors, healthPackages, bookingMethods, doctorCount, specialtyCount, reviewAggregate] = await Promise.all([
       this.publicNavigation(),
@@ -77,7 +77,7 @@ export class DirectoryService {
       select: {
         id: true, code: true, name: true, description: true, price: true, branchBookingMethod: { select: { id: true, branchId: true } },
         items: { orderBy: { sortOrder: 'asc' }, select: { quantity: true, medicalService: { select: { id: true, code: true, name: true, category: true } } } },
-        schedules: { where: { isActive: true, examDate: { gte: this.today() } }, orderBy: { examDate: 'asc' }, select: { id: true, examDate: true, capacity: true, room: { select: { id: true, code: true, name: true } } } },
+        schedules: { where: { isActive: true, examDate: { gte: this.today() }, slots: { some: { isActive: true } } }, orderBy: { examDate: 'asc' }, select: { id: true, examDate: true, room: { select: { id: true, code: true, name: true } }, slots: { where: { isActive: true }, orderBy: { startTime: 'asc' }, select: { id: true, startTime: true, endTime: true, capacity: true, occupiedCount: true } } } },
       },
     });
     return rows.map(({ branchBookingMethod, ...healthPackage }) => ({ ...healthPackage, branchId: branchBookingMethod.branchId, branchBookingMethodId: branchBookingMethod.id }));
@@ -97,7 +97,7 @@ export class DirectoryService {
     if (specialtyId !== undefined && !Number.isInteger(specialtyId)) throw new BadRequestException('specialtyId không hợp lệ');
     const term = q?.trim();
     const rows = await this.prisma.doctor.findMany({
-      where: { isActive: true, isFeatured: featuredOnly ? true : undefined, departmentId, fullName: term ? { contains: term, mode: 'insensitive' } : undefined, specialties: specialtyId ? { some: { specialtyId } } : undefined, user: branchId ? { branchAssignments: { some: { branchId } } } : undefined },
+      where: { isActive: true, departmentId, fullName: term ? { contains: term, mode: 'insensitive' } : undefined, specialties: specialtyId ? { some: { specialtyId } } : undefined, user: branchId ? { branchAssignments: { some: { branchId } } } : undefined },
       orderBy: featuredOnly ? [{ ratingAverage: 'desc' }, { fullName: 'asc' }] : [{ isFeatured: 'desc' }, { ratingAverage: 'desc' }, { fullName: 'asc' }],
       select: { id: true, fullName: true, academicRank: true, experienceYears: true, biography: true, consultationFee: true, ratingAverage: true, ratingCount: true, isFeatured: true, department: { select: { id: true, name: true } }, user: { select: { branchAssignments: { where: branchId ? { branchId } : undefined, select: { isPrimary: true, branch: { select: { id: true, name: true, address: true } } } } } }, specialties: { select: { isPrimary: true, specialty: { select: { id: true, name: true } } } } },
     });

@@ -205,8 +205,8 @@ async function main() {
     const user = users.get(input.email);
     const doctor = await prisma.doctor.upsert({
       where: { userId: user.id },
-      update: { fullName: user.fullName, departmentId: input.department.id, consultationFee: input.fee, isActive: true },
-      create: { userId: user.id, fullName: user.fullName, departmentId: input.department.id, consultationFee: input.fee, academicRank: 'Bác sĩ CKI' },
+      update: { fullName: user.fullName, departmentId: input.department.id, consultationFee: input.fee, isActive: true, isFeatured: true },
+      create: { userId: user.id, fullName: user.fullName, departmentId: input.department.id, consultationFee: input.fee, academicRank: 'Bác sĩ CKI', isFeatured: true },
     });
     doctors.set(input.email, doctor);
     slotsByDoctor.set(input.email, []);
@@ -425,9 +425,26 @@ async function seedBookingTables({ users, doctors, slotsByDoctor, branches, room
     });
     await prisma.healthPackageItem.createMany({ data: items });
     await prisma.healthPackageSchedule.deleteMany({ where: { healthPackageId: healthPackage.id } });
-    await prisma.healthPackageSchedule.create({
-      data: { healthPackageId: healthPackage.id, roomId: rooms[0].id, examDate: dateOnly(7 + packageIndex), capacity: 20 },
-    });
+    let weekdaysCreated = 0;
+    for (let day = 1; weekdaysCreated < 10; day += 1) {
+      const examDate = dateOnly(day);
+      const dayOfWeek = examDate.getUTCDay();
+      if (dayOfWeek === 0 || dayOfWeek === 6) continue;
+      await prisma.healthPackageSchedule.create({
+        data: {
+          healthPackageId: healthPackage.id,
+          roomId: rooms[packageIndex % rooms.length].id,
+          examDate,
+          slots: {
+            create: [
+              { startTime: time(8), endTime: time(11, 30), capacity: 20 },
+              { startTime: time(13, 30), endTime: time(16, 30), capacity: 20 },
+            ],
+          },
+        },
+      });
+      weekdaysCreated += 1;
+    }
   }
   const ecgService = medicalServicesByCode.get('PROC_ECG');
   await prisma.inventoryStock.upsert({

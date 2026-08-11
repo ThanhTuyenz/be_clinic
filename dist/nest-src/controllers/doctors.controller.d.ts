@@ -106,7 +106,13 @@ export declare class PublicDirectoryController {
             }[];
             schedules: {
                 id: string;
-                capacity: number;
+                slots: {
+                    id: string;
+                    startTime: Date;
+                    endTime: Date;
+                    capacity: number;
+                    occupiedCount: number;
+                }[];
                 room: {
                     name: string;
                     id: string;
@@ -169,7 +175,13 @@ export declare class PublicDirectoryController {
         }[];
         schedules: {
             id: string;
-            capacity: number;
+            slots: {
+                id: string;
+                startTime: Date;
+                endTime: Date;
+                capacity: number;
+                occupiedCount: number;
+            }[];
             room: {
                 name: string;
                 id: string;

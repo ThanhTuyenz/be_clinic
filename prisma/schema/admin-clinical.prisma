@@ -202,17 +202,35 @@ model HealthPackageSchedule {
   healthPackageId String   @map("health_package_id") @db.Uuid
   roomId          String   @map("room_id") @db.Uuid
   examDate        DateTime @map("exam_date") @db.Date
-  capacity        Int      @default(20)
   isActive        Boolean  @default(true) @map("is_active")
   createdAt       DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt       DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
 
   healthPackage HealthPackage @relation(fields: [healthPackageId], references: [id], onDelete: Cascade)
   room          ClinicRoom    @relation(fields: [roomId], references: [id], onDelete: Restrict)
+  slots         HealthPackageScheduleSlot[]
 
   @@unique([healthPackageId, roomId, examDate])
   @@index([examDate, isActive])
   @@map("health_package_schedules")
+}
+
+model HealthPackageScheduleSlot {
+  id            String   @id @default(uuid()) @db.Uuid
+  scheduleId    String   @map("schedule_id") @db.Uuid
+  startTime     DateTime @map("start_time") @db.Time(0)
+  endTime       DateTime @map("end_time") @db.Time(0)
+  capacity      Int      @default(20)
+  occupiedCount Int      @default(0) @map("occupied_count")
+  isActive      Boolean  @default(true) @map("is_active")
+  createdAt     DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt     DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  schedule HealthPackageSchedule @relation(fields: [scheduleId], references: [id], onDelete: Cascade)
+
+  @@unique([scheduleId, startTime])
+  @@index([scheduleId, isActive])
+  @@map("health_package_schedule_slots")
 }
 
 model HealthPackageItem {
