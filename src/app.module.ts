@@ -29,6 +29,7 @@ import { ClinicalCatalogModule } from './modules/clinical-catalog/clinical-catal
 import { MedicalRecordsModule } from './modules/medical-records/medical-records.module.js'
 import { SystemCatalogModule } from './modules/system-catalog/system-catalog.module.js'
 import { InventoryModule } from './modules/inventory/inventory.module.js'
+import { ClinicalQueueModule } from './modules/clinical-queue/clinical-queue.module.js'
 
 @Module({
   imports: [
@@ -69,6 +70,7 @@ import { InventoryModule } from './modules/inventory/inventory.module.js'
     MedicalRecordsModule,
     SystemCatalogModule,
     InventoryModule,
+    ClinicalQueueModule,
   ],
   controllers: [],
   providers: [

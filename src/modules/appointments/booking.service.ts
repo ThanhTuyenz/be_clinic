@@ -1,7 +1,7 @@
 import { BadRequestException, ConflictException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { AppointmentStatus, PaymentStatus, Prisma } from '@prisma/client';
-import { createHash, randomBytes } from 'crypto';
+import { createHash, createHmac } from 'crypto';
 import { RabbitMqConfig } from '../../config/config.type.js';
 import { PrismaService } from '../../infrastructure/database/prisma/prisma.service.js';
 import { CheckoutAppointmentDto } from './dtos/checkout-appointment.dto.js';
@@ -17,6 +17,52 @@ export class BookingService {
     private readonly prisma: PrismaService,
     private readonly config: ConfigService,
   ) {}
+
+  private checkInToken(appointmentId: string) {
+    const secret = this.config.get<string>('auth.secret');
+    if (!secret) throw new Error('Thiếu AUTH_JWT_SECRET để phát hành QR check-in');
+    return createHmac('sha256', secret).update(`check-in:${appointmentId}`).digest('base64url');
+  }
+
+  /**
+   * Số dự kiến chỉ dành cho lịch đã thanh toán (BOOKED). Nó xếp các lịch đang
+   * chờ check-in trong cùng slot sau bộ đếm số thật đã cấp. queueNumber vẫn chỉ
+   * được ghi khi check-in.
+   */
+  private async estimatedQueueNumber(row: {
+    id: string;
+    status: AppointmentStatus;
+    createdAt: Date;
+    queueNumber: number | null;
+    scheduleSlotId: string | null;
+    servicePackageScheduleSlotId: string | null;
+    scheduleSlot?: { nextQueueNumber: number } | null;
+    servicePackageScheduleSlot?: { nextQueueNumber: number } | null;
+  }) {
+    if (row.queueNumber != null) return row.queueNumber;
+    if (row.status !== 'BOOKED') return null;
+    const slotFilter = row.servicePackageScheduleSlotId
+      ? { servicePackageScheduleSlotId: row.servicePackageScheduleSlotId }
+      : row.scheduleSlotId
+        ? { scheduleSlotId: row.scheduleSlotId }
+        : null;
+    if (!slotFilter) return null;
+    const bookedAheadOrSelf = await this.prisma.appointment.count({
+      where: {
+        ...slotFilter,
+        status: 'BOOKED',
+        queueNumber: null,
+        OR: [
+          { createdAt: { lt: row.createdAt } },
+          { createdAt: row.createdAt, id: { lte: row.id } },
+        ],
+      },
+    });
+    const issuedCount = row.servicePackageScheduleSlot?.nextQueueNumber
+      ?? row.scheduleSlot?.nextQueueNumber
+      ?? 0;
+    return issuedCount + bookedAheadOrSelf;
+  }
 
   async checkout(accountId: string, dto: CheckoutAppointmentDto) {
     try {
@@ -219,11 +265,12 @@ export class BookingService {
     const packageSlot = row.servicePackageScheduleSlot;
     const room = doctorSlot?.schedule.room ?? packageSlot?.schedule.room;
     const branch = doctorSlot?.schedule.branch ?? packageSlot?.schedule.servicePackage.branchBookingMethod.branch;
+    const estimatedQueueNumber = await this.estimatedQueueNumber(row);
     return {
       appointmentId: row.id, status: row.status, holdExpiresAt: row.holdExpiresAt,
       paymentStatus: row.invoice?.payments[0]?.status ?? null, hasQr: Boolean(row.qrToken),
       bookingCode: row.bookingCode,
-      estimatedQueueNumber: row.queueNumber ?? (doctorSlot ? doctorSlot.nextQueueNumber + 1 : packageSlot ? packageSlot.nextQueueNumber + 1 : null),
+      estimatedQueueNumber,
       room: room ? { id: room.id, code: room.code, name: room.name } : null,
       branch: branch ? { id: branch.id, name: branch.name, address: branch.address } : null,
     };
@@ -290,7 +337,7 @@ export class BookingService {
     const branch = doctorSlot?.schedule.branch ?? row.branch;
     if (!branch) throw new ConflictException('Không xác định được cơ sở khám');
 
-    const rawToken = randomBytes(32).toString('base64url');
+    const rawToken = this.checkInToken(row.id);
     const tokenHash = createHash('sha256').update(rawToken).digest('hex');
     const appointmentDate = (doctorSlot?.schedule.workDate ?? packageSlot!.schedule.examDate).toISOString().slice(0, 10);
     const expiresAt = new Date(`${appointmentDate}T23:59:59.999+07:00`);
@@ -299,6 +346,7 @@ export class BookingService {
       update: { tokenHash, expiresAt, usedAt: row.status === 'CHECKED_IN' ? new Date() : null },
       create: { appointmentId: row.id, tokenHash, expiresAt },
     });
+    const estimatedQueueNumber = await this.estimatedQueueNumber(row);
     return {
       appointmentId: row.id,
       bookingCode: row.bookingCode,
@@ -306,7 +354,7 @@ export class BookingService {
       expiresAt,
       status: row.status,
       queueNumber: row.queueNumber,
-      estimatedQueueNumber: row.queueNumber ?? (doctorSlot ? doctorSlot.nextQueueNumber + 1 : packageSlot ? packageSlot.nextQueueNumber + 1 : null),
+      estimatedQueueNumber,
       appointmentDate,
       startTime: (doctorSlot?.startTime ?? packageSlot!.startTime).toISOString().slice(11, 16),
       endTime: (doctorSlot?.endTime ?? packageSlot!.endTime).toISOString().slice(11, 16),
@@ -414,7 +462,7 @@ export class BookingService {
   }
 
   private async confirmPaid(tx: Prisma.TransactionClient, paymentId: string, invoiceId: string, appointmentId: string, provider: string, dto: PaymentWebhookDto, late: boolean) {
-    const rawToken = randomBytes(32).toString('base64url');
+    const rawToken = this.checkInToken(appointmentId);
     const tokenHash = createHash('sha256').update(rawToken).digest('hex');
     const bookingCode = `VC-${appointmentId.slice(0, 8).toUpperCase()}`;
     await tx.paymentTransaction.update({ where: { id: paymentId }, data: { provider, providerTransactionId: dto.providerTransactionId, status: late ? 'LATE_SUCCESS' : 'SUCCESS', paidAt: new Date(), rawPayload: dto.payload as Prisma.InputJsonValue } });

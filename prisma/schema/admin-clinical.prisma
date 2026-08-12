@@ -97,11 +97,17 @@ model ClinicalOrder {
   resultPayload    Json?               @map("result_payload")
   orderedAt        DateTime            @default(now()) @map("ordered_at") @db.Timestamptz(3)
   completedAt      DateTime?           @map("completed_at") @db.Timestamptz(3)
+  assignedRoomId   String?             @map("assigned_room_id") @db.Uuid
+  queueDate        DateTime?           @map("queue_date") @db.Date
+  queueNumber      Int?                @map("queue_number")
+  receivedAt       DateTime?           @map("received_at") @db.Timestamptz(3)
   medicalVisit     MedicalVisit        @relation(fields: [medicalVisitId], references: [id], onDelete: Cascade)
   medicalService   MedicalService      @relation(fields: [medicalServiceId], references: [id], onDelete: Restrict)
+  assignedRoom     ClinicRoom?         @relation(fields: [assignedRoomId], references: [id], onDelete: SetNull)
 
   @@index([medicalVisitId, status])
   @@index([medicalServiceId, orderedAt])
+  @@index([assignedRoomId, queueDate, status, queueNumber])
   @@map("clinical_orders")
 }
 

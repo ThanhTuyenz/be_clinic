@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Post, Query, Req } from '@nestjs/common'
+import { Body, Controller, Get, Param, Post, Query, Req } from '@nestjs/common'
 import type { Request } from 'express'
 import { SkipPermissions } from '../modules/permissions/decorators/skip-permissions.decorator.js'
 import { ApiBearerAuth, ApiBody, ApiOperation, ApiTags } from '@nestjs/swagger'
@@ -15,6 +15,12 @@ export class MedicalVisitsController {
   @ApiOperation({ summary: 'Lấy hồ sơ lần khám theo lịch hẹn' })
   findOne(@Req() req: Request, @Query('appointmentId') appointmentId: string) {
     return this.medicalVisits.findByAppointment(req.user!.id, appointmentId)
+  }
+
+  @Post('clinical-orders/:orderId/mock-result')
+  @ApiOperation({ summary: 'Tạo kết quả LIS/PACS mô phỏng cho một chỉ định' })
+  mockClinicalResult(@Req() req: Request, @Param('orderId') orderId: string) {
+    return this.medicalVisits.mockClinicalResult(req.user!.id, orderId)
   }
 
   @Post()

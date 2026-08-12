@@ -131,6 +131,7 @@ model ClinicRoom {
   schedules DoctorSchedule[]
   servicePackageSchedules ServicePackageSchedule[]
   specialties ClinicRoomSpecialty[]
+  clinicalOrders ClinicalOrder[]
 
   @@unique([branchId, code])
   @@map("clinic_rooms")

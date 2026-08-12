@@ -12,6 +12,19 @@ const roles = [
   ['cashier@vitacare.local', 'Thu ngân Phạm Mai', 'CASHIER'],
   ['receptionist@vitacare.local', 'Tiếp nhận Đỗ Lan', 'RECEPTIONIST'],
   ['patient@vitacare.local', 'Nguyễn Văn An', 'PATIENT'],
+  ['patient01@vitacare.local', 'Trần Thị Mai', 'PATIENT'],
+  ['patient02@vitacare.local', 'Lê Hoàng Nam', 'PATIENT'],
+  ['patient03@vitacare.local', 'Phạm Ngọc Anh', 'PATIENT'],
+  ['patient04@vitacare.local', 'Võ Minh Khang', 'PATIENT'],
+  ['patient05@vitacare.local', 'Đặng Thu Hương', 'PATIENT'],
+];
+
+const additionalPatientSeeds = [
+  { email: 'patient01@vitacare.local', nationalId: '079198000101', dateOfBirth: '1988-03-12', gender: 'FEMALE', address: 'Quận 3, TP.HCM' },
+  { email: 'patient02@vitacare.local', nationalId: '079199000102', dateOfBirth: '1992-07-25', gender: 'MALE', address: 'Quận Bình Thạnh, TP.HCM' },
+  { email: 'patient03@vitacare.local', nationalId: '079200000103', dateOfBirth: '1995-11-08', gender: 'FEMALE', address: 'TP. Thủ Đức, TP.HCM' },
+  { email: 'patient04@vitacare.local', nationalId: '079201000104', dateOfBirth: '1985-01-30', gender: 'MALE', address: 'Quận 7, TP.HCM' },
+  { email: 'patient05@vitacare.local', nationalId: '079202000105', dateOfBirth: '1998-09-16', gender: 'FEMALE', address: 'Quận Gò Vấp, TP.HCM' },
 ];
 
 function dateOnly(daysFromNow) {
@@ -113,6 +126,13 @@ async function main() {
       where: { branchId_code: { branchId: branches[0].id, code } },
       update: { name, isActive: true }, create: { branchId: branches[0].id, code, name },
     }));
+  }
+  for (const [code, name] of [['LAB01', 'Phòng xét nghiệm'], ['XRAY01', 'Phòng X-quang'], ['US01', 'Phòng siêu âm']]) {
+    await prisma.clinicRoom.upsert({
+      where: { branchId_code: { branchId: branches[0].id, code } },
+      update: { name, isActive: true },
+      create: { branchId: branches[0].id, code, name },
+    });
   }
   await prisma.clinicRoom.upsert({
     where: { branchId_code: { branchId: branches[1].id, code: 'P201' } },
@@ -330,9 +350,36 @@ async function main() {
     create: { accountId: patient.id, fullName: 'Nguyễn Minh An', nationalId: '079201000002', dateOfBirth: new Date('2018-05-20T00:00:00.000Z'), gender: 'MALE', relationshipToAccount: 'CHILD', isMainProfile: false },
   });
 
+  for (const patientSeed of additionalPatientSeeds) {
+    const account = users.get(patientSeed.email);
+    await prisma.patientProfile.upsert({
+      where: { nationalId: patientSeed.nationalId },
+      update: {
+        accountId: account.id,
+        fullName: account.fullName,
+        dateOfBirth: new Date(`${patientSeed.dateOfBirth}T00:00:00.000Z`),
+        gender: patientSeed.gender,
+        address: patientSeed.address,
+        relationshipToAccount: 'SELF',
+        isMainProfile: true,
+      },
+      create: {
+        accountId: account.id,
+        fullName: account.fullName,
+        nationalId: patientSeed.nationalId,
+        dateOfBirth: new Date(`${patientSeed.dateOfBirth}T00:00:00.000Z`),
+        gender: patientSeed.gender,
+        address: patientSeed.address,
+        relationshipToAccount: 'SELF',
+        isMainProfile: true,
+      },
+    });
+  }
+
   await seedAuthTables(users, patient);
   await seedBookingTables({ users, doctors, branches, rooms });
-  console.log('Seed completed without appointments. Every specialty has a doctor. Test password: VitaCare@123');
+  await seedTodayWaitingAppointments({ users, doctors, branches, rooms });
+  console.log('Seed completed with 5 patients waiting today. Test password: VitaCare@123');
 }
 
 async function seedAuthTables(users, patient) {
@@ -356,6 +403,131 @@ async function seedAuthTables(users, patient) {
     update: { consumedAt: new Date(), expiresAt: dateOnly(-1) },
     create: { id: '10000000-0000-4000-8000-000000000003', userId: patient.id, tokenHash: createHash('sha256').update('seed-used-reset').digest('hex'), expiresAt: dateOnly(-1), consumedAt: new Date() },
   });
+}
+
+async function seedTodayWaitingAppointments({ users, doctors, branches, rooms }) {
+  const doctor = doctors.get('doctor.cardio@vitacare.local');
+  const receptionist = users.get('receptionist@vitacare.local');
+  const cashier = users.get('cashier@vitacare.local');
+  if (!doctor || !receptionist || !cashier || !branches[0] || !rooms[0]) {
+    throw new Error('Thiếu bác sĩ, lễ tân, chi nhánh hoặc phòng để seed hàng đợi hôm nay');
+  }
+
+  const schedule = await prisma.doctorSchedule.upsert({
+    where: {
+      doctorId_branchId_workDate_startTime: {
+        doctorId: doctor.id,
+        branchId: branches[0].id,
+        workDate: dateOnly(0),
+        startTime: time(8),
+      },
+    },
+    update: { roomId: rooms[0].id, endTime: time(17), status: 'OPEN' },
+    create: {
+      doctorId: doctor.id,
+      branchId: branches[0].id,
+      roomId: rooms[0].id,
+      workDate: dateOnly(0),
+      startTime: time(8),
+      endTime: time(17),
+      status: 'OPEN',
+    },
+  });
+  const slot = await prisma.doctorScheduleSlot.upsert({
+    where: { scheduleId_startTime: { scheduleId: schedule.id, startTime: time(8) } },
+    update: { endTime: time(17), capacity: 10, occupiedCount: 5, nextQueueNumber: 5, isActive: true },
+    create: { scheduleId: schedule.id, startTime: time(8), endTime: time(17), capacity: 10, occupiedCount: 5, nextQueueNumber: 5 },
+  });
+
+  for (let index = 0; index < additionalPatientSeeds.length; index += 1) {
+    const account = users.get(additionalPatientSeeds[index].email);
+    const profile = await prisma.patientProfile.findFirstOrThrow({
+      where: { accountId: account.id, isMainProfile: true },
+    });
+    const queueNumber = index + 1;
+    const bookingCode = `TODAY-${String(queueNumber).padStart(2, '0')}`;
+    const checkedInAt = new Date(Date.now() - (additionalPatientSeeds.length - index) * 4 * 60 * 1000);
+    const existing = await prisma.appointment.findUnique({ where: { bookingCode } });
+    if (existing) {
+      await prisma.appointment.update({
+        where: { id: existing.id },
+        data: {
+          patientProfileId: profile.id,
+          doctorId: doctor.id,
+          branchId: branches[0].id,
+          scheduleSlotId: slot.id,
+          servicePackageId: null,
+          servicePackageScheduleSlotId: null,
+          servicePrice: doctor.consultationFee,
+          symptomsDescription: ['Đau đầu và chóng mặt', 'Hồi hộp, đánh trống ngực', 'Theo dõi tăng huyết áp', 'Đau tức ngực nhẹ', 'Khám tim mạch định kỳ'][index],
+          status: 'CHECKED_IN',
+          queueNumber,
+          checkedInAt,
+          checkedInById: receptionist.id,
+        },
+      });
+    } else {
+      await prisma.appointment.create({
+        data: {
+          bookingCode,
+          patientProfileId: profile.id,
+          doctorId: doctor.id,
+          branchId: branches[0].id,
+          scheduleSlotId: slot.id,
+          servicePrice: doctor.consultationFee,
+          symptomsDescription: ['Đau đầu và chóng mặt', 'Hồi hộp, đánh trống ngực', 'Theo dõi tăng huyết áp', 'Đau tức ngực nhẹ', 'Khám tim mạch định kỳ'][index],
+          status: 'CHECKED_IN',
+          queueNumber,
+          checkedInAt,
+          checkedInById: receptionist.id,
+          statusHistories: {
+            create: { toStatus: 'CHECKED_IN', actorId: receptionist.id, reason: 'SEED_WAITING_TODAY' },
+          },
+        },
+      });
+    }
+    const appointment = await prisma.appointment.findUniqueOrThrow({ where: { bookingCode } });
+    const invoice = await prisma.invoice.upsert({
+      where: { appointmentId: appointment.id },
+      update: {
+        issuedBranchId: branches[0].id,
+        cashierId: cashier.id,
+        totalAmount: doctor.consultationFee,
+        status: 'PAID',
+        paidAt: checkedInAt,
+      },
+      create: {
+        appointmentId: appointment.id,
+        issuedBranchId: branches[0].id,
+        cashierId: cashier.id,
+        totalAmount: doctor.consultationFee,
+        status: 'PAID',
+        paidAt: checkedInAt,
+        items: {
+          create: {
+            description: `Khám với ${doctor.fullName}`,
+            quantity: 1,
+            unitPrice: doctor.consultationFee,
+            amount: doctor.consultationFee,
+          },
+        },
+      },
+    });
+    await prisma.paymentTransaction.upsert({
+      where: { idempotencyKey: `seed-paid:${bookingCode}` },
+      update: { invoiceId: invoice.id, amount: doctor.consultationFee, status: 'SUCCESS', paidAt: checkedInAt },
+      create: {
+        invoiceId: invoice.id,
+        provider: 'SEED',
+        providerTransactionId: `SEED-${bookingCode}`,
+        idempotencyKey: `seed-paid:${bookingCode}`,
+        method: 'CASH',
+        amount: doctor.consultationFee,
+        status: 'SUCCESS',
+        paidAt: checkedInAt,
+      },
+    });
+  }
 }
 
 async function seedBookingTables({ users, doctors, branches, rooms }) {

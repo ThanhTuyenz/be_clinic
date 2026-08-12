@@ -56,6 +56,15 @@ export class MedicalVisitsService {
         price: Number(order.price),
         note: order.note || '',
         status: order.status,
+        category: order.medicalService?.category || '',
+        result: order.resultPayload || null,
+        orderedAt: order.orderedAt,
+        completedAt: order.completedAt,
+        assignedRoomId: order.assignedRoomId,
+        assignedRoom: order.assignedRoom ? { id: order.assignedRoom.id, code: order.assignedRoom.code, name: order.assignedRoom.name } : null,
+        queueDate: order.queueDate,
+        queueNumber: order.queueNumber,
+        receivedAt: order.receivedAt,
       }))
     }
     return {
@@ -72,7 +81,7 @@ export class MedicalVisitsService {
     return {
       diagnoses: { include: { icd10Code: true } },
       prescription: { include: { items: { include: { medicine: true } } } },
-      clinicalOrders: { include: { medicalService: true }, orderBy: { orderedAt: 'asc' as const } },
+      clinicalOrders: { include: { medicalService: true, assignedRoom: true }, orderBy: { orderedAt: 'asc' as const } },
     }
   }
 
@@ -159,6 +168,7 @@ export class MedicalVisitsService {
           price: Number(service.price),
           note: String(item.note || '').trim(),
           priority: String(item.priority || 'NORMAL').trim().toUpperCase(),
+          assignedRoomId: String(item.assignedRoomId || '').trim(),
         }
       })
     }
@@ -169,6 +179,39 @@ export class MedicalVisitsService {
     await this.authorize(userId, appointmentId, false)
     const row = await this.prisma.medicalVisit.findUnique({ where: { appointmentId }, include: this.visitInclude() })
     return { medicalVisit: this.serialize(row) }
+  }
+
+  async mockClinicalResult(userId: string, orderId: string) {
+    const order = await this.prisma.clinicalOrder.findUnique({
+      where: { id: orderId },
+      include: { medicalService: true, medicalVisit: { select: { appointmentId: true } } },
+    })
+    if (!order?.medicalVisit.appointmentId) throw new NotFoundException('Không tìm thấy chỉ định')
+    await this.authorize(userId, order.medicalVisit.appointmentId, true)
+    if (!['LAB_TEST', 'IMAGING'].includes(order.medicalService.category)) {
+      throw new BadRequestException('Dịch vụ này không hỗ trợ kết quả mô phỏng')
+    }
+    const completedAt = new Date()
+    const result = order.medicalService.category === 'LAB_TEST'
+      ? {
+          source: 'MOCK_LIS', format: 'JSON', specimen: { type: 'Máu', collectedAt: completedAt.toISOString() },
+          observations: [
+            { code: 'GLU', name: 'Glucose', value: 6.2, unit: 'mmol/L', referenceRange: '3.9 - 5.6', flag: 'HIGH' },
+            { code: 'WBC', name: 'Bạch cầu', value: 7.5, unit: '10^9/L', referenceRange: '4.0 - 10.0', flag: 'NORMAL' },
+            { code: 'HGB', name: 'Hemoglobin', value: 142, unit: 'g/L', referenceRange: '120 - 170', flag: 'NORMAL' },
+          ],
+          conclusion: 'Glucose cao nhẹ so với khoảng tham chiếu.',
+        }
+      : {
+          source: 'MOCK_PACS', format: 'JPEG', modality: 'CR', bodyPart: 'CHEST',
+          studyInstanceUid: `1.2.840.10008.${completedAt.getTime()}.${order.id.replaceAll('-', '').slice(0, 8)}`,
+          imageUrl: '/mock-pacs/chest-xray.svg', conclusion: '',
+        }
+    await this.prisma.clinicalOrder.update({
+      where: { id: order.id },
+      data: { status: 'COMPLETED', completedAt, resultPayload: result },
+    })
+    return { orderId: order.id, status: 'COMPLETED', completedAt, result }
   }
 
   async upsert(userId: string, body: Record<string, unknown>) {
@@ -270,8 +313,16 @@ export class MedicalVisitsService {
         await tx.prescription.deleteMany({ where: { medicalVisitId: visit.id } })
       }
 
-      await tx.clinicalOrder.deleteMany({ where: { medicalVisitId: visit.id } })
       const clinicalOrders = (Array.isArray(normalized.clinicalOrders) ? normalized.clinicalOrders : []) as Record<string, unknown>[]
+      const requestedServiceIds = clinicalOrders.map((order) => String(order.serviceId))
+      const roomIds = [...new Set(clinicalOrders.map((order) => String(order.assignedRoomId || '')).filter(Boolean))]
+      if (roomIds.length) {
+        const roomCount = await tx.clinicRoom.count({ where: { id: { in: roomIds }, branchId: appointment.branchId, isActive: true } })
+        if (roomCount !== roomIds.length) throw new BadRequestException('Phòng cận lâm sàng không hợp lệ hoặc khác chi nhánh')
+      }
+      await tx.clinicalOrder.deleteMany({
+        where: { medicalVisitId: visit.id, medicalServiceId: { notIn: requestedServiceIds }, status: { not: 'COMPLETED' } },
+      })
       if (clinicalOrders.length) {
         const services = await tx.medicalService.findMany({
           where: { id: { in: clinicalOrders.map((order) => String(order.serviceId)) }, isActive: true },
@@ -280,6 +331,11 @@ export class MedicalVisitsService {
         for (const order of clinicalOrders) {
           const service = serviceMap.get(String(order.serviceId))
           if (!service) continue
+          const existing = await tx.clinicalOrder.findFirst({ where: { medicalVisitId: visit.id, medicalServiceId: service.id } })
+          if (existing) {
+            await tx.clinicalOrder.update({ where: { id: existing.id }, data: { note: String(order.note || '').trim() || null, assignedRoomId: String(order.assignedRoomId || '').trim() || null } })
+            continue
+          }
           await tx.clinicalOrder.create({
             data: {
               medicalVisitId: visit.id,
@@ -287,6 +343,7 @@ export class MedicalVisitsService {
               serviceName: service.name,
               price: service.price,
               note: String(order.note || '').trim() || null,
+              assignedRoomId: String(order.assignedRoomId || '').trim() || null,
             },
           })
         }
