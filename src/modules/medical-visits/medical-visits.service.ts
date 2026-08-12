@@ -6,6 +6,42 @@ import { PrismaService } from '../../infrastructure/database/prisma/prisma.servi
 export class MedicalVisitsService {
   constructor(private readonly prisma: PrismaService) {}
 
+  async listPrescriptions(userId: string, filters: { from?: string; to?: string; q?: string }) {
+    const user = await this.prisma.user.findUnique({ where: { id: userId }, select: { role: true, doctor: { select: { id: true, fullName: true } } } })
+    if (!user?.doctor?.id || user.role !== 'DOCTOR') throw new ForbiddenException('Chỉ bác sĩ được xem danh sách đơn thuốc')
+    const from = filters.from ? new Date(`${filters.from}T00:00:00+07:00`) : undefined
+    const to = filters.to ? new Date(`${filters.to}T23:59:59.999+07:00`) : undefined
+    if ((from && Number.isNaN(from.getTime())) || (to && Number.isNaN(to.getTime()))) throw new BadRequestException('Khoảng ngày không hợp lệ')
+    const q = String(filters.q || '').trim()
+    const rows = await this.prisma.prescription.findMany({
+      where: {
+        medicalVisit: {
+          doctorId: user.doctor.id,
+          createdAt: from || to ? { gte: from, lte: to } : undefined,
+          medicalRecord: q ? { patientProfile: { OR: [{ fullName: { contains: q, mode: 'insensitive' } }, { medicalRecord: { recordCode: { contains: q, mode: 'insensitive' } } }] } } : undefined,
+        },
+        items: { some: {} },
+      },
+      include: {
+        items: { include: { medicine: true }, orderBy: { id: 'asc' } },
+        medicalVisit: { include: { medicalRecord: { include: { patientProfile: true } }, appointment: true, diagnoses: { include: { icd10Code: true } }, branch: true } },
+      },
+      orderBy: { updatedAt: 'desc' },
+      take: 200,
+    })
+    return { items: rows.map((row) => ({
+      id: row.id, status: row.status, issuedAt: row.issuedAt, createdAt: row.createdAt, updatedAt: row.updatedAt,
+      patient: row.medicalVisit.medicalRecord.patientProfile,
+      recordCode: row.medicalVisit.medicalRecord.recordCode,
+      appointment: row.medicalVisit.appointment,
+      branch: row.medicalVisit.branch,
+      doctorName: user.doctor!.fullName,
+      diagnosis: row.medicalVisit.diagnoses.map((item) => ({ code: item.icd10Code.code, name: item.icd10Code.description, isPrimary: item.isPrimary })),
+      visit: { id: row.medicalVisit.id, symptoms: row.medicalVisit.symptoms, treatmentPlan: row.medicalVisit.treatmentPlan, createdAt: row.medicalVisit.createdAt },
+      items: row.items.map((item) => ({ id: item.id.toString(), medicineId: item.medicineId, medicineName: item.medicineName, strength: item.strength, unit: item.unit, quantity: Number(item.quantity), dosageAmount: item.dosageAmount, frequencyPerDay: item.frequencyPerDay, durationDays: item.durationDays, instructions: item.instructions })),
+    })) }
+  }
+
   private number(value: unknown) {
     if (value === null || value === undefined || value === '') return null
     const parsed = Number(String(value).replace(',', '.'))
@@ -33,7 +69,7 @@ export class MedicalVisitsService {
     payload.heightCm = row.heightCm === null ? '' : Number(row.heightCm)
     payload.weightKg = row.weightKg === null ? '' : Number(row.weightKg)
     payload.spo2 = row.spo2 === null ? '' : Number(row.spo2)
-    if (row.prescription) {
+    if (row.prescription && !(payload.draftOnly === true && Array.isArray(payload.prescriptionLines))) {
       payload.prescriptionLines = row.prescription.items.map((item: any) => ({
         medicineId: item.medicineId,
         medicineCode: item.medicine?.code || '',
@@ -109,6 +145,7 @@ export class MedicalVisitsService {
 
   private async validateAndNormalizePayload(payload: Record<string, unknown>) {
     const normalized: Record<string, unknown> = { ...payload }
+    const draftOnly = payload.draftOnly === true
     const diagnosisCode = String(payload.diagnosisCode || '').trim().toUpperCase()
     if (diagnosisCode) {
       const diagnosis = await this.prisma.icd10Code.findFirst({
@@ -126,7 +163,7 @@ export class MedicalVisitsService {
     const medicineIds = prescriptionLines
       .map((line) => String((line as Record<string, unknown>)?.medicineId || '').trim())
       .filter(Boolean)
-    if (medicineIds.length) {
+    if (!draftOnly && medicineIds.length) {
       const validMedicines = await this.prisma.medicine.findMany({
         where: { id: { in: [...new Set(medicineIds)] }, isActive: true },
         select: { id: true },
@@ -139,7 +176,7 @@ export class MedicalVisitsService {
       const item = line as Record<string, unknown>
       return Boolean(String(item.medicineName || item.medicineDisplayName || '').trim()) && !String(item.medicineId || '').trim()
     })
-    if (invalidMedicine) throw new BadRequestException('Thuốc kê đơn phải được chọn từ danh mục')
+    if (!draftOnly && invalidMedicine) throw new BadRequestException('Thuốc kê đơn phải được chọn từ danh mục')
 
     const clinicalOrders = Array.isArray(payload.clinicalOrders) ? payload.clinicalOrders : []
     if (clinicalOrders.length > 20) throw new BadRequestException('Không được vượt quá 20 chỉ định cận lâm sàng')
@@ -275,8 +312,10 @@ export class MedicalVisitsService {
         })
       }
 
+      const clinicalOnly = normalized.clinicalOnly === true
+      const draftOnly = normalized.draftOnly === true
       const prescriptionLines = (Array.isArray(normalized.prescriptionLines) ? normalized.prescriptionLines : []) as Record<string, unknown>[]
-      if (prescriptionLines.length) {
+      if (!clinicalOnly && !draftOnly && prescriptionLines.length) {
         const prescription = await tx.prescription.upsert({
           where: { medicalVisitId: visit.id },
           create: { medicalVisitId: visit.id },
@@ -309,7 +348,7 @@ export class MedicalVisitsService {
             },
           })
         }
-      } else {
+      } else if (!clinicalOnly && !draftOnly) {
         await tx.prescription.deleteMany({ where: { medicalVisitId: visit.id } })
       }
 

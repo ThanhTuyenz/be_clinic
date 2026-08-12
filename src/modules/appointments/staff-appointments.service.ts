@@ -453,7 +453,7 @@ export class StaffAppointmentsService {
     if (!appointment.medicalVisit?.diagnoses.length && !String(medicalVisit.diagnosisCode || '').trim()) {
       throw new BadRequestException('Chưa chọn chẩn đoán ICD-10')
     }
-    return this.prisma.$transaction(async (tx) => {
+    const row = await this.prisma.$transaction(async (tx) => {
       const result = await tx.appointment.updateMany({
         where: { id: appointmentId, status: 'IN_EXAMINATION' },
         data: { status: 'COMPLETED' },
@@ -466,7 +466,12 @@ export class StaffAppointmentsService {
         where: { appointmentId },
         data: { status: 'FINALIZED', finalizedAt: new Date() },
       })
+      await tx.prescription.updateMany({
+        where: { medicalVisit: { appointmentId }, items: { some: {} } },
+        data: { status: 'ISSUED', issuedAt: new Date() },
+      })
       return tx.appointment.findUniqueOrThrow({ where: { id: appointmentId }, include: this.appointmentInclude() })
     })
+    return { appointment: this.serialize(row) }
   }
 }

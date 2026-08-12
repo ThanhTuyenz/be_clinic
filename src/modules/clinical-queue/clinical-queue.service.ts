@@ -87,30 +87,37 @@ export class ClinicalQueueService {
     }
   }
 
-  async receive(userId: string, qrPayload: string, roomId: string) {
+  async receive(userId: string, qrPayload: string) {
     await this.staff(userId)
     const visitId = this.verify(qrPayload)
-    const room = await this.prisma.clinicRoom.findFirst({ where: { id: roomId, isActive: true } })
-    if (!room) throw new NotFoundException('Không tìm thấy phòng cận lâm sàng')
     const date = this.dateKey()
     return this.prisma.$transaction(async (tx) => {
-      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`CLINICAL:${roomId}:${date}`}))`
-      const orders = await tx.clinicalOrder.findMany({ where: { medicalVisitId: visitId, assignedRoomId: roomId, status: { in: ['ORDERED', 'IN_PROGRESS'] } }, include: { medicalService: true, medicalVisit: { include: { medicalRecord: { include: { patientProfile: true } } } } } })
-      if (!orders.length) throw new NotFoundException('Phiếu không có chỉ định chờ tại phòng này')
-      const existing = orders.find((item) => item.queueDate?.toISOString().slice(0, 10) === date && item.queueNumber != null)
-      let queueNumber = existing?.queueNumber || null
-      if (!queueNumber) {
-        const [counter] = await tx.$queryRaw<Array<{ max: number | null }>>`SELECT MAX("queue_number")::int AS max FROM "clinical_orders" WHERE "assigned_room_id" = ${roomId}::uuid AND "queue_date" = ${date}::date`
-        queueNumber = (counter?.max || 0) + 1
-        await tx.clinicalOrder.updateMany({ where: { id: { in: orders.map((item) => item.id) } }, data: { status: 'IN_PROGRESS', queueDate: new Date(`${date}T00:00:00.000Z`), queueNumber, receivedAt: new Date() } })
+      const orders = await tx.clinicalOrder.findMany({ where: { medicalVisitId: visitId, status: { in: ['ORDERED', 'IN_PROGRESS'] } }, include: { medicalService: true, assignedRoom: true, medicalVisit: { include: { medicalRecord: { include: { patientProfile: true } } } } } })
+      if (!orders.length) throw new NotFoundException('Phiếu không còn chỉ định chờ tiếp nhận')
+      if (orders.some((item) => !item.assignedRoomId || !item.assignedRoom)) throw new BadRequestException('Phiếu có chỉ định chưa được bác sĩ phân phòng')
+      const roomIds = [...new Set(orders.map((item) => item.assignedRoomId!))].sort()
+      const tickets: Array<{ room: any; queueDate: string; queueNumber: number; orders: any[] }> = []
+      for (const roomId of roomIds) {
+        await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`CLINICAL:${roomId}:${date}`}))`
+        const roomOrders = orders.filter((item) => item.assignedRoomId === roomId)
+        const existing = roomOrders.find((item) => item.queueDate?.toISOString().slice(0, 10) === date && item.queueNumber != null)
+        let queueNumber = existing?.queueNumber || null
+        if (!queueNumber) {
+          const [counter] = await tx.$queryRaw<Array<{ max: number | null }>>`SELECT MAX("queue_number")::int AS max FROM "clinical_orders" WHERE "assigned_room_id" = ${roomId}::uuid AND "queue_date" = ${date}::date`
+          queueNumber = (counter?.max || 0) + 1
+          await tx.clinicalOrder.updateMany({ where: { id: { in: roomOrders.map((item) => item.id) } }, data: { status: 'IN_PROGRESS', queueDate: new Date(`${date}T00:00:00.000Z`), queueNumber, receivedAt: new Date() } })
+        }
+        tickets.push({ room: roomOrders[0].assignedRoom, queueDate: date, queueNumber, orders: roomOrders.map((item) => ({ id: item.id, serviceName: item.serviceName, category: item.medicalService.category })) })
       }
-      return { room, queueDate: date, queueNumber, patient: orders[0].medicalVisit.medicalRecord.patientProfile, orders: orders.map((item) => ({ id: item.id, serviceName: item.serviceName, category: item.medicalService.category })) }
+      return { patient: orders[0].medicalVisit.medicalRecord.patientProfile, tickets }
     }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable })
   }
 
-  async list(userId: string, roomId: string, date = this.dateKey()) {
+  async list(userId: string, roomId: string, date = this.dateKey(), status = 'waiting') {
     await this.staff(userId)
-    const items = await this.prisma.clinicalOrder.findMany({ where: { assignedRoomId: roomId, queueDate: new Date(`${date}T00:00:00.000Z`), status: { in: ['IN_PROGRESS', 'COMPLETED'] } }, include: { medicalService: true, assignedRoom: true, medicalVisit: { include: { medicalRecord: { include: { patientProfile: true } } } } }, orderBy: [{ queueNumber: 'asc' }, { orderedAt: 'asc' }] })
+    if (!['waiting', 'completed'].includes(status)) throw new BadRequestException('Trạng thái hàng đợi không hợp lệ')
+    const orderStatus = status === 'completed' ? 'COMPLETED' : 'IN_PROGRESS'
+    const items = await this.prisma.clinicalOrder.findMany({ where: { assignedRoomId: roomId, queueDate: new Date(`${date}T00:00:00.000Z`), status: orderStatus }, include: { medicalService: true, assignedRoom: true, medicalVisit: { include: { medicalRecord: { include: { patientProfile: true } } } } }, orderBy: status === 'completed' ? [{ completedAt: 'desc' }, { queueNumber: 'asc' }] : [{ queueNumber: 'asc' }, { orderedAt: 'asc' }] })
     return { items: items.map((item) => ({ ...item, price: Number(item.price), patient: item.medicalVisit.medicalRecord.patientProfile })) }
   }
 

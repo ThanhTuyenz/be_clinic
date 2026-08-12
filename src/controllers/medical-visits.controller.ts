@@ -11,6 +11,12 @@ import { MedicalVisitsService } from '../modules/medical-visits/medical-visits.s
 export class MedicalVisitsController {
   constructor(private readonly medicalVisits: MedicalVisitsService) {}
 
+  @Get('prescriptions')
+  @ApiOperation({ summary: 'Danh sách đơn thuốc của bác sĩ đăng nhập' })
+  prescriptions(@Req() req: Request, @Query('from') from?: string, @Query('to') to?: string, @Query('q') q?: string) {
+    return this.medicalVisits.listPrescriptions(req.user!.id, { from, to, q })
+  }
+
   @Get()
   @ApiOperation({ summary: 'Lấy hồ sơ lần khám theo lịch hẹn' })
   findOne(@Req() req: Request, @Query('appointmentId') appointmentId: string) {
