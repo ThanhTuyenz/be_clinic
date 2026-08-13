@@ -31,6 +31,7 @@ import { SystemCatalogModule } from './modules/system-catalog/system-catalog.mod
 import { InventoryModule } from './modules/inventory/inventory.module.js'
 import { ClinicalQueueModule } from './modules/clinical-queue/clinical-queue.module.js'
 import { PharmacyModule } from './modules/pharmacy/pharmacy.module.js'
+import { SchedulesModule } from './modules/schedules/schedules.module.js'
 
 @Module({
   imports: [
@@ -73,6 +74,7 @@ import { PharmacyModule } from './modules/pharmacy/pharmacy.module.js'
     InventoryModule,
     ClinicalQueueModule,
     PharmacyModule,
+    SchedulesModule,
   ],
   controllers: [],
   providers: [

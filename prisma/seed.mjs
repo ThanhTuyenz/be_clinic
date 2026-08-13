@@ -267,15 +267,6 @@ async function main() {
       create: { userId: user.id, branchId: branches[0].id, isPrimary: true },
     });
 
-    const existingTemplate = await prisma.doctorScheduleTemplate.findFirst({
-      where: { doctorId: doctor.id, branchId: branches[0].id, dayOfWeek: 1, isActive: true },
-    });
-    if (existingTemplate) {
-      await prisma.doctorScheduleTemplate.update({ where: { id: existingTemplate.id }, data: { shiftStartTime: time(8), shiftEndTime: time(11, 30), slotDurationMin: 60, defaultCapacity: 5, validFrom: dateOnly(0) } });
-    } else {
-      await prisma.doctorScheduleTemplate.create({ data: { doctorId: doctor.id, branchId: branches[0].id, dayOfWeek: 1, shiftStartTime: time(8), shiftEndTime: time(11, 30), slotDurationMin: 60, defaultCapacity: 5, validFrom: dateOnly(0) } });
-    }
-
     await prisma.doctorScheduleException.upsert({
       where: { doctorId_branchId_date: { doctorId: doctor.id, branchId: branches[0].id, date: dateOnly(31) } },
       update: { reason: 'Nghỉ đào tạo chuyên môn', isClosed: true },
@@ -289,8 +280,8 @@ async function main() {
       if (workDate.getUTCDay() === 0 && day !== 0) continue;
       const schedule = await prisma.doctorSchedule.upsert({
         where: { doctorId_branchId_workDate_startTime: { doctorId: doctor.id, branchId: branches[0].id, workDate, startTime: time(8) } },
-        update: { status: 'OPEN', roomId: input.room.id },
-        create: { doctorId: doctor.id, branchId: branches[0].id, roomId: input.room.id, workDate, startTime: time(8), endTime: time(11, 30), status: 'OPEN' },
+        update: { status: 'OPEN', roomId: input.room.id, slotDurationMin: 60 },
+        create: { doctorId: doctor.id, branchId: branches[0].id, roomId: input.room.id, workDate, startTime: time(8), endTime: time(11, 30), slotDurationMin: 60, status: 'OPEN' },
       });
       for (const [startHour, endHour, endMinute, capacity] of [[8, 9, 0, 5], [9, 10, 0, 5], [10, 11, 0, 5], [11, 11, 30, 2]]) {
         await prisma.doctorScheduleSlot.upsert({

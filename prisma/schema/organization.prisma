@@ -24,7 +24,6 @@ model Branch {
   clinic             Clinic                    @relation(fields: [clinicId], references: [id], onDelete: Cascade)
   rooms              ClinicRoom[]
   userAssignments    UserBranchAssignment[]
-  scheduleTemplates  DoctorScheduleTemplate[]
   scheduleExceptions DoctorScheduleException[]
   schedules          DoctorSchedule[]
   appointments       Appointment[]

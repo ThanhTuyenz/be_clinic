@@ -74,7 +74,29 @@ export class BookingService {
 
         if (dto.bookingType === 'DOCTOR') {
           if (!dto.scheduleSlotId) throw new BadRequestException('Thiếu khung giờ của bác sĩ');
-          const doctorSlot = await tx.doctorScheduleSlot.findUnique({ where: { id: dto.scheduleSlotId }, include: { schedule: { include: { doctor: true } } } });
+          
+          let doctorSlot: any = null;
+          if (dto.scheduleSlotId.startsWith('virtual_')) {
+            const parts = dto.scheduleSlotId.split('_');
+            const scheduleId = parts[1];
+            const startTimeStr = parts[2];
+            const schedule = await tx.doctorSchedule.findUnique({ where: { id: scheduleId }, include: { doctor: true } });
+            if (!schedule || schedule.status !== 'OPEN' || !schedule.doctor.isActive) throw new NotFoundException('Lịch làm việc của bác sĩ không khả dụng');
+
+            const dateStr = schedule.workDate.toISOString().slice(0, 10);
+            const startDt = new Date(`${dateStr}T${startTimeStr}:00.000Z`);
+            const endDt = new Date(startDt.getTime() + (schedule.slotDurationMin || 30) * 60000);
+
+            doctorSlot = await tx.doctorScheduleSlot.upsert({
+              where: { scheduleId_startTime: { scheduleId, startTime: startDt } },
+              update: {},
+              create: { scheduleId, startTime: startDt, endTime: endDt, capacity: 1, occupiedCount: 0 },
+              include: { schedule: { include: { doctor: true } } },
+            });
+          } else {
+            doctorSlot = await tx.doctorScheduleSlot.findUnique({ where: { id: dto.scheduleSlotId }, include: { schedule: { include: { doctor: true } } } });
+          }
+
           if (!doctorSlot || !doctorSlot.isActive || doctorSlot.schedule.status !== 'OPEN' || !doctorSlot.schedule.doctor.isActive) throw new NotFoundException('Khung giờ của bác sĩ không khả dụng');
           const duplicate = await tx.appointment.findFirst({ where: { patientProfileId: profile.id, scheduleSlotId: doctorSlot.id, status: { in: ACTIVE_APPOINTMENT_STATUSES } } });
           if (duplicate) throw new ConflictException('Người bệnh đã có lịch hẹn trong khung giờ này');

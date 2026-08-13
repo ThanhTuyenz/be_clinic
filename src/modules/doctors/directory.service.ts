@@ -136,19 +136,60 @@ export class DirectoryService {
 
   async availableDates(doctorId: string, branchId: string) {
     const schedules = await this.prisma.doctorSchedule.findMany({
-      where: { doctorId, branchId, status: 'OPEN', workDate: { gte: this.today() }, slots: { some: { isActive: true, occupiedCount: { lt: this.prisma.doctorScheduleSlot.fields.capacity } } } },
-      select: { workDate: true }, orderBy: { workDate: 'asc' }, take: 90,
+      where: { doctorId, branchId, status: 'OPEN', workDate: { gte: this.today() } },
+      select: { workDate: true },
+      orderBy: { workDate: 'asc' },
+      take: 90,
     });
-    return schedules.map(({ workDate }) => workDate.toISOString().slice(0, 10));
+    return Array.from(new Set(schedules.map(({ workDate }) => workDate.toISOString().slice(0, 10))));
   }
 
   async timeslots(doctorId: string, branchId: string, date: string) {
     const workDate = this.parseDate(date);
-    const rows = await this.prisma.doctorScheduleSlot.findMany({
-      where: { isActive: true, schedule: { doctorId, branchId, workDate, status: 'OPEN' } }, orderBy: { startTime: 'asc' },
-      select: { id: true, startTime: true, endTime: true, capacity: true, occupiedCount: true, schedule: { select: { room: { select: { id: true, code: true, name: true, branch: { select: { id: true, name: true, address: true } } } } } } },
+    const schedule = await this.prisma.doctorSchedule.findFirst({
+      where: { doctorId, branchId, workDate, status: 'OPEN' },
+      include: {
+        room: { select: { id: true, code: true, name: true, branch: { select: { id: true, name: true, address: true } } } },
+        slots: { where: { isActive: true } },
+      },
     });
-    return rows.map(({ schedule, ...slot }) => ({ ...slot, room: schedule.room, startTime: slot.startTime.toISOString().slice(11, 16), endTime: slot.endTime.toISOString().slice(11, 16), remainingCapacity: Math.max(slot.capacity - slot.occupiedCount, 0), isAvailable: slot.occupiedCount < slot.capacity }));
+
+    if (!schedule) return [];
+
+    const slotDuration = schedule.slotDurationMin || 30;
+    const bookedMap = new Map(schedule.slots.map((s) => [s.startTime.toISOString().slice(11, 16), s]));
+
+    const slots: any[] = [];
+    let current = new Date(schedule.startTime);
+    const end = new Date(schedule.endTime);
+
+    while (current < end) {
+      const startTimeStr = current.toISOString().slice(11, 16);
+      const nextTime = new Date(current.getTime() + slotDuration * 60000);
+      if (nextTime > end) break;
+      const endTimeStr = nextTime.toISOString().slice(11, 16);
+
+      const existingSlot = bookedMap.get(startTimeStr);
+      const isBlocked = existingSlot?.isBlocked || false;
+      const occupiedCount = existingSlot?.occupiedCount || 0;
+      const capacity = existingSlot?.capacity || 1;
+      const remainingCapacity = Math.max(capacity - occupiedCount, 0);
+
+      slots.push({
+        id: existingSlot?.id || `virtual_${schedule.id}_${startTimeStr}`,
+        startTime: startTimeStr,
+        endTime: endTimeStr,
+        capacity,
+        occupiedCount,
+        remainingCapacity,
+        isAvailable: !isBlocked && remainingCapacity > 0,
+        room: schedule.room,
+      });
+
+      current = nextTime;
+    }
+
+    return slots;
   }
 
   private today(): Date { const date = new Date(); date.setUTCHours(0, 0, 0, 0); return date; }

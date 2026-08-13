@@ -5,7 +5,7 @@ export class CheckoutAppointmentDto {
   @ApiProperty({ format: 'uuid' }) @IsUUID() patientProfileId: string;
   @ApiPropertyOptional({ enum: ['SERVICE_PACKAGE', 'DOCTOR'], default: 'SERVICE_PACKAGE' })
   @IsOptional() @IsIn(['SERVICE_PACKAGE', 'DOCTOR']) bookingType?: 'SERVICE_PACKAGE' | 'DOCTOR';
-  @ApiPropertyOptional({ format: 'uuid' }) @IsOptional() @IsUUID() scheduleSlotId?: string;
+  @ApiPropertyOptional() @IsOptional() @IsString() scheduleSlotId?: string;
   @ApiPropertyOptional({ format: 'uuid' }) @IsOptional() @IsUUID() servicePackageId?: string;
   @ApiPropertyOptional({ format: 'uuid' }) @IsOptional() @IsUUID() servicePackageScheduleSlotId?: string;
   @ApiPropertyOptional() @IsOptional() @IsString() @MaxLength(2000) symptomsDescription?: string;

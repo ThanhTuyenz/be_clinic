@@ -32,6 +32,8 @@ export class AdminDashboardService {
           OR: [
             { scheduleSlot: { schedule: { workDate: { gte: from, lt: to } } } },
             { servicePackageScheduleSlot: { schedule: { examDate: { gte: from, lt: to } } } },
+            { checkedInAt: { gte: from, lt: to } },
+            { createdAt: { gte: from, lt: to } },
           ],
         },
       ],
@@ -80,15 +82,17 @@ export class AdminDashboardService {
     if (user.role === 'DOCTOR') appointmentScope.doctorId = user.doctor?.id || '__none__'
     else if (user.role !== 'ADMIN') appointmentScope.branchId = { in: branchIds.length ? branchIds : ['__none__'] }
 
-    const todayStart = new Date()
-    todayStart.setHours(0, 0, 0, 0)
-    const tomorrow = new Date(todayStart)
-    tomorrow.setDate(tomorrow.getDate() + 1)
-    const weekStart = new Date(todayStart)
-    const dayOfWeek = weekStart.getDay() || 7
-    weekStart.setDate(weekStart.getDate() - dayOfWeek + 1)
-    const weekEnd = new Date(weekStart)
-    weekEnd.setDate(weekEnd.getDate() + 7)
+    const now = new Date()
+    const year = now.getFullYear()
+    const month = now.getMonth()
+    const date = now.getDate()
+
+    const todayStart = new Date(Date.UTC(year, month, date))
+    const tomorrow = new Date(Date.UTC(year, month, date + 1))
+
+    const dayOfWeek = now.getDay() || 7
+    const weekStart = new Date(Date.UTC(year, month, date - dayOfWeek + 1))
+    const weekEnd = new Date(Date.UTC(year, month, date - dayOfWeek + 8))
 
     const todayScope = this.rangeScope(appointmentScope, todayStart, tomorrow)
     const weekScope = this.rangeScope(appointmentScope, weekStart, weekEnd)

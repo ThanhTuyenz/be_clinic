@@ -191,7 +191,8 @@ export class SystemCatalogService {
         })
         return { roomId: item.roomId ? String(item.roomId) : null, examDate, slots: { create: slots } }
       })
-      return { name: String(b.name).trim(), code: String(b.code || '').trim(), description: b.description || null, branchBookingMethodId, specialtyId: b.specialtyId ? Number(b.specialtyId) : null, price: Number(b.price) || 0, durationMin: Number(b.durationMin) || 30, isActive: b.isActive ?? true, items: creating ? { create: serviceIds.map((medicalServiceId, sortOrder) => ({ medicalServiceId, sortOrder })) } : { deleteMany: {}, create: serviceIds.map((medicalServiceId, sortOrder) => ({ medicalServiceId, sortOrder })) }, schedules: creating ? { create: schedules } : { deleteMany: {}, create: schedules } }
+      const generatedPkgCode = String(b.code || '').trim() || `PKG-${new Date().getFullYear()}-${Math.floor(1000 + Math.random() * 9000)}`
+      return { name: String(b.name).trim(), code: generatedPkgCode, description: b.description || null, branchBookingMethodId, specialtyId: b.specialtyId ? Number(b.specialtyId) : null, price: Number(b.price) || 0, durationMin: Number(b.durationMin) || 30, isActive: b.isActive ?? true, items: creating ? { create: serviceIds.map((medicalServiceId, sortOrder) => ({ medicalServiceId, sortOrder })) } : { deleteMany: {}, create: serviceIds.map((medicalServiceId, sortOrder) => ({ medicalServiceId, sortOrder })) }, schedules: creating ? { create: schedules } : { deleteMany: {}, create: schedules } }
     }
     return { name: String(b.name).trim(), code: String(b.code || '').trim(), activeIngredient: b.activeIngredient || null, strength: b.strength || null, unit: b.unit || null, unitPrice: Number(b.unitPrice) || 0, stockQuantity: Number(b.stockQuantity) || 0, isActive: b.isActive ?? true }
   }
