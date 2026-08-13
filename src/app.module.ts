@@ -17,7 +17,6 @@ import { DoctorsModule } from './modules/doctors/doctors.module.js'
 import { MedicalVisitsModule } from './modules/medical-visits/medical-visits.module.js'
 import { PermissionsGuard } from './modules/permissions/guards/permissions.guard.js'
 import { JwtAuthGuard } from './modules/auth/auth-local/guards/jwt-auth.guard.js'
-import { DatabaseModule } from './database/database.module.js'
 import { ContactsModule } from './modules/contacts/contacts.module.js'
 import { PrismaModule } from './infrastructure/database/prisma/prisma.module.js'
 import { RabbitMqModule } from './infrastructure/messaging/rabbitmq/rabbitmq.module.js'
@@ -53,9 +52,8 @@ import { SchedulesModule } from './modules/schedules/schedules.module.js'
         limit: 1000,
       },
     ]),
-    DatabaseModule,
     PrismaModule,
-    RedisModule,
+    // RedisModule,
     AppFeatureModule,
     JwtAuthCoreModule,
     AuthModule,

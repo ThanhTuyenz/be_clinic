@@ -80,6 +80,19 @@ export class StaffAppointmentsService {
         ? { code: row.servicePackage.branchBookingMethod.bookingMethod.code, name: row.servicePackage.branchBookingMethod.bookingMethod.name }
         : { code: 'DOCTOR', name: 'Khám với bác sĩ' },
       branch: row.branch ? { id: row.branch.id, code: row.branch.code, name: row.branch.name, address: row.branch.address } : null,
+      invoice: row.invoice ? {
+        id: row.invoice.id,
+        totalAmount: Number(row.invoice.totalAmount),
+        status: row.invoice.status,
+        paidAt: row.invoice.paidAt,
+        items: (row.invoice.items || []).map((item: any) => ({
+          id: String(item.id),
+          description: item.description,
+          quantity: item.quantity,
+          unitPrice: Number(item.unitPrice),
+          amount: Number(item.amount),
+        })),
+      } : null,
       payment: row.invoice ? {
         status: row.invoice.status === 'PAID' ? 'paid' : 'unpaid',
         paid: row.invoice.status === 'PAID',
@@ -114,7 +127,7 @@ export class StaffAppointmentsService {
       },
       servicePackage: { include: { specialty: { include: { department: true } }, branchBookingMethod: { include: { bookingMethod: true } } } },
       servicePackageScheduleSlot: { include: { schedule: { include: { room: true } } } },
-      invoice: { include: { payments: { orderBy: { createdAt: 'desc' as const }, take: 1 } } },
+      invoice: { include: { items: true, payments: { orderBy: { createdAt: 'desc' as const }, take: 1 } } },
       medicalVisit: true,
       statusHistories: { orderBy: { createdAt: 'asc' as const }, take: 1, include: { actor: { select: { id: true, fullName: true, email: true, role: true } } } },
     }
