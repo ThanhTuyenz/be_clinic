@@ -538,13 +538,40 @@ async function seedBookingTables({ users, doctors, branches, rooms }) {
   const branchMethodByCode = new Map(configuredMethods.map((item) => [item.bookingMethod.code, item]));
   const pharmacist = users.get('pharmacist@vitacare.local');
   const patientUser = users.get('patient@vitacare.local');
-  const amlodipine = await prisma.medicine.upsert({
-    where: { code: 'MED-AMLO-5' },
-    update: { name: 'Amlodipine', activeIngredient: 'Amlodipine', strength: '5 mg', unit: 'viên', unitPrice: 1200, stockQuantity: 500, isActive: true },
-    create: { code: 'MED-AMLO-5', name: 'Amlodipine', activeIngredient: 'Amlodipine', strength: '5 mg', unit: 'viên', unitPrice: 1200, stockQuantity: 500 },
-  });
+  // Danh mục generic phục vụ demo kê/cấp thuốc. Hàm lượng và dạng bào chế dựa trên
+  // WHO Model List of Essential Medicines; giá chỉ là dữ liệu mô phỏng, không phải giá kê khai.
+  const medicineCatalog = [
+    ['MED-PARA-500-TAB', 'Paracetamol 500 mg viên nén', 'Paracetamol', '500 mg', 'viên', 800, 1000],
+    ['MED-IBU-400-TAB', 'Ibuprofen 400 mg viên nén', 'Ibuprofen', '400 mg', 'viên', 1200, 500],
+    ['MED-AMOX-500-CAP', 'Amoxicillin 500 mg viên nang', 'Amoxicillin', '500 mg', 'viên', 2500, 500],
+    ['MED-AMOXCLAV-625-TAB', 'Amoxicillin/Clavulanic acid 500 mg/125 mg viên nén', 'Amoxicillin + acid clavulanic', '500 mg/125 mg', 'viên', 8500, 300],
+    ['MED-AZITH-500-TAB', 'Azithromycin 500 mg viên nén', 'Azithromycin', '500 mg', 'viên', 6500, 300],
+    ['MED-CEPHALEXIN-500-CAP', 'Cefalexin 500 mg viên nang', 'Cefalexin', '500 mg', 'viên', 3500, 400],
+    ['MED-METRO-500-TAB', 'Metronidazole 500 mg viên nén', 'Metronidazole', '500 mg', 'viên', 1000, 500],
+    ['MED-OMEP-20-CAP', 'Omeprazole 20 mg viên nang kháng dịch vị', 'Omeprazole', '20 mg', 'viên', 1800, 500],
+    ['MED-ORS-SACHET', 'Oresol gói pha 1 lít', 'Glucose + natri clorid + kali clorid + natri citrat', 'Gói pha 1 L', 'gói', 4500, 300],
+    ['MED-CETI-10-TAB', 'Cetirizine 10 mg viên nén', 'Cetirizine', '10 mg', 'viên', 1000, 500],
+    ['MED-SALB-100-INH', 'Salbutamol 100 microgam/liều bình hít', 'Salbutamol', '100 microgam/liều', 'bình', 85000, 80],
+    ['MED-BUD-200-INH', 'Budesonide 200 microgam/liều bình hít', 'Budesonide', '200 microgam/liều', 'bình', 145000, 60],
+    ['MED-AMLO-5', 'Amlodipine 5 mg viên nén', 'Amlodipine', '5 mg', 'viên', 1200, 500],
+    ['MED-LOSAR-50-TAB', 'Losartan 50 mg viên nén', 'Losartan', '50 mg', 'viên', 2200, 500],
+    ['MED-HCTZ-25-TAB', 'Hydrochlorothiazide 25 mg viên nén', 'Hydrochlorothiazide', '25 mg', 'viên', 900, 400],
+    ['MED-METF-500-TAB', 'Metformin 500 mg viên nén', 'Metformin hydrochloride', '500 mg', 'viên', 1200, 600],
+    ['MED-GLIC-80-TAB', 'Gliclazide 80 mg viên nén', 'Gliclazide', '80 mg', 'viên', 1700, 300],
+    ['MED-ATOR-20-TAB', 'Atorvastatin 20 mg viên nén', 'Atorvastatin', '20 mg', 'viên', 2500, 500],
+    ['MED-ASA-81-TAB', 'Acid acetylsalicylic 81 mg viên bao tan trong ruột', 'Acid acetylsalicylic', '81 mg', 'viên', 900, 400],
+    ['MED-LEVOTH-50-TAB', 'Levothyroxine 50 microgam viên nén', 'Levothyroxine natri', '50 microgam', 'viên', 1800, 300],
+    ['MED-FERRO-60-TAB', 'Sắt nguyên tố 60 mg + acid folic 400 microgam viên nén', 'Muối sắt + acid folic', '60 mg/400 microgam', 'viên', 1500, 500],
+    ['MED-PRED-5-TAB', 'Prednisolone 5 mg viên nén', 'Prednisolone', '5 mg', 'viên', 1000, 300],
+  ];
+  const medicinesByCode = new Map();
+  for (const [code, name, activeIngredient, strength, unit, unitPrice, stockQuantity] of medicineCatalog) {
+    const medicine = await prisma.medicine.upsert({ where: { code }, update: { name, activeIngredient, strength, unit, unitPrice, stockQuantity, isActive: true }, create: { code, name, activeIngredient, strength, unit, unitPrice, stockQuantity } });
+    medicinesByCode.set(code, medicine);
+  }
+  const amlodipine = medicinesByCode.get('MED-AMLO-5');
   const serviceDepartmentRows = await prisma.department.findMany({
-    where: { name: { in: ['Khoa Nội', 'Khoa Ngoại', 'Khoa Sản – Phụ khoa', 'Khoa Chuyên khoa Giác quan & Răng Hàm Mặt'] } },
+    where: { name: { in: ['Khoa Nội', 'Khoa Ngoại', 'Khoa Da liễu', 'Khoa Sản – Phụ khoa', 'Khoa Chuyên khoa Giác quan & Răng Hàm Mặt'] } },
     select: { id: true, name: true },
   });
   const serviceDepartmentIds = new Map(serviceDepartmentRows.map((department) => [department.name, department.id]));
@@ -591,6 +618,28 @@ async function seedBookingTables({ users, doctors, branches, rooms }) {
     ['R42', 'Chóng mặt và choáng váng', 'Khoa Nội'],
     ['R50.9', 'Sốt, không xác định', 'Khoa Nội'],
     ['R51', 'Đau đầu', 'Khoa Nội'],
+    ['A04.9', 'Nhiễm trùng đường ruột do vi khuẩn, không xác định', 'Khoa Nội'],
+    ['B34.9', 'Nhiễm virus, không xác định', 'Khoa Nội'],
+    ['D50.9', 'Thiếu máu thiếu sắt, không xác định', 'Khoa Nội'],
+    ['E66.9', 'Béo phì, không xác định', 'Khoa Nội'],
+    ['E79.0', 'Tăng acid uric máu không có biểu hiện viêm khớp và bệnh gút', 'Khoa Nội'],
+    ['F41.1', 'Rối loạn lo âu lan tỏa', 'Khoa Nội'],
+    ['G47.0', 'Rối loạn khởi phát và duy trì giấc ngủ', 'Khoa Nội'],
+    ['H00.0', 'Lẹo và viêm sâu khác của mi mắt', 'Khoa Chuyên khoa Giác quan & Răng Hàm Mặt'],
+    ['I48', 'Rung nhĩ và cuồng nhĩ', 'Khoa Nội'],
+    ['I83.9', 'Giãn tĩnh mạch chi dưới không loét hoặc viêm', 'Khoa Ngoại'],
+    ['J01.9', 'Viêm xoang cấp, không xác định', 'Khoa Chuyên khoa Giác quan & Răng Hàm Mặt'],
+    ['J32.9', 'Viêm xoang mạn, không xác định', 'Khoa Chuyên khoa Giác quan & Răng Hàm Mặt'],
+    ['K59.0', 'Táo bón', 'Khoa Nội'],
+    ['L50.9', 'Mày đay, không xác định', 'Khoa Da liễu'],
+    ['M10.9', 'Bệnh gút, không xác định', 'Khoa Nội'],
+    ['M25.5', 'Đau khớp', 'Khoa Ngoại'],
+    ['N30.0', 'Viêm bàng quang cấp', 'Khoa Ngoại'],
+    ['N40', 'Tăng sản tuyến tiền liệt', 'Khoa Ngoại'],
+    ['R00.2', 'Đánh trống ngực', 'Khoa Nội'],
+    ['R07.4', 'Đau ngực, không xác định', 'Khoa Nội'],
+    ['R53', 'Khó chịu và mệt mỏi', 'Khoa Nội'],
+    ['Z00.0', 'Khám sức khỏe tổng quát người không có than phiền hoặc chẩn đoán', 'Khoa Nội'],
   ];
   for (const [code, description, departmentName] of icd10Catalog) {
     const departmentId = serviceDepartmentIds.get(departmentName) || null;
@@ -685,11 +734,12 @@ async function seedBookingTables({ users, doctors, branches, rooms }) {
   }
   for (const [specialtyIndex, specialty] of bookingSpecialties.entries()) {
     const codeSuffix = String(specialty.id).padStart(3, '0');
+    const specialtyName = String(specialty.name || 'chuyên khoa').trim().replace(/^Khám\s+/i, '');
     const specialtyServices = [
-      { code: `CONSULT-${codeSuffix}-STANDARD`, name: 'Khám dịch vụ', price: 220000, durationMin: 30, description: 'Khám trong giờ hành chính theo lịch của chuyên khoa.' },
-      { code: `CONSULT-${codeSuffix}-AFTER`, name: 'Khám dịch vụ ngoài giờ', price: 270000, durationMin: 30, description: 'Khám ngoài giờ hành chính theo lịch được công bố.' },
-      { code: `CONSULT-${codeSuffix}-FOLLOWUP`, name: 'Tái khám', price: 180000, durationMin: 20, description: 'Tái khám theo chỉ định của bác sĩ.' },
-      { code: `CONSULT-${codeSuffix}-ADVICE`, name: 'Tư vấn khám bệnh', price: 150000, durationMin: 20, description: 'Tư vấn ban đầu với bác sĩ chuyên khoa trước khi quyết định lịch khám phù hợp.' },
+      { code: `CONSULT-${codeSuffix}-STANDARD`, name: `Khám ${specialtyName} trong giờ`, price: 220000, durationMin: 30, description: `Khám ban đầu các triệu chứng và bệnh lý thuộc ${specialtyName}, thực hiện trong giờ hành chính.` },
+      { code: `CONSULT-${codeSuffix}-AFTER`, name: `Khám ${specialtyName} ngoài giờ`, price: 270000, durationMin: 30, description: `Khám các triệu chứng và bệnh lý thuộc ${specialtyName} ngoài giờ hành chính theo lịch được công bố.` },
+      { code: `CONSULT-${codeSuffix}-FOLLOWUP`, name: `Tái khám ${specialtyName}`, price: 180000, durationMin: 20, description: `Theo dõi đáp ứng điều trị, xem lại kết quả và điều chỉnh kế hoạch điều trị thuộc ${specialtyName}.` },
+      { code: `CONSULT-${codeSuffix}-ADVICE`, name: `Tư vấn ${specialtyName}`, price: 150000, durationMin: 20, description: `Tư vấn ban đầu về triệu chứng, nguy cơ và hướng thăm khám phù hợp thuộc ${specialtyName}.` },
     ];
     for (const service of specialtyServices) {
       const methodCode = service.code.endsWith('-AFTER') ? 'AFTER_HOURS' : service.code.endsWith('-ADVICE') ? 'CONSULTATION' : 'SPECIALTY_EXAM';
@@ -765,25 +815,13 @@ async function seedBookingTables({ users, doctors, branches, rooms }) {
     }
   }
   const ecgService = medicalServicesByCode.get('PROC_ECG');
-  await prisma.inventoryStock.upsert({
-    where: { branchId_medicineId: { branchId: branches[0].id, medicineId: amlodipine.id } },
-    update: { quantity: 500 },
-    create: { branchId: branches[0].id, medicineId: amlodipine.id, quantity: 500 },
-  });
-  await prisma.inventoryMovement.deleteMany({
-    where: { referenceId: 'SEED-INITIAL-STOCK-AMLO' },
-  });
-  await prisma.inventoryMovement.create({
-    data: {
-      branchId: branches[0].id,
-      medicineId: amlodipine.id,
-      type: 'IMPORT',
-      quantity: 500,
-      referenceId: 'SEED-INITIAL-STOCK-AMLO',
-      note: 'Nhập kho ban đầu từ seed data',
-      createdById: pharmacist.id,
-    },
-  });
+  await prisma.inventoryMovement.deleteMany({ where: { referenceId: 'SEED-INITIAL-STOCK-AMLO' } });
+  for (const medicine of medicinesByCode.values()) {
+    await prisma.inventoryStock.upsert({ where: { branchId_medicineId: { branchId: branches[0].id, medicineId: medicine.id } }, update: { quantity: medicine.stockQuantity }, create: { branchId: branches[0].id, medicineId: medicine.id, quantity: medicine.stockQuantity } });
+    const referenceId = `SEED-STOCK:${medicine.code}`;
+    await prisma.inventoryMovement.deleteMany({ where: { referenceId } });
+    await prisma.inventoryMovement.create({ data: { branchId: branches[0].id, medicineId: medicine.id, type: 'IMPORT', quantity: medicine.stockQuantity, referenceId, note: 'Tồn kho khởi tạo cho dữ liệu demo', createdById: pharmacist.id } });
+  }
   await prisma.review.upsert({
     where: { doctorId_reviewerId: { doctorId: cardioDoctor.id, reviewerId: patientUser.id } },
     update: { rating: 5, comment: 'Bác sĩ tư vấn tận tình, quy trình khám rõ ràng.', isActive: true },
