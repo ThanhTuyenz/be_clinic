@@ -57,7 +57,9 @@ model Specialty {
   description  String?
   department   Department        @relation(fields: [departmentId], references: [id], onDelete: Restrict)
   doctors      DoctorSpecialty[]
-  services     SpecialtyService[]
+  servicePackages ServicePackage[]
+  branches     BranchSpecialty[]
+  rooms        ClinicRoomSpecialty[]
 
   @@unique([departmentId, name])
   @@map("specialties")
@@ -83,7 +85,6 @@ model Doctor {
   user               User                      @relation(fields: [userId], references: [id], onDelete: Cascade)
   department         Department?               @relation(fields: [departmentId], references: [id], onDelete: SetNull)
   specialties        DoctorSpecialty[]
-  scheduleTemplates  DoctorScheduleTemplate[]
   scheduleExceptions DoctorScheduleException[]
   schedules          DoctorSchedule[]
   appointments       Appointment[]

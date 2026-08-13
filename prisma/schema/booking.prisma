@@ -2,10 +2,11 @@ model Appointment {
   id                  String                     @id @default(uuid()) @db.Uuid
   bookingCode         String?                    @unique @map("booking_code") @db.VarChar(30)
   patientProfileId    String                     @map("patient_profile_id") @db.Uuid
-  doctorId            String                     @map("doctor_id") @db.Uuid
+  doctorId            String?                    @map("doctor_id") @db.Uuid
   branchId            String                     @map("branch_id") @db.Uuid
-  scheduleSlotId      String                     @map("schedule_slot_id") @db.Uuid
-  specialtyServiceId  String?                    @map("specialty_service_id") @db.Uuid
+  scheduleSlotId      String?                    @map("schedule_slot_id") @db.Uuid
+  servicePackageId    String?                    @map("service_package_id") @db.Uuid
+  servicePackageScheduleSlotId String?           @map("service_package_schedule_slot_id") @db.Uuid
   servicePrice        Decimal?                   @map("service_price") @db.Decimal(12, 2)
   symptomsDescription String?                    @map("symptoms_description")
   bookedViaAi         Boolean                    @default(false) @map("booked_via_ai")
@@ -17,10 +18,11 @@ model Appointment {
   createdAt           DateTime                   @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt           DateTime                   @updatedAt @map("updated_at") @db.Timestamptz(3)
   patientProfile      PatientProfile             @relation(fields: [patientProfileId], references: [id], onDelete: Restrict)
-  doctor              Doctor                     @relation(fields: [doctorId], references: [id], onDelete: Restrict)
+  doctor              Doctor?                    @relation(fields: [doctorId], references: [id], onDelete: Restrict)
   branch              Branch                     @relation(fields: [branchId], references: [id], onDelete: Restrict)
-  scheduleSlot        DoctorScheduleSlot         @relation(fields: [scheduleSlotId], references: [id], onDelete: Restrict)
-  specialtyService    SpecialtyService?           @relation(fields: [specialtyServiceId], references: [id], onDelete: Restrict)
+  scheduleSlot        DoctorScheduleSlot?        @relation(fields: [scheduleSlotId], references: [id], onDelete: Restrict)
+  servicePackage      ServicePackage?             @relation(fields: [servicePackageId], references: [id], onDelete: Restrict)
+  servicePackageScheduleSlot ServicePackageScheduleSlot? @relation(fields: [servicePackageScheduleSlotId], references: [id], onDelete: Restrict)
   checkedInBy         User?                      @relation("CheckedInBy", fields: [checkedInById], references: [id], onDelete: SetNull)
   statusHistories     AppointmentStatusHistory[]
   qrToken             AppointmentQrToken?
@@ -33,7 +35,8 @@ model Appointment {
   @@index([doctorId, status, createdAt])
   @@index([branchId, status, createdAt])
   @@index([scheduleSlotId, status])
-  @@index([specialtyServiceId, status])
+  @@index([servicePackageId, status])
+  @@index([servicePackageScheduleSlotId, status])
   @@map("appointments")
 }
 

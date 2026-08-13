@@ -1,1 +1,0 @@
-DROP INDEX IF EXISTS "health_package_schedules_health_package_id_room_id_exam_dat_key";

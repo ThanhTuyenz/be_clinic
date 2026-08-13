@@ -84,6 +84,7 @@ enum MedicalVisitStatus {
 enum PrescriptionStatus {
   DRAFT
   ISSUED
+  DISPENSED
   CANCELLED
 }
 
