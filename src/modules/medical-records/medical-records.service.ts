@@ -29,7 +29,7 @@ export class MedicalRecordsService {
     }
     if (user.role === 'DOCTOR' && user.doctor?.id) {
       const assigned = await this.prisma.appointment.findFirst({
-        where: { patientProfileId, doctorId: user.doctor.id },
+        where: { patientProfileId, scheduleSlot: { schedule: { doctorId: user.doctor.id } } },
         select: { id: true },
       })
       if (assigned) return
@@ -48,9 +48,8 @@ export class MedicalRecordsService {
               include: {
                 appointment: {
                   include: {
-                    doctor: { select: { id: true, fullName: true, academicRank: true } },
+                    scheduleSlot: { include: { schedule: { include: { doctor: { select: { id: true, fullName: true, academicRank: true } }, room: true } } } },
                     branch: { select: { id: true, name: true } },
-                    scheduleSlot: { include: { schedule: { include: { room: true } } } },
                   },
                 },
               },

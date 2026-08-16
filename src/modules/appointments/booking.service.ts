@@ -105,7 +105,7 @@ export class BookingService {
           const holdTtlMs = this.config.getOrThrow<RabbitMqConfig>('rabbitmq').holdTtlMs;
           const [{ now, expiresAt }] = await tx.$queryRaw<Array<{ now: Date; expiresAt: Date }>>`SELECT NOW() AS "now", NOW() + (${holdTtlMs} * INTERVAL '1 millisecond') AS "expiresAt"`;
           const price = doctorSlot.schedule.doctor.consultationFee;
-          const appointment = await tx.appointment.create({ data: { patientProfileId: profile.id, doctorId: doctorSlot.schedule.doctorId, branchId: doctorSlot.schedule.branchId, scheduleSlotId: doctorSlot.id, servicePrice: price, symptomsDescription: dto.symptomsDescription, bookedViaAi: dto.bookedViaAi ?? false, holdExpiresAt: expiresAt, statusHistories: { create: { toStatus: 'PENDING_PAYMENT', actorId: accountId } } } });
+          const appointment = await tx.appointment.create({ data: { patientProfileId: profile.id, branchId: doctorSlot.schedule.branchId, scheduleSlotId: doctorSlot.id, servicePrice: price, symptomsDescription: dto.symptomsDescription, bookedViaAi: dto.bookedViaAi ?? false, holdExpiresAt: expiresAt, statusHistories: { create: { toStatus: 'PENDING_PAYMENT', actorId: accountId } } } });
           const invoice = await tx.invoice.create({ data: { appointmentId: appointment.id, issuedBranchId: doctorSlot.schedule.branchId, totalAmount: price, items: { create: { description: `Khám với ${doctorSlot.schedule.doctor.fullName}`, quantity: 1, unitPrice: price, amount: price } } } });
           const payment = await tx.paymentTransaction.create({ data: { invoiceId: invoice.id, provider: 'PENDING_SELECTION', idempotencyKey: `checkout:${appointment.id}`, method: 'ONLINE', amount: invoice.totalAmount } });
           await tx.outboxEvent.create({ data: { aggregateType: 'Appointment', aggregateId: appointment.id, eventType: 'appointment.hold.created', payload: { appointmentId: appointment.id, doctorSlotId: doctorSlot.id, holdExpiresAt: expiresAt.toISOString() } } });
@@ -156,7 +156,6 @@ export class BookingService {
         const appointment = await tx.appointment.create({
           data: {
             patientProfileId: profile.id,
-            doctorId: doctorSlot?.schedule.doctorId,
             branchId: servicePackage.branchBookingMethod.branchId,
             scheduleSlotId: doctorSlot?.id,
             servicePackageId: servicePackage.id,
@@ -304,11 +303,10 @@ export class BookingService {
       orderBy: { createdAt: 'desc' },
       include: {
         patientProfile: true,
-        doctor: true,
         servicePackage: true,
         branch: true,
         invoice: { include: { payments: { orderBy: { createdAt: 'desc' }, take: 1 } } },
-        scheduleSlot: { include: { schedule: { include: { room: true, branch: true } } } },
+        scheduleSlot: { include: { schedule: { include: { doctor: true, room: true, branch: true } } } },
         servicePackageScheduleSlot: { include: { schedule: { include: { room: true } } } },
       },
     });
@@ -327,7 +325,7 @@ export class BookingService {
         startTime: (packageSlot?.startTime ?? doctorSlot?.startTime)?.toISOString().slice(11, 16) ?? null,
         endTime: (packageSlot?.endTime ?? doctorSlot?.endTime)?.toISOString().slice(11, 16) ?? null,
         patient: { id: row.patientProfile.id, fullName: row.patientProfile.fullName },
-        doctor: row.doctor ? { id: row.doctor.id, fullName: row.doctor.fullName } : null,
+        doctor: (() => { const d = doctorSlot?.schedule?.doctor; return d ? { id: d.id, fullName: d.fullName } : null; })(),
         service: row.servicePackage ? { id: row.servicePackage.id, name: row.servicePackage.name } : null,
         healthPackage: row.servicePackage ? { id: row.servicePackage.id, name: row.servicePackage.name } : null,
         branch: branch ? { id: branch.id, name: branch.name, address: branch.address } : null,
@@ -344,10 +342,9 @@ export class BookingService {
       where: { id: appointmentId, patientProfile: { accountId } },
       include: {
         patientProfile: true,
-        doctor: true,
         servicePackage: true,
         branch: true,
-        scheduleSlot: { include: { schedule: { include: { room: true, branch: true } } } },
+        scheduleSlot: { include: { schedule: { include: { doctor: true, room: true, branch: true } } } },
         servicePackageScheduleSlot: { include: { schedule: { include: { room: true } } } },
       },
     });
@@ -382,7 +379,7 @@ export class BookingService {
       endTime: (doctorSlot?.endTime ?? packageSlot!.endTime).toISOString().slice(11, 16),
       room: room ? { id: room.id, code: room.code, name: room.name } : null,
       branch: { id: branch.id, name: branch.name, address: branch.address },
-      doctor: row.doctor ? { id: row.doctor.id, fullName: row.doctor.fullName } : null,
+      doctor: (() => { const d = row.scheduleSlot?.schedule?.doctor; return d ? { id: d.id, fullName: d.fullName } : null; })(),
       healthPackage: row.servicePackage ? { id: row.servicePackage.id, name: row.servicePackage.name } : null,
       patient: { id: row.patientProfile.id, fullName: row.patientProfile.fullName },
     };
@@ -401,20 +398,18 @@ export class BookingService {
         where: { tokenHash },
         include: { appointment: { include: {
           patientProfile: true,
-          doctor: true,
           servicePackage: true,
-          scheduleSlot: { include: { schedule: { include: { room: true } } } },
+          scheduleSlot: { include: { schedule: { include: { doctor: true, room: true } } } },
           servicePackageScheduleSlot: { include: { schedule: { include: { room: true } } } },
         } } },
       });
       if (!qr || qr.expiresAt <= new Date()) throw new NotFoundException('QR không hợp lệ hoặc đã hết hạn');
       const alreadyCheckedIn = qr.appointment.status === 'CHECKED_IN';
       if (!alreadyCheckedIn && qr.appointment.status !== 'BOOKED') throw new ConflictException('APPOINTMENT_NOT_CHECKIN_READY');
-      let assignedDoctorId = qr.appointment.doctorId;
       let assignedDoctorSlotId = qr.appointment.scheduleSlotId;
       const packageSlot = qr.appointment.servicePackageScheduleSlot;
       const specialtyId = qr.appointment.servicePackage?.specialtyId;
-      if (!assignedDoctorId && packageSlot && specialtyId) {
+      if (!assignedDoctorSlotId && packageSlot && specialtyId) {
         const candidates = await tx.doctorScheduleSlot.findMany({
           where: {
             isActive: true,
@@ -436,19 +431,18 @@ export class BookingService {
             data: { occupiedCount: { increment: 1 } },
           });
           if (reserved.count === 1) {
-            assignedDoctorId = candidate.schedule.doctorId;
             assignedDoctorSlotId = candidate.id;
             break;
           }
         }
-        if (!assignedDoctorId) throw new ConflictException('Chưa có bác sĩ đúng chuyên khoa còn chỗ trong khung giờ này');
+        if (!assignedDoctorSlotId) throw new ConflictException('Chưa có bác sĩ đúng chuyên khoa còn chỗ trong khung giờ này');
       }
       if (alreadyCheckedIn) {
-        if (assignedDoctorId !== qr.appointment.doctorId || assignedDoctorSlotId !== qr.appointment.scheduleSlotId) {
+        if (assignedDoctorSlotId !== qr.appointment.scheduleSlotId) {
           const repairedAppointment = await tx.appointment.update({
             where: { id: qr.appointment.id },
-            data: { doctorId: assignedDoctorId, scheduleSlotId: assignedDoctorSlotId },
-            include: { patientProfile: true, doctor: true, servicePackage: true, scheduleSlot: { include: { schedule: { include: { room: true } } } }, servicePackageScheduleSlot: { include: { schedule: { include: { room: true } } } } },
+            data: { scheduleSlotId: assignedDoctorSlotId },
+            include: { patientProfile: true, servicePackage: true, scheduleSlot: { include: { schedule: { include: { doctor: true, room: true } } } }, servicePackageScheduleSlot: { include: { schedule: { include: { room: true } } } } },
           });
           return this.checkInResult(repairedAppointment, channel);
         }
@@ -470,8 +464,8 @@ export class BookingService {
       if (!counter) throw new ConflictException('Không tìm thấy khung giờ của lịch hẹn');
       const appointment = await tx.appointment.update({
         where: { id: qr.appointment.id },
-        data: { status: 'CHECKED_IN', doctorId: assignedDoctorId, scheduleSlotId: assignedDoctorSlotId, queueNumber: counter.nextQueueNumber, checkedInAt: new Date(), checkedInById: actorId, statusHistories: { create: { fromStatus: 'BOOKED', toStatus: 'CHECKED_IN', actorId, reason: `CHECK_IN_${channel}` } } },
-        include: { patientProfile: true, doctor: true, servicePackage: true, scheduleSlot: { include: { schedule: { include: { room: true } } } }, servicePackageScheduleSlot: { include: { schedule: { include: { room: true } } } } },
+        data: { status: 'CHECKED_IN', scheduleSlotId: assignedDoctorSlotId, queueNumber: counter.nextQueueNumber, checkedInAt: new Date(), checkedInById: actorId, statusHistories: { create: { fromStatus: 'BOOKED', toStatus: 'CHECKED_IN', actorId, reason: `CHECK_IN_${channel}` } } },
+        include: { patientProfile: true, servicePackage: true, scheduleSlot: { include: { schedule: { include: { doctor: true, room: true } } } }, servicePackageScheduleSlot: { include: { schedule: { include: { room: true } } } } },
       });
       await tx.appointmentQrToken.update({ where: { id: qr.id }, data: { usedAt: new Date() } });
       return this.checkInResult(appointment, channel);
@@ -480,7 +474,8 @@ export class BookingService {
 
   private checkInResult(appointment: any, channel: 'KIOSK' | 'RECEPTIONIST') {
     const room = appointment.servicePackageScheduleSlot?.schedule?.room ?? appointment.scheduleSlot?.schedule?.room;
-    return { appointmentId: appointment.id, bookingCode: appointment.bookingCode, queueNumber: appointment.queueNumber, status: appointment.status, channel, checkedInAt: appointment.checkedInAt, patient: { fullName: appointment.patientProfile?.fullName }, doctor: appointment.doctor ? { fullName: appointment.doctor.fullName } : null, healthPackage: appointment.servicePackage ? { name: appointment.servicePackage.name } : null, room: room ? { code: room.code, name: room.name } : null };
+    const doctor = appointment.scheduleSlot?.schedule?.doctor;
+    return { appointmentId: appointment.id, bookingCode: appointment.bookingCode, queueNumber: appointment.queueNumber, status: appointment.status, channel, checkedInAt: appointment.checkedInAt, patient: { fullName: appointment.patientProfile?.fullName }, doctor: doctor ? { fullName: doctor.fullName } : null, healthPackage: appointment.servicePackage ? { name: appointment.servicePackage.name } : null, room: room ? { code: room.code, name: room.name } : null };
   }
 
   private async confirmPaid(tx: Prisma.TransactionClient, paymentId: string, invoiceId: string, appointmentId: string, provider: string, dto: PaymentWebhookDto, late: boolean) {

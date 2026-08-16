@@ -87,7 +87,7 @@ model Doctor {
   specialties        DoctorSpecialty[]
   scheduleExceptions DoctorScheduleException[]
   schedules          DoctorSchedule[]
-  appointments       Appointment[]
+
   reviews            Review[]
   medicalVisits      MedicalVisit[]
 

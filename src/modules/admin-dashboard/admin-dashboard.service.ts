@@ -79,7 +79,7 @@ export class AdminDashboardService {
 
     const branchIds = user.branchAssignments.map((item) => item.branchId)
     const appointmentScope: Record<string, unknown> = {}
-    if (user.role === 'DOCTOR') appointmentScope.doctorId = user.doctor?.id || '__none__'
+    if (user.role === 'DOCTOR') appointmentScope.scheduleSlot = { schedule: { doctorId: user.doctor?.id || '__none__' } }
     else if (user.role !== 'ADMIN') appointmentScope.branchId = { in: branchIds.length ? branchIds : ['__none__'] }
 
     const now = new Date()

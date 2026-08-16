@@ -127,13 +127,13 @@ export class MedicalVisitsService {
       this.prisma.user.findUnique({ where: { id: userId }, select: { role: true, doctor: { select: { id: true } } } }),
       this.prisma.appointment.findUnique({
         where: { id: appointmentId },
-        select: { id: true, doctorId: true, branchId: true, patientProfileId: true, status: true },
+        select: { id: true, branchId: true, patientProfileId: true, status: true, scheduleSlot: { select: { schedule: { select: { doctorId: true } } } } },
       }),
     ])
     if (!appointment) throw new NotFoundException('Không tìm thấy lịch khám')
     const allowed = user && (
       user.role === 'ADMIN' ||
-      (user.role === 'DOCTOR' && user.doctor?.id === appointment.doctorId) ||
+      (user.role === 'DOCTOR' && user.doctor?.id === appointment.scheduleSlot?.schedule?.doctorId) ||
       (!write && ['BRANCH_MANAGER', 'RECEPTIONIST'].includes(user.role))
     )
     if (!allowed) throw new ForbiddenException('Không có quyền truy cập hồ sơ khám này')
@@ -281,7 +281,7 @@ export class MedicalVisitsService {
         create: {
           medicalRecordId: medicalRecord.id,
           appointmentId,
-          doctorId: appointment.doctorId,
+          doctorId: appointment.scheduleSlot?.schedule?.doctorId!,
           branchId: appointment.branchId,
           createdById: userId,
           symptoms: String(normalized.symptoms || '').trim() || null,
@@ -291,7 +291,7 @@ export class MedicalVisitsService {
           payload: normalized as Prisma.InputJsonValue,
         },
         update: {
-          doctorId: appointment.doctorId,
+          doctorId: appointment.scheduleSlot?.schedule?.doctorId!,
           branchId: appointment.branchId,
           symptoms: String(normalized.symptoms || '').trim() || null,
           clinicalNotes: String(normalized.clinicalNotes || normalized.notes || '').trim() || null,

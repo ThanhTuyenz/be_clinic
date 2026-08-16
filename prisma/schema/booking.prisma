@@ -2,7 +2,6 @@ model Appointment {
   id                  String                     @id @default(uuid()) @db.Uuid
   bookingCode         String?                    @unique @map("booking_code") @db.VarChar(30)
   patientProfileId    String                     @map("patient_profile_id") @db.Uuid
-  doctorId            String?                    @map("doctor_id") @db.Uuid
   branchId            String                     @map("branch_id") @db.Uuid
   scheduleSlotId      String?                    @map("schedule_slot_id") @db.Uuid
   servicePackageId    String?                    @map("service_package_id") @db.Uuid
@@ -18,7 +17,6 @@ model Appointment {
   createdAt           DateTime                   @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt           DateTime                   @updatedAt @map("updated_at") @db.Timestamptz(3)
   patientProfile      PatientProfile             @relation(fields: [patientProfileId], references: [id], onDelete: Restrict)
-  doctor              Doctor?                    @relation(fields: [doctorId], references: [id], onDelete: Restrict)
   branch              Branch                     @relation(fields: [branchId], references: [id], onDelete: Restrict)
   scheduleSlot        DoctorScheduleSlot?        @relation(fields: [scheduleSlotId], references: [id], onDelete: Restrict)
   servicePackage      ServicePackage?             @relation(fields: [servicePackageId], references: [id], onDelete: Restrict)
@@ -32,7 +30,6 @@ model Appointment {
   @@unique([scheduleSlotId, queueNumber])
   @@index([patientProfileId, status])
   @@index([patientProfileId, createdAt])
-  @@index([doctorId, status, createdAt])
   @@index([branchId, status, createdAt])
   @@index([scheduleSlotId, status])
   @@index([servicePackageId, status])

@@ -283,7 +283,7 @@ async function main() {
         update: { status: 'OPEN', roomId: input.room.id, slotDurationMin: 60 },
         create: { doctorId: doctor.id, branchId: branches[0].id, roomId: input.room.id, workDate, startTime: time(8), endTime: time(11, 30), slotDurationMin: 60, status: 'OPEN' },
       });
-      for (const [startHour, endHour, endMinute, capacity] of [[8, 9, 0, 5], [9, 10, 0, 5], [10, 11, 0, 5], [11, 11, 30, 2]]) {
+      for (const [startHour, endHour, endMinute, capacity] of [[8, 9, 0, 10], [9, 10, 0, 10], [10, 11, 0, 10], [11, 11, 30, 10]]) {
         await prisma.doctorScheduleSlot.upsert({
           where: { scheduleId_startTime: { scheduleId: schedule.id, startTime: time(startHour) } },
           update: { endTime: time(endHour, endMinute), capacity, isActive: true },
@@ -326,7 +326,7 @@ async function main() {
         create: { doctorId: doctor.id, branchId: branches[0].id, roomId: room.id, workDate, startTime: time(8), endTime: time(16, 30), status: 'OPEN' },
       });
       for (const slot of servicePackageSlots()) {
-        await prisma.doctorScheduleSlot.upsert({ where: { scheduleId_startTime: { scheduleId: schedule.id, startTime: slot.startTime } }, update: { endTime: slot.endTime, capacity: 1, isActive: true }, create: { scheduleId: schedule.id, startTime: slot.startTime, endTime: slot.endTime, capacity: 1 } });
+        await prisma.doctorScheduleSlot.upsert({ where: { scheduleId_startTime: { scheduleId: schedule.id, startTime: slot.startTime } }, update: { endTime: slot.endTime, capacity: 10, isActive: true }, create: { scheduleId: schedule.id, startTime: slot.startTime, endTime: slot.endTime, capacity: 10 } });
       }
       weekdaysCreated += 1;
     }
@@ -444,7 +444,6 @@ async function seedTodayWaitingAppointments({ users, doctors, branches, rooms })
         where: { id: existing.id },
         data: {
           patientProfileId: profile.id,
-          doctorId: doctor.id,
           branchId: branches[0].id,
           scheduleSlotId: slot.id,
           servicePackageId: null,
@@ -462,7 +461,6 @@ async function seedTodayWaitingAppointments({ users, doctors, branches, rooms })
         data: {
           bookingCode,
           patientProfileId: profile.id,
-          doctorId: doctor.id,
           branchId: branches[0].id,
           scheduleSlotId: slot.id,
           servicePrice: doctor.consultationFee,
