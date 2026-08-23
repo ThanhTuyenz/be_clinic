@@ -113,15 +113,14 @@ export class SpecialtiesService {
       where: {
         isActive: true,
         specialties: { some: { specialtyId } },
-        ...(term ? { fullName: { contains: term, mode: 'insensitive' } } : {}),
-        ...(branchId
-          ? { user: { branchAssignments: { some: { branchId } } } }
-          : {}),
+        user: {
+          ...(term ? { fullName: { contains: term, mode: 'insensitive' } } : {}),
+          ...(branchId ? { branchAssignments: { some: { branchId } } } : {}),
+        },
       },
-      orderBy: [{ isFeatured: 'desc' }, { ratingAverage: 'desc' }, { fullName: 'asc' }],
+      orderBy: [{ isFeatured: 'desc' }, { ratingAverage: 'desc' }, { user: { fullName: 'asc' } }],
       select: {
         id: true,
-        fullName: true,
         academicRank: true,
         experienceYears: true,
         biography: true,
@@ -138,6 +137,7 @@ export class SpecialtiesService {
         },
         user: {
           select: {
+            fullName: true,
             branchAssignments: {
               where: branchId ? { branchId } : undefined,
               select: {
@@ -151,6 +151,7 @@ export class SpecialtiesService {
     })
     return doctors.map(({ user, ...doctor }) => ({
       ...doctor,
+      fullName: user.fullName || 'Bác sĩ',
       consultationFee: Number(doctor.consultationFee),
       branchAssignments: user.branchAssignments,
     }))

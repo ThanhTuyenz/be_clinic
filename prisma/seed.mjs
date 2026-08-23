@@ -186,8 +186,8 @@ async function main() {
     const user = users.get(input.email);
     const doctor = await prisma.doctor.upsert({
       where: { userId: user.id },
-      update: { fullName: user.fullName, consultationFee: input.fee, isActive: true, isFeatured: true },
-      create: { userId: user.id, fullName: user.fullName, consultationFee: input.fee, academicRank: 'Bác sĩ CKI', isFeatured: true },
+      update: { consultationFee: input.fee, isActive: true, isFeatured: true },
+      create: { userId: user.id, consultationFee: input.fee, academicRank: 'Bác sĩ CKI', isFeatured: true },
     });
     doctors.set(input.email, doctor);
     await prisma.doctorSpecialty.upsert({
@@ -233,8 +233,8 @@ async function main() {
     users.set(email, user);
     const doctor = await prisma.doctor.upsert({
       where: { userId: user.id },
-      update: { fullName, consultationFee: 250000, isActive: true },
-      create: { userId: user.id, fullName, consultationFee: 250000, academicRank: 'Bác sĩ CKI', isActive: true },
+      update: { consultationFee: 250000, isActive: true },
+      create: { userId: user.id, consultationFee: 250000, academicRank: 'Bác sĩ CKI', isActive: true },
     });
     doctors.set(email, doctor);
     await prisma.doctorSpecialty.upsert({ where: { doctorId_specialtyId: { doctorId: doctor.id, specialtyId: specialty.id } }, update: { isPrimary: true }, create: { doctorId: doctor.id, specialtyId: specialty.id, isPrimary: true } });
@@ -419,7 +419,7 @@ async function seedTodayWaitingAppointments({ users, doctors, branches, rooms })
         paidAt: checkedInAt,
         items: {
           create: {
-            description: `Khám với ${doctor.fullName}`,
+            description: `Khám với ${users.get('doctor.cardio@vitacare.local')?.fullName || ''}`,
             quantity: 1,
             unitPrice: doctor.consultationFee,
             amount: doctor.consultationFee,

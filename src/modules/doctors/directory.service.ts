@@ -127,11 +127,51 @@ export class DirectoryService {
     if (specialtyId !== undefined && !Number.isInteger(specialtyId)) throw new BadRequestException('specialtyId không hợp lệ');
     const term = q?.trim();
     const rows = await this.prisma.doctor.findMany({
-      where: { isActive: true, fullName: term ? { contains: term, mode: 'insensitive' } : undefined, specialties: specialtyId ? { some: { specialtyId } } : undefined, user: branchId ? { branchAssignments: { some: { branchId } } } : undefined },
-      orderBy: featuredOnly ? [{ ratingAverage: 'desc' }, { fullName: 'asc' }] : [{ isFeatured: 'desc' }, { ratingAverage: 'desc' }, { fullName: 'asc' }],
-      select: { id: true, fullName: true, academicRank: true, experienceYears: true, biography: true, consultationFee: true, ratingAverage: true, ratingCount: true, isFeatured: true, user: { select: { branchAssignments: { where: branchId ? { branchId } : undefined, select: { isPrimary: true, branch: { select: { id: true, name: true, address: true } } } } } }, specialties: { select: { isPrimary: true, specialty: { select: { id: true, name: true } } } } },
+      where: {
+        isActive: true,
+        specialties: specialtyId ? { some: { specialtyId } } : undefined,
+        user: {
+          fullName: term ? { contains: term, mode: 'insensitive' } : undefined,
+          ...(branchId ? { branchAssignments: { some: { branchId } } } : {}),
+        },
+      },
+      orderBy: featuredOnly
+        ? [{ ratingAverage: 'desc' }, { user: { fullName: 'asc' } }]
+        : [{ isFeatured: 'desc' }, { ratingAverage: 'desc' }, { user: { fullName: 'asc' } }],
+      select: {
+        id: true,
+        academicRank: true,
+        experienceYears: true,
+        biography: true,
+        consultationFee: true,
+        ratingAverage: true,
+        ratingCount: true,
+        isFeatured: true,
+        user: {
+          select: {
+            fullName: true,
+            branchAssignments: {
+              where: branchId ? { branchId } : undefined,
+              select: {
+                isPrimary: true,
+                branch: { select: { id: true, name: true, address: true } }
+              }
+            }
+          }
+        },
+        specialties: {
+          select: {
+            isPrimary: true,
+            specialty: { select: { id: true, name: true } }
+          }
+        }
+      },
     });
-    return rows.map(({ user, ...doctor }) => ({ ...doctor, branchAssignments: user.branchAssignments }));
+    return rows.map(({ user, ...doctor }) => ({
+      ...doctor,
+      fullName: user.fullName || 'Bác sĩ',
+      branchAssignments: user.branchAssignments
+    }));
   }
 
   async availableDates(doctorId: string, branchId: string) {

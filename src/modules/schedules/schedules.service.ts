@@ -77,7 +77,7 @@ export class SchedulesService {
         ...(branchId ? { branchId } : {}),
       },
       include: {
-        doctor: { select: { id: true, fullName: true, academicRank: true, consultationFee: true } },
+        doctor: { select: { id: true, academicRank: true, consultationFee: true, user: { select: { fullName: true } } } },
         branch: { select: { id: true, name: true, address: true } },
         room: { select: { id: true, code: true, name: true } },
         slots: {
@@ -96,7 +96,12 @@ export class SchedulesService {
       date,
       scheduleId: schedule.id,
       slotDurationMin: schedule.slotDurationMin,
-      doctor: (schedule as any).doctor,
+      doctor: schedule.doctor ? {
+        id: schedule.doctor.id,
+        fullName: schedule.doctor.user?.fullName ?? '',
+        academicRank: schedule.doctor.academicRank,
+        consultationFee: schedule.doctor.consultationFee
+      } : null,
       branch: (schedule as any).branch,
       room: (schedule as any).room,
       slots: ((schedule as any).slots as any[])
@@ -136,7 +141,7 @@ export class SchedulesService {
       where,
       orderBy: [{ workDate: 'asc' }, { startTime: 'asc' }],
       include: {
-        doctor: { select: { id: true, userId: true, fullName: true, academicRank: true } },
+        doctor: { select: { id: true, userId: true, academicRank: true, user: { select: { fullName: true } } } },
         branch: { select: { id: true, name: true } },
         room: { select: { id: true, code: true, name: true } },
         slots: { where: { isActive: true }, orderBy: { startTime: 'asc' } },
@@ -148,6 +153,12 @@ export class SchedulesService {
       workDate: r.workDate.toISOString().slice(0, 10),
       startTime: r.startTime.toISOString().slice(11, 16),
       endTime: r.endTime.toISOString().slice(11, 16),
+      doctor: r.doctor ? {
+        id: r.doctor.id,
+        userId: r.doctor.userId,
+        fullName: r.doctor.user?.fullName ?? '',
+        academicRank: r.doctor.academicRank
+      } : null,
       slots: r.slots.map((s) => ({
         ...s,
         startTime: s.startTime.toISOString().slice(11, 16),
@@ -199,7 +210,7 @@ export class SchedulesService {
         status: body.status || 'OPEN',
       },
       include: {
-        doctor: { select: { id: true, fullName: true, academicRank: true } },
+        doctor: { select: { id: true, academicRank: true, user: { select: { fullName: true } } } },
         branch: { select: { id: true, name: true } },
         room: { select: { id: true, code: true, name: true } },
       },
@@ -214,7 +225,15 @@ export class SchedulesService {
       capacityPerSlot,
     );
 
-    return { ...schedule, slotsGenerated: slotResult.slotsCreated };
+    return {
+      ...schedule,
+      doctor: schedule.doctor ? {
+        id: schedule.doctor.id,
+        fullName: schedule.doctor.user?.fullName ?? '',
+        academicRank: schedule.doctor.academicRank
+      } : null,
+      slotsGenerated: slotResult.slotsCreated
+    };
   }
 
   async update(id: string, body: any) {
@@ -240,7 +259,7 @@ export class SchedulesService {
       where: { id },
       data,
       include: {
-        doctor: { select: { id: true, fullName: true, academicRank: true } },
+        doctor: { select: { id: true, academicRank: true, user: { select: { fullName: true } } } },
         branch: { select: { id: true, name: true } },
         room: { select: { id: true, code: true, name: true } },
       },
@@ -255,7 +274,14 @@ export class SchedulesService {
       await this.generateSlotsForShift(id, finalStart, finalEnd, finalDuration, finalCapacity);
     }
 
-    return updated;
+    return {
+      ...updated,
+      doctor: updated.doctor ? {
+        id: updated.doctor.id,
+        fullName: updated.doctor.user?.fullName ?? '',
+        academicRank: updated.doctor.academicRank
+      } : null
+    };
   }
 
   async remove(id: string) {

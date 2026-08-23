@@ -306,7 +306,7 @@ export class BookingService {
         servicePackage: true,
         branch: true,
         invoice: { include: { payments: { orderBy: { createdAt: 'desc' }, take: 1 } } },
-        scheduleSlot: { include: { schedule: { include: { doctor: true, room: true, branch: true } } } },
+        scheduleSlot: { include: { schedule: { include: { doctor: { include: { user: true } }, room: true, branch: true } } } },
         servicePackageScheduleSlot: { include: { schedule: { include: { room: true } } } },
       },
     });
@@ -325,7 +325,7 @@ export class BookingService {
         startTime: (packageSlot?.startTime ?? doctorSlot?.startTime)?.toISOString().slice(11, 16) ?? null,
         endTime: (packageSlot?.endTime ?? doctorSlot?.endTime)?.toISOString().slice(11, 16) ?? null,
         patient: { id: row.patientProfile.id, fullName: row.patientProfile.fullName },
-        doctor: (() => { const d = doctorSlot?.schedule?.doctor; return d ? { id: d.id, fullName: d.fullName } : null; })(),
+        doctor: (() => { const d = doctorSlot?.schedule?.doctor; return d ? { id: d.id, fullName: d.user?.fullName ?? '' } : null; })(),
         service: row.servicePackage ? { id: row.servicePackage.id, name: row.servicePackage.name } : null,
         healthPackage: row.servicePackage ? { id: row.servicePackage.id, name: row.servicePackage.name } : null,
         branch: branch ? { id: branch.id, name: branch.name, address: branch.address } : null,
@@ -344,7 +344,7 @@ export class BookingService {
         patientProfile: true,
         servicePackage: true,
         branch: true,
-        scheduleSlot: { include: { schedule: { include: { doctor: true, room: true, branch: true } } } },
+        scheduleSlot: { include: { schedule: { include: { doctor: { include: { user: true } }, room: true, branch: true } } } },
         servicePackageScheduleSlot: { include: { schedule: { include: { room: true } } } },
       },
     });
@@ -379,7 +379,7 @@ export class BookingService {
       endTime: (doctorSlot?.endTime ?? packageSlot!.endTime).toISOString().slice(11, 16),
       room: room ? { id: room.id, code: room.code, name: room.name } : null,
       branch: { id: branch.id, name: branch.name, address: branch.address },
-      doctor: (() => { const d = row.scheduleSlot?.schedule?.doctor; return d ? { id: d.id, fullName: d.fullName } : null; })(),
+      doctor: (() => { const d = row.scheduleSlot?.schedule?.doctor; return d ? { id: d.id, fullName: d.user?.fullName ?? '' } : null; })(),
       healthPackage: row.servicePackage ? { id: row.servicePackage.id, name: row.servicePackage.name } : null,
       patient: { id: row.patientProfile.id, fullName: row.patientProfile.fullName },
     };
@@ -740,7 +740,7 @@ export class BookingService {
       include: {
         schedule: {
           include: {
-            doctor: { select: { id: true, fullName: true, academicRank: true, consultationFee: true } },
+            doctor: { select: { id: true, academicRank: true, consultationFee: true, user: { select: { fullName: true } } } },
           },
         },
       },
@@ -765,7 +765,7 @@ export class BookingService {
           startTime: time,
           slots: slotsAtTime.slice(0, memberCount).map((s) => ({
             slotId: s.id,
-            doctor: s.schedule.doctor,
+            doctor: s.schedule.doctor ? { id: s.schedule.doctor.id, fullName: s.schedule.doctor.user?.fullName ?? '', academicRank: s.schedule.doctor.academicRank, consultationFee: s.schedule.doctor.consultationFee } : null,
             startTime: s.startTime.toISOString().slice(11, 16),
             endTime: s.endTime.toISOString().slice(11, 16),
             remainingCapacity: s.capacity - s.occupiedCount,
@@ -787,7 +787,7 @@ export class BookingService {
           endTime: candidate[candidate.length - 1],
           slots: slotGroup.map((s) => ({
             slotId: s.id,
-            doctor: s.schedule.doctor,
+            doctor: s.schedule.doctor ? { id: s.schedule.doctor.id, fullName: s.schedule.doctor.user?.fullName ?? '', academicRank: s.schedule.doctor.academicRank, consultationFee: s.schedule.doctor.consultationFee } : null,
             startTime: s.startTime.toISOString().slice(11, 16),
             endTime: s.endTime.toISOString().slice(11, 16),
             remainingCapacity: s.capacity - s.occupiedCount,

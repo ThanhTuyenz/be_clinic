@@ -71,7 +71,7 @@ export class AppointmentReminderTask {
           include: {
             schedule: {
               include: {
-                doctor: { select: { fullName: true, academicRank: true } },
+                doctor: { select: { academicRank: true, user: { select: { fullName: true } } } },
                 branch: { select: { name: true, address: true, phoneNumber: true } },
               },
             },
@@ -112,7 +112,7 @@ export class AppointmentReminderTask {
           packageSlot?.startTime?.toISOString().slice(11, 16) ??
           '?';
         const doctorName = doctorSlot?.schedule.doctor
-          ? `${doctorSlot.schedule.doctor.academicRank ?? ''} ${doctorSlot.schedule.doctor.fullName}`.trim()
+          ? `${doctorSlot.schedule.doctor.academicRank ?? ''} ${doctorSlot.schedule.doctor.user?.fullName ?? ''}`.trim()
           : null;
         const serviceName = packageSlot?.schedule.servicePackage?.name ?? null;
 
