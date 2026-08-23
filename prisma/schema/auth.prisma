@@ -1,40 +1,44 @@
+// ============================================================
+// Auth: User, Session, OAuth, Token
+// ============================================================
+
 model User {
-  id                        String                     @id @default(uuid()) @db.Uuid
-  email                     String?                    @unique @db.VarChar(255)
-  password                  String?                    @map("password_hash") @db.VarChar(255)
-  phoneNumber               String?                    @unique @map("phone_number") @db.VarChar(20)
-  fullName                  String?                    @map("full_name") @db.VarChar(100)
-  provider                  AuthProvider               @default(EMAIL)
-  status                    UserStatus                 @default(ACTIVE)
-  role                      UserRole                   @default(PATIENT)
-  roleId                    String?                    @map("role_id") @db.VarChar(100)
-  socialId                  String?                    @map("social_id") @db.VarChar(255)
-  customPermissions         Json?                      @map("custom_permissions")
-  hash                      String?                    @db.VarChar(255)
-  emailOtpHash              String?                    @map("email_otp_hash") @db.VarChar(255)
-  emailOtpExpiresAt         DateTime?                  @map("email_otp_expires_at") @db.Timestamptz(3)
-  emailOtpLastSentAt        DateTime?                  @map("email_otp_last_sent_at") @db.Timestamptz(3)
-  emailOtpAttempts          Int                        @default(0) @map("email_otp_attempts")
-  isBlocked                 Boolean                    @default(false) @map("is_blocked")
-  blockedAt                 DateTime?                  @map("blocked_at") @db.Timestamptz(3)
-  isDeleted                 Boolean                    @default(false) @map("is_deleted")
-  lastLoginAt               DateTime?                  @map("last_login_at") @db.Timestamptz(3)
-  createdAt                 DateTime                   @default(now()) @map("created_at") @db.Timestamptz(3)
-  updatedAt                 DateTime                   @updatedAt @map("updated_at") @db.Timestamptz(3)
-  sessions                  Session[]
-  oauthAccounts             OAuthAccount[]
-  verificationTokens        AuthVerificationToken[]
-  passwordResetTokens       PasswordResetToken[]
-  branchAssignments         UserBranchAssignment[]
-  patientProfiles           PatientProfile[]
-  doctor                    Doctor?
-  handledInvoices           Invoice[]                  @relation("CashierInvoices")
-  checkedInAppointments     Appointment[]              @relation("CheckedInBy")
-  auditLogs                 AuditLog[]                 @relation("AuditActor")
-  medicalVisitsCreated      MedicalVisit[]
-  doctorReviews             Review[]                   @relation
-  appointmentStatusChanges  AppointmentStatusHistory[] @relation("AppointmentStatusActor")
-  inventoryMovementsCreated InventoryMovement[]
+  id                       String                     @id @default(uuid()) @db.Uuid
+  email                    String?                    @unique @db.VarChar(255)
+  password                 String?                    @map("password_hash") @db.VarChar(255)
+  phoneNumber              String?                    @unique @map("phone_number") @db.VarChar(20)
+  fullName                 String?                    @map("full_name") @db.VarChar(100)
+  provider                 AuthProvider               @default(EMAIL)
+  status                   UserStatus                 @default(ACTIVE)
+  role                     UserRole                   @default(PATIENT)
+  roleId                   String?                    @map("role_id") @db.VarChar(100)
+  socialId                 String?                    @map("social_id") @db.VarChar(255)
+  customPermissions        Json?                      @map("custom_permissions")
+  hash                     String?                    @db.VarChar(255)
+  emailOtpHash             String?                    @map("email_otp_hash") @db.VarChar(255)
+  emailOtpExpiresAt        DateTime?                  @map("email_otp_expires_at") @db.Timestamptz(3)
+  emailOtpLastSentAt       DateTime?                  @map("email_otp_last_sent_at") @db.Timestamptz(3)
+  emailOtpAttempts         Int                        @default(0) @map("email_otp_attempts")
+  isBlocked                Boolean                    @default(false) @map("is_blocked")
+  blockedAt                DateTime?                  @map("blocked_at") @db.Timestamptz(3)
+  isDeleted                Boolean                    @default(false) @map("is_deleted")
+  lastLoginAt              DateTime?                  @map("last_login_at") @db.Timestamptz(3)
+  createdAt                DateTime                   @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt                DateTime                   @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  sessions                 Session[]
+  oauthAccounts            OAuthAccount[]
+  verificationTokens       AuthVerificationToken[]
+  passwordResetTokens      PasswordResetToken[]
+  branchAssignments        UserBranchAssignment[]
+  patientProfiles          PatientProfile[]
+  doctor                   Doctor?
+  receptionist             Receptionist?
+  bookingOrders            BookingOrder[]
+  checkedInAppointments    Appointment[]              @relation("CheckedInBy")
+  auditLogs                AuditLog[]                 @relation("AuditActor")
+  doctorReviews            Review[]                   @relation
+  appointmentStatusChanges AppointmentStatusHistory[] @relation("AppointmentStatusActor")
 
   @@index([role, status])
   @@index([isDeleted, createdAt])

@@ -4,11 +4,11 @@ import { AppointmentStatus, PaymentStatus, Prisma } from '@prisma/client';
 import { createHash, createHmac } from 'crypto';
 import { RabbitMqConfig } from '../../config/config.type.js';
 import { PrismaService } from '../../infrastructure/database/prisma/prisma.service.js';
-import { CheckoutAppointmentDto } from './dtos/checkout-appointment.dto.js';
+import { AppointmentItemDto, BatchCheckoutDto, CheckoutAppointmentDto } from './dtos/checkout-appointment.dto.js';
 import { PaymentWebhookDto } from './dtos/payment-webhook.dto.js';
 
 const ACTIVE_APPOINTMENT_STATUSES: AppointmentStatus[] = [
-  'PENDING_PAYMENT', 'BOOKED', 'CHECKED_IN', 'IN_EXAMINATION',
+  'PENDING_PAYMENT', 'BOOKED', 'CHECKED_IN',
 ];
 
 @Injectable()
@@ -476,6 +476,333 @@ export class BookingService {
     const room = appointment.servicePackageScheduleSlot?.schedule?.room ?? appointment.scheduleSlot?.schedule?.room;
     const doctor = appointment.scheduleSlot?.schedule?.doctor;
     return { appointmentId: appointment.id, bookingCode: appointment.bookingCode, queueNumber: appointment.queueNumber, status: appointment.status, channel, checkedInAt: appointment.checkedInAt, patient: { fullName: appointment.patientProfile?.fullName }, doctor: doctor ? { fullName: doctor.fullName } : null, healthPackage: appointment.servicePackage ? { name: appointment.servicePackage.name } : null, room: room ? { code: room.code, name: room.name } : null };
+  }
+
+  // ─────────────────────────────────────────────────────────────
+  // BATCH CHECKOUT – Đặt lịch nhóm All-or-Nothing
+  // ─────────────────────────────────────────────────────────────
+  /**
+   * Đặt lịch cho nhiều thành viên cùng lúc trong 1 transaction.
+   * Nếu bất kỳ slot nào hết chỗ → rollback toàn bộ.
+   */
+  async batchCheckout(accountId: string, dto: BatchCheckoutDto) {
+    if (!dto.items || dto.items.length === 0) {
+      throw new BadRequestException('Danh sách thành viên không được rỗng');
+    }
+    const groupType = dto.groupType ?? (dto.items.length === 1 ? 'SINGLE' : 'FAMILY');
+
+    try {
+      return await this.prisma.$transaction(async (tx) => {
+        // Xác minh tất cả profiles thuộc account
+        const profileIds = dto.items.map((i) => i.patientProfileId);
+        const profiles = await tx.patientProfile.findMany({
+          where: { id: { in: profileIds }, accountId },
+          select: { id: true, fullName: true },
+        });
+        if (profiles.length !== dto.items.length) {
+          throw new NotFoundException('Một hoặc nhiều hồ sơ bệnh nhân không hợp lệ');
+        }
+
+        const holdTtlMs = this.config.getOrThrow<RabbitMqConfig>('rabbitmq').holdTtlMs;
+        const [{ now, expiresAt }] = await tx.$queryRaw<Array<{ now: Date; expiresAt: Date }>>`
+          SELECT NOW() AS "now", NOW() + (${holdTtlMs} * INTERVAL '1 millisecond') AS "expiresAt"
+        `;
+
+        let totalAmount = new Prisma.Decimal(0);
+        const appointmentData: any[] = [];
+        const invoiceItems: any[] = [];
+
+        // Khóa & validate từng slot một cách tuần tự (tránh deadlock)
+        for (const item of dto.items) {
+          const profile = profiles.find((p) => p.id === item.patientProfileId)!;
+
+          if (item.bookingType === 'DOCTOR' || !item.servicePackageId) {
+            // ── Đặt theo bác sĩ ──────────────────────────────────
+            if (!item.scheduleSlotId) throw new BadRequestException(`Thiếu khung giờ bác sĩ cho ${profile.fullName}`);
+
+            let doctorSlot: any;
+            if (item.scheduleSlotId.startsWith('virtual_')) {
+              const parts = item.scheduleSlotId.split('_');
+              const scheduleId = parts[1];
+              const startTimeStr = parts[2];
+              const schedule = await (tx as any).doctorSchedule.findUnique({ where: { id: scheduleId }, include: { doctor: true } });
+              if (!schedule || schedule.status !== 'OPEN' || !schedule.doctor.isActive) {
+                throw new NotFoundException(`Lịch làm việc của bác sĩ không khả dụng cho ${profile.fullName}`);
+              }
+              const dateStr = schedule.workDate.toISOString().slice(0, 10);
+              const startDt = new Date(`${dateStr}T${startTimeStr}:00.000Z`);
+              const endDt = new Date(startDt.getTime() + schedule.slotDurationMin * 60_000);
+              doctorSlot = await tx.doctorScheduleSlot.upsert({
+                where: { scheduleId_startTime: { scheduleId, startTime: startDt } },
+                update: {},
+                create: { scheduleId, startTime: startDt, endTime: endDt, capacity: schedule.capacityPerSlot ?? 1, occupiedCount: 0 } as any,
+                include: { schedule: { include: { doctor: true } } },
+              });
+            } else {
+              doctorSlot = await tx.doctorScheduleSlot.findUnique({
+                where: { id: item.scheduleSlotId },
+                include: { schedule: { include: { doctor: true } } },
+              });
+            }
+            if (!doctorSlot || !doctorSlot.isActive || doctorSlot.schedule.status !== 'OPEN') {
+              throw new NotFoundException(`Khung giờ bác sĩ không khả dụng cho ${profile.fullName}`);
+            }
+
+            // Duplicate check
+            const dup = await tx.appointment.findFirst({
+              where: { patientProfileId: profile.id, scheduleSlotId: doctorSlot.id, status: { in: ACTIVE_APPOINTMENT_STATUSES } },
+            });
+            if (dup) throw new ConflictException(`${profile.fullName} đã có lịch hẹn trong khung giờ này`);
+
+            // Atomic lock slot
+            const reserved = await tx.$executeRaw`
+              UPDATE "doctor_schedule_slots"
+              SET "occupied_count" = "occupied_count" + 1, "updated_at" = NOW()
+              WHERE "id" = ${doctorSlot.id}::uuid
+                AND "is_active" = TRUE
+                AND "occupied_count" < "capacity"
+            `;
+            if (reserved !== 1) throw new ConflictException(`Bác sĩ vừa hết chỗ trong khung giờ này (${profile.fullName})`);
+
+            const price = doctorSlot.schedule.doctor.consultationFee;
+            totalAmount = totalAmount.add(price);
+            appointmentData.push({
+              patientProfileId: profile.id,
+              branchId: doctorSlot.schedule.branchId,
+              scheduleSlotId: doctorSlot.id,
+              servicePrice: price,
+              symptomsDescription: item.symptomsDescription,
+              bookedViaAi: item.bookedViaAi ?? false,
+              holdExpiresAt: expiresAt,
+            });
+            invoiceItems.push({
+              description: `Khám với ${doctorSlot.schedule.doctor.fullName} – ${profile.fullName}`,
+              quantity: 1,
+              unitPrice: price,
+              amount: price,
+            });
+          } else {
+            // ── Đặt theo gói dịch vụ ─────────────────────────────
+            if (!item.servicePackageScheduleSlotId) {
+              throw new BadRequestException(`Thiếu khung giờ gói dịch vụ cho ${profile.fullName}`);
+            }
+            const packageSlot = await tx.servicePackageScheduleSlot.findUnique({
+              where: { id: item.servicePackageScheduleSlotId },
+              include: { schedule: { include: { servicePackage: { include: { branchBookingMethod: true } } } } },
+            });
+            const pkg = packageSlot?.schedule.servicePackage;
+            if (!packageSlot || !pkg || pkg.id !== item.servicePackageId || !packageSlot.isActive || !pkg.isActive) {
+              throw new NotFoundException(`Gói dịch vụ không khả dụng cho ${profile.fullName}`);
+            }
+
+            const dup = await tx.appointment.findFirst({
+              where: { patientProfileId: profile.id, servicePackageScheduleSlotId: packageSlot.id, status: { in: ACTIVE_APPOINTMENT_STATUSES } },
+            });
+            if (dup) throw new ConflictException(`${profile.fullName} đã có lịch hẹn trong khung giờ này`);
+
+            const pkgReserved = await tx.$executeRaw`
+              UPDATE "service_package_schedule_slots"
+              SET "occupied_count" = "occupied_count" + 1, "updated_at" = NOW()
+              WHERE "id" = ${packageSlot.id}::uuid
+                AND "is_active" = TRUE
+                AND "occupied_count" < "capacity"
+            `;
+            if (pkgReserved !== 1) throw new ConflictException(`Khung giờ gói dịch vụ hết chỗ (${profile.fullName})`);
+
+            totalAmount = totalAmount.add(pkg.price);
+            appointmentData.push({
+              patientProfileId: profile.id,
+              branchId: pkg.branchBookingMethod.branchId,
+              servicePackageId: pkg.id,
+              servicePackageScheduleSlotId: packageSlot.id,
+              servicePrice: pkg.price,
+              symptomsDescription: item.symptomsDescription,
+              bookedViaAi: item.bookedViaAi ?? false,
+              holdExpiresAt: expiresAt,
+            });
+            invoiceItems.push({
+              description: `${pkg.name} – ${profile.fullName}`,
+              quantity: 1,
+              unitPrice: pkg.price,
+              amount: pkg.price,
+            });
+          }
+        }
+
+        // Tạo BookingOrder tổng
+        const orderCode = `ORD-${Date.now().toString(36).toUpperCase()}`;
+        const branchId = appointmentData[0]?.branchId;
+        const bookingOrder = await (tx as any).bookingOrder.create({
+          data: {
+            accountId,
+            orderCode,
+            groupType,
+            totalAmount,
+            note: dto.note,
+          },
+        });
+
+        // Tạo tất cả Appointment
+        const appointments = await Promise.all(
+          appointmentData.map((appt) =>
+            tx.appointment.create({
+              data: {
+                ...appt,
+                bookingOrderId: bookingOrder.id,
+                statusHistories: { create: { toStatus: 'PENDING_PAYMENT', actorId: accountId } },
+              },
+            }),
+          ),
+        );
+
+        // 1 Invoice duy nhất cho toàn đơn
+        const invoice = await tx.invoice.create({
+          data: {
+            bookingOrderId: bookingOrder.id,
+            issuedBranchId: branchId,
+            totalAmount,
+            items: { create: invoiceItems },
+          } as any,
+        });
+
+        const payment = await tx.paymentTransaction.create({
+          data: {
+            invoiceId: invoice.id,
+            provider: 'PENDING_SELECTION',
+            idempotencyKey: `checkout:${bookingOrder.id}`,
+            method: 'ONLINE',
+            amount: totalAmount,
+          },
+        });
+
+        await tx.outboxEvent.create({
+          data: {
+            aggregateType: 'BookingOrder',
+            aggregateId: bookingOrder.id,
+            eventType: 'booking_order.hold.created',
+            payload: { bookingOrderId: bookingOrder.id, appointmentIds: appointments.map((a) => a.id), holdExpiresAt: expiresAt.toISOString() },
+          },
+        });
+
+        return {
+          bookingOrderId: bookingOrder.id,
+          orderCode,
+          invoiceId: invoice.id,
+          paymentId: payment.id,
+          totalAmount: Number(totalAmount),
+          groupType,
+          holdStartedAt: now,
+          holdExpiresAt: expiresAt,
+          appointments: appointments.map((a) => ({ appointmentId: a.id, patientProfileId: a.patientProfileId, status: a.status })),
+        };
+      }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
+    } catch (error) {
+      if (error instanceof ConflictException || error instanceof NotFoundException || error instanceof BadRequestException) throw error;
+      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
+        throw new ConflictException('Lịch hẹn bị trùng. Vui lòng chọn lại khung giờ');
+      }
+      throw error;
+    }
+  }
+
+  // ─────────────────────────────────────────────────────────────
+  // GỢI Ý KHUNG GIỜ SONG SONG / LIÊN TIẾP
+  // ─────────────────────────────────────────────────────────────
+  /**
+   * Gợi ý xếp N thành viên vào cùng khung giờ (song song)
+   * hoặc các khung giờ liên tiếp gần nhất.
+   */
+  async suggestParallelSlots(branchId: string, date: string, memberCount: number, specialtyId?: number) {
+    if (!branchId || !date) throw new BadRequestException('Thiếu branchId hoặc date');
+    if (memberCount < 1 || memberCount > 10) throw new BadRequestException('Số thành viên phải từ 1 đến 10');
+
+    const workDate = (() => {
+      const d = new Date(`${date}T00:00:00.000Z`);
+      if (Number.isNaN(d.getTime())) throw new BadRequestException('Ngày không hợp lệ');
+      return d;
+    })();
+
+    // Lấy tất cả slot còn chỗ trong ngày tại chi nhánh
+    const slots = await this.prisma.doctorScheduleSlot.findMany({
+      where: {
+        isActive: true,
+        slotStatus: 'AVAILABLE' as any,
+        schedule: {
+          branchId,
+          workDate,
+          status: 'OPEN',
+          doctor: {
+            isActive: true,
+            ...(specialtyId ? { specialties: { some: { specialtyId } } } : {}),
+          },
+        },
+      },
+      include: {
+        schedule: {
+          include: {
+            doctor: { select: { id: true, fullName: true, academicRank: true, consultationFee: true } },
+          },
+        },
+      },
+      orderBy: [{ startTime: 'asc' }, { occupiedCount: 'asc' }],
+    });
+
+    // Nhóm slot theo startTime
+    const byTime = new Map<string, typeof slots>();
+    for (const slot of slots) {
+      if (slot.capacity - slot.occupiedCount < 1) continue;
+      const key = slot.startTime.toISOString().slice(11, 16);
+      if (!byTime.has(key)) byTime.set(key, []);
+      byTime.get(key)!.push(slot);
+    }
+
+    // Tìm khung giờ có đủ N bác sĩ khác nhau cùng lúc
+    const parallelOptions: any[] = [];
+    for (const [time, slotsAtTime] of byTime.entries()) {
+      if (slotsAtTime.length >= memberCount) {
+        parallelOptions.push({
+          type: 'PARALLEL',
+          startTime: time,
+          slots: slotsAtTime.slice(0, memberCount).map((s) => ({
+            slotId: s.id,
+            doctor: s.schedule.doctor,
+            startTime: s.startTime.toISOString().slice(11, 16),
+            endTime: s.endTime.toISOString().slice(11, 16),
+            remainingCapacity: s.capacity - s.occupiedCount,
+          })),
+        });
+      }
+    }
+
+    // Tìm dãy liên tiếp
+    const sequentialOptions: any[] = [];
+    const timeKeys = Array.from(byTime.keys()).sort();
+    for (let i = 0; i <= timeKeys.length - memberCount; i++) {
+      const candidate = timeKeys.slice(i, i + memberCount);
+      const slotGroup = candidate.map((t) => byTime.get(t)![0]).filter(Boolean);
+      if (slotGroup.length === memberCount) {
+        sequentialOptions.push({
+          type: 'SEQUENTIAL',
+          startTime: candidate[0],
+          endTime: candidate[candidate.length - 1],
+          slots: slotGroup.map((s) => ({
+            slotId: s.id,
+            doctor: s.schedule.doctor,
+            startTime: s.startTime.toISOString().slice(11, 16),
+            endTime: s.endTime.toISOString().slice(11, 16),
+            remainingCapacity: s.capacity - s.occupiedCount,
+          })),
+        });
+      }
+    }
+
+    return {
+      date,
+      branchId,
+      memberCount,
+      parallelOptions: parallelOptions.slice(0, 5),
+      sequentialOptions: sequentialOptions.slice(0, 5),
+    };
   }
 
   private async confirmPaid(tx: Prisma.TransactionClient, paymentId: string, invoiceId: string, appointmentId: string, provider: string, dto: PaymentWebhookDto, late: boolean) {

@@ -100,13 +100,7 @@ export class StaffAppointmentsService {
         method: payment?.method?.toLowerCase(),
         paidAt: row.invoice.paidAt,
       } : null,
-      medicalVisit: row.medicalVisit ? {
-        ...(row.medicalVisit.payload as object),
-        id: row.medicalVisit.id,
-        appointmentId: row.medicalVisit.appointmentId,
-        medicalRecordId: row.medicalVisit.medicalRecordId,
-        updatedAt: row.medicalVisit.updatedAt,
-      } : null,
+      medicalVisit: null,
     }
   }
 
@@ -119,15 +113,14 @@ export class StaffAppointmentsService {
           schedule: {
             include: {
               room: true,
-              doctor: { include: { department: true, specialties: { include: { specialty: { include: { department: true } } } } } },
+              doctor: { include: { specialties: { include: { specialty: true } } } },
             },
           },
         },
       },
-      servicePackage: { include: { specialty: { include: { department: true } }, branchBookingMethod: { include: { bookingMethod: true } } } },
+      servicePackage: { include: { specialty: true, branchBookingMethod: { include: { bookingMethod: true } } } },
       servicePackageScheduleSlot: { include: { schedule: { include: { room: true } } } },
       invoice: { include: { items: true, payments: { orderBy: { createdAt: 'desc' as const }, take: 1 } } },
-      medicalVisit: true,
       statusHistories: { orderBy: { createdAt: 'asc' as const }, take: 1, include: { actor: { select: { id: true, fullName: true, email: true, role: true } } } },
     }
   }
@@ -431,11 +424,11 @@ export class StaffAppointmentsService {
       })
       await tx.invoice.update({
         where: { id: invoice.id },
-        data: { status: 'PAID', paidAt: now, cashierId: userId },
+        data: { status: 'PAID', paidAt: now },
       })
       const appointment = await tx.appointment.update({
         where: { id: appointmentId },
-        data: invoice.appointment.status === 'PENDING_PAYMENT' ? { status: 'BOOKED' } : {},
+        data: (invoice as any).appointment?.status === 'PENDING_PAYMENT' ? { status: 'BOOKED' } : {},
       })
       return { appointment, payment }
     })
@@ -448,39 +441,20 @@ export class StaffAppointmentsService {
     })
     const appointment = await this.prisma.appointment.findUnique({
       where: { id: appointmentId },
-      include: { medicalVisit: { include: { diagnoses: true } }, scheduleSlot: { include: { schedule: { select: { doctorId: true } } } } },
+      include: { scheduleSlot: { include: { schedule: { select: { doctorId: true } } } } },
     })
     if (!appointment) throw new NotFoundException('Không tìm thấy lịch khám')
     if (!user || (user.role !== 'ADMIN' && (user.role !== 'DOCTOR' || user.doctor?.id !== appointment.scheduleSlot?.schedule?.doctorId))) {
-      throw new ForbiddenException('Không được kết thúc phiên khám này')
-    }
-    if (!['CHECKED_IN', 'IN_EXAMINATION'].includes(appointment.status)) {
-      throw new BadRequestException('Trạng thái lịch khám không cho phép kết thúc')
-    }
-    if (appointment.status !== 'IN_EXAMINATION') {
-      throw new BadRequestException('Bác sĩ phải bắt đầu khám trước khi kết thúc')
-    }
-    const medicalVisit = appointment.medicalVisit?.payload as Record<string, unknown> | undefined
-    if (!medicalVisit) throw new BadRequestException('Chưa có hồ sơ lần khám')
-    if (!appointment.medicalVisit?.diagnoses.length && !String(medicalVisit.diagnosisCode || '').trim()) {
-      throw new BadRequestException('Chưa chọn chẩn đoán ICD-10')
+      throw new ForbiddenException('Không được hoàn tất lịch khám này')
     }
     const row = await this.prisma.$transaction(async (tx) => {
       const result = await tx.appointment.updateMany({
-        where: { id: appointmentId, status: 'IN_EXAMINATION' },
+        where: { id: appointmentId, status: { in: ['CHECKED_IN', 'BOOKED'] } },
         data: { status: 'COMPLETED' },
       })
       if (result.count !== 1) throw new BadRequestException('Lịch khám vừa được cập nhật, vui lòng tải lại')
       await tx.appointmentStatusHistory.create({
         data: { appointmentId, fromStatus: appointment.status, toStatus: 'COMPLETED', actorId: userId },
-      })
-      await tx.medicalVisit.update({
-        where: { appointmentId },
-        data: { status: 'FINALIZED', finalizedAt: new Date() },
-      })
-      await tx.prescription.updateMany({
-        where: { medicalVisit: { appointmentId }, items: { some: {} } },
-        data: { status: 'ISSUED', issuedAt: new Date() },
       })
       return tx.appointment.findUniqueOrThrow({ where: { id: appointmentId }, include: this.appointmentInclude() })
     })

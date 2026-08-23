@@ -4,12 +4,14 @@ import { MailsService } from './mails.service.js'
 
 @Module({
   providers: [
+    MailsService,
     {
       provide: Services.MAILS,
       useClass: MailsService,
     },
   ],
   exports: [
+    MailsService,
     {
       provide: Services.MAILS,
       useClass: MailsService,
