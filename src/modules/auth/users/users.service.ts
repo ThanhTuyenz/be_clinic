@@ -61,7 +61,6 @@ export class UsersService implements IUsersService {
       const docRec = await this.prisma.doctor.upsert({
         where: { userId: row.id },
         update: {
-          fullName: row.fullName || 'Bác sĩ',
           academicRank: (dto as any).academicRank || 'BS. CKI',
           licenseNumber: (dto as any).licenseNumber || null,
           experienceYears: Number((dto as any).experienceYears) || 0,
@@ -72,7 +71,6 @@ export class UsersService implements IUsersService {
         },
         create: {
           userId: row.id,
-          fullName: row.fullName || 'Bác sĩ',
           academicRank: (dto as any).academicRank || 'BS. CKI',
           licenseNumber: (dto as any).licenseNumber || null,
           experienceYears: Number((dto as any).experienceYears) || 0,
@@ -162,7 +160,6 @@ export class UsersService implements IUsersService {
       const docRec = await this.prisma.doctor.upsert({
         where: { userId: row.id },
         update: {
-          fullName: row.fullName || 'Bác sĩ',
           ...(p.academicRank !== undefined ? { academicRank: p.academicRank } : {}),
           ...(p.licenseNumber !== undefined ? { licenseNumber: p.licenseNumber } : {}),
           ...(p.experienceYears !== undefined ? { experienceYears: Number(p.experienceYears) || 0 } : {}),
@@ -173,7 +170,6 @@ export class UsersService implements IUsersService {
         },
         create: {
           userId: row.id,
-          fullName: row.fullName || 'Bác sĩ',
           academicRank: p.academicRank || 'BS. CKI',
           licenseNumber: p.licenseNumber || null,
           experienceYears: Number(p.experienceYears) || 0,

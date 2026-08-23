@@ -5,7 +5,7 @@ import { PrismaService } from '../../infrastructure/database/prisma/prisma.servi
 
 @Injectable()
 export class StaffAppointmentsService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(private readonly prisma: PrismaService) { }
 
   private async roleOf(userId: string) {
     const user = await this.prisma.user.findUnique({ where: { id: userId }, select: { role: true } })
@@ -100,35 +100,27 @@ export class StaffAppointmentsService {
         method: payment?.method?.toLowerCase(),
         paidAt: row.invoice.paidAt,
       } : null,
-      medicalVisit: row.medicalVisit ? {
-        ...(row.medicalVisit.payload as object),
-        id: row.medicalVisit.id,
-        appointmentId: row.medicalVisit.appointmentId,
-        medicalRecordId: row.medicalVisit.medicalRecordId,
-        updatedAt: row.medicalVisit.updatedAt,
-      } : null,
+      medicalVisit: null,
     }
   }
 
   private appointmentInclude() {
     return {
       patientProfile: { include: { account: true } },
-      doctor: { include: { department: true, specialties: { include: { specialty: { include: { department: true } } } } } },
       branch: true,
       scheduleSlot: {
         include: {
           schedule: {
             include: {
               room: true,
-              doctor: { include: { department: true, specialties: { include: { specialty: { include: { department: true } } } } } },
+              doctor: { include: { specialties: { include: { specialty: true } } } },
             },
           },
         },
       },
-      servicePackage: { include: { specialty: { include: { department: true } }, branchBookingMethod: { include: { bookingMethod: true } } } },
+      servicePackage: { include: { specialty: true, branchBookingMethod: { include: { bookingMethod: true } } } },
       servicePackageScheduleSlot: { include: { schedule: { include: { room: true } } } },
       invoice: { include: { items: true, payments: { orderBy: { createdAt: 'desc' as const }, take: 1 } } },
-      medicalVisit: true,
       statusHistories: { orderBy: { createdAt: 'asc' as const }, take: 1, include: { actor: { select: { id: true, fullName: true, email: true, role: true } } } },
     }
   }
@@ -158,7 +150,7 @@ export class StaffAppointmentsService {
     }
     const rows = await this.prisma.appointment.findMany({
       where: {
-        ...(user.role === 'DOCTOR' ? { doctorId: user.doctor?.id || '__none__' } : {}),
+        ...(user.role === 'DOCTOR' ? { scheduleSlot: { schedule: { doctorId: user.doctor?.id || '__none__' } } } : {}),
         ...(status && status !== 'ALL' ? { status: status as any } : {}),
         ...(dateRange ? { scheduleSlot: { schedule: { workDate: dateRange } } } : {}),
       },
@@ -221,7 +213,7 @@ export class StaffAppointmentsService {
     if (!user) throw new ForbiddenException('Tài khoản không hợp lệ')
     if (user.role === 'DOCTOR') {
       const assigned = await this.prisma.appointment.findFirst({
-        where: { patientProfileId: patientId, doctorId: user.doctor?.id || '__none__' },
+        where: { patientProfileId: patientId, scheduleSlot: { schedule: { doctorId: user.doctor?.id || '__none__' } } },
         select: { id: true },
       })
       if (!assigned) throw new ForbiddenException('Bệnh nhân chưa từng được phân công cho bác sĩ này')
@@ -264,7 +256,7 @@ export class StaffAppointmentsService {
     if (!['ADMIN', 'BRANCH_MANAGER', 'RECEPTIONIST', 'DOCTOR'].includes(role)) throw new ForbiddenException('Không có quyền cập nhật lịch khám')
     const current = await this.prisma.appointment.findUnique({
       where: { id: appointmentId },
-      include: { scheduleSlot: { include: { schedule: true } } },
+      include: { scheduleSlot: { include: { schedule: { select: { doctorId: true } } } } },
     })
     if (!current) throw new NotFoundException('Không tìm thấy lịch khám')
     const statuses: Record<string, any> = { pending: 'PENDING_PAYMENT', confirmed: 'BOOKED', cancelled: 'CANCELLED', examined: 'COMPLETED', completed: 'COMPLETED', checked_in: 'CHECKED_IN', in_examination: 'IN_EXAMINATION' }
@@ -272,7 +264,7 @@ export class StaffAppointmentsService {
     const allowed = ['PENDING_PAYMENT', 'BOOKED', 'CHECKED_IN', 'IN_EXAMINATION', 'COMPLETED', 'CANCELLED']
     if (!allowed.includes(status)) throw new BadRequestException('Trạng thái lịch khám không hợp lệ')
     if (role === 'DOCTOR') {
-      if (!user.doctor?.id || user.doctor.id !== current.doctorId) {
+      if (!user.doctor?.id || user.doctor.id !== current.scheduleSlot?.schedule?.doctorId) {
         throw new ForbiddenException('Lịch khám không thuộc bác sĩ hiện tại')
       }
       if (status !== 'IN_EXAMINATION' || current.status !== 'CHECKED_IN') {
@@ -360,7 +352,7 @@ export class StaffAppointmentsService {
       const reserved = await tx.doctorScheduleSlot.updateMany({ where: { id: slot.id, occupiedCount: { lt: slot.capacity } }, data: { occupiedCount: { increment: 1 } } })
       if (reserved.count !== 1) throw new BadRequestException('Khung giờ vừa hết chỗ')
       await tx.appointment.create({
-        data: { id: appointmentId, bookingCode, patientProfileId, doctorId: doctor.id, branchId: slot.schedule.branchId, scheduleSlotId: slot.id, symptomsDescription: input.note || null, status: 'PENDING_PAYMENT' },
+        data: { id: appointmentId, bookingCode, patientProfileId, branchId: slot.schedule.branchId, scheduleSlotId: slot.id, symptomsDescription: input.note || null, status: 'PENDING_PAYMENT' },
       })
       await tx.appointmentStatusHistory.create({ data: { appointmentId, toStatus: 'PENDING_PAYMENT', actorId: userId, reason: 'CREATED_AT_RECEPTION' } })
       await tx.invoice.create({
@@ -432,11 +424,11 @@ export class StaffAppointmentsService {
       })
       await tx.invoice.update({
         where: { id: invoice.id },
-        data: { status: 'PAID', paidAt: now, cashierId: userId },
+        data: { status: 'PAID', paidAt: now },
       })
       const appointment = await tx.appointment.update({
         where: { id: appointmentId },
-        data: invoice.appointment.status === 'PENDING_PAYMENT' ? { status: 'BOOKED' } : {},
+        data: (invoice as any).appointment?.status === 'PENDING_PAYMENT' ? { status: 'BOOKED' } : {},
       })
       return { appointment, payment }
     })
@@ -449,39 +441,20 @@ export class StaffAppointmentsService {
     })
     const appointment = await this.prisma.appointment.findUnique({
       where: { id: appointmentId },
-      include: { medicalVisit: { include: { diagnoses: true } } },
+      include: { scheduleSlot: { include: { schedule: { select: { doctorId: true } } } } },
     })
     if (!appointment) throw new NotFoundException('Không tìm thấy lịch khám')
-    if (!user || (user.role !== 'ADMIN' && (user.role !== 'DOCTOR' || user.doctor?.id !== appointment.doctorId))) {
-      throw new ForbiddenException('Không được kết thúc phiên khám này')
-    }
-    if (!['CHECKED_IN', 'IN_EXAMINATION'].includes(appointment.status)) {
-      throw new BadRequestException('Trạng thái lịch khám không cho phép kết thúc')
-    }
-    if (appointment.status !== 'IN_EXAMINATION') {
-      throw new BadRequestException('Bác sĩ phải bắt đầu khám trước khi kết thúc')
-    }
-    const medicalVisit = appointment.medicalVisit?.payload as Record<string, unknown> | undefined
-    if (!medicalVisit) throw new BadRequestException('Chưa có hồ sơ lần khám')
-    if (!appointment.medicalVisit?.diagnoses.length && !String(medicalVisit.diagnosisCode || '').trim()) {
-      throw new BadRequestException('Chưa chọn chẩn đoán ICD-10')
+    if (!user || (user.role !== 'ADMIN' && (user.role !== 'DOCTOR' || user.doctor?.id !== appointment.scheduleSlot?.schedule?.doctorId))) {
+      throw new ForbiddenException('Không được hoàn tất lịch khám này')
     }
     const row = await this.prisma.$transaction(async (tx) => {
       const result = await tx.appointment.updateMany({
-        where: { id: appointmentId, status: 'IN_EXAMINATION' },
+        where: { id: appointmentId, status: { in: ['CHECKED_IN', 'BOOKED'] } },
         data: { status: 'COMPLETED' },
       })
       if (result.count !== 1) throw new BadRequestException('Lịch khám vừa được cập nhật, vui lòng tải lại')
       await tx.appointmentStatusHistory.create({
         data: { appointmentId, fromStatus: appointment.status, toStatus: 'COMPLETED', actorId: userId },
-      })
-      await tx.medicalVisit.update({
-        where: { appointmentId },
-        data: { status: 'FINALIZED', finalizedAt: new Date() },
-      })
-      await tx.prescription.updateMany({
-        where: { medicalVisit: { appointmentId }, items: { some: {} } },
-        data: { status: 'ISSUED', issuedAt: new Date() },
       })
       return tx.appointment.findUniqueOrThrow({ where: { id: appointmentId }, include: this.appointmentInclude() })
     })

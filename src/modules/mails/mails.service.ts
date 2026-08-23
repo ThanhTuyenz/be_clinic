@@ -7,6 +7,7 @@ import { ConfigService } from '@nestjs/config'
 import nodemailer, { Transporter } from 'nodemailer'
 import type { AllConfigType, MailerConfig } from '../../config/config.type.js'
 import type {
+  AppointmentReminderMail,
   ForgotPasswordMail,
   IMailsService,
   RegistrationOtpMail,
@@ -68,6 +69,39 @@ export class MailsService implements IMailsService {
       subject: 'Mật khẩu VitaCare đã được thay đổi',
       text: 'Mật khẩu tài khoản của bạn đã được thay đổi thành công.',
       html: '<p>Mật khẩu tài khoản của bạn đã được thay đổi thành công.</p>',
+    })
+  }
+
+  async sendAppointmentReminder(mail: AppointmentReminderMail): Promise<void> {
+    const d = mail.data
+    const label = d.hoursAhead === 24 ? 'ngày mai' : 'trong 2 giờ nữa'
+    const subject = `⏰ Nhắc lịch khám ${label} – ${d.bookingCode}`
+    const name = this.escapeHtml(d.patientName)
+    const what = d.doctorName
+      ? `khám với ${this.escapeHtml(d.doctorName)}`
+      : d.serviceName
+        ? this.escapeHtml(d.serviceName)
+        : 'khám bệnh'
+
+    const html = `
+      <p>Xin chào <strong>${name}</strong>,</p>
+      <p>Đây là lời nhắc lịch hẹn <strong>${what}</strong> của bạn:</p>
+      <table style="border-collapse:collapse;width:100%;max-width:480px">
+        <tr><td style="padding:6px 0;color:#666">Mã đặt lịch</td><td><strong>${this.escapeHtml(d.bookingCode)}</strong></td></tr>
+        <tr><td style="padding:6px 0;color:#666">Ngày khám</td><td><strong>${d.appointmentDate}</strong></td></tr>
+        <tr><td style="padding:6px 0;color:#666">Giờ khám</td><td><strong>${d.startTime}</strong></td></tr>
+        <tr><td style="padding:6px 0;color:#666">Địa điểm</td><td>${this.escapeHtml(d.branchName)}${d.branchAddress ? '<br>' + this.escapeHtml(d.branchAddress) : ''}</td></tr>
+        ${d.branchPhone ? `<tr><td style="padding:6px 0;color:#666">Điện thoại</td><td>${this.escapeHtml(d.branchPhone)}</td></tr>` : ''}
+      </table>
+      ${d.medicalNote ? `<p style="background:#fffbe6;border-left:4px solid #f59e0b;padding:12px;margin-top:16px">${this.escapeHtml(d.medicalNote)}</p>` : ''}
+      <p style="color:#888;font-size:13px">Nếu cần hỗ trợ, vui lòng liên hệ số điện thoại phòng khám bên trên.</p>
+    `
+
+    await this.send({
+      to: mail.to,
+      subject,
+      text: `Nhắc lịch: ${what} – ${d.appointmentDate} lúc ${d.startTime} tại ${d.branchName}. ${d.medicalNote}`,
+      html,
     })
   }
 

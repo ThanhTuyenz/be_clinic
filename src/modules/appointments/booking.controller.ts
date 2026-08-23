@@ -1,10 +1,11 @@
-import { Body, Controller, Get, Headers, Param, Post, Req } from '@nestjs/common';
-import { ApiBearerAuth, ApiOperation, ApiParam, ApiTags } from '@nestjs/swagger';
-import type { Request } from 'express';
+import { Body, Controller, Get, Headers, Param, Post, Query, Req, Res } from '@nestjs/common';
+import { ApiBearerAuth, ApiOperation, ApiParam, ApiQuery, ApiTags } from '@nestjs/swagger';
+import type { Request, Response } from 'express';
 import { Public } from '../../common/decorators/public.decorator.js';
 import { SkipPermissions } from '../permissions/decorators/skip-permissions.decorator.js';
+import { buildGoogleCalendarUrl, buildIcsContent } from './helpers/calendar.helper.js';
 import { BookingService } from './booking.service.js';
-import { CheckoutAppointmentDto } from './dtos/checkout-appointment.dto.js';
+import { BatchCheckoutDto, CheckoutAppointmentDto } from './dtos/checkout-appointment.dto.js';
 import { PaymentWebhookDto } from './dtos/payment-webhook.dto.js';
 import { PaymentWebhookSignatureService } from './payment-webhook-signature.service.js';
 
@@ -38,6 +39,79 @@ export class BookingController {
   @ApiOperation({ summary: 'Lấy QR check-in, số thứ tự dự kiến và phòng khám sau thanh toán' })
   checkInPass(@Req() request: Request, @Param('id') id: string) {
     return this.bookingService.issueCheckInPass(id, request.user!.id);
+  }
+
+  // ─── Batch Checkout (Đặt nhóm / Gia đình) ──────────────────
+  @Post('batch-checkout')
+  @ApiOperation({ summary: 'Đặt lịch cho nhiều thành viên cùng lúc (All-or-Nothing)' })
+  batchCheckout(@Req() request: Request, @Body() dto: BatchCheckoutDto) {
+    return this.bookingService.batchCheckout(request.user!.id, dto);
+  }
+
+  // ─── Gợi ý khung giờ song song / liên tiếp ─────────────────
+  @Get('suggest-slots')
+  @ApiOperation({ summary: 'Gợi ý slot song song hoặc liên tiếp cho nhóm gia đình' })
+  @ApiQuery({ name: 'branchId', required: true })
+  @ApiQuery({ name: 'date', required: true, description: 'YYYY-MM-DD' })
+  @ApiQuery({ name: 'memberCount', required: true, description: 'Số thành viên (1-10)' })
+  @ApiQuery({ name: 'specialtyId', required: false })
+  suggestSlots(
+    @Query('branchId') branchId: string,
+    @Query('date') date: string,
+    @Query('memberCount') memberCount: string,
+    @Query('specialtyId') specialtyId?: string,
+  ) {
+    return this.bookingService.suggestParallelSlots(
+      branchId,
+      date,
+      Number(memberCount) || 1,
+      specialtyId ? Number(specialtyId) : undefined,
+    );
+  }
+
+  // ─── Calendar Sync ──────────────────────────────────────────
+  @Get(':id/google-calendar-url')
+  @ApiOperation({ summary: 'Sinh URL thêm lịch hẹn vào Google Calendar' })
+  async googleCalendarUrl(@Req() request: Request, @Param('id') id: string) {
+    const pass = await this.bookingService.issueCheckInPass(id, request.user!.id);
+    const url = buildGoogleCalendarUrl({
+      appointmentId: pass.appointmentId,
+      bookingCode: pass.bookingCode,
+      patientName: pass.patient.fullName,
+      doctorName: pass.doctor?.fullName ?? null,
+      serviceName: pass.healthPackage?.name ?? null,
+      branchName: pass.branch.name,
+      branchAddress: pass.branch.address ?? '',
+      appointmentDate: pass.appointmentDate,
+      startTime: pass.startTime,
+      endTime: pass.endTime,
+    });
+    return { url };
+  }
+
+  @Get(':id/calendar.ics')
+  @ApiOperation({ summary: 'Tải file .ics về lịch cá nhân (Outlook, Apple Calendar...)' })
+  async downloadIcs(
+    @Req() request: Request,
+    @Param('id') id: string,
+    @Res() res: Response,
+  ) {
+    const pass = await this.bookingService.issueCheckInPass(id, request.user!.id);
+    const ics = buildIcsContent({
+      appointmentId: pass.appointmentId,
+      bookingCode: pass.bookingCode,
+      patientName: pass.patient.fullName,
+      doctorName: pass.doctor?.fullName ?? null,
+      serviceName: pass.healthPackage?.name ?? null,
+      branchName: pass.branch.name,
+      branchAddress: pass.branch.address ?? '',
+      appointmentDate: pass.appointmentDate,
+      startTime: pass.startTime,
+      endTime: pass.endTime,
+    });
+    res.setHeader('Content-Type', 'text/calendar; charset=utf-8');
+    res.setHeader('Content-Disposition', `attachment; filename="appointment-${id}.ics"`);
+    res.send(ics);
   }
 }
 

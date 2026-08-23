@@ -16,7 +16,6 @@ export class SystemCatalogService {
       'rooms',
       'specialties',
       'services',
-      'medicines',
       'service-packages',
       'booking-methods',
       'branch-specialties',
@@ -29,7 +28,6 @@ export class SystemCatalogService {
       rooms: this.prisma.clinicRoom,
       specialties: this.prisma.specialty,
       services: this.prisma.medicalService,
-      medicines: this.prisma.medicine,
       'service-packages': this.prisma.servicePackage,
       'booking-methods': this.prisma.branchBookingMethod,
       'branch-specialties': this.prisma.branchSpecialty,
@@ -52,7 +50,7 @@ export class SystemCatalogService {
     if (resource === 'branch-specialties') {
       const rows = await model.findMany({
         where: term ? { OR: [{ branch: { name: { contains: term, mode: 'insensitive' } } }, { specialty: { name: { contains: term, mode: 'insensitive' } } }] } : {},
-        include: { branch: { select: { id: true, name: true } }, specialty: { select: { id: true, name: true, department: { select: { id: true, name: true } } } } },
+        include: { branch: { select: { id: true, name: true } }, specialty: { select: { id: true, name: true } } },
         orderBy: [{ branch: { name: 'asc' } }, { specialty: { name: 'asc' } }],
       })
       return { items: rows }
@@ -60,7 +58,7 @@ export class SystemCatalogService {
     if (resource === 'room-specialties') {
       const rows = await model.findMany({
         where: term ? { OR: [{ room: { name: { contains: term, mode: 'insensitive' } } }, { specialty: { name: { contains: term, mode: 'insensitive' } } }, { room: { branch: { name: { contains: term, mode: 'insensitive' } } } }] } : {},
-        include: { room: { include: { branch: { select: { id: true, name: true, address: true } } } }, specialty: { include: { department: { select: { id: true, name: true } } } } },
+        include: { room: { include: { branch: { select: { id: true, name: true, address: true } } } }, specialty: { select: { id: true, name: true } } },
         orderBy: [{ room: { branch: { name: 'asc' } } }, { room: { code: 'asc' } }, { priority: 'desc' }],
       })
       return { items: rows }
@@ -68,6 +66,8 @@ export class SystemCatalogService {
     const where: any = term ? { OR: [{ name: { contains: term, mode: 'insensitive' } }, ...(['branches','services','medicines','service-packages'].includes(resource) ? [{ code: { contains: term, mode: 'insensitive' } }] : [])] } : {}
     const include = resource === 'service-packages'
       ? { branchBookingMethod: { include: { branch: { select: { id: true, name: true } }, bookingMethod: { select: { id: true, code: true, name: true } } } }, specialty: { select: { id: true, name: true } }, items: { include: { medicalService: { select: { id: true, code: true, name: true } } }, orderBy: { sortOrder: 'asc' } }, schedules: { include: { room: { select: { id: true, name: true, branchId: true } }, slots: { orderBy: { startTime: 'asc' } } }, orderBy: { examDate: 'asc' } } }
+      : resource === 'services'
+      ? { specialty: { select: { id: true, name: true } } }
       : resource === 'rooms' ? { branch: { select: { id: true, name: true, address: true } }, specialties: { where: { isActive: true }, include: { specialty: { select: { id: true, name: true } } }, orderBy: { priority: 'desc' } } } : undefined
     return { items: await model.findMany({ where, include, orderBy: { name: 'asc' }, take: 200 }) }
   }
@@ -140,7 +140,7 @@ export class SystemCatalogService {
       if (!clinicId) { const clinic = await this.prisma.clinic.findFirst({ where: { isActive: true } }); if (!clinic) throw new BadRequestException('Chưa có phòng khám để gán chi nhánh'); clinicId = clinic.id }
       return { name: String(b.name).trim(), code: String(b.code || '').trim(), address: b.address || null, phoneNumber: b.phoneNumber || null, timezone: b.timezone || 'Asia/Ho_Chi_Minh', isActive: b.isActive ?? true, ...(creating ? { clinicId } : {}) }
     }
-    if (resource === 'specialties') return { name: String(b.name).trim(), description: b.description || null, departmentId: Number(b.departmentId) }
+    if (resource === 'specialties') return { name: String(b.name).trim(), description: b.description || null }
     if (resource === 'branch-specialties') {
       const branchId = String(b.branchId || ''), specialtyId = Number(b.specialtyId)
       if (!branchId || !Number.isInteger(specialtyId)) throw new BadRequestException('Vui lòng chọn cơ sở và chuyên khoa')
@@ -161,8 +161,8 @@ export class SystemCatalogService {
       return { branchId, name: String(b.name).trim(), code: String(b.code || '').trim(), isActive: b.isActive ?? true }
     }
     if (resource === 'services') {
-      const category = String(b.category || '').trim().toUpperCase(); if (!['LAB_TEST','IMAGING','PROCEDURE'].includes(category)) throw new BadRequestException('Nhóm dịch vụ không hợp lệ')
-      return { name: String(b.name).trim(), code: String(b.code || '').trim(), description: b.description || null, category, departmentId: b.departmentId ? Number(b.departmentId) : null, price: Number(b.price) || 0, durationMin: Number(b.durationMin) || 30, isActive: b.isActive ?? true }
+      const category = String(b.category || '').trim().toUpperCase(); if (!['LAB_TEST','IMAGING','PROCEDURE','CONSULTATION'].includes(category)) throw new BadRequestException('Nhóm dịch vụ không hợp lệ')
+      return { name: String(b.name).trim(), code: String(b.code || '').trim(), description: b.description || null, category, specialtyId: b.specialtyId ? Number(b.specialtyId) : null, price: Number(b.price) || 0, durationMin: Number(b.durationMin) || 30, isActive: b.isActive ?? true }
     }
     if (resource === 'service-packages') {
       const serviceIds = Array.isArray(b.medicalServiceIds) ? [...new Set<string>(b.medicalServiceIds.map(String).filter(Boolean))] : []

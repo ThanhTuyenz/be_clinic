@@ -1,9 +1,11 @@
+// ============================================================
+// Enums – Smart Booking scope
+// ============================================================
+
 enum UserRole {
   ADMIN          @map("admin")
   BRANCH_MANAGER @map("branch_manager")
   DOCTOR         @map("doctor")
-  PHARMACIST     @map("pharmacist")
-  CASHIER        @map("cashier")
   RECEPTIONIST   @map("receptionist")
   PATIENT        @map("patient")
 }
@@ -30,17 +32,30 @@ enum ScheduleStatus {
   CANCELLED
 }
 
+enum SlotStatus {
+  AVAILABLE
+  FULL
+  BLOCKED
+}
+
 enum AppointmentStatus {
   PENDING_PAYMENT
   BOOKED
   CHECKED_IN
-  IN_EXAMINATION
   COMPLETED
   CANCELLED
   EXPIRED
   NO_SHOW
   REFUND_REQUIRED
   MANUAL_REVIEW
+}
+
+enum BookingOrderStatus {
+  PENDING_PAYMENT
+  PAID
+  PARTIALLY_CANCELLED
+  CANCELLED
+  REFUNDED
 }
 
 enum InvoiceStatus {
@@ -75,36 +90,9 @@ enum OutboxStatus {
   FAILED
 }
 
-enum MedicalVisitStatus {
-  DRAFT
-  FINALIZED
-  AMENDED
-}
-
-enum PrescriptionStatus {
-  DRAFT
-  ISSUED
-  DISPENSED
-  CANCELLED
-}
-
-enum ClinicalOrderStatus {
-  ORDERED
-  IN_PROGRESS
-  COMPLETED
-  CANCELLED
-}
-
 enum MedicalServiceCategory {
   LAB_TEST
   IMAGING
   PROCEDURE
-}
-
-enum InventoryMovementType {
-  IMPORT
-  DISPENSE
-  ADJUSTMENT
-  RETURN
-  EXPIRED
+  CONSULTATION
 }

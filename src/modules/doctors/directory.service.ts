@@ -10,13 +10,14 @@ export class DirectoryService {
   }
 
   async publicNavigation() {
-    const [departments, branches] = await Promise.all([
-      this.prisma.department.findMany({
+    const [specialties, branches] = await Promise.all([
+      this.prisma.specialty.findMany({
         orderBy: { name: 'asc' },
         select: {
           id: true,
           name: true,
-          specialties: { orderBy: { name: 'asc' }, select: { id: true, name: true, branches: { where: { isActive: true }, select: { branchId: true } } } },
+          description: true,
+          branches: { where: { isActive: true }, select: { branchId: true } },
         },
       }),
       this.prisma.branch.findMany({
@@ -26,13 +27,13 @@ export class DirectoryService {
       }),
     ]);
 
-    return { departments, branches };
+    return { departments: specialties, specialties, branches };
   }
 
   specialties() {
-    return this.prisma.department.findMany({
+    return this.prisma.specialty.findMany({
       orderBy: { name: 'asc' },
-      select: { id: true, name: true, description: true, specialties: { orderBy: { name: 'asc' }, select: { id: true, name: true, description: true, branches: { where: { isActive: true }, select: { branchId: true } } } } },
+      select: { id: true, name: true, description: true, branches: { where: { isActive: true }, select: { branchId: true } } },
     });
   }
 
@@ -51,7 +52,7 @@ export class DirectoryService {
       this.prisma.specialty.count(),
       this.prisma.review.aggregate({ where: { isActive: true, doctor: { isActive: true } }, _avg: { rating: true }, _count: { id: true } }),
     ]);
-    return { selectedBranch, branches: navigation.branches, departments: navigation.departments, featuredDoctors: featuredDoctors.slice(0, 6), specialtyPackages: specialtyPackages.slice(0, 8), healthPackages: healthPackages.slice(0, 6), bookingMethods, stats: { doctorCount, branchCount: navigation.branches.length, specialtyCount, reviewCount: reviewAggregate._count.id, averageRating: reviewAggregate._avg.rating ?? 0 } };
+    return { selectedBranch, branches: navigation.branches, departments: navigation.departments, specialties: navigation.specialties, featuredDoctors: featuredDoctors.slice(0, 6), specialtyPackages: specialtyPackages.slice(0, 8), healthPackages: healthPackages.slice(0, 6), bookingMethods, stats: { doctorCount, branchCount: navigation.branches.length, specialtyCount, reviewCount: reviewAggregate._count.id, averageRating: reviewAggregate._avg.rating ?? 0 } };
   }
 
   private async homepageSpecialtyPackages(branchId: string) {
@@ -64,8 +65,8 @@ export class DirectoryService {
   }
 
   departments(branchId: string) {
-    return this.prisma.department.findMany({
-      where: { doctors: { some: { isActive: true, user: { branchAssignments: { some: { branchId } } } } } },
+    return this.prisma.specialty.findMany({
+      where: { branches: { some: { branchId, isActive: true } } },
       orderBy: { name: 'asc' }, select: { id: true, name: true, description: true },
     });
   }
@@ -123,15 +124,54 @@ export class DirectoryService {
   }
 
   async doctors(branchId?: string, departmentId?: number, specialtyId?: number, q?: string, featuredOnly = false) {
-    if (departmentId !== undefined && !Number.isInteger(departmentId)) throw new BadRequestException('departmentId không hợp lệ');
     if (specialtyId !== undefined && !Number.isInteger(specialtyId)) throw new BadRequestException('specialtyId không hợp lệ');
     const term = q?.trim();
     const rows = await this.prisma.doctor.findMany({
-      where: { isActive: true, departmentId, fullName: term ? { contains: term, mode: 'insensitive' } : undefined, specialties: specialtyId ? { some: { specialtyId } } : undefined, user: branchId ? { branchAssignments: { some: { branchId } } } : undefined },
-      orderBy: featuredOnly ? [{ ratingAverage: 'desc' }, { fullName: 'asc' }] : [{ isFeatured: 'desc' }, { ratingAverage: 'desc' }, { fullName: 'asc' }],
-      select: { id: true, fullName: true, academicRank: true, experienceYears: true, biography: true, consultationFee: true, ratingAverage: true, ratingCount: true, isFeatured: true, department: { select: { id: true, name: true } }, user: { select: { branchAssignments: { where: branchId ? { branchId } : undefined, select: { isPrimary: true, branch: { select: { id: true, name: true, address: true } } } } } }, specialties: { select: { isPrimary: true, specialty: { select: { id: true, name: true } } } } },
+      where: {
+        isActive: true,
+        specialties: specialtyId ? { some: { specialtyId } } : undefined,
+        user: {
+          fullName: term ? { contains: term, mode: 'insensitive' } : undefined,
+          ...(branchId ? { branchAssignments: { some: { branchId } } } : {}),
+        },
+      },
+      orderBy: featuredOnly
+        ? [{ ratingAverage: 'desc' }, { user: { fullName: 'asc' } }]
+        : [{ isFeatured: 'desc' }, { ratingAverage: 'desc' }, { user: { fullName: 'asc' } }],
+      select: {
+        id: true,
+        academicRank: true,
+        experienceYears: true,
+        biography: true,
+        consultationFee: true,
+        ratingAverage: true,
+        ratingCount: true,
+        isFeatured: true,
+        user: {
+          select: {
+            fullName: true,
+            branchAssignments: {
+              where: branchId ? { branchId } : undefined,
+              select: {
+                isPrimary: true,
+                branch: { select: { id: true, name: true, address: true } }
+              }
+            }
+          }
+        },
+        specialties: {
+          select: {
+            isPrimary: true,
+            specialty: { select: { id: true, name: true } }
+          }
+        }
+      },
     });
-    return rows.map(({ user, ...doctor }) => ({ ...doctor, branchAssignments: user.branchAssignments }));
+    return rows.map(({ user, ...doctor }) => ({
+      ...doctor,
+      fullName: user.fullName || 'Bác sĩ',
+      branchAssignments: user.branchAssignments
+    }));
   }
 
   async availableDates(doctorId: string, branchId: string) {
@@ -150,46 +190,26 @@ export class DirectoryService {
       where: { doctorId, branchId, workDate, status: 'OPEN' },
       include: {
         room: { select: { id: true, code: true, name: true, branch: { select: { id: true, name: true, address: true } } } },
-        slots: { where: { isActive: true } },
+        slots: {
+          where: { isActive: true },
+          orderBy: { startTime: 'asc' },
+        },
       },
     });
 
     if (!schedule) return [];
 
-    const slotDuration = schedule.slotDurationMin || 30;
-    const bookedMap = new Map(schedule.slots.map((s) => [s.startTime.toISOString().slice(11, 16), s]));
-
-    const slots: any[] = [];
-    let current = new Date(schedule.startTime);
-    const end = new Date(schedule.endTime);
-
-    while (current < end) {
-      const startTimeStr = current.toISOString().slice(11, 16);
-      const nextTime = new Date(current.getTime() + slotDuration * 60000);
-      if (nextTime > end) break;
-      const endTimeStr = nextTime.toISOString().slice(11, 16);
-
-      const existingSlot = bookedMap.get(startTimeStr);
-      const isBlocked = existingSlot?.isBlocked || false;
-      const occupiedCount = existingSlot?.occupiedCount || 0;
-      const capacity = existingSlot?.capacity || 1;
-      const remainingCapacity = Math.max(capacity - occupiedCount, 0);
-
-      slots.push({
-        id: existingSlot?.id || `virtual_${schedule.id}_${startTimeStr}`,
-        startTime: startTimeStr,
-        endTime: endTimeStr,
-        capacity,
-        occupiedCount,
-        remainingCapacity,
-        isAvailable: !isBlocked && remainingCapacity > 0,
-        room: schedule.room,
-      });
-
-      current = nextTime;
-    }
-
-    return slots;
+    return schedule.slots.map((s) => ({
+      id: s.id,
+      startTime: s.startTime.toISOString().slice(11, 16),
+      endTime: s.endTime.toISOString().slice(11, 16),
+      capacity: s.capacity,
+      occupiedCount: s.occupiedCount,
+      remainingCapacity: Math.max(s.capacity - s.occupiedCount, 0),
+      isAvailable: s.slotStatus === 'AVAILABLE' && s.occupiedCount < s.capacity,
+      slotStatus: s.slotStatus,
+      room: schedule.room,
+    }));
   }
 
   private today(): Date { const date = new Date(); date.setUTCHours(0, 0, 0, 0); return date; }
@@ -200,3 +220,4 @@ export class DirectoryService {
     return date;
   }
 }
+

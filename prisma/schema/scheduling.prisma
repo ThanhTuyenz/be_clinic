@@ -1,21 +1,27 @@
+// ============================================================
+// Ca làm việc & Khung giờ của bác sĩ
+// ============================================================
+
 model DoctorSchedule {
-  id              String               @id @default(uuid()) @db.Uuid
-  doctorId        String               @map("doctor_id") @db.Uuid
-  branchId        String               @map("branch_id") @db.Uuid
-  roomId          String?              @map("room_id") @db.Uuid
-  workDate        DateTime             @map("work_date") @db.Date
-  startTime       DateTime             @map("start_time") @db.Time(0)
-  endTime         DateTime             @map("end_time") @db.Time(0)
-  slotDurationMin Int                  @default(30) @map("slot_duration_min")
-  status          ScheduleStatus       @default(OPEN)
-  createdAt       DateTime             @default(now()) @map("created_at") @db.Timestamptz(3)
-  updatedAt       DateTime             @updatedAt @map("updated_at") @db.Timestamptz(3)
-  doctor          Doctor               @relation(fields: [doctorId], references: [id], onDelete: Cascade)
-  branch          Branch               @relation(fields: [branchId], references: [id], onDelete: Cascade)
-  room            ClinicRoom?          @relation(fields: [roomId], references: [id], onDelete: SetNull)
-  slots           DoctorScheduleSlot[]
+  id               String         @id @default(uuid()) @db.Uuid
+  doctorId         String         @map("doctor_id") @db.Uuid
+  branchId         String         @map("branch_id") @db.Uuid
+  roomId           String?        @map("room_id") @db.Uuid
+  workDate         DateTime       @map("work_date") @db.Date
+  startTime        DateTime       @map("start_time") @db.Time(0)
+  endTime          DateTime       @map("end_time") @db.Time(0)
+  slotDurationMin  Int            @default(30) @map("slot_duration_min")
+  capacityPerSlot  Int            @default(1) @map("capacity_per_slot")  // số bệnh nhân tối đa / slot
+  status           ScheduleStatus @default(OPEN)
+  createdAt        DateTime       @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt        DateTime       @updatedAt @map("updated_at") @db.Timestamptz(3)
+  doctor           Doctor         @relation(fields: [doctorId], references: [id], onDelete: Cascade)
+  branch           Branch         @relation(fields: [branchId], references: [id], onDelete: Cascade)
+  room             ClinicRoom?    @relation(fields: [roomId], references: [id], onDelete: SetNull)
+  slots            DoctorScheduleSlot[]
 
   @@unique([doctorId, branchId, workDate, startTime])
+  @@index([doctorId, workDate, status])
   @@index([branchId, workDate, status])
   @@map("doctor_schedules")
 }
@@ -28,7 +34,7 @@ model DoctorScheduleSlot {
   capacity        Int            @default(1)
   occupiedCount   Int            @default(0) @map("occupied_count")
   nextQueueNumber Int            @default(1) @map("next_queue_number")
-  isBlocked       Boolean        @default(false) @map("is_blocked")
+  slotStatus      SlotStatus     @default(AVAILABLE) @map("slot_status")
   isActive        Boolean        @default(true) @map("is_active")
   createdAt       DateTime       @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt       DateTime       @updatedAt @map("updated_at") @db.Timestamptz(3)
@@ -36,7 +42,8 @@ model DoctorScheduleSlot {
   appointments    Appointment[]
 
   @@unique([scheduleId, startTime])
-  @@index([scheduleId, isActive])
+  @@index([scheduleId, slotStatus, isActive])
+  @@index([scheduleId, isActive, occupiedCount])
   @@map("doctor_schedule_slots")
 }
 
@@ -54,4 +61,3 @@ model DoctorScheduleException {
   @@unique([doctorId, branchId, date])
   @@map("doctor_schedule_exceptions")
 }
-

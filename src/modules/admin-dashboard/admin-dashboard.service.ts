@@ -79,7 +79,7 @@ export class AdminDashboardService {
 
     const branchIds = user.branchAssignments.map((item) => item.branchId)
     const appointmentScope: Record<string, unknown> = {}
-    if (user.role === 'DOCTOR') appointmentScope.doctorId = user.doctor?.id || '__none__'
+    if (user.role === 'DOCTOR') appointmentScope.scheduleSlot = { schedule: { doctorId: user.doctor?.id || '__none__' } }
     else if (user.role !== 'ADMIN') appointmentScope.branchId = { in: branchIds.length ? branchIds : ['__none__'] }
 
     const now = new Date()
@@ -114,14 +114,14 @@ export class AdminDashboardService {
         },
       }),
       this.prisma.invoice.findMany({
-        where: { appointment: todayScope as any, status: 'PAID' },
+        where: { status: 'PAID', paidAt: { gte: todayStart, lt: tomorrow } },
         select: { totalAmount: true, payments: { where: { status: 'SUCCESS' }, orderBy: { paidAt: 'desc' }, take: 1, select: { method: true } } },
       }),
     ])
 
     const sourcesToday = { clinic: 0, online: 0, other: 0 }
     const roomMap = new Map<string, { room: string; total: number; pending: number; confirmed: number }>()
-    for (const appointment of todayRows) {
+    for (const appointment of todayRows as any[]) {
       const actorRole = appointment.statusHistories[0]?.actor?.role
       if (actorRole === 'PATIENT' || !actorRole) sourcesToday.online += 1
       else sourcesToday.clinic += 1
@@ -130,7 +130,7 @@ export class AdminDashboardService {
         const current = roomMap.get(room.id) || { room: room.name || room.code, total: 0, pending: 0, confirmed: 0 }
         current.total += 1
         if (['PENDING_PAYMENT', 'BOOKED'].includes(appointment.status)) current.pending += 1
-        if (['CHECKED_IN', 'IN_EXAMINATION'].includes(appointment.status)) current.confirmed += 1
+        if (['CHECKED_IN'].includes(appointment.status)) current.confirmed += 1
         roomMap.set(room.id, current)
       }
     }
@@ -148,8 +148,8 @@ export class AdminDashboardService {
       { total: 0, count: 0, cash: 0, transfer: 0 },
     )
 
-    const unpaidPending = todayRows.filter((row) => row.status === 'PENDING_PAYMENT' && row.invoice?.status !== 'PAID').length
-    const bookedWaitingCheckIn = todayRows.filter((row) => row.status === 'BOOKED').length
+    const unpaidPending = (todayRows as any[]).filter((row) => row.status === 'PENDING_PAYMENT' && row.invoice?.status !== 'PAID').length
+    const bookedWaitingCheckIn = (todayRows as any[]).filter((row) => row.status === 'BOOKED').length
     return {
       today: this.dateKey(todayStart),
       week: { from: this.dateKey(weekStart), to: this.dateKey(new Date(weekEnd.getTime() - 1)) },

@@ -1,38 +1,64 @@
-model Appointment {
-  id                  String                     @id @default(uuid()) @db.Uuid
-  bookingCode         String?                    @unique @map("booking_code") @db.VarChar(30)
-  patientProfileId    String                     @map("patient_profile_id") @db.Uuid
-  doctorId            String?                    @map("doctor_id") @db.Uuid
-  branchId            String                     @map("branch_id") @db.Uuid
-  scheduleSlotId      String?                    @map("schedule_slot_id") @db.Uuid
-  servicePackageId    String?                    @map("service_package_id") @db.Uuid
-  servicePackageScheduleSlotId String?           @map("service_package_schedule_slot_id") @db.Uuid
-  servicePrice        Decimal?                   @map("service_price") @db.Decimal(12, 2)
-  symptomsDescription String?                    @map("symptoms_description")
-  bookedViaAi         Boolean                    @default(false) @map("booked_via_ai")
-  status              AppointmentStatus          @default(PENDING_PAYMENT)
-  holdExpiresAt       DateTime?                  @map("hold_expires_at") @db.Timestamptz(3)
-  queueNumber         Int?                       @map("queue_number")
-  checkedInAt         DateTime?                  @map("checked_in_at") @db.Timestamptz(3)
-  checkedInById       String?                    @map("checked_in_by_id") @db.Uuid
-  createdAt           DateTime                   @default(now()) @map("created_at") @db.Timestamptz(3)
-  updatedAt           DateTime                   @updatedAt @map("updated_at") @db.Timestamptz(3)
-  patientProfile      PatientProfile             @relation(fields: [patientProfileId], references: [id], onDelete: Restrict)
-  doctor              Doctor?                    @relation(fields: [doctorId], references: [id], onDelete: Restrict)
-  branch              Branch                     @relation(fields: [branchId], references: [id], onDelete: Restrict)
-  scheduleSlot        DoctorScheduleSlot?        @relation(fields: [scheduleSlotId], references: [id], onDelete: Restrict)
-  servicePackage      ServicePackage?             @relation(fields: [servicePackageId], references: [id], onDelete: Restrict)
-  servicePackageScheduleSlot ServicePackageScheduleSlot? @relation(fields: [servicePackageScheduleSlotId], references: [id], onDelete: Restrict)
-  checkedInBy         User?                      @relation("CheckedInBy", fields: [checkedInById], references: [id], onDelete: SetNull)
-  statusHistories     AppointmentStatusHistory[]
-  qrToken             AppointmentQrToken?
-  invoice             Invoice?
-  medicalVisit        MedicalVisit?
+// ============================================================
+// Đặt lịch: BookingOrder (nhóm/đơn lẻ) + Appointment
+// ============================================================
 
-  @@unique([scheduleSlotId, queueNumber])
+// Đơn tổng – quản lý thanh toán & nhóm thành viên gia đình
+model BookingOrder {
+  id              String             @id @default(uuid()) @db.Uuid
+  accountId       String             @map("account_id") @db.Uuid
+  orderCode       String             @unique @map("order_code") @db.VarChar(30)
+  groupType       String             @default("SINGLE") @map("group_type") @db.VarChar(20) // SINGLE | FAMILY
+  status          BookingOrderStatus @default(PENDING_PAYMENT)
+  totalAmount     Decimal            @map("total_amount") @db.Decimal(12, 2)
+  note            String?            @db.Text
+  createdAt       DateTime           @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt       DateTime           @updatedAt @map("updated_at") @db.Timestamptz(3)
+  account         User               @relation(fields: [accountId], references: [id], onDelete: Restrict)
+  appointments    Appointment[]
+  invoice         Invoice?
+
+  @@index([accountId, status])
+  @@index([status, createdAt])
+  @@map("booking_orders")
+}
+
+// Chi tiết lịch khám của từng thành viên / từng lịch đơn lẻ
+model Appointment {
+  id                           String             @id @default(uuid()) @db.Uuid
+  bookingOrderId               String?            @map("booking_order_id") @db.Uuid
+  bookingCode                  String?            @unique @map("booking_code") @db.VarChar(30)
+  patientProfileId             String             @map("patient_profile_id") @db.Uuid
+  branchId                     String             @map("branch_id") @db.Uuid
+  scheduleSlotId               String?            @map("schedule_slot_id") @db.Uuid
+  servicePackageId             String?            @map("service_package_id") @db.Uuid
+  servicePackageScheduleSlotId String?            @map("service_package_schedule_slot_id") @db.Uuid
+  servicePrice                 Decimal?           @map("service_price") @db.Decimal(12, 2)
+  symptomsDescription          String?            @map("symptoms_description")
+  bookedViaAi                  Boolean            @default(false) @map("booked_via_ai")
+  status                       AppointmentStatus  @default(PENDING_PAYMENT)
+  holdExpiresAt                DateTime?          @map("hold_expires_at") @db.Timestamptz(3)
+  queueNumber                  Int?               @map("queue_number")
+  checkedInAt                  DateTime?          @map("checked_in_at") @db.Timestamptz(3)
+  checkedInById                String?            @map("checked_in_by_id") @db.Uuid
+  reminderSent24h              Boolean            @default(false) @map("reminder_sent_24h")
+  reminderSent2h               Boolean            @default(false) @map("reminder_sent_2h")
+  createdAt                    DateTime           @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt                    DateTime           @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  bookingOrder                 BookingOrder?                @relation(fields: [bookingOrderId], references: [id], onDelete: SetNull)
+  patientProfile               PatientProfile               @relation(fields: [patientProfileId], references: [id], onDelete: Restrict)
+  branch                       Branch                       @relation(fields: [branchId], references: [id], onDelete: Restrict)
+  scheduleSlot                 DoctorScheduleSlot?          @relation(fields: [scheduleSlotId], references: [id], onDelete: Restrict)
+  servicePackage               ServicePackage?              @relation(fields: [servicePackageId], references: [id], onDelete: Restrict)
+  servicePackageScheduleSlot   ServicePackageScheduleSlot?  @relation(fields: [servicePackageScheduleSlotId], references: [id], onDelete: Restrict)
+  checkedInBy                  User?                        @relation("CheckedInBy", fields: [checkedInById], references: [id], onDelete: SetNull)
+  statusHistories              AppointmentStatusHistory[]
+  qrToken                      AppointmentQrToken?
+  invoice                      Invoice?
+
+  @@index([bookingOrderId])
   @@index([patientProfileId, status])
   @@index([patientProfileId, createdAt])
-  @@index([doctorId, status, createdAt])
   @@index([branchId, status, createdAt])
   @@index([scheduleSlotId, status])
   @@index([servicePackageId, status])
