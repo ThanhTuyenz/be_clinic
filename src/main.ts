@@ -78,6 +78,8 @@ async function bootstrap() {
         if (!origin) return callback(null, true)
         if (corsAllowlist.includes('*')) return callback(null, true)
         if (corsAllowlist.includes(origin)) return callback(null, true)
+        // Tự động cho phép tất cả các domain Vercel (Preview & Production)
+        if (/^https:\/\/.*\.vercel\.app$/.test(origin)) return callback(null, true)
         return callback(new Error(`CORS blocked for origin: ${origin}`), false)
       },
       credentials: true,
