@@ -1,8 +1,19 @@
 import { PrismaClient } from '@prisma/client';
+import { PrismaPg } from '@prisma/adapter-pg';
+import pg from 'pg';
+import dotenv from 'dotenv';
+import path from 'node:path';
 import bcrypt from 'bcrypt';
 import { createHash } from 'node:crypto';
 
-const prisma = new PrismaClient();
+const envFile = process.env.ENV_FILE || '.env.development';
+dotenv.config({ path: path.resolve(process.cwd(), '.env') });
+dotenv.config({ path: path.resolve(process.cwd(), envFile), override: true });
+
+const connectionString = process.env.DIRECT_URL || process.env.DATABASE_URL;
+const pool = new pg.Pool({ connectionString });
+const adapter = new PrismaPg(pool);
+const prisma = new PrismaClient({ adapter });
 
 const roles = [
   ['admin@vitacare.local', 'Quản trị hệ thống', 'ADMIN'],
@@ -595,4 +606,7 @@ async function seedBookingTables({ users, doctors, branches, rooms, specialtiesB
   }
 }
 
-main().finally(() => prisma.$disconnect());
+main().finally(async () => {
+  await prisma.$disconnect();
+  await pool.end();
+});

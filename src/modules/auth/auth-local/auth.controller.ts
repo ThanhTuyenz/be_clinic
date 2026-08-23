@@ -87,7 +87,7 @@ export class AuthController {
     const cookieOptions: CookieOptions = {
       httpOnly: true,
       secure: isProduction,
-      sameSite: false, // Allow cookies in cross-origin POST requests
+      sameSite: isProduction ? 'none' : 'lax', // Bắt buộc 'none' cho cross-site giữa Vercel và Render
       path: '/',
     };
 
@@ -216,7 +216,7 @@ export class AuthController {
     const refreshCookieOptions: CookieOptions = {
       httpOnly: true,
       secure: isProduction,
-      sameSite: false, // Allow cookies in cross-origin POST requests
+      sameSite: isProduction ? 'none' : 'lax', // Bắt buộc 'none' cho cross-site giữa Vercel và Render
       maxAge: tokenMaxAge,
       path: '/',
     };
@@ -226,7 +226,7 @@ export class AuthController {
     res.cookie('refreshToken', response.refreshToken, {
       httpOnly: true,
       secure: isProduction,
-      sameSite: false,
+      sameSite: isProduction ? 'none' : 'lax',
       maxAge: refreshTokenMaxAge,
       path: '/',
     });
@@ -255,7 +255,7 @@ export class AuthController {
     const cookieOptions: CookieOptions = {
       httpOnly: true,
       secure: isProduction,
-      sameSite: false,
+      sameSite: isProduction ? 'none' : 'lax',
       path: '/',
     };
 
