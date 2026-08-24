@@ -21,6 +21,13 @@ export class MomoController {
     return this.momoService.createPayment(request.user!.id, dto.paymentId, dto.paymentMethod);
   }
 
+  @ApiBearerAuth('access-token')
+  @Post('simulate-success')
+  @ApiOperation({ summary: 'Mô phỏng thanh toán thành công (Dành cho Demo / Test)' })
+  simulate(@Req() request: Request, @Body('paymentId') paymentId: string) {
+    return this.momoService.simulateSuccess(request.user!.id, paymentId);
+  }
+
   @Public()
   @Post('ipn')
   @HttpCode(204)

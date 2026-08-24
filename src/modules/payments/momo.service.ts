@@ -35,6 +35,29 @@ export class MomoService {
     private readonly bookingService: BookingService,
   ) {}
 
+  async simulateSuccess(accountId: string, paymentId: string) {
+    const payment = await this.prisma.paymentTransaction.findFirst({
+      where: { id: paymentId, invoice: { appointment: { patientProfile: { accountId } } } },
+      include: { invoice: { include: { appointment: true } } },
+    });
+    if (!payment) throw new NotFoundException('Không tìm thấy giao dịch thanh toán');
+    const appointment = payment.invoice.appointment;
+
+    await this.bookingService.handlePaymentWebhook('MOMO_SANDBOX', {
+      paymentId: payment.id,
+      providerTransactionId: `DEMO_${Date.now()}`,
+      status: 'SUCCESS',
+      payload: { mock: true, orderId: payment.id, resultCode: 0 },
+    });
+
+    return {
+      success: true,
+      appointmentId: appointment.id,
+      paymentId: payment.id,
+      message: 'Thanh toán mô phỏng thành công!',
+    };
+  }
+
   async createPayment(accountId: string, paymentId: string, paymentMethod: MomoPaymentMethod) {
     const settings = this.settings();
     const payment = await this.prisma.paymentTransaction.findFirst({
@@ -68,12 +91,8 @@ export class MomoService {
       paymentId: payment.id,
       appointmentId: appointment.id,
     })).toString('base64');
-    const requestTypeByMethod: Record<MomoPaymentMethod, string> = {
-      [MomoPaymentMethod.WALLET]: 'captureWallet',
-      [MomoPaymentMethod.ATM]: 'payWithATM',
-      [MomoPaymentMethod.CREDIT_CARD]: 'payWithCC',
-    };
-    const requestType = requestTypeByMethod[paymentMethod];
+    // Luồng Merchant Gateway chuẩn cho Website (All-In-One: QR Ví MoMo, Thẻ ATM Napas, Thẻ Quốc tế)
+    const requestType = 'captureWallet';
     const rawSignature = [
       `accessKey=${settings.accessKey}`,
       `amount=${amount}`,

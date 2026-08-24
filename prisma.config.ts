@@ -10,7 +10,6 @@ export default defineConfig({
   schema: path.join('prisma', 'schema'),
   datasource: {
     url: process.env.DIRECT_URL || process.env.DATABASE_URL || '',
-    directUrl: process.env.DIRECT_URL || '',
   },
   migrations: {
     path: path.join('prisma', 'schema', 'migrations'),
