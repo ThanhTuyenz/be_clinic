@@ -25,43 +25,10 @@ export class BookingService {
   }
 
   /**
-   * Số dự kiến chỉ dành cho lịch đã thanh toán (BOOKED). Nó xếp các lịch đang
-   * chờ check-in trong cùng slot sau bộ đếm số thật đã cấp. queueNumber vẫn chỉ
-   * được ghi khi check-in.
+   * Trả về số thứ tự cố định của lịch khám.
    */
-  private async estimatedQueueNumber(row: {
-    id: string;
-    status: AppointmentStatus;
-    createdAt: Date;
-    queueNumber: number | null;
-    scheduleSlotId: string | null;
-    servicePackageScheduleSlotId: string | null;
-    scheduleSlot?: { nextQueueNumber: number } | null;
-    servicePackageScheduleSlot?: { nextQueueNumber: number } | null;
-  }) {
-    if (row.queueNumber != null) return row.queueNumber;
-    if (row.status !== 'BOOKED') return null;
-    const slotFilter = row.servicePackageScheduleSlotId
-      ? { servicePackageScheduleSlotId: row.servicePackageScheduleSlotId }
-      : row.scheduleSlotId
-        ? { scheduleSlotId: row.scheduleSlotId }
-        : null;
-    if (!slotFilter) return null;
-    const bookedAheadOrSelf = await this.prisma.appointment.count({
-      where: {
-        ...slotFilter,
-        status: 'BOOKED',
-        queueNumber: null,
-        OR: [
-          { createdAt: { lt: row.createdAt } },
-          { createdAt: row.createdAt, id: { lte: row.id } },
-        ],
-      },
-    });
-    const issuedCount = row.servicePackageScheduleSlot?.nextQueueNumber
-      ?? row.scheduleSlot?.nextQueueNumber
-      ?? 0;
-    return issuedCount + bookedAheadOrSelf;
+  private estimatedQueueNumber(row: { queueNumber: number | null }) {
+    return row.queueNumber;
   }
 
   async checkout(accountId: string, dto: CheckoutAppointmentDto) {
@@ -286,12 +253,13 @@ export class BookingService {
     const packageSlot = row.servicePackageScheduleSlot;
     const room = doctorSlot?.schedule.room ?? packageSlot?.schedule.room;
     const branch = doctorSlot?.schedule.branch ?? packageSlot?.schedule.servicePackage.branchBookingMethod.branch;
-    const estimatedQueueNumber = await this.estimatedQueueNumber(row);
+    const estimatedQueueNumber = this.estimatedQueueNumber(row);
     return {
       appointmentId: row.id, status: row.status, holdExpiresAt: row.holdExpiresAt,
       paymentStatus: row.invoice?.payments[0]?.status ?? null, hasQr: Boolean(row.qrToken),
       bookingCode: row.bookingCode,
-      estimatedQueueNumber,
+      queueNumber: row.queueNumber,
+      estimatedQueueNumber: row.queueNumber ?? estimatedQueueNumber,
       room: room ? { id: room.id, code: room.code, name: room.name } : null,
       branch: branch ? { id: branch.id, name: branch.name, address: branch.address } : null,
     };
@@ -319,6 +287,7 @@ export class BookingService {
         id: row.id,
         bookingCode: row.bookingCode,
         status: row.status,
+        queueNumber: row.queueNumber,
         holdExpiresAt: row.holdExpiresAt,
         createdAt: row.createdAt,
         appointmentDate: (packageSlot?.schedule.examDate ?? doctorSlot?.schedule.workDate)?.toISOString().slice(0, 10) ?? null,
@@ -344,7 +313,23 @@ export class BookingService {
         patientProfile: true,
         servicePackage: true,
         branch: true,
-        scheduleSlot: { include: { schedule: { include: { doctor: { include: { user: true } }, room: true, branch: true } } } },
+        invoice: { include: { payments: { orderBy: { createdAt: 'desc' }, take: 1 } } },
+        scheduleSlot: {
+          include: {
+            schedule: {
+              include: {
+                doctor: {
+                  include: {
+                    user: true,
+                    specialties: { include: { specialty: true } },
+                  },
+                },
+                room: true,
+                branch: true,
+              },
+            },
+          },
+        },
         servicePackageScheduleSlot: { include: { schedule: { include: { room: true } } } },
       },
     });
@@ -365,7 +350,10 @@ export class BookingService {
       update: { tokenHash, expiresAt, usedAt: row.status === 'CHECKED_IN' ? new Date() : null },
       create: { appointmentId: row.id, tokenHash, expiresAt },
     });
-    const estimatedQueueNumber = await this.estimatedQueueNumber(row);
+    const estimatedQueueNumber = this.estimatedQueueNumber(row);
+    const doc = doctorSlot?.schedule?.doctor;
+    const specialtyName = doc?.specialties?.[0]?.specialty?.name || (row.servicePackage ? 'Đa khoa / Gói khám' : 'Khám chuyên khoa');
+
     return {
       appointmentId: row.id,
       bookingCode: row.bookingCode,
@@ -379,9 +367,19 @@ export class BookingService {
       endTime: (doctorSlot?.endTime ?? packageSlot!.endTime).toISOString().slice(11, 16),
       room: room ? { id: room.id, code: room.code, name: room.name } : null,
       branch: { id: branch.id, name: branch.name, address: branch.address },
-      doctor: (() => { const d = row.scheduleSlot?.schedule?.doctor; return d ? { id: d.id, fullName: d.user?.fullName ?? '' } : null; })(),
+      doctor: doc ? { id: doc.id, fullName: doc.user?.fullName ?? '', academicRank: doc.academicRank ?? null } : null,
+      specialty: specialtyName,
       healthPackage: row.servicePackage ? { id: row.servicePackage.id, name: row.servicePackage.name } : null,
-      patient: { id: row.patientProfile.id, fullName: row.patientProfile.fullName },
+      patient: {
+        id: row.patientProfile.id,
+        fullName: row.patientProfile.fullName,
+        gender: row.patientProfile.gender,
+        dateOfBirth: row.patientProfile.dateOfBirth ? row.patientProfile.dateOfBirth.toISOString().slice(0, 10) : null,
+        nationalId: row.patientProfile.nationalId || null,
+        phoneNumber: row.patientProfile.phoneNumber || null,
+      },
+      totalAmount: Number(row.invoice?.totalAmount ?? row.servicePrice ?? 0),
+      paymentStatus: row.invoice?.payments[0]?.status ?? (['BOOKED', 'CHECKED_IN'].includes(row.status) ? 'PAID' : null),
     };
   }
 
@@ -448,23 +446,37 @@ export class BookingService {
         }
         return this.checkInResult(qr.appointment, channel);
       }
-      const [counter] = qr.appointment.servicePackageScheduleSlotId
-        ? await tx.$queryRaw<Array<{ nextQueueNumber: number }>>`
-            UPDATE "service_package_schedule_slots"
-            SET "next_queue_number" = "next_queue_number" + 1, "updated_at" = NOW()
-            WHERE "id" = ${qr.appointment.servicePackageScheduleSlotId}::uuid
-            RETURNING "next_queue_number" AS "nextQueueNumber"
-          `
-        : await tx.$queryRaw<Array<{ nextQueueNumber: number }>>`
-            UPDATE "doctor_schedule_slots"
-            SET "next_queue_number" = "next_queue_number" + 1, "updated_at" = NOW()
-            WHERE "id" = ${qr.appointment.scheduleSlotId}::uuid
-            RETURNING "next_queue_number" AS "nextQueueNumber"
-          `;
-      if (!counter) throw new ConflictException('Không tìm thấy khung giờ của lịch hẹn');
+      let finalQueueNumber = qr.appointment.queueNumber;
+      if (finalQueueNumber == null) {
+        if (qr.appointment.servicePackageScheduleSlot) {
+          const scheduleId = qr.appointment.servicePackageScheduleSlot.scheduleId;
+          const maxQueue = await tx.appointment.aggregate({
+            where: { servicePackageScheduleSlot: { scheduleId }, queueNumber: { not: null } },
+            _max: { queueNumber: true },
+          });
+          finalQueueNumber = (maxQueue._max.queueNumber ?? 0) + 1;
+        } else if (qr.appointment.scheduleSlot) {
+          const scheduleId = qr.appointment.scheduleSlot.scheduleId;
+          const maxQueue = await tx.appointment.aggregate({
+            where: { scheduleSlot: { scheduleId }, queueNumber: { not: null } },
+            _max: { queueNumber: true },
+          });
+          finalQueueNumber = (maxQueue._max.queueNumber ?? 0) + 1;
+        } else {
+          finalQueueNumber = 1;
+        }
+      }
+
       const appointment = await tx.appointment.update({
         where: { id: qr.appointment.id },
-        data: { status: 'CHECKED_IN', scheduleSlotId: assignedDoctorSlotId, queueNumber: counter.nextQueueNumber, checkedInAt: new Date(), checkedInById: actorId, statusHistories: { create: { fromStatus: 'BOOKED', toStatus: 'CHECKED_IN', actorId, reason: `CHECK_IN_${channel}` } } },
+        data: {
+          status: 'CHECKED_IN',
+          scheduleSlotId: assignedDoctorSlotId,
+          queueNumber: finalQueueNumber,
+          checkedInAt: new Date(),
+          checkedInById: actorId,
+          statusHistories: { create: { fromStatus: 'BOOKED', toStatus: 'CHECKED_IN', actorId, reason: `CHECK_IN_${channel}` } },
+        },
         include: { patientProfile: true, servicePackage: true, scheduleSlot: { include: { schedule: { include: { doctor: true, room: true } } } }, servicePackageScheduleSlot: { include: { schedule: { include: { room: true } } } } },
       });
       await tx.appointmentQrToken.update({ where: { id: qr.id }, data: { usedAt: new Date() } });
@@ -809,11 +821,55 @@ export class BookingService {
     const rawToken = this.checkInToken(appointmentId);
     const tokenHash = createHash('sha256').update(rawToken).digest('hex');
     const bookingCode = `VC-${appointmentId.slice(0, 8).toUpperCase()}`;
+
+    // Cấp số thứ tự cố định tăng dần liên tục trong ngày làm việc của Bác sĩ / Gói khám
+    const existingAppt = await tx.appointment.findUnique({
+      where: { id: appointmentId },
+      include: {
+        scheduleSlot: true,
+        servicePackageScheduleSlot: true,
+      },
+    });
+
+    let assignedQueueNumber = existingAppt?.queueNumber ?? null;
+    if (assignedQueueNumber == null && existingAppt) {
+      if (existingAppt.servicePackageScheduleSlot) {
+        const scheduleId = existingAppt.servicePackageScheduleSlot.scheduleId;
+        const maxQueue = await tx.appointment.aggregate({
+          where: {
+            servicePackageScheduleSlot: { scheduleId },
+            queueNumber: { not: null },
+          },
+          _max: { queueNumber: true },
+        });
+        assignedQueueNumber = (maxQueue._max.queueNumber ?? 0) + 1;
+      } else if (existingAppt.scheduleSlot) {
+        const scheduleId = existingAppt.scheduleSlot.scheduleId;
+        const maxQueue = await tx.appointment.aggregate({
+          where: {
+            scheduleSlot: { scheduleId },
+            queueNumber: { not: null },
+          },
+          _max: { queueNumber: true },
+        });
+        assignedQueueNumber = (maxQueue._max.queueNumber ?? 0) + 1;
+      }
+    }
+
     await tx.paymentTransaction.update({ where: { id: paymentId }, data: { provider, providerTransactionId: dto.providerTransactionId, status: late ? 'LATE_SUCCESS' : 'SUCCESS', paidAt: new Date(), rawPayload: dto.payload as Prisma.InputJsonValue } });
     await tx.invoice.update({ where: { id: invoiceId }, data: { status: 'PAID', paidAt: new Date() } });
-    const appointment = await tx.appointment.update({ where: { id: appointmentId }, data: { status: 'BOOKED', bookingCode, holdExpiresAt: null, statusHistories: { create: { fromStatus: late ? 'EXPIRED' : 'PENDING_PAYMENT', toStatus: 'BOOKED', reason: late ? 'LATE_SUCCESS_CAPACITY_REACQUIRED' : 'PAYMENT_SUCCESS' } } } });
+    const appointment = await tx.appointment.update({
+      where: { id: appointmentId },
+      data: {
+        status: 'BOOKED',
+        bookingCode,
+        queueNumber: assignedQueueNumber,
+        holdExpiresAt: null,
+        statusHistories: { create: { fromStatus: late ? 'EXPIRED' : 'PENDING_PAYMENT', toStatus: 'BOOKED', reason: late ? 'LATE_SUCCESS_CAPACITY_REACQUIRED' : 'PAYMENT_SUCCESS' } },
+      },
+    });
     await tx.appointmentQrToken.upsert({ where: { appointmentId }, update: { tokenHash, expiresAt: new Date(Date.now() + 48 * 60 * 60 * 1000), usedAt: null }, create: { appointmentId, tokenHash, expiresAt: new Date(Date.now() + 48 * 60 * 60 * 1000) } });
-    await tx.outboxEvent.create({ data: { aggregateType: 'Appointment', aggregateId: appointmentId, eventType: 'appointment.booked', payload: { appointmentId, bookingCode, lateSuccess: late } } });
-    return { status: late ? PaymentStatus.LATE_SUCCESS : PaymentStatus.SUCCESS, appointmentStatus: appointment.status, bookingCode, qrToken: rawToken };
+    await tx.outboxEvent.create({ data: { aggregateType: 'Appointment', aggregateId: appointmentId, eventType: 'appointment.booked', payload: { appointmentId, bookingCode, queueNumber: assignedQueueNumber, lateSuccess: late } } });
+    return { status: late ? PaymentStatus.LATE_SUCCESS : PaymentStatus.SUCCESS, appointmentStatus: appointment.status, bookingCode, queueNumber: assignedQueueNumber, qrToken: rawToken };
   }
 }
