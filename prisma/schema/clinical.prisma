@@ -4,6 +4,7 @@
 
 model PatientProfile {
   id                    String        @id @default(uuid()) @db.Uuid
+  patientCode           String?       @unique @map("patient_code") @db.VarChar(30)
   accountId             String?       @map("account_id") @db.Uuid
   fullName              String        @map("full_name") @db.VarChar(100)
   phoneNumber           String?       @map("phone_number") @db.VarChar(20)

@@ -83,8 +83,9 @@ export class DirectoryService {
 
   async servicePackageScheduleDates(packageId: string) {
     if (!packageId) throw new BadRequestException('Thiếu gói dịch vụ');
+    const { minDate, maxDate } = this.getBookingAllowedDateRange();
     const rows = await this.prisma.servicePackageSchedule.findMany({
-      where: { servicePackageId: packageId, isActive: true, examDate: { gte: this.today() }, slots: { some: { isActive: true } } },
+      where: { servicePackageId: packageId, isActive: true, examDate: { gte: minDate, lte: maxDate }, slots: { some: { isActive: true } } },
       select: { examDate: true }, orderBy: { examDate: 'asc' }, take: 90,
     });
     return rows.map(({ examDate }) => examDate.toISOString().slice(0, 10));
@@ -93,6 +94,7 @@ export class DirectoryService {
   async servicePackageTimeslots(packageId: string, date: string) {
     if (!packageId) throw new BadRequestException('Thiếu gói dịch vụ');
     const examDate = this.parseDate(date);
+    this.validateDateWithinBookingRange(examDate);
     const rows = await this.prisma.servicePackageScheduleSlot.findMany({
       where: { isActive: true, schedule: { servicePackageId: packageId, examDate, isActive: true } },
       orderBy: { startTime: 'asc' },
@@ -175,8 +177,9 @@ export class DirectoryService {
   }
 
   async availableDates(doctorId: string, branchId: string) {
+    const { minDate, maxDate } = this.getBookingAllowedDateRange();
     const schedules = await this.prisma.doctorSchedule.findMany({
-      where: { doctorId, branchId, status: 'OPEN', workDate: { gte: this.today() } },
+      where: { doctorId, branchId, status: 'OPEN', workDate: { gte: minDate, lte: maxDate } },
       select: { workDate: true },
       orderBy: { workDate: 'asc' },
       take: 90,
@@ -186,6 +189,7 @@ export class DirectoryService {
 
   async timeslots(doctorId: string, branchId: string, date: string) {
     const workDate = this.parseDate(date);
+    this.validateDateWithinBookingRange(workDate);
     const schedule = await this.prisma.doctorSchedule.findFirst({
       where: { doctorId, branchId, workDate, status: 'OPEN' },
       include: {
@@ -210,6 +214,67 @@ export class DirectoryService {
       slotStatus: s.slotStatus,
       room: schedule.room,
     }));
+  }
+
+  public getBookingAllowedDateRange(): { minDate: Date; maxDate: Date } {
+    const nowUtc = new Date();
+    const vnOffsetMs = 7 * 60 * 60 * 1000;
+    const nowVn = new Date(nowUtc.getTime() + vnOffsetMs);
+    const currentHour = nowVn.getUTCHours();
+    const currentMinute = nowVn.getUTCMinutes();
+
+    const todayVnStr = nowVn.toISOString().slice(0, 10);
+    const baseDate = new Date(`${todayVnStr}T00:00:00.000Z`);
+
+    // Quy định bệnh viện:
+    // 1. Chỉ cho phép đặt lịch trực tuyến trước từ 1 đến 30 ngày (không cho đặt trong ngày).
+    // 2. Nếu muốn khám ngày mai, phải đặt trước 16h30 hôm nay. Sau 16h30 hôm nay, ngày mai sẽ bị khóa trực tuyến.
+    const isPastCutoff = currentHour > 16 || (currentHour === 16 && currentMinute >= 30);
+    const minDays = isPastCutoff ? 2 : 1;
+
+    const minDate = new Date(baseDate);
+    minDate.setUTCDate(minDate.getUTCDate() + minDays);
+
+    const maxDate = new Date(baseDate);
+    maxDate.setUTCDate(maxDate.getUTCDate() + 30);
+
+    return { minDate, maxDate };
+  }
+
+  public validateDateWithinBookingRange(targetDate: Date): void {
+    const nowUtc = new Date();
+    const vnOffsetMs = 7 * 60 * 60 * 1000;
+    const nowVn = new Date(nowUtc.getTime() + vnOffsetMs);
+    const currentHour = nowVn.getUTCHours();
+    const currentMinute = nowVn.getUTCMinutes();
+
+    const todayVnStr = nowVn.toISOString().slice(0, 10);
+    const baseDate = new Date(`${todayVnStr}T00:00:00.000Z`);
+    const examDateStr = targetDate.toISOString().slice(0, 10);
+    const examDateOnly = new Date(`${examDateStr}T00:00:00.000Z`);
+
+    const diffDays = Math.round((examDateOnly.getTime() - baseDate.getTime()) / (24 * 60 * 60 * 1000));
+
+    if (diffDays < 1) {
+      throw new BadRequestException(
+        'Hệ thống không nhận đặt lịch trực tuyến trong ngày. Để khám trong ngày hôm nay, quý khách vui lòng đến trực tiếp phòng khám để lấy số thứ tự tại quầy tiếp đón.',
+      );
+    }
+
+    if (diffDays > 30) {
+      throw new BadRequestException(
+        'Hệ thống chỉ mở đặt lịch trực tuyến trước tối đa 30 ngày.',
+      );
+    }
+
+    if (diffDays === 1) {
+      const isPastCutoff = currentHour > 16 || (currentHour === 16 && currentMinute >= 30);
+      if (isPastCutoff) {
+        throw new BadRequestException(
+          'Để khám vào ngày mai, quý khách vui lòng hoàn tất đặt lịch trước 16h30 hôm nay. Quý khách vui lòng chọn ngày khám khác hoặc đến lấy số trực tiếp tại quầy tiếp đón.',
+        );
+      }
+    }
   }
 
   private today(): Date { const date = new Date(); date.setUTCHours(0, 0, 0, 0); return date; }

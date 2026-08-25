@@ -25,9 +25,24 @@ export class PatientProfilesService {
           dto.provinceName?.trim()
         ].filter(Boolean).join(', ');
 
+        const yy = String(new Date().getFullYear()).slice(-2);
+        const prefix = `BN${yy}`;
+        const lastProfile = await tx.patientProfile.findFirst({
+          where: { patientCode: { startsWith: prefix } },
+          orderBy: { patientCode: 'desc' },
+          select: { patientCode: true },
+        });
+        let seq = 1;
+        if (lastProfile?.patientCode && lastProfile.patientCode.startsWith(prefix)) {
+          const num = parseInt(lastProfile.patientCode.replace(prefix, ''), 10);
+          if (!Number.isNaN(num)) seq = num + 1;
+        }
+        const patientCode = `${prefix}${String(seq).padStart(5, '0')}`;
+
         return tx.patientProfile.create({
           data: {
             accountId,
+            patientCode,
             fullName: dto.fullName.trim(),
             dateOfBirth: new Date(`${dto.dateOfBirth}T00:00:00.000Z`),
             gender: dto.gender,

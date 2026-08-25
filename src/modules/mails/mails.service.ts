@@ -8,6 +8,7 @@ import nodemailer, { Transporter } from 'nodemailer'
 import type { AllConfigType, MailerConfig } from '../../config/config.type.js'
 import type {
   AppointmentReminderMail,
+  BookingConfirmationMail,
   ForgotPasswordMail,
   IMailsService,
   RegistrationOtpMail,
@@ -105,11 +106,152 @@ export class MailsService implements IMailsService {
     })
   }
 
+  async sendBookingConfirmation(mail: BookingConfirmationMail): Promise<void> {
+    const d = mail.data
+    const subject = `Xác nhận đặt khám thành công – ${d.bookingCode} | VitaCare`
+    const name = this.escapeHtml(d.patientName)
+    const what = d.doctorName
+      ? `Khám với ${this.escapeHtml(d.doctorName)}`
+      : d.servicePackageName
+        ? this.escapeHtml(d.servicePackageName)
+        : 'Khám bệnh'
+
+    const formattedAmount = d.totalAmount != null
+      ? new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(d.totalAmount)
+      : null
+
+    let attachments: Array<{ filename: string; content: Buffer; cid: string; contentType?: string }> | undefined
+    let qrSectionHtml = ''
+
+    if (d.qrCodeDataUrl && d.qrCodeDataUrl.startsWith('data:image/')) {
+      const base64Data = d.qrCodeDataUrl.split(',')[1]
+      if (base64Data) {
+        attachments = [
+          {
+            filename: 'qr-checkin.png',
+            content: Buffer.from(base64Data, 'base64'),
+            cid: 'vitacare_qr_checkin',
+            contentType: 'image/png',
+          },
+        ]
+        qrSectionHtml = `
+          <div style="text-align: center; margin: 20px 0; padding: 16px; background-color: #ffffff; border: 1px solid #e2e8f0; border-radius: 8px;">
+            <div style="font-size: 13px; font-weight: 700; color: #0f172a; margin-bottom: 12px; text-transform: uppercase; letter-spacing: 0.5px;">MÃ QR CHECK-IN TIẾP ĐÓN</div>
+            <div style="display: inline-block; padding: 10px; background-color: #ffffff; border: 1px solid #cbd5e1; border-radius: 6px;">
+              <img src="cid:vitacare_qr_checkin" alt="Mã QR Check-in" width="160" height="160" style="display: block; width: 160px; height: 160px; margin: 0 auto; background-color: #ffffff;" />
+            </div>
+            <div style="margin-top: 8px; font-size: 12px; color: #64748b;">Quét mã này tại Kiosk hoặc xuất trình cho Lễ tân khi đến phòng khám</div>
+          </div>
+        `
+      }
+    }
+
+    const html = `
+      <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; max-width: 560px; margin: 0 auto; background-color: #ffffff; border: 1px solid #e2e8f0; border-radius: 8px; overflow: hidden; color: #334155;">
+        <!-- Header -->
+        <div style="background-color: #0f766e; padding: 20px 24px; text-align: center; color: #ffffff;">
+          <div style="font-size: 18px; font-weight: 700; letter-spacing: 0.5px;">PHÒNG KHÁM QUỐC TẾ VITACARE</div>
+          <div style="margin-top: 4px; font-size: 13px; opacity: 0.9;">PHIẾU XÁC NHẬN ĐẶT KHÁM</div>
+        </div>
+
+        <!-- Body -->
+        <div style="padding: 24px;">
+          <p style="font-size: 15px; margin: 0 0 12px; color: #0f172a;">Xin chào <strong>${name}</strong>,</p>
+          <p style="font-size: 14px; line-height: 1.5; margin: 0 0 16px; color: #475569;">
+            Lịch hẹn khám của bạn đã được xác nhận thành công. Dưới đây là thông tin chi tiết:
+          </p>
+
+          <!-- Highlight Box: Booking Code & Queue Number -->
+          <div style="background-color: #f8fafc; border: 1px solid #e2e8f0; border-radius: 6px; padding: 14px; margin-bottom: 20px; text-align: center;">
+            <table style="width: 100%; border-collapse: collapse;">
+              <tr>
+                <td style="text-align: center; width: 50%; border-right: 1px solid #e2e8f0;">
+                  <div style="font-size: 11px; color: #64748b; font-weight: 600; text-transform: uppercase;">Mã đặt khám</div>
+                  <div style="font-size: 17px; font-weight: 700; color: #0f766e; margin-top: 2px;">${this.escapeHtml(d.bookingCode)}</div>
+                </td>
+                <td style="text-align: center; width: 50%;">
+                  <div style="font-size: 11px; color: #64748b; font-weight: 600; text-transform: uppercase;">Số thứ tự dự kiến</div>
+                  <div style="font-size: 17px; font-weight: 700; color: #0f766e; margin-top: 2px;">${d.queueNumber != null ? '#' + String(d.queueNumber).padStart(2, '0') : 'Đang cập nhật'}</div>
+                </td>
+              </tr>
+            </table>
+          </div>
+
+          <!-- Appointment Details Table -->
+          <table style="width: 100%; border-collapse: collapse; font-size: 13.5px; margin-bottom: 16px;">
+            <tbody>
+              <tr style="border-bottom: 1px solid #f1f5f9;">
+                <td style="padding: 8px 0; color: #64748b; width: 35%;">Dịch vụ / Bác sĩ:</td>
+                <td style="padding: 8px 0; font-weight: 600; color: #0f172a;">${what}</td>
+              </tr>
+              <tr style="border-bottom: 1px solid #f1f5f9;">
+                <td style="padding: 8px 0; color: #64748b;">Thời gian khám:</td>
+                <td style="padding: 8px 0; font-weight: 600; color: #0f172a;">${d.startTime} – Ngày ${d.appointmentDate}</td>
+              </tr>
+              ${d.roomName ? `
+              <tr style="border-bottom: 1px solid #f1f5f9;">
+                <td style="padding: 8px 0; color: #64748b;">Phòng khám:</td>
+                <td style="padding: 8px 0; font-weight: 600; color: #0f172a;">${this.escapeHtml(d.roomName)}</td>
+              </tr>
+              ` : ''}
+              <tr style="border-bottom: 1px solid #f1f5f9;">
+                <td style="padding: 8px 0; color: #64748b;">Cơ sở:</td>
+                <td style="padding: 8px 0; color: #0f172a; font-weight: 500;">${this.escapeHtml(d.branchName)}</td>
+              </tr>
+              <tr style="border-bottom: 1px solid #f1f5f9;">
+                <td style="padding: 8px 0; color: #64748b;">Địa chỉ:</td>
+                <td style="padding: 8px 0; color: #334155;">${this.escapeHtml(d.branchAddress)}</td>
+              </tr>
+              ${d.branchPhone ? `
+              <tr style="border-bottom: 1px solid #f1f5f9;">
+                <td style="padding: 8px 0; color: #64748b;">Hotline hỗ trợ:</td>
+                <td style="padding: 8px 0; color: #334155;">${this.escapeHtml(d.branchPhone)}</td>
+              </tr>
+              ` : ''}
+              ${formattedAmount ? `
+              <tr style="border-bottom: 1px solid #f1f5f9;">
+                <td style="padding: 8px 0; color: #64748b;">Phí khám:</td>
+                <td style="padding: 8px 0; font-weight: 600; color: #0f172a;">${formattedAmount} <span style="font-size: 11px; color: #16a34a; font-weight: 600;">(Đã thanh toán)</span></td>
+              </tr>
+              ` : ''}
+            </tbody>
+          </table>
+
+          <!-- QR Code Section -->
+          ${qrSectionHtml}
+
+          <!-- Notice Box -->
+          <div style="background-color: #f8fafc; border-left: 3px solid #0f766e; padding: 12px 14px; border-radius: 0 6px 6px 0; margin-top: 16px; font-size: 12.5px; color: #475569; line-height: 1.5;">
+            <div style="font-weight: 600; color: #0f172a; margin-bottom: 4px;">Lưu ý khi đến khám:</div>
+            <div style="margin-bottom: 2px;">• Vui lòng có mặt tại cơ sở trước giờ hẹn <strong>15 phút</strong>.</div>
+            <div style="margin-bottom: 2px;">• Xuất trình <strong>Mã QR</strong> trên email này hoặc <strong>Mã đặt khám / CCCD</strong> tại Quầy lễ tân.</div>
+            <div>• Mang theo các kết quả xét nghiệm, toa thuốc cũ nếu có.</div>
+          </div>
+        </div>
+
+        <!-- Footer -->
+        <div style="background-color: #f8fafc; padding: 14px 20px; text-align: center; border-top: 1px solid #e2e8f0; font-size: 11.5px; color: #94a3b8;">
+          <div>Cảm ơn quý khách đã lựa chọn <strong>VitaCare</strong>.</div>
+          <div style="margin-top: 2px;">Email này được gửi tự động từ hệ thống.</div>
+        </div>
+      </div>
+    `
+
+    await this.send({
+      to: mail.to,
+      subject,
+      text: `Xác nhận đặt khám thành công: ${what} – ${d.appointmentDate} lúc ${d.startTime} tại ${d.branchName}. Mã đặt khám: ${d.bookingCode}. Số thứ tự: #${d.queueNumber || '---'}`,
+      html,
+      attachments,
+    })
+  }
+
   private async send(message: {
     to: string
     subject: string
     text: string
     html: string
+    attachments?: Array<{ filename: string; content: Buffer; cid?: string; contentType?: string }>
   }): Promise<void> {
     if (!this.config.user || !this.config.password) {
       throw new InternalServerErrorException(
@@ -125,6 +267,7 @@ export class MailsService implements IMailsService {
         subject: message.subject,
         text: message.text,
         html: message.html,
+        attachments: message.attachments,
       })
       this.logger.log(`Email sent to ${message.to}, messageId=${info.messageId}`)
     } catch (error) {

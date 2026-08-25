@@ -54,7 +54,7 @@ export class StaffAppointmentsService {
       clinicRoomName: room?.name || room?.code || '',
       patient: {
         id: row.patientProfile.id,
-        patientCode: row.patientProfile.nationalId || row.patientProfile.id,
+        patientCode: row.patientProfile.patientCode || row.patientProfile.nationalId || row.patientProfile.id,
         fullName: row.patientProfile.fullName,
         name: row.patientProfile.fullName,
         dateOfBirth: row.patientProfile.dateOfBirth,
@@ -192,7 +192,7 @@ export class StaffAppointmentsService {
     const page = Math.max(Number(query.page) || 1, 1)
     const pageSize = Math.min(Math.max(Number(query.pageSize) || 10, 1), 100)
     const where: any = {
-      ...(query.patientCode ? { OR: [{ id: query.patientCode }, { nationalId: { contains: query.patientCode, mode: 'insensitive' } }] } : {}),
+      ...(query.patientCode ? { OR: [{ patientCode: { contains: query.patientCode, mode: 'insensitive' } }, { nationalId: { contains: query.patientCode, mode: 'insensitive' } }, { id: query.patientCode }] } : {}),
       ...(query.name ? { fullName: { contains: query.name, mode: 'insensitive' } } : {}),
       ...(query.phone ? { account: { phoneNumber: { contains: query.phone } } } : {}),
       ...(query.account ? { account: { email: { contains: query.account, mode: 'insensitive' } } } : {}),
@@ -201,7 +201,7 @@ export class StaffAppointmentsService {
       this.prisma.patientProfile.findMany({ where, include: { account: true }, skip: (page - 1) * pageSize, take: pageSize, orderBy: { fullName: 'asc' } }),
       this.prisma.patientProfile.count({ where }),
     ])
-    return { patients: rows.map((row) => ({ ...row, patientCode: row.nationalId || row.id, phone: row.account?.phoneNumber, email: row.account?.email })), total, page, pageSize }
+    return { patients: rows.map((row) => ({ ...row, patientCode: row.patientCode || row.nationalId || row.id, phone: row.account?.phoneNumber, email: row.account?.email })), total, page, pageSize }
   }
 
   async patientHistory(userId: string, patientId: string) {
@@ -230,9 +230,9 @@ export class StaffAppointmentsService {
 
   async patientByCode(userId: string, code: string) {
     await this.roleOf(userId)
-    const row = await this.prisma.patientProfile.findFirst({ where: { OR: [{ id: code }, { nationalId: code }] }, include: { account: true } })
+    const row = await this.prisma.patientProfile.findFirst({ where: { OR: [{ patientCode: code }, { nationalId: code }, { id: code }] }, include: { account: true } })
     if (!row) throw new NotFoundException('Không tìm thấy bệnh nhân')
-    return { patient: { ...row, patientCode: row.nationalId || row.id, phone: row.account?.phoneNumber, email: row.account?.email } }
+    return { patient: { ...row, patientCode: row.patientCode || row.nationalId || row.id, phone: row.account?.phoneNumber, email: row.account?.email } }
   }
 
   async availability(userId: string, doctorId: string, date: string) {
@@ -331,11 +331,26 @@ export class StaffAppointmentsService {
     }
     if (!patientProfileId && input.patient?.fullName) {
       const patient = input.patient
+      const yy = String(new Date().getFullYear()).slice(-2)
+      const prefix = `BN${yy}`
+      const lastProfile = await this.prisma.patientProfile.findFirst({
+        where: { patientCode: { startsWith: prefix } },
+        orderBy: { patientCode: 'desc' },
+        select: { patientCode: true },
+      })
+      let seq = 1
+      if (lastProfile?.patientCode && lastProfile.patientCode.startsWith(prefix)) {
+        const num = parseInt(lastProfile.patientCode.replace(prefix, ''), 10)
+        if (!Number.isNaN(num)) seq = num + 1
+      }
+      const patientCode = `${prefix}${String(seq).padStart(5, '0')}`
+
       const created = await this.prisma.patientProfile.create({
         data: {
+          patientCode,
           fullName: String(patient.fullName),
-          nationalId: patient.nationalId || patient.patientCode || null,
-          dateOfBirth: new Date(patient.dateOfBirth || '1990-01-01'),
+          nationalId: patient.nationalId || null,
+          dateOfBirth: new Date(patient.dateOfBirth || patient.dob || '1990-01-01'),
           gender: patient.gender && Object.values(Gender).includes(String(patient.gender).toUpperCase() as Gender)
             ? String(patient.gender).toUpperCase() as Gender
             : null,
@@ -351,8 +366,32 @@ export class StaffAppointmentsService {
     await this.prisma.$transaction(async (tx) => {
       const reserved = await tx.doctorScheduleSlot.updateMany({ where: { id: slot.id, occupiedCount: { lt: slot.capacity } }, data: { occupiedCount: { increment: 1 } } })
       if (reserved.count !== 1) throw new BadRequestException('Khung giờ vừa hết chỗ')
+
+      // Tự động cấp số thứ tự khám (STT) tăng dần trong ngày của bác sĩ
+      const maxQueueRow = await tx.appointment.aggregate({
+        where: {
+          scheduleSlot: {
+            schedule: {
+              doctorId: doctor.id,
+              workDate: { gte: workDate, lt: nextDate },
+            },
+          },
+        },
+        _max: { queueNumber: true },
+      })
+      const queueNumber = (maxQueueRow._max.queueNumber || 0) + 1
+
       await tx.appointment.create({
-        data: { id: appointmentId, bookingCode, patientProfileId, branchId: slot.schedule.branchId, scheduleSlotId: slot.id, symptomsDescription: input.note || null, status: 'PENDING_PAYMENT' },
+        data: {
+          id: appointmentId,
+          bookingCode,
+          patientProfileId,
+          branchId: slot.schedule.branchId,
+          scheduleSlotId: slot.id,
+          queueNumber,
+          symptomsDescription: input.note || null,
+          status: 'PENDING_PAYMENT',
+        },
       })
       await tx.appointmentStatusHistory.create({ data: { appointmentId, toStatus: 'PENDING_PAYMENT', actorId: userId, reason: 'CREATED_AT_RECEPTION' } })
       await tx.invoice.create({

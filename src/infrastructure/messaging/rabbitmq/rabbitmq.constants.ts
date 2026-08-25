@@ -8,4 +8,7 @@ export const RABBITMQ_TOPOLOGY = {
   retryExchange: 'appointments.hold.retry',
   failedRoutingKey: 'failed',
   deadLetterQueue: 'appointments.hold.expired.dlq',
+  eventsExchange: 'amq.topic',
+  bookedRoutingKey: 'appointment.booked',
+  bookedQueue: 'appointments.booked.mail',
 } as const;

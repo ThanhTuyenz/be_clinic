@@ -30,11 +30,11 @@ const roles = [
 ];
 
 const additionalPatientSeeds = [
-  { email: 'patient01@vitacare.local', nationalId: '079198000101', dateOfBirth: '1988-03-12', gender: 'FEMALE', address: 'Quận 3, TP.HCM' },
-  { email: 'patient02@vitacare.local', nationalId: '079199000102', dateOfBirth: '1992-07-25', gender: 'MALE', address: 'Quận Bình Thạnh, TP.HCM' },
-  { email: 'patient03@vitacare.local', nationalId: '079200000103', dateOfBirth: '1995-11-08', gender: 'FEMALE', address: 'TP. Thủ Đức, TP.HCM' },
-  { email: 'patient04@vitacare.local', nationalId: '079201000104', dateOfBirth: '1985-01-30', gender: 'MALE', address: 'Quận 7, TP.HCM' },
-  { email: 'patient05@vitacare.local', nationalId: '079202000105', dateOfBirth: '1998-09-16', gender: 'FEMALE', address: 'Quận Gò Vấp, TP.HCM' },
+  { email: 'patient01@vitacare.local', patientCode: 'BN2600003', nationalId: '079198000101', dateOfBirth: '1988-03-12', gender: 'FEMALE', address: 'Quận 3, TP.HCM' },
+  { email: 'patient02@vitacare.local', patientCode: 'BN2600004', nationalId: '079199000102', dateOfBirth: '1992-07-25', gender: 'MALE', address: 'Quận Bình Thạnh, TP.HCM' },
+  { email: 'patient03@vitacare.local', patientCode: 'BN2600005', nationalId: '079200000103', dateOfBirth: '1995-11-08', gender: 'FEMALE', address: 'TP. Thủ Đức, TP.HCM' },
+  { email: 'patient04@vitacare.local', patientCode: 'BN2600006', nationalId: '079201000104', dateOfBirth: '1985-01-30', gender: 'MALE', address: 'Quận 7, TP.HCM' },
+  { email: 'patient05@vitacare.local', patientCode: 'BN2600007', nationalId: '079202000105', dateOfBirth: '1998-09-16', gender: 'FEMALE', address: 'Quận Gò Vấp, TP.HCM' },
 ];
 
 function dateOnly(daysFromNow) {
@@ -271,13 +271,13 @@ async function main() {
   const patient = users.get('patient@vitacare.local');
   await prisma.patientProfile.upsert({
     where: { nationalId: '079200000001' },
-    update: { accountId: patient.id, fullName: patient.fullName, isMainProfile: true },
-    create: { accountId: patient.id, fullName: patient.fullName, nationalId: '079200000001', dateOfBirth: new Date('2000-01-15T00:00:00.000Z'), gender: 'MALE', address: 'Quận 1, TP.HCM', relationshipToAccount: 'SELF', isMainProfile: true },
+    update: { accountId: patient.id, fullName: patient.fullName, patientCode: 'BN2600001', isMainProfile: true },
+    create: { accountId: patient.id, fullName: patient.fullName, patientCode: 'BN2600001', nationalId: '079200000001', dateOfBirth: new Date('2000-01-15T00:00:00.000Z'), gender: 'MALE', address: 'Quận 1, TP.HCM', relationshipToAccount: 'SELF', isMainProfile: true },
   });
   await prisma.patientProfile.upsert({
     where: { nationalId: '079201000002' },
-    update: { accountId: patient.id, fullName: 'Nguyễn Minh An' },
-    create: { accountId: patient.id, fullName: 'Nguyễn Minh An', nationalId: '079201000002', dateOfBirth: new Date('2018-05-20T00:00:00.000Z'), gender: 'MALE', relationshipToAccount: 'CHILD', isMainProfile: false },
+    update: { accountId: patient.id, fullName: 'Nguyễn Minh An', patientCode: 'BN2600002' },
+    create: { accountId: patient.id, fullName: 'Nguyễn Minh An', patientCode: 'BN2600002', nationalId: '079201000002', dateOfBirth: new Date('2018-05-20T00:00:00.000Z'), gender: 'MALE', relationshipToAccount: 'CHILD', isMainProfile: false },
   });
 
   for (const patientSeed of additionalPatientSeeds) {
@@ -287,6 +287,7 @@ async function main() {
       update: {
         accountId: account.id,
         fullName: account.fullName,
+        patientCode: patientSeed.patientCode,
         dateOfBirth: new Date(`${patientSeed.dateOfBirth}T00:00:00.000Z`),
         gender: patientSeed.gender,
         address: patientSeed.address,
@@ -296,6 +297,7 @@ async function main() {
       create: {
         accountId: account.id,
         fullName: account.fullName,
+        patientCode: patientSeed.patientCode,
         nationalId: patientSeed.nationalId,
         dateOfBirth: new Date(`${patientSeed.dateOfBirth}T00:00:00.000Z`),
         gender: patientSeed.gender,

@@ -18,7 +18,7 @@ export class BookingService {
     private readonly config: ConfigService,
   ) {}
 
-  private checkInToken(appointmentId: string) {
+  public checkInToken(appointmentId: string) {
     const secret = this.config.get<string>('auth.secret');
     if (!secret) throw new Error('Thiếu AUTH_JWT_SECRET để phát hành QR check-in');
     return createHmac('sha256', secret).update(`check-in:${appointmentId}`).digest('base64url');
@@ -29,6 +29,42 @@ export class BookingService {
    */
   private estimatedQueueNumber(row: { queueNumber: number | null }) {
     return row.queueNumber;
+  }
+
+  private validateBookingLeadTime(examDate: Date) {
+    const nowUtc = new Date();
+    const vnOffsetMs = 7 * 60 * 60 * 1000;
+    const nowVn = new Date(nowUtc.getTime() + vnOffsetMs);
+    const currentHour = nowVn.getUTCHours();
+    const currentMinute = nowVn.getUTCMinutes();
+
+    const todayVnStr = nowVn.toISOString().slice(0, 10);
+    const baseDate = new Date(`${todayVnStr}T00:00:00.000Z`);
+    const examDateStr = examDate.toISOString().slice(0, 10);
+    const examDateOnly = new Date(`${examDateStr}T00:00:00.000Z`);
+
+    const diffDays = Math.round((examDateOnly.getTime() - baseDate.getTime()) / (24 * 60 * 60 * 1000));
+
+    if (diffDays < 1) {
+      throw new BadRequestException(
+        'Hệ thống không nhận đặt lịch trực tuyến trong ngày. Để khám trong ngày hôm nay, quý khách vui lòng đến trực tiếp phòng khám để lấy số thứ tự tại quầy tiếp đón.',
+      );
+    }
+
+    if (diffDays > 30) {
+      throw new BadRequestException(
+        'Hệ thống chỉ mở đặt lịch trực tuyến trước tối đa 30 ngày.',
+      );
+    }
+
+    if (diffDays === 1) {
+      const isPastCutoff = currentHour > 16 || (currentHour === 16 && currentMinute >= 30);
+      if (isPastCutoff) {
+        throw new BadRequestException(
+          'Để khám vào ngày mai, quý khách vui lòng hoàn tất đặt lịch trước 16h30 hôm nay. Quý khách vui lòng chọn ngày khám khác hoặc đến lấy số trực tiếp tại quầy tiếp đón.',
+        );
+      }
+    }
   }
 
   async checkout(accountId: string, dto: CheckoutAppointmentDto) {
@@ -65,6 +101,7 @@ export class BookingService {
           }
 
           if (!doctorSlot || !doctorSlot.isActive || doctorSlot.schedule.status !== 'OPEN' || !doctorSlot.schedule.doctor.isActive) throw new NotFoundException('Khung giờ của bác sĩ không khả dụng');
+          this.validateBookingLeadTime(doctorSlot.schedule.workDate);
           const duplicate = await tx.appointment.findFirst({ where: { patientProfileId: profile.id, scheduleSlotId: doctorSlot.id, status: { in: ACTIVE_APPOINTMENT_STATUSES } } });
           if (duplicate) throw new ConflictException('Người bệnh đã có lịch hẹn trong khung giờ này');
           const reserved = await tx.$executeRaw`UPDATE "doctor_schedule_slots" SET "occupied_count" = "occupied_count" + 1, "updated_at" = NOW() WHERE "id" = ${doctorSlot.id}::uuid AND "is_active" = TRUE AND "occupied_count" < "capacity"`;
@@ -84,6 +121,7 @@ export class BookingService {
         const packageSlot = await tx.servicePackageScheduleSlot.findUnique({ where: { id: dto.servicePackageScheduleSlotId }, include: { schedule: { include: { room: true, servicePackage: { include: { branchBookingMethod: true } } } } } });
         const servicePackage = packageSlot?.schedule.servicePackage;
         if (!packageSlot || !servicePackage || servicePackage.id !== dto.servicePackageId || !packageSlot.isActive || !packageSlot.schedule.isActive || !servicePackage.isActive || !servicePackage.branchBookingMethod.isEnabled) throw new NotFoundException('Gói dịch vụ hoặc khung giờ không khả dụng');
+        this.validateBookingLeadTime(packageSlot.schedule.examDate);
         if (!packageSlot.schedule.roomId) throw new ConflictException('Lịch khám chưa được phân phòng');
         if (packageSlot.schedule.room?.branchId !== servicePackage.branchBookingMethod.branchId) throw new ConflictException('Phòng khám không thuộc cơ sở của gói');
         if (servicePackage.specialtyId) {
@@ -448,23 +486,12 @@ export class BookingService {
       }
       let finalQueueNumber = qr.appointment.queueNumber;
       if (finalQueueNumber == null) {
-        if (qr.appointment.servicePackageScheduleSlot) {
-          const scheduleId = qr.appointment.servicePackageScheduleSlot.scheduleId;
-          const maxQueue = await tx.appointment.aggregate({
-            where: { servicePackageScheduleSlot: { scheduleId }, queueNumber: { not: null } },
-            _max: { queueNumber: true },
-          });
-          finalQueueNumber = (maxQueue._max.queueNumber ?? 0) + 1;
-        } else if (qr.appointment.scheduleSlot) {
-          const scheduleId = qr.appointment.scheduleSlot.scheduleId;
-          const maxQueue = await tx.appointment.aggregate({
-            where: { scheduleSlot: { scheduleId }, queueNumber: { not: null } },
-            _max: { queueNumber: true },
-          });
-          finalQueueNumber = (maxQueue._max.queueNumber ?? 0) + 1;
-        } else {
-          finalQueueNumber = 1;
-        }
+        finalQueueNumber = await this.computeQueueNumber(
+          tx,
+          qr.appointment.id,
+          qr.appointment.scheduleSlotId,
+          qr.appointment.servicePackageScheduleSlotId,
+        );
       }
 
       const appointment = await tx.appointment.update({
@@ -817,12 +844,71 @@ export class BookingService {
     };
   }
 
+  private async computeQueueNumber(
+    tx: Prisma.TransactionClient,
+    appointmentId: string,
+    scheduleSlotId?: string | null,
+    servicePackageScheduleSlotId?: string | null,
+  ): Promise<number> {
+    if (servicePackageScheduleSlotId) {
+      const currSlot = await tx.servicePackageScheduleSlot.findUnique({
+        where: { id: servicePackageScheduleSlotId },
+      });
+      if (currSlot) {
+        const earlierSlots = await tx.servicePackageScheduleSlot.findMany({
+          where: {
+            scheduleId: currSlot.scheduleId,
+            isActive: true,
+            startTime: { lt: currSlot.startTime },
+          },
+          select: { capacity: true },
+        });
+        const priorCapacity = earlierSlots.reduce((sum, s) => sum + (s.capacity || 1), 0);
+        const bookedInCurrentSlot = await tx.appointment.count({
+          where: {
+            servicePackageScheduleSlotId: currSlot.id,
+            queueNumber: { not: null },
+            id: { not: appointmentId },
+          },
+        });
+        return priorCapacity + bookedInCurrentSlot + 1;
+      }
+    }
+
+    if (scheduleSlotId) {
+      const currSlot = await tx.doctorScheduleSlot.findUnique({
+        where: { id: scheduleSlotId },
+      });
+      if (currSlot) {
+        const earlierSlots = await tx.doctorScheduleSlot.findMany({
+          where: {
+            scheduleId: currSlot.scheduleId,
+            isActive: true,
+            startTime: { lt: currSlot.startTime },
+          },
+          select: { capacity: true },
+        });
+        const priorCapacity = earlierSlots.reduce((sum, s) => sum + (s.capacity || 1), 0);
+        const bookedInCurrentSlot = await tx.appointment.count({
+          where: {
+            scheduleSlotId: currSlot.id,
+            queueNumber: { not: null },
+            id: { not: appointmentId },
+          },
+        });
+        return priorCapacity + bookedInCurrentSlot + 1;
+      }
+    }
+
+    return 1;
+  }
+
   private async confirmPaid(tx: Prisma.TransactionClient, paymentId: string, invoiceId: string, appointmentId: string, provider: string, dto: PaymentWebhookDto, late: boolean) {
     const rawToken = this.checkInToken(appointmentId);
     const tokenHash = createHash('sha256').update(rawToken).digest('hex');
     const bookingCode = `VC-${appointmentId.slice(0, 8).toUpperCase()}`;
 
-    // Cấp số thứ tự cố định tăng dần liên tục trong ngày làm việc của Bác sĩ / Gói khám
+    // Cấp số thứ tự cố định chuẩn theo thứ tự khung giờ trong ngày làm việc của Bác sĩ / Gói khám
     const existingAppt = await tx.appointment.findUnique({
       where: { id: appointmentId },
       include: {
@@ -833,27 +919,12 @@ export class BookingService {
 
     let assignedQueueNumber = existingAppt?.queueNumber ?? null;
     if (assignedQueueNumber == null && existingAppt) {
-      if (existingAppt.servicePackageScheduleSlot) {
-        const scheduleId = existingAppt.servicePackageScheduleSlot.scheduleId;
-        const maxQueue = await tx.appointment.aggregate({
-          where: {
-            servicePackageScheduleSlot: { scheduleId },
-            queueNumber: { not: null },
-          },
-          _max: { queueNumber: true },
-        });
-        assignedQueueNumber = (maxQueue._max.queueNumber ?? 0) + 1;
-      } else if (existingAppt.scheduleSlot) {
-        const scheduleId = existingAppt.scheduleSlot.scheduleId;
-        const maxQueue = await tx.appointment.aggregate({
-          where: {
-            scheduleSlot: { scheduleId },
-            queueNumber: { not: null },
-          },
-          _max: { queueNumber: true },
-        });
-        assignedQueueNumber = (maxQueue._max.queueNumber ?? 0) + 1;
-      }
+      assignedQueueNumber = await this.computeQueueNumber(
+        tx,
+        appointmentId,
+        existingAppt.scheduleSlotId,
+        existingAppt.servicePackageScheduleSlotId,
+      );
     }
 
     await tx.paymentTransaction.update({ where: { id: paymentId }, data: { provider, providerTransactionId: dto.providerTransactionId, status: late ? 'LATE_SUCCESS' : 'SUCCESS', paidAt: new Date(), rawPayload: dto.payload as Prisma.InputJsonValue } });
