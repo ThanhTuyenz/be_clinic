@@ -50,10 +50,27 @@ export type BookingConfirmationMail = {
   }
 }
 
+export type AppointmentCancellationMail = {
+  to: string
+  data: {
+    patientName: string
+    bookingCode: string
+    appointmentDate: string // YYYY-MM-DD
+    startTime: string // HH:MM
+    branchName: string
+    doctorOrServiceName: string
+    cancelReason?: string | null
+    cancelledBy: 'PATIENT' | 'CLINIC'
+    refundStatusNote?: string
+  }
+}
+
 export interface IMailsService {
   confirmRegisterUser(data: RegistrationOtpMail): Promise<void>
   forgotPassword(data: ForgotPasswordMail): Promise<void>
   resetPassword(data: ResetPasswordMail): Promise<void>
   sendAppointmentReminder(data: AppointmentReminderMail): Promise<void>
   sendBookingConfirmation(data: BookingConfirmationMail): Promise<void>
+  sendAppointmentCancellation(data: AppointmentCancellationMail): Promise<void>
 }
+

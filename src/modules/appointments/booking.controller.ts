@@ -41,7 +41,15 @@ export class BookingController {
     return this.bookingService.issueCheckInPass(id, request.user!.id);
   }
 
+  @Post(':id/cancel')
+  @ApiOperation({ summary: 'Bệnh nhân tự hủy lịch hẹn' })
+  @ApiParam({ name: 'id', format: 'uuid' })
+  cancelAppointment(@Req() request: Request, @Param('id') id: string, @Body() body: { reason?: string }) {
+    return this.bookingService.cancelMyAppointment(request.user!.id, id, body?.reason);
+  }
+
   // ─── Batch Checkout (Đặt nhóm / Gia đình) ──────────────────
+
   @Post('batch-checkout')
   @ApiOperation({ summary: 'Đặt lịch cho nhiều thành viên cùng lúc (All-or-Nothing)' })
   batchCheckout(@Req() request: Request, @Body() dto: BatchCheckoutDto) {

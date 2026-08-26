@@ -246,6 +246,88 @@ export class MailsService implements IMailsService {
     })
   }
 
+  async sendAppointmentCancellation(mail: import('./mails.js').AppointmentCancellationMail): Promise<void> {
+    const d = mail.data
+    const isPatient = d.cancelledBy === 'PATIENT'
+    const subject = isPatient
+      ? `[VitaCare] Xác nhận hủy lịch khám – Mã: ${d.bookingCode}`
+      : `[VitaCare] Thông báo hủy lịch khám từ phòng khám – Mã: ${d.bookingCode}`
+
+    const html = `
+      <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; max-width: 580px; margin: 0 auto; background: #ffffff; border: 1px solid #e2e8f0; border-radius: 8px; overflow: hidden;">
+        <!-- Header -->
+        <div style="background: ${isPatient ? '#475569' : '#b91c1c'}; padding: 18px 24px; text-align: center;">
+          <h1 style="color: #ffffff; margin: 0; font-size: 18px; font-weight: 700; letter-spacing: -0.3px;">
+            ${isPatient ? 'Xác Nhận Hủy Lịch Khám' : 'Thông Báo Hủy Lịch Khám'}
+          </h1>
+          <p style="color: rgba(255,255,255,0.85); margin: 4px 0 0; font-size: 12px;">Hệ thống Phòng khám Đa khoa VitaCare</p>
+        </div>
+
+        <!-- Body -->
+        <div style="padding: 20px 24px;">
+          <p style="margin: 0 0 14px; font-size: 14px; color: #1e293b; line-height: 1.5;">
+            Kính gửi <strong>${d.patientName}</strong>,
+          </p>
+          <p style="margin: 0 0 16px; font-size: 13px; color: #475569; line-height: 1.5;">
+            ${isPatient
+              ? `Lịch hẹn khám của quý khách với mã <strong>#${d.bookingCode}</strong> đã được hủy thành công theo yêu cầu.`
+              : `Chúng tôi rất tiếc phải thông báo rằng lịch hẹn khám <strong>#${d.bookingCode}</strong> của quý khách đã bị hủy do lý do bất khả kháng từ phòng khám.`}
+          </p>
+
+          <!-- Appointment Summary Table -->
+          <div style="background-color: #f8fafc; border: 1px solid #e2e8f0; border-radius: 6px; padding: 14px 16px; margin-bottom: 16px;">
+            <table style="width: 100%; border-collapse: collapse; font-size: 13px;">
+              <tr>
+                <td style="padding: 4px 0; color: #64748b; width: 140px;">Mã lịch hẹn:</td>
+                <td style="padding: 4px 0; font-weight: 700; color: #0f172a; font-family: monospace;">#${d.bookingCode}</td>
+              </tr>
+              <tr>
+                <td style="padding: 4px 0; color: #64748b;">Dịch vụ / Bác sĩ:</td>
+                <td style="padding: 4px 0; font-weight: 600; color: #0f172a;">${d.doctorOrServiceName}</td>
+              </tr>
+              <tr>
+                <td style="padding: 4px 0; color: #64748b;">Thời gian:</td>
+                <td style="padding: 4px 0; font-weight: 600; color: #0f172a;">${d.startTime} ngày ${d.appointmentDate}</td>
+              </tr>
+              <tr>
+                <td style="padding: 4px 0; color: #64748b;">Cơ sở khám:</td>
+                <td style="padding: 4px 0; color: #334155;">${d.branchName}</td>
+              </tr>
+              ${d.cancelReason ? `
+              <tr>
+                <td style="padding: 4px 0; color: #64748b;">Lý do hủy:</td>
+                <td style="padding: 4px 0; color: #b91c1c; font-weight: 500;">${d.cancelReason}</td>
+              </tr>` : ''}
+            </table>
+          </div>
+
+          <!-- Refund Note -->
+          ${d.refundStatusNote ? `
+          <div style="background-color: #eff6ff; border-left: 3px solid #3b82f6; padding: 10px 14px; border-radius: 0 6px 6px 0; margin-bottom: 16px; font-size: 12.5px; color: #1e40af; line-height: 1.5;">
+            <strong>Thông tin hoàn tiền:</strong> ${d.refundStatusNote}
+          </div>` : ''}
+
+          <p style="margin: 0; font-size: 12.5px; color: #64748b; line-height: 1.5;">
+            Nếu quý khách có bất kỳ thắc mắc nào hoặc muốn đặt lại lịch mới, xin vui lòng truy cập website hoặc liên hệ hotline phòng khám để được hỗ trợ.
+          </p>
+        </div>
+
+        <!-- Footer -->
+        <div style="background-color: #f8fafc; padding: 12px 20px; text-align: center; border-top: 1px solid #e2e8f0; font-size: 11.5px; color: #94a3b8;">
+          <div>VitaCare Clinic · Hotline Hỗ trợ 24/7</div>
+        </div>
+      </div>
+    `
+
+    await this.send({
+      to: mail.to,
+      subject,
+      text: `Thông báo hủy lịch hẹn #${d.bookingCode}: ${d.doctorOrServiceName} ngày ${d.appointmentDate} lúc ${d.startTime}.`,
+      html,
+    })
+  }
+
+
   private async send(message: {
     to: string
     subject: string

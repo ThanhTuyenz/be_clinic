@@ -2,10 +2,15 @@ import { BadRequestException, ForbiddenException, Injectable, NotFoundException 
 import { randomUUID } from 'node:crypto'
 import { Gender } from '@prisma/client'
 import { PrismaService } from '../../infrastructure/database/prisma/prisma.service.js'
+import { MailsService } from '../mails/mails.service.js'
 
 @Injectable()
 export class StaffAppointmentsService {
-  constructor(private readonly prisma: PrismaService) { }
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly mailsService: MailsService,
+  ) { }
+
 
   private async roleOf(userId: string) {
     const user = await this.prisma.user.findUnique({ where: { id: userId }, select: { role: true } })
@@ -256,7 +261,13 @@ export class StaffAppointmentsService {
     if (!['ADMIN', 'BRANCH_MANAGER', 'RECEPTIONIST', 'DOCTOR'].includes(role)) throw new ForbiddenException('Không có quyền cập nhật lịch khám')
     const current = await this.prisma.appointment.findUnique({
       where: { id: appointmentId },
-      include: { scheduleSlot: { include: { schedule: { select: { doctorId: true } } } } },
+      include: {
+        patientProfile: { include: { account: { select: { email: true } } } },
+        scheduleSlot: { include: { schedule: { include: { doctor: { include: { user: true } }, branch: true } } } },
+        servicePackageScheduleSlot: { include: { schedule: { include: { servicePackage: true } } } },
+        servicePackage: true,
+        branch: true,
+      },
     })
     if (!current) throw new NotFoundException('Không tìm thấy lịch khám')
     const statuses: Record<string, any> = { pending: 'PENDING_PAYMENT', confirmed: 'BOOKED', cancelled: 'CANCELLED', examined: 'COMPLETED', completed: 'COMPLETED', checked_in: 'CHECKED_IN', in_examination: 'IN_EXAMINATION' }
@@ -299,13 +310,97 @@ export class StaffAppointmentsService {
         where: { id: appointmentId },
         data: { status, ...(input.visitQueueNumber != null ? { queueNumber: Number(input.visitQueueNumber) } : {}) },
       })
+
+      // Nếu chuyển sang CANCELLED
+      if (status === 'CANCELLED' && current.status !== 'CANCELLED') {
+        if (current.servicePackageScheduleSlotId) {
+          await tx.$executeRaw`
+            UPDATE "service_package_schedule_slots"
+            SET "occupied_count" = GREATEST("occupied_count" - 1, 0), "updated_at" = NOW()
+            WHERE "id" = ${current.servicePackageScheduleSlotId}::uuid
+          `;
+        }
+        if (current.scheduleSlotId) {
+          await tx.$executeRaw`
+            UPDATE "doctor_schedule_slots"
+            SET "occupied_count" = GREATEST("occupied_count" - 1, 0), "updated_at" = NOW()
+            WHERE "id" = ${current.scheduleSlotId}::uuid
+          `;
+        }
+
+        const invoice = await tx.invoice.findUnique({
+          where: { appointmentId },
+          include: { payments: { orderBy: { createdAt: 'desc' }, take: 1 } },
+        });
+        if (invoice?.payments[0]?.status === 'SUCCESS') {
+          await tx.paymentTransaction.update({
+            where: { id: invoice.payments[0].id },
+            data: { status: 'REFUND_REQUIRED' },
+          });
+          await tx.invoice.update({
+            where: { id: invoice.id },
+            data: { status: 'REFUNDED' },
+          });
+          await tx.outboxEvent.create({
+            data: {
+              aggregateType: 'PaymentTransaction',
+              aggregateId: invoice.payments[0].id,
+              eventType: 'payment.refund.required',
+              payload: {
+                paymentId: invoice.payments[0].id,
+                appointmentId: current.id,
+                isClinicCancelled: true,
+                reason: input.cancelReason || 'Phòng khám hủy lịch khám',
+              },
+            },
+          });
+        }
+      }
+
       await tx.appointmentStatusHistory.create({
         data: { appointmentId, fromStatus: current.status, toStatus: status, actorId: userId, reason: input.cancelReason || input.note || null },
       })
     })
+
+    // Gửi mail thông báo hủy nếu phòng khám hủy lịch
+    if (status === 'CANCELLED' && current.status !== 'CANCELLED') {
+      const email = current.patientProfile?.account?.email;
+      if (email) {
+        const doctorSlot = current.scheduleSlot;
+        const packageSlot = current.servicePackageScheduleSlot;
+        const examDateStr = (packageSlot?.schedule?.examDate ?? doctorSlot?.schedule?.workDate)?.toISOString().slice(0, 10) ?? '';
+        const startTimeStr = (packageSlot?.startTime ?? doctorSlot?.startTime)?.toISOString().slice(11, 16) ?? '';
+        const doctorName = doctorSlot?.schedule?.doctor
+          ? `${doctorSlot.schedule.doctor.academicRank ? doctorSlot.schedule.doctor.academicRank + ' ' : ''}${doctorSlot.schedule.doctor.user?.fullName ?? ''}`.trim()
+          : null;
+        const serviceName = packageSlot?.schedule?.servicePackage?.name || current.servicePackage?.name || null;
+        const branchName = doctorSlot?.schedule?.branch?.name || current.branch?.name || 'VitaCare Clinic';
+
+        try {
+          await this.mailsService.sendAppointmentCancellation({
+            to: email,
+            data: {
+              patientName: current.patientProfile.fullName,
+              bookingCode: current.bookingCode || current.id,
+              appointmentDate: examDateStr,
+              startTime: startTimeStr,
+              branchName,
+              doctorOrServiceName: doctorName ? `Bác sĩ ${doctorName}` : (serviceName || 'Khám chuyên khoa'),
+              cancelReason: input.cancelReason || 'Lý do kỹ thuật / thay đổi từ phòng khám',
+              cancelledBy: 'CLINIC',
+              refundStatusNote: 'Phòng khám đã tạo lệnh hoàn tiền 100% cho lịch hẹn này. Bộ phận kế toán sẽ tiến hành chuyển tiền về tài khoản của bạn.',
+            },
+          });
+        } catch {
+          // Ignore email error to not block status update
+        }
+      }
+    }
+
     const row = await this.prisma.appointment.findUniqueOrThrow({ where: { id: appointmentId }, include: this.appointmentInclude() })
     return { appointment: this.serialize(row) }
   }
+
 
   async createReception(userId: string, input: Record<string, any>) {
     const role = await this.roleOf(userId)

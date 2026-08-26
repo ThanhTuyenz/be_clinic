@@ -4,6 +4,7 @@ import { AppointmentStatus, PaymentStatus, Prisma } from '@prisma/client';
 import { createHash, createHmac } from 'crypto';
 import { RabbitMqConfig } from '../../config/config.type.js';
 import { PrismaService } from '../../infrastructure/database/prisma/prisma.service.js';
+import { MailsService } from '../mails/mails.service.js';
 import { AppointmentItemDto, BatchCheckoutDto, CheckoutAppointmentDto } from './dtos/checkout-appointment.dto.js';
 import { PaymentWebhookDto } from './dtos/payment-webhook.dto.js';
 
@@ -16,7 +17,9 @@ export class BookingService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly config: ConfigService,
+    private readonly mailsService: MailsService,
   ) {}
+
 
   public checkInToken(appointmentId: string) {
     const secret = this.config.get<string>('auth.secret');
@@ -421,7 +424,178 @@ export class BookingService {
     };
   }
 
+  /**
+   * Bệnh nhân tự hủy lịch hẹn đã đặt.
+   * Xử lý giải phóng slot, hoàn tiền (REFUND_REQUIRED), ghi nhận lịch sử và gửi email.
+   */
+  async cancelMyAppointment(accountId: string, appointmentId: string, reason?: string) {
+    const appointment = await this.prisma.appointment.findUnique({
+      where: { id: appointmentId },
+      include: {
+        bookingOrder: true,
+        patientProfile: { include: { account: { select: { email: true } } } },
+        scheduleSlot: { include: { schedule: { include: { doctor: { include: { user: true } }, branch: true } } } },
+        servicePackageScheduleSlot: { include: { schedule: { include: { servicePackage: true } } } },
+        servicePackage: true,
+        branch: true,
+        invoice: { include: { payments: { orderBy: { createdAt: 'desc' }, take: 1 } } },
+      },
+    });
+
+    if (!appointment) throw new NotFoundException('Không tìm thấy lịch hẹn');
+
+    // Kiểm tra quyền sở hữu lịch hẹn
+    const isOwner = appointment.bookingOrder?.accountId === accountId || appointment.patientProfile?.accountId === accountId;
+    if (!isOwner) throw new ForbiddenException('Bạn không có quyền hủy lịch hẹn này');
+
+    // Chỉ cho phép hủy khi đang ở trạng thái BOOKED hoặc PENDING_PAYMENT
+    if (!['BOOKED', 'PENDING_PAYMENT'].includes(appointment.status)) {
+      throw new BadRequestException(`Không thể hủy lịch hẹn đang ở trạng thái «${appointment.status}»`);
+    }
+
+    // Tính toán thời gian khám để kiểm tra tính cấp bách (sát giờ < 24h hoặc sau 16h30 ngày trước)
+    const doctorSlot = appointment.scheduleSlot;
+    const packageSlot = appointment.servicePackageScheduleSlot;
+    const examDate = packageSlot?.schedule?.examDate ?? doctorSlot?.schedule?.workDate;
+    const startTimeDate = packageSlot?.startTime ?? doctorSlot?.startTime;
+
+    const now = new Date();
+    let isUrgent = false;
+
+    if (examDate && startTimeDate) {
+      const examDateStr = examDate.toISOString().slice(0, 10);
+      const startTimeStr = startTimeDate.toISOString().slice(11, 16);
+      const appointmentDateTime = new Date(`${examDateStr}T${startTimeStr}:00+07:00`);
+
+      const hoursUntilExam = (appointmentDateTime.getTime() - now.getTime()) / (1000 * 60 * 60);
+
+      // Nếu dưới 24h -> Coi là hủy gấp
+      if (hoursUntilExam < 24) {
+        isUrgent = true;
+      }
+    }
+
+    const previousStatus = appointment.status;
+    const latestPayment = appointment.invoice?.payments?.[0];
+    const isPaid = latestPayment?.status === 'SUCCESS';
+
+    await this.prisma.$transaction(async (tx) => {
+      // 1. Cập nhật trạng thái Appointment -> CANCELLED
+      await tx.appointment.update({
+        where: { id: appointmentId },
+        data: {
+          status: 'CANCELLED',
+        },
+      });
+
+      // 2. Trả lại slot occupiedCount (giải phóng slot ngay lập tức)
+      if (appointment.servicePackageScheduleSlotId) {
+        await tx.$executeRaw`
+          UPDATE "service_package_schedule_slots"
+          SET "occupied_count" = GREATEST("occupied_count" - 1, 0), "updated_at" = NOW()
+          WHERE "id" = ${appointment.servicePackageScheduleSlotId}::uuid
+        `;
+      }
+      if (appointment.scheduleSlotId) {
+        await tx.$executeRaw`
+          UPDATE "doctor_schedule_slots"
+          SET "occupied_count" = GREATEST("occupied_count" - 1, 0), "updated_at" = NOW()
+          WHERE "id" = ${appointment.scheduleSlotId}::uuid
+        `;
+      }
+
+      // 3. Nếu đã thanh toán trực tuyến thành công -> Tạo yêu cầu hoàn tiền
+      if (isPaid && latestPayment) {
+        await tx.paymentTransaction.update({
+          where: { id: latestPayment.id },
+          data: {
+            status: 'REFUND_REQUIRED',
+          },
+        });
+
+        if (appointment.invoice) {
+          await tx.invoice.update({
+            where: { id: appointment.invoice.id },
+            data: { status: 'REFUNDED' },
+          });
+        }
+
+        // Bắn Outbox event thông báo hoàn tiền
+        await tx.outboxEvent.create({
+          data: {
+            aggregateType: 'PaymentTransaction',
+            aggregateId: latestPayment.id,
+            eventType: 'payment.refund.required',
+            payload: {
+              paymentId: latestPayment.id,
+              appointmentId: appointment.id,
+              bookingCode: appointment.bookingCode,
+              amount: Number(latestPayment.amount),
+              isUrgent,
+              reason: reason || 'Bệnh nhân tự hủy lịch khám',
+            },
+          },
+        });
+      }
+
+      // 4. Ghi nhận lịch sử trạng thái
+      await tx.appointmentStatusHistory.create({
+        data: {
+          appointmentId: appointment.id,
+          fromStatus: previousStatus,
+          toStatus: 'CANCELLED',
+          actorId: accountId,
+          reason: reason ? `Bệnh nhân hủy: ${reason}${isUrgent ? ' (HỦY GẤP)' : ''}` : `Bệnh nhân tự hủy lịch${isUrgent ? ' (HỦY GẤP)' : ''}`,
+        },
+      });
+    });
+
+    // 5. Gửi email xác nhận hủy lịch cho bệnh nhân
+    const patientEmail = appointment.patientProfile?.account?.email;
+    if (patientEmail) {
+      const examDateStr = (packageSlot?.schedule?.examDate ?? doctorSlot?.schedule?.workDate)?.toISOString().slice(0, 10) ?? '';
+      const startTimeStr = (packageSlot?.startTime ?? doctorSlot?.startTime)?.toISOString().slice(11, 16) ?? '';
+      const doctorName = doctorSlot?.schedule?.doctor
+        ? `${doctorSlot.schedule.doctor.academicRank ? doctorSlot.schedule.doctor.academicRank + ' ' : ''}${doctorSlot.schedule.doctor.user?.fullName ?? ''}`.trim()
+        : null;
+      const serviceName = packageSlot?.schedule?.servicePackage?.name || appointment.servicePackage?.name || null;
+      const branchName = doctorSlot?.schedule?.branch?.name || appointment.branch?.name || 'VitaCare Clinic';
+
+      try {
+        await this.mailsService.sendAppointmentCancellation({
+          to: patientEmail,
+          data: {
+            patientName: appointment.patientProfile.fullName,
+            bookingCode: appointment.bookingCode || appointment.id,
+            appointmentDate: examDateStr,
+            startTime: startTimeStr,
+            branchName,
+            doctorOrServiceName: doctorName ? `Bác sĩ ${doctorName}` : (serviceName || 'Khám chuyên khoa'),
+            cancelReason: reason || 'Bệnh nhân có việc bận cá nhân',
+            cancelledBy: 'PATIENT',
+            refundStatusNote: isPaid
+              ? (isUrgent
+                ? 'Lịch hẹn được hủy sát giờ khám (<24h). Yêu cầu hoàn tiền đã được gửi tới Ban quản lý cơ sở để xét duyệt theo chính sách phòng khám.'
+                : 'Yêu cầu hoàn tiền 100% đã được ghi nhận. Số tiền sẽ được hoàn về tài khoản MoMo / Ngân hàng của quý khách trong 1-3 ngày làm việc.')
+              : undefined,
+          },
+        });
+      } catch {
+        // Không block response nếu email lỗi
+      }
+    }
+
+    return {
+      success: true,
+      isUrgent,
+      message: isUrgent
+        ? 'Hủy lịch khám thành công. Do bạn hủy sát giờ khám (< 24 giờ), yêu cầu hoàn tiền sẽ được chuyển tới Quản lý phòng khám để xét duyệt theo chính sách.'
+        : 'Hủy lịch khám thành công. Slot khám đã được giải phóng và yêu cầu hoàn tiền 100% đã được ghi nhận.',
+    };
+  }
+
   async checkIn(rawPayload: string, actorId: string | null, channel: 'KIOSK' | 'RECEPTIONIST') {
+
     const rawToken = String(rawPayload || '').trim().replace(/^VITACARE_CHECKIN:/, '');
     if (!rawToken) throw new BadRequestException('Thiếu mã QR check-in');
     if (channel === 'RECEPTIONIST') {
