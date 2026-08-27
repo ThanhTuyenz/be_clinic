@@ -37,11 +37,24 @@ export class MomoService {
 
   async simulateSuccess(accountId: string, paymentId: string) {
     const payment = await this.prisma.paymentTransaction.findFirst({
-      where: { id: paymentId, invoice: { appointment: { patientProfile: { accountId } } } },
-      include: { invoice: { include: { appointment: true } } },
+      where: {
+        id: paymentId,
+        OR: [
+          { invoice: { appointment: { patientProfile: { accountId } } } },
+          { invoice: { bookingOrder: { accountId } } },
+        ],
+      },
+      include: {
+        invoice: {
+          include: {
+            appointment: true,
+            bookingOrder: { include: { appointments: true } },
+          },
+        },
+      },
     });
     if (!payment) throw new NotFoundException('Không tìm thấy giao dịch thanh toán');
-    const appointment = payment.invoice.appointment;
+    const appointmentId = payment.invoice.appointment?.id || payment.invoice.bookingOrder?.appointments?.[0]?.id;
 
     await this.bookingService.handlePaymentWebhook('MOMO_SANDBOX', {
       paymentId: payment.id,
@@ -52,7 +65,8 @@ export class MomoService {
 
     return {
       success: true,
-      appointmentId: appointment.id,
+      appointmentId,
+      bookingOrderId: payment.invoice.bookingOrderId,
       paymentId: payment.id,
       message: 'Thanh toán mô phỏng thành công!',
     };
@@ -61,18 +75,41 @@ export class MomoService {
   async createPayment(accountId: string, paymentId: string, paymentMethod: MomoPaymentMethod) {
     const settings = this.settings();
     const payment = await this.prisma.paymentTransaction.findFirst({
-      where: { id: paymentId, invoice: { appointment: { patientProfile: { accountId } } } },
-      include: { invoice: { include: { appointment: true } } },
+      where: {
+        id: paymentId,
+        OR: [
+          { invoice: { appointment: { patientProfile: { accountId } } } },
+          { invoice: { bookingOrder: { accountId } } },
+        ],
+      },
+      include: {
+        invoice: {
+          include: {
+            appointment: true,
+            bookingOrder: { include: { appointments: true } },
+          },
+        },
+      },
     });
     if (!payment) throw new NotFoundException('Không tìm thấy giao dịch thanh toán');
     if (payment.status !== 'PENDING') {
       throw new ConflictException('Giao dịch không còn ở trạng thái chờ thanh toán');
     }
+
     const appointment = payment.invoice.appointment;
+    const bookingOrder = payment.invoice.bookingOrder;
+    const firstAppointment = appointment || bookingOrder?.appointments?.[0];
+
+    if (!firstAppointment) {
+      throw new NotFoundException('Không tìm thấy lịch hẹn liên kết');
+    }
+
+    const holdExpiresAt = firstAppointment.holdExpiresAt;
     if (
-      appointment.status !== 'PENDING_PAYMENT' ||
-      !appointment.holdExpiresAt ||
-      appointment.holdExpiresAt <= new Date()
+      (appointment && appointment.status !== 'PENDING_PAYMENT') ||
+      (bookingOrder && (bookingOrder as any).status !== 'PENDING_PAYMENT') ||
+      !holdExpiresAt ||
+      holdExpiresAt <= new Date()
     ) {
       throw new ConflictException('Thời gian giữ lịch đã hết');
     }
@@ -84,12 +121,19 @@ export class MomoService {
 
     const orderId = payment.id;
     const requestId = payment.id;
-    const orderInfo = `Thanh toan lich kham ${appointment.id.slice(0, 8)}`;
+    const orderInfo = bookingOrder
+      ? `Thanh toan don dat lich ${bookingOrder.orderCode}`
+      : `Thanh toan lich kham ${appointment!.id.slice(0, 8)}`;
     const redirectUrl = new URL(settings.redirectUrl);
-    redirectUrl.searchParams.set('appointmentId', appointment.id);
+    if (bookingOrder) {
+      redirectUrl.searchParams.set('bookingOrderId', bookingOrder.id);
+    } else {
+      redirectUrl.searchParams.set('appointmentId', appointment!.id);
+    }
     const extraData = Buffer.from(JSON.stringify({
       paymentId: payment.id,
-      appointmentId: appointment.id,
+      appointmentId: appointment?.id,
+      bookingOrderId: bookingOrder?.id,
     })).toString('base64');
     // Luồng Merchant Gateway chuẩn cho Website (All-In-One: QR Ví MoMo, Thẻ ATM Napas, Thẻ Quốc tế)
     const requestType = 'captureWallet';
@@ -155,12 +199,13 @@ export class MomoService {
     }
     return {
       paymentId: payment.id,
-      appointmentId: appointment.id,
+      appointmentId: appointment?.id,
+      bookingOrderId: bookingOrder?.id,
       paymentMethod,
       payUrl: momoResponse.payUrl,
       deeplink: momoResponse.deeplink,
       qrCodeUrl: momoResponse.qrCodeUrl,
-      holdExpiresAt: appointment.holdExpiresAt,
+      holdExpiresAt,
     };
   }
 

@@ -251,37 +251,85 @@ export class BookingService {
   async handlePaymentWebhook(provider: string, dto: PaymentWebhookDto) {
     return this.prisma.$transaction(async (tx) => {
       const payment = await tx.paymentTransaction.findUnique({
-        where: { id: dto.paymentId }, include: { invoice: { include: { appointment: true } } },
+        where: { id: dto.paymentId },
+        include: {
+          invoice: {
+            include: {
+              appointment: true,
+              bookingOrder: {
+                include: {
+                  appointments: {
+                    include: {
+                      scheduleSlot: true,
+                      servicePackageScheduleSlot: true,
+                    },
+                  },
+                },
+              },
+            },
+          },
+        },
       });
       if (!payment) throw new NotFoundException('Không tìm thấy giao dịch');
       if (payment.providerTransactionId === dto.providerTransactionId && ['SUCCESS', 'LATE_SUCCESS', 'REFUND_REQUIRED', 'MANUAL_REVIEW'].includes(payment.status)) {
-        return { status: payment.status, appointmentStatus: payment.invoice.appointment.status };
+        return {
+          status: payment.status,
+          appointmentStatus: payment.invoice.appointment?.status ?? (payment.invoice.bookingOrder?.status as any),
+        };
       }
       if (dto.status === 'FAILED') {
-        await tx.paymentTransaction.update({ where: { id: payment.id }, data: { provider, providerTransactionId: dto.providerTransactionId, status: 'FAILED', rawPayload: dto.payload as Prisma.InputJsonValue } });
-        return { status: PaymentStatus.FAILED, appointmentStatus: payment.invoice.appointment.status };
+        await tx.paymentTransaction.update({
+          where: { id: payment.id },
+          data: { provider, providerTransactionId: dto.providerTransactionId, status: 'FAILED', rawPayload: dto.payload as Prisma.InputJsonValue },
+        });
+        if (payment.invoice.bookingOrder) {
+          await (tx as any).bookingOrder.update({
+            where: { id: payment.invoice.bookingOrder.id },
+            data: { status: 'CANCELLED' },
+          });
+        }
+        return {
+          status: PaymentStatus.FAILED,
+          appointmentStatus: payment.invoice.appointment?.status ?? 'CANCELLED',
+        };
       }
+
+      // Xử lý đơn tổng BookingOrder (Batch Payment)
+      const bookingOrder = payment.invoice.bookingOrder;
+      if (bookingOrder) {
+        return this.confirmPaidBatch(tx, payment.id, payment.invoiceId, bookingOrder.id, bookingOrder.appointments, provider, dto);
+      }
+
       const appointment = payment.invoice.appointment;
-      if (appointment.status === 'PENDING_PAYMENT' && appointment.holdExpiresAt && appointment.holdExpiresAt > new Date()) {
-        return this.confirmPaid(tx, payment.id, payment.invoiceId, appointment.id, provider, dto, false);
+      if (appointment) {
+        if (appointment.status === 'PENDING_PAYMENT' && appointment.holdExpiresAt && appointment.holdExpiresAt > new Date()) {
+          return this.confirmPaid(tx, payment.id, payment.invoiceId, appointment.id, provider, dto, false);
+        }
+        if (appointment.status === 'EXPIRED') {
+          const packageReserved = appointment.servicePackageScheduleSlotId ? await tx.$executeRaw`UPDATE "service_package_schedule_slots" SET "occupied_count" = "occupied_count" + 1, "updated_at" = NOW() WHERE "id" = ${appointment.servicePackageScheduleSlotId}::uuid AND "occupied_count" < "capacity" AND "is_active" = TRUE` : 1;
+          const doctorReserved = packageReserved === 1 && appointment.scheduleSlotId ? await tx.$executeRaw`UPDATE "doctor_schedule_slots" SET "occupied_count" = "occupied_count" + 1, "updated_at" = NOW() WHERE "id" = ${appointment.scheduleSlotId}::uuid AND "occupied_count" < "capacity" AND "is_active" = TRUE` : appointment.scheduleSlotId ? 0 : 1;
+          if (packageReserved === 1 && doctorReserved === 1) return this.confirmPaid(tx, payment.id, payment.invoiceId, appointment.id, provider, dto, true);
+          if (packageReserved === 1) await tx.$executeRaw`UPDATE "service_package_schedule_slots" SET "occupied_count" = GREATEST("occupied_count" - 1, 0), "updated_at" = NOW() WHERE "id" = ${appointment.servicePackageScheduleSlotId}::uuid`;
+          await tx.paymentTransaction.update({ where: { id: payment.id }, data: { provider, providerTransactionId: dto.providerTransactionId, status: 'REFUND_REQUIRED', paidAt: new Date(), rawPayload: dto.payload as Prisma.InputJsonValue } });
+          await tx.appointment.update({ where: { id: appointment.id }, data: { status: 'REFUND_REQUIRED', statusHistories: { create: { fromStatus: 'EXPIRED', toStatus: 'REFUND_REQUIRED', reason: 'LATE_SUCCESS_SLOT_FULL' } } } });
+          await tx.outboxEvent.create({ data: { aggregateType: 'PaymentTransaction', aggregateId: payment.id, eventType: 'payment.refund.required', payload: { paymentId: payment.id, appointmentId: appointment.id, reason: 'LATE_SUCCESS_SLOT_FULL' } } });
+          return { status: PaymentStatus.REFUND_REQUIRED, appointmentStatus: AppointmentStatus.REFUND_REQUIRED };
+        }
+        return { status: payment.status, appointmentStatus: appointment.status };
       }
-      if (appointment.status === 'EXPIRED') {
-        const packageReserved = appointment.servicePackageScheduleSlotId ? await tx.$executeRaw`UPDATE "service_package_schedule_slots" SET "occupied_count" = "occupied_count" + 1, "updated_at" = NOW() WHERE "id" = ${appointment.servicePackageScheduleSlotId}::uuid AND "occupied_count" < "capacity" AND "is_active" = TRUE` : 1;
-        const doctorReserved = packageReserved === 1 && appointment.scheduleSlotId ? await tx.$executeRaw`UPDATE "doctor_schedule_slots" SET "occupied_count" = "occupied_count" + 1, "updated_at" = NOW() WHERE "id" = ${appointment.scheduleSlotId}::uuid AND "occupied_count" < "capacity" AND "is_active" = TRUE` : appointment.scheduleSlotId ? 0 : 1;
-        if (packageReserved === 1 && doctorReserved === 1) return this.confirmPaid(tx, payment.id, payment.invoiceId, appointment.id, provider, dto, true);
-        if (packageReserved === 1) await tx.$executeRaw`UPDATE "service_package_schedule_slots" SET "occupied_count" = GREATEST("occupied_count" - 1, 0), "updated_at" = NOW() WHERE "id" = ${appointment.servicePackageScheduleSlotId}::uuid`;
-        await tx.paymentTransaction.update({ where: { id: payment.id }, data: { provider, providerTransactionId: dto.providerTransactionId, status: 'REFUND_REQUIRED', paidAt: new Date(), rawPayload: dto.payload as Prisma.InputJsonValue } });
-        await tx.appointment.update({ where: { id: appointment.id }, data: { status: 'REFUND_REQUIRED', statusHistories: { create: { fromStatus: 'EXPIRED', toStatus: 'REFUND_REQUIRED', reason: 'LATE_SUCCESS_SLOT_FULL' } } } });
-        await tx.outboxEvent.create({ data: { aggregateType: 'PaymentTransaction', aggregateId: payment.id, eventType: 'payment.refund.required', payload: { paymentId: payment.id, appointmentId: appointment.id, reason: 'LATE_SUCCESS_SLOT_FULL' } } });
-        return { status: PaymentStatus.REFUND_REQUIRED, appointmentStatus: AppointmentStatus.REFUND_REQUIRED };
-      }
-      return { status: payment.status, appointmentStatus: appointment.status };
+      return { status: payment.status, appointmentStatus: 'UNKNOWN' };
     }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
   }
 
-  async paymentStatus(appointmentId: string, accountId: string) {
+  async paymentStatus(appointmentIdOrOrderId: string, accountId: string) {
     const row = await this.prisma.appointment.findFirst({
-      where: { id: appointmentId, patientProfile: { accountId } },
+      where: {
+        id: appointmentIdOrOrderId,
+        OR: [
+          { patientProfile: { accountId } },
+          { bookingOrder: { accountId } },
+        ],
+      },
       include: {
         invoice: { include: { payments: { orderBy: { createdAt: 'desc' }, take: 1 } } },
         qrToken: true,
@@ -289,31 +337,100 @@ export class BookingService {
         servicePackageScheduleSlot: { include: { schedule: { include: { room: true, servicePackage: { include: { branchBookingMethod: { include: { branch: true } } } } } } } },
       },
     });
-    if (!row) throw new NotFoundException('Không tìm thấy lịch hẹn');
+
+    if (!row) {
+      // Thử tìm theo bookingOrderId
+      const order = await (this.prisma as any).bookingOrder.findFirst({
+        where: { id: appointmentIdOrOrderId, accountId },
+        include: {
+          invoice: { include: { payments: { orderBy: { createdAt: 'desc' }, take: 1 } } },
+          appointments: {
+            include: {
+              patientProfile: true,
+              qrToken: true,
+              scheduleSlot: { include: { schedule: { include: { room: true, branch: true } } } },
+              servicePackageScheduleSlot: { include: { schedule: { include: { room: true, servicePackage: { include: { branchBookingMethod: { include: { branch: true } } } } } } } },
+            },
+          },
+        },
+      });
+      if (!order) throw new NotFoundException('Không tìm thấy lịch hẹn hoặc đơn đặt lịch');
+      const firstAppt = order.appointments[0];
+      return {
+        bookingOrderId: order.id,
+        appointmentId: firstAppt?.id || order.id,
+        orderCode: order.orderCode,
+        groupType: order.groupType,
+        status: order.status,
+        paymentStatus: order.invoice?.payments[0]?.status ?? null,
+        totalAmount: Number(order.totalAmount),
+        appointments: order.appointments.map((a: any) => ({
+          appointmentId: a.id,
+          bookingCode: a.bookingCode,
+          status: a.status,
+          queueNumber: a.queueNumber,
+          patient: { id: a.patientProfile?.id, fullName: a.patientProfile?.fullName },
+          hasQr: Boolean(a.qrToken),
+        })),
+      };
+    }
+
     const doctorSlot = row.scheduleSlot;
     const packageSlot = row.servicePackageScheduleSlot;
     const room = doctorSlot?.schedule.room ?? packageSlot?.schedule.room;
-    const branch = doctorSlot?.schedule.branch ?? packageSlot?.schedule.servicePackage.branchBookingMethod.branch;
+    const branch = doctorSlot?.schedule.branch ?? packageSlot?.schedule.servicePackage?.branchBookingMethod?.branch;
     const estimatedQueueNumber = this.estimatedQueueNumber(row);
+
+    let siblingAppts: any[] = [];
+    if (row.bookingOrderId) {
+      const siblings = await (this.prisma as any).appointment.findMany({
+        where: { bookingOrderId: row.bookingOrderId },
+        include: {
+          patientProfile: true,
+          qrToken: true,
+        },
+        orderBy: { createdAt: 'asc' },
+      });
+      siblingAppts = siblings.map((a: any) => ({
+        appointmentId: a.id,
+        bookingCode: a.bookingCode,
+        status: a.status,
+        queueNumber: a.queueNumber,
+        patient: { id: a.patientProfile?.id, fullName: a.patientProfile?.fullName },
+        hasQr: Boolean(a.qrToken),
+      }));
+    }
+
     return {
-      appointmentId: row.id, status: row.status, holdExpiresAt: row.holdExpiresAt,
-      paymentStatus: row.invoice?.payments[0]?.status ?? null, hasQr: Boolean(row.qrToken),
+      appointmentId: row.id,
+      bookingOrderId: row.bookingOrderId,
+      status: row.status,
+      holdExpiresAt: row.holdExpiresAt,
+      paymentStatus: row.invoice?.payments[0]?.status ?? null,
+      hasQr: Boolean(row.qrToken),
       bookingCode: row.bookingCode,
       queueNumber: row.queueNumber,
       estimatedQueueNumber: row.queueNumber ?? estimatedQueueNumber,
       room: room ? { id: room.id, code: room.code, name: room.name } : null,
       branch: branch ? { id: branch.id, name: branch.name, address: branch.address } : null,
+      appointments: siblingAppts.length > 0 ? siblingAppts : undefined,
     };
   }
 
   async myAppointments(accountId: string) {
     const rows = await this.prisma.appointment.findMany({
-      where: { patientProfile: { accountId } },
+      where: {
+        OR: [
+          { patientProfile: { accountId } },
+          { bookingOrder: { accountId } },
+        ],
+      },
       orderBy: { createdAt: 'desc' },
       include: {
         patientProfile: true,
         servicePackage: true,
         branch: true,
+        bookingOrder: true,
         invoice: { include: { payments: { orderBy: { createdAt: 'desc' }, take: 1 } } },
         scheduleSlot: { include: { schedule: { include: { doctor: { include: { user: true } }, room: true, branch: true } } } },
         servicePackageScheduleSlot: { include: { schedule: { include: { room: true } } } },
@@ -327,6 +444,9 @@ export class BookingService {
       return {
         id: row.id,
         bookingCode: row.bookingCode,
+        bookingOrderId: row.bookingOrderId,
+        orderCode: (row as any).bookingOrder?.orderCode ?? null,
+        groupType: (row as any).bookingOrder?.groupType ?? null,
         status: row.status,
         queueNumber: row.queueNumber,
         holdExpiresAt: row.holdExpiresAt,
@@ -1116,5 +1236,112 @@ export class BookingService {
     await tx.appointmentQrToken.upsert({ where: { appointmentId }, update: { tokenHash, expiresAt: new Date(Date.now() + 48 * 60 * 60 * 1000), usedAt: null }, create: { appointmentId, tokenHash, expiresAt: new Date(Date.now() + 48 * 60 * 60 * 1000) } });
     await tx.outboxEvent.create({ data: { aggregateType: 'Appointment', aggregateId: appointmentId, eventType: 'appointment.booked', payload: { appointmentId, bookingCode, queueNumber: assignedQueueNumber, lateSuccess: late } } });
     return { status: late ? PaymentStatus.LATE_SUCCESS : PaymentStatus.SUCCESS, appointmentStatus: appointment.status, bookingCode, queueNumber: assignedQueueNumber, qrToken: rawToken };
+  }
+
+  private async confirmPaidBatch(
+    tx: Prisma.TransactionClient,
+    paymentId: string,
+    invoiceId: string,
+    bookingOrderId: string,
+    appointments: any[],
+    provider: string,
+    dto: PaymentWebhookDto,
+  ) {
+    await tx.paymentTransaction.update({
+      where: { id: paymentId },
+      data: {
+        provider,
+        providerTransactionId: dto.providerTransactionId,
+        status: 'SUCCESS',
+        paidAt: new Date(),
+        rawPayload: dto.payload as Prisma.InputJsonValue,
+      },
+    });
+
+    await tx.invoice.update({
+      where: { id: invoiceId },
+      data: { status: 'PAID', paidAt: new Date() },
+    });
+
+    await (tx as any).bookingOrder.update({
+      where: { id: bookingOrderId },
+      data: { status: 'PAID' },
+    });
+
+    const confirmedAppointments: any[] = [];
+
+    for (const appt of appointments) {
+      const rawToken = this.checkInToken(appt.id);
+      const tokenHash = createHash('sha256').update(rawToken).digest('hex');
+      const bookingCode = `VC-${appt.id.slice(0, 8).toUpperCase()}`;
+
+      let assignedQueueNumber = appt.queueNumber ?? null;
+      if (assignedQueueNumber == null) {
+        assignedQueueNumber = await this.computeQueueNumber(
+          tx,
+          appt.id,
+          appt.scheduleSlotId,
+          appt.servicePackageScheduleSlotId,
+        );
+      }
+
+      const updated = await tx.appointment.update({
+        where: { id: appt.id },
+        data: {
+          status: 'BOOKED',
+          bookingCode,
+          queueNumber: assignedQueueNumber,
+          holdExpiresAt: null,
+          statusHistories: {
+            create: {
+              fromStatus: 'PENDING_PAYMENT',
+              toStatus: 'BOOKED',
+              reason: 'PAYMENT_SUCCESS_BATCH',
+            },
+          },
+        },
+      });
+
+      await tx.appointmentQrToken.upsert({
+        where: { appointmentId: appt.id },
+        update: {
+          tokenHash,
+          expiresAt: new Date(Date.now() + 48 * 60 * 60 * 1000),
+          usedAt: null,
+        },
+        create: {
+          appointmentId: appt.id,
+          tokenHash,
+          expiresAt: new Date(Date.now() + 48 * 60 * 60 * 1000),
+        },
+      });
+
+      await tx.outboxEvent.create({
+        data: {
+          aggregateType: 'Appointment',
+          aggregateId: appt.id,
+          eventType: 'appointment.booked',
+          payload: {
+            appointmentId: appt.id,
+            bookingCode,
+            bookingOrderId,
+            queueNumber: assignedQueueNumber,
+          },
+        },
+      });
+
+      confirmedAppointments.push({
+        appointmentId: updated.id,
+        bookingCode,
+        queueNumber: assignedQueueNumber,
+      });
+    }
+
+    return {
+      status: PaymentStatus.SUCCESS,
+      appointmentStatus: 'BOOKED',
+      bookingOrderId,
+      appointments: confirmedAppointments,
+    };
   }
 }

@@ -30,11 +30,11 @@ const roles = [
 ];
 
 const additionalPatientSeeds = [
-  { email: 'patient01@vitacare.local', patientCode: 'BN2600003', nationalId: '079198000101', dateOfBirth: '1988-03-12', gender: 'FEMALE', address: 'Quận 3, TP.HCM' },
-  { email: 'patient02@vitacare.local', patientCode: 'BN2600004', nationalId: '079199000102', dateOfBirth: '1992-07-25', gender: 'MALE', address: 'Quận Bình Thạnh, TP.HCM' },
-  { email: 'patient03@vitacare.local', patientCode: 'BN2600005', nationalId: '079200000103', dateOfBirth: '1995-11-08', gender: 'FEMALE', address: 'TP. Thủ Đức, TP.HCM' },
-  { email: 'patient04@vitacare.local', patientCode: 'BN2600006', nationalId: '079201000104', dateOfBirth: '1985-01-30', gender: 'MALE', address: 'Quận 7, TP.HCM' },
-  { email: 'patient05@vitacare.local', patientCode: 'BN2600007', nationalId: '079202000105', dateOfBirth: '1998-09-16', gender: 'FEMALE', address: 'Quận Gò Vấp, TP.HCM' },
+  { email: 'patient01@vitacare.local', phoneNumber: '0901234001', patientCode: 'BN2600003', nationalId: '079198000101', dateOfBirth: '1988-03-12', gender: 'FEMALE', address: '12 Đường Lê Lợi, Phường Bến Nghé, Quận 1, TP.HCM' },
+  { email: 'patient02@vitacare.local', phoneNumber: '0901234002', patientCode: 'BN2600004', nationalId: '079199000102', dateOfBirth: '1992-07-25', gender: 'MALE', address: '45 Điện Biên Phủ, Phường 15, Quận Bình Thạnh, TP.HCM' },
+  { email: 'patient03@vitacare.local', phoneNumber: '0901234003', patientCode: 'BN2600005', nationalId: '079200000103', dateOfBirth: '1995-11-08', gender: 'FEMALE', address: '78 Võ Văn Ngân, Phường Linh Chiểu, TP. Thủ Đức, TP.HCM' },
+  { email: 'patient04@vitacare.local', phoneNumber: '0901234004', patientCode: 'BN2600006', nationalId: '079201000104', dateOfBirth: '1985-01-30', gender: 'MALE', address: '101 Nguyễn Thị Thập, Phường Tân Phú, Quận 7, TP.HCM' },
+  { email: 'patient05@vitacare.local', phoneNumber: '0901234005', patientCode: 'BN2600007', nationalId: '079202000105', dateOfBirth: '1998-09-16', gender: 'FEMALE', address: '23 Quang Trung, Phường 10, Quận Gò Vấp, TP.HCM' },
 ];
 
 function dateOnly(daysFromNow) {
@@ -131,20 +131,39 @@ async function main() {
     }
   }
 
-  const rooms = [];
-  for (const [code, name] of [['P101', 'Phòng khám Nội 101'], ['P102', 'Phòng khám Nhi 102']]) {
-    rooms.push(await prisma.clinicRoom.upsert({
+  const doctorRooms = [];
+  for (const [code, name] of [
+    ['P101', 'Phòng khám Nội 101'],
+    ['P102', 'Phòng khám Nhi 102'],
+    ['P103', 'Phòng khám Tim mạch 103'],
+    ['P104', 'Phòng khám Tiêu hóa 104'],
+    ['P105', 'Phòng khám Hô hấp 105'],
+    ['P106', 'Phòng khám Tai Mũi Họng 106'],
+    ['P107', 'Phòng khám Mắt 107'],
+    ['P108', 'Phòng khám Da liễu 108'],
+  ]) {
+    doctorRooms.push(await prisma.clinicRoom.upsert({
       where: { branchId_code: { branchId: branches[0].id, code } },
       update: { name, isActive: true }, create: { branchId: branches[0].id, code, name },
     }));
   }
+
+  const receptionRoom = await prisma.clinicRoom.upsert({
+    where: { branchId_code: { branchId: branches[0].id, code: 'P100' } },
+    update: { name: 'Phòng tiếp nhận & Khám ban đầu', isActive: true },
+    create: { branchId: branches[0].id, code: 'P100', name: 'Phòng tiếp nhận & Khám ban đầu' },
+  });
+
+  const labRooms = [];
   for (const [code, name] of [['LAB01', 'Phòng xét nghiệm'], ['XRAY01', 'Phòng X-quang'], ['US01', 'Phòng siêu âm']]) {
-    rooms.push(await prisma.clinicRoom.upsert({
+    labRooms.push(await prisma.clinicRoom.upsert({
       where: { branchId_code: { branchId: branches[0].id, code } },
       update: { name, isActive: true },
       create: { branchId: branches[0].id, code, name },
     }));
   }
+  const rooms = [...doctorRooms, receptionRoom, ...labRooms];
+
   rooms.push(await prisma.clinicRoom.upsert({
     where: { branchId_code: { branchId: branches[1].id, code: 'P201' } },
     update: { name: 'Phòng khám 201', isActive: true },
@@ -189,8 +208,8 @@ async function main() {
   const pediatricsSpecialty = specialtiesByName.get('Nhi khoa');
 
   const doctorInputs = [
-    { email: 'doctor.cardio@vitacare.local', specialty: cardioSpecialty, fee: 300000, room: rooms[0] },
-    { email: 'doctor.pediatrics@vitacare.local', specialty: pediatricsSpecialty, fee: 250000, room: rooms[1] },
+    { email: 'doctor.cardio@vitacare.local', specialty: cardioSpecialty, fee: 300000, room: doctorRooms[2] },
+    { email: 'doctor.pediatrics@vitacare.local', specialty: pediatricsSpecialty, fee: 250000, room: doctorRooms[1] },
   ];
   const doctors = new Map();
   for (const input of doctorInputs) {
@@ -250,7 +269,7 @@ async function main() {
     doctors.set(email, doctor);
     await prisma.doctorSpecialty.upsert({ where: { doctorId_specialtyId: { doctorId: doctor.id, specialtyId: specialty.id } }, update: { isPrimary: true }, create: { doctorId: doctor.id, specialtyId: specialty.id, isPrimary: true } });
     await prisma.userBranchAssignment.upsert({ where: { userId_branchId: { userId: user.id, branchId: branches[0].id } }, update: { isPrimary: true }, create: { userId: user.id, branchId: branches[0].id, isPrimary: true } });
-    const room = rooms[index % rooms.length];
+    const room = doctorRooms[index % doctorRooms.length];
     let weekdaysCreated = 0;
     for (let day = 1; weekdaysCreated < 10; day += 1) {
       const workDate = dateOnly(day);
@@ -269,24 +288,70 @@ async function main() {
 
   // Tạo hồ sơ bệnh nhân
   const patient = users.get('patient@vitacare.local');
+  await prisma.user.update({
+    where: { id: patient.id },
+    data: { phoneNumber: '0909123456' },
+  });
   await prisma.patientProfile.upsert({
     where: { nationalId: '079200000001' },
-    update: { accountId: patient.id, fullName: patient.fullName, patientCode: 'BN2600001', isMainProfile: true },
-    create: { accountId: patient.id, fullName: patient.fullName, patientCode: 'BN2600001', nationalId: '079200000001', dateOfBirth: new Date('2000-01-15T00:00:00.000Z'), gender: 'MALE', address: 'Quận 1, TP.HCM', relationshipToAccount: 'SELF', isMainProfile: true },
+    update: {
+      accountId: patient.id,
+      fullName: patient.fullName,
+      phoneNumber: '0909123456',
+      patientCode: 'BN2600001',
+      address: '123 Nguyễn Thị Minh Khai, Phường Bến Thành, Quận 1, TP.HCM',
+      isMainProfile: true,
+    },
+    create: {
+      accountId: patient.id,
+      fullName: patient.fullName,
+      phoneNumber: '0909123456',
+      patientCode: 'BN2600001',
+      nationalId: '079200000001',
+      dateOfBirth: new Date('2000-01-15T00:00:00.000Z'),
+      gender: 'MALE',
+      address: '123 Nguyễn Thị Minh Khai, Phường Bến Thành, Quận 1, TP.HCM',
+      relationshipToAccount: 'SELF',
+      isMainProfile: true,
+    },
   });
   await prisma.patientProfile.upsert({
     where: { nationalId: '079201000002' },
-    update: { accountId: patient.id, fullName: 'Nguyễn Minh An', patientCode: 'BN2600002' },
-    create: { accountId: patient.id, fullName: 'Nguyễn Minh An', patientCode: 'BN2600002', nationalId: '079201000002', dateOfBirth: new Date('2018-05-20T00:00:00.000Z'), gender: 'MALE', relationshipToAccount: 'CHILD', isMainProfile: false },
+    update: {
+      accountId: patient.id,
+      fullName: 'Nguyễn Minh An',
+      phoneNumber: '0909123456',
+      patientCode: 'BN2600002',
+      address: '123 Nguyễn Thị Minh Khai, Phường Bến Thành, Quận 1, TP.HCM',
+    },
+    create: {
+      accountId: patient.id,
+      fullName: 'Nguyễn Minh An',
+      phoneNumber: '0909123456',
+      patientCode: 'BN2600002',
+      nationalId: '079201000002',
+      dateOfBirth: new Date('2018-05-20T00:00:00.000Z'),
+      gender: 'MALE',
+      address: '123 Nguyễn Thị Minh Khai, Phường Bến Thành, Quận 1, TP.HCM',
+      relationshipToAccount: 'CHILD',
+      isMainProfile: false,
+    },
   });
 
   for (const patientSeed of additionalPatientSeeds) {
     const account = users.get(patientSeed.email);
+    if (patientSeed.phoneNumber) {
+      await prisma.user.update({
+        where: { id: account.id },
+        data: { phoneNumber: patientSeed.phoneNumber },
+      });
+    }
     await prisma.patientProfile.upsert({
       where: { nationalId: patientSeed.nationalId },
       update: {
         accountId: account.id,
         fullName: account.fullName,
+        phoneNumber: patientSeed.phoneNumber,
         patientCode: patientSeed.patientCode,
         dateOfBirth: new Date(`${patientSeed.dateOfBirth}T00:00:00.000Z`),
         gender: patientSeed.gender,
@@ -297,6 +362,7 @@ async function main() {
       create: {
         accountId: account.id,
         fullName: account.fullName,
+        phoneNumber: patientSeed.phoneNumber,
         patientCode: patientSeed.patientCode,
         nationalId: patientSeed.nationalId,
         dateOfBirth: new Date(`${patientSeed.dateOfBirth}T00:00:00.000Z`),
@@ -309,8 +375,7 @@ async function main() {
   }
 
   await seedAuthTables(users, patient);
-  await seedBookingTables({ users, doctors, branches, rooms, specialtiesByName });
-  await seedTodayWaitingAppointments({ users, doctors, branches, rooms });
+  await seedBookingTables({ users, doctors, branches, rooms, doctorRooms, receptionRoom, specialtiesByName });
   console.log('Seed completed successfully! Test password: VitaCare@123');
 }
 
@@ -337,127 +402,7 @@ async function seedAuthTables(users, patient) {
   });
 }
 
-async function seedTodayWaitingAppointments({ users, doctors, branches, rooms }) {
-  const doctor = doctors.get('doctor.cardio@vitacare.local');
-  const receptionist = users.get('receptionist@vitacare.local');
-  if (!doctor || !receptionist || !branches[0] || !rooms[0]) {
-    throw new Error('Thiếu bác sĩ, lễ tân, chi nhánh hoặc phòng để seed hàng đợi hôm nay');
-  }
-
-  const schedule = await prisma.doctorSchedule.upsert({
-    where: {
-      doctorId_branchId_workDate_startTime: {
-        doctorId: doctor.id,
-        branchId: branches[0].id,
-        workDate: dateOnly(0),
-        startTime: time(8),
-      },
-    },
-    update: { roomId: rooms[0].id, endTime: time(17), status: 'OPEN' },
-    create: {
-      doctorId: doctor.id,
-      branchId: branches[0].id,
-      roomId: rooms[0].id,
-      workDate: dateOnly(0),
-      startTime: time(8),
-      endTime: time(17),
-      status: 'OPEN',
-    },
-  });
-  const slot = await prisma.doctorScheduleSlot.upsert({
-    where: { scheduleId_startTime: { scheduleId: schedule.id, startTime: time(8) } },
-    update: { endTime: time(17), capacity: 10, occupiedCount: 5, nextQueueNumber: 5, isActive: true },
-    create: { scheduleId: schedule.id, startTime: time(8), endTime: time(17), capacity: 10, occupiedCount: 5, nextQueueNumber: 5 },
-  });
-
-  for (let index = 0; index < additionalPatientSeeds.length; index += 1) {
-    const account = users.get(additionalPatientSeeds[index].email);
-    const profile = await prisma.patientProfile.findFirstOrThrow({
-      where: { accountId: account.id, isMainProfile: true },
-    });
-    const queueNumber = index + 1;
-    const bookingCode = `TODAY-${String(queueNumber).padStart(2, '0')}`;
-    const checkedInAt = new Date(Date.now() - (additionalPatientSeeds.length - index) * 4 * 60 * 1000);
-    const existing = await prisma.appointment.findUnique({ where: { bookingCode } });
-    if (existing) {
-      await prisma.appointment.update({
-        where: { id: existing.id },
-        data: {
-          patientProfileId: profile.id,
-          branchId: branches[0].id,
-          scheduleSlotId: slot.id,
-          servicePackageId: null,
-          servicePackageScheduleSlotId: null,
-          servicePrice: doctor.consultationFee,
-          symptomsDescription: ['Đau đầu và chóng mặt', 'Hồi hộp, đánh trống ngực', 'Theo dõi tăng huyết áp', 'Đau tức ngực nhẹ', 'Khám tim mạch định kỳ'][index],
-          status: 'CHECKED_IN',
-          queueNumber,
-          checkedInAt,
-          checkedInById: receptionist.id,
-        },
-      });
-    } else {
-      await prisma.appointment.create({
-        data: {
-          bookingCode,
-          patientProfileId: profile.id,
-          branchId: branches[0].id,
-          scheduleSlotId: slot.id,
-          servicePrice: doctor.consultationFee,
-          symptomsDescription: ['Đau đầu và chóng mặt', 'Hồi hộp, đánh trống ngực', 'Theo dõi tăng huyết áp', 'Đau tức ngực nhẹ', 'Khám tim mạch định kỳ'][index],
-          status: 'CHECKED_IN',
-          queueNumber,
-          checkedInAt,
-          checkedInById: receptionist.id,
-          statusHistories: {
-            create: { toStatus: 'CHECKED_IN', actorId: receptionist.id, reason: 'SEED_WAITING_TODAY' },
-          },
-        },
-      });
-    }
-    const appointment = await prisma.appointment.findUniqueOrThrow({ where: { bookingCode } });
-    const invoice = await prisma.invoice.upsert({
-      where: { appointmentId: appointment.id },
-      update: {
-        issuedBranchId: branches[0].id,
-        totalAmount: doctor.consultationFee,
-        status: 'PAID',
-        paidAt: checkedInAt,
-      },
-      create: {
-        appointmentId: appointment.id,
-        issuedBranchId: branches[0].id,
-        totalAmount: doctor.consultationFee,
-        status: 'PAID',
-        paidAt: checkedInAt,
-        items: {
-          create: {
-            description: `Khám với ${users.get('doctor.cardio@vitacare.local')?.fullName || ''}`,
-            quantity: 1,
-            unitPrice: doctor.consultationFee,
-            amount: doctor.consultationFee,
-          },
-        },
-      },
-    });
-    await prisma.paymentTransaction.upsert({
-      where: { idempotencyKey: `seed-paid:${bookingCode}` },
-      update: { invoiceId: invoice.id, amount: doctor.consultationFee, status: 'SUCCESS', paidAt: checkedInAt },
-      create: {
-        invoiceId: invoice.id,
-        provider: 'SEED',
-        providerTransactionId: `SEED-${bookingCode}`,
-        idempotencyKey: `seed-paid:${bookingCode}`,
-        method: 'CASH',
-        amount: doctor.consultationFee,
-        status: 'SUCCESS',
-        paidAt: checkedInAt,
-      },
-    });
-  }
-}
-
-async function seedBookingTables({ users, doctors, branches, rooms, specialtiesByName }) {
+async function seedBookingTables({ users, doctors, branches, rooms, doctorRooms, receptionRoom, specialtiesByName }) {
   const cardioDoctor = doctors.get('doctor.cardio@vitacare.local');
   const configuredMethods = await prisma.branchBookingMethod.findMany({ where: { branchId: branches[0].id }, include: { bookingMethod: true } });
   const branchMethodByCode = new Map(configuredMethods.map((item) => [item.bookingMethod.code, item]));
@@ -530,7 +475,7 @@ async function seedBookingTables({ users, doctors, branches, rooms, specialtiesB
         update: { ...service, branchBookingMethodId: branchBookingMethod.id, specialtyId: specialty.id, isActive: true },
         create: { ...service, branchBookingMethodId: branchBookingMethod.id, specialtyId: specialty.id },
       });
-      const roomId = rooms[specialtyIndex % rooms.length].id;
+      const roomId = doctorRooms[specialtyIndex % doctorRooms.length].id;
       let scheduleDays = 0;
       for (let day = 1; scheduleDays < 10; day += 1) {
         const examDate = dateOnly(day);
@@ -573,7 +518,7 @@ async function seedBookingTables({ users, doctors, branches, rooms, specialtiesB
       const examDate = dateOnly(day);
       const dayOfWeek = examDate.getUTCDay();
       if (dayOfWeek === 0 || dayOfWeek === 6) continue;
-      const roomId = rooms[packageIndex % rooms.length].id;
+      const roomId = receptionRoom.id;
       const schedule = await prisma.servicePackageSchedule.upsert({
         where: { servicePackageId_examDate: { servicePackageId: healthPackage.id, examDate } },
         update: { roomId, isActive: true },

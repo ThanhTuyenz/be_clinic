@@ -31,7 +31,8 @@ export class StaffAppointmentsService {
   }
 
   private serialize(row: any) {
-    const payment = row.invoice?.payments?.[0]
+    const invoice = row.invoice ?? row.bookingOrder?.invoice
+    const payment = invoice?.payments?.[0]
     const doctorSlot = row.scheduleSlot
     const packageSlot = row.servicePackageScheduleSlot
     const bookedDoctor = row.doctor ?? doctorSlot?.schedule?.doctor
@@ -66,8 +67,8 @@ export class StaffAppointmentsService {
         dob: row.patientProfile.dateOfBirth,
         gender: row.patientProfile.gender?.toLowerCase(),
         email: row.patientProfile.account?.email,
-        phone: row.patientProfile.account?.phoneNumber,
-        address: row.patientProfile.address,
+        phone: row.patientProfile.phoneNumber || row.patientProfile.account?.phoneNumber || '',
+        address: row.patientProfile.address || '',
         nationalId: row.patientProfile.nationalId,
         healthInsuranceNumber: row.patientProfile.healthInsuranceNumber,
       },
@@ -80,17 +81,24 @@ export class StaffAppointmentsService {
         specialtyName: specialty?.name,
       } : null,
       specialty: specialty ? { id: specialty.id, name: specialty.name, department: specialty.department?.name } : null,
-      servicePackage: row.servicePackage ? { id: row.servicePackage.id, code: row.servicePackage.code, name: row.servicePackage.name } : null,
-      bookingMethod: row.servicePackage?.branchBookingMethod?.bookingMethod
-        ? { code: row.servicePackage.branchBookingMethod.bookingMethod.code, name: row.servicePackage.branchBookingMethod.bookingMethod.name }
+      servicePackage: (row.servicePackage || row.servicePackageScheduleSlot?.schedule?.servicePackage) ? {
+        id: (row.servicePackage || row.servicePackageScheduleSlot?.schedule?.servicePackage).id,
+        code: (row.servicePackage || row.servicePackageScheduleSlot?.schedule?.servicePackage).code,
+        name: (row.servicePackage || row.servicePackageScheduleSlot?.schedule?.servicePackage).name,
+      } : null,
+      bookingMethod: (row.servicePackage?.branchBookingMethod?.bookingMethod || row.servicePackageScheduleSlot?.schedule?.servicePackage?.branchBookingMethod?.bookingMethod)
+        ? {
+            code: (row.servicePackage?.branchBookingMethod?.bookingMethod || row.servicePackageScheduleSlot?.schedule?.servicePackage?.branchBookingMethod?.bookingMethod).code,
+            name: (row.servicePackage?.branchBookingMethod?.bookingMethod || row.servicePackageScheduleSlot?.schedule?.servicePackage?.branchBookingMethod?.bookingMethod).name,
+          }
         : { code: 'DOCTOR', name: 'Khám với bác sĩ' },
       branch: row.branch ? { id: row.branch.id, code: row.branch.code, name: row.branch.name, address: row.branch.address } : null,
-      invoice: row.invoice ? {
-        id: row.invoice.id,
-        totalAmount: Number(row.invoice.totalAmount),
-        status: row.invoice.status,
-        paidAt: row.invoice.paidAt,
-        items: (row.invoice.items || []).map((item: any) => ({
+      invoice: invoice ? {
+        id: invoice.id,
+        totalAmount: Number(invoice.totalAmount),
+        status: invoice.status,
+        paidAt: invoice.paidAt,
+        items: (invoice.items || []).map((item: any) => ({
           id: String(item.id),
           description: item.description,
           quantity: item.quantity,
@@ -98,12 +106,12 @@ export class StaffAppointmentsService {
           amount: Number(item.amount),
         })),
       } : null,
-      payment: row.invoice ? {
-        status: row.invoice.status === 'PAID' ? 'paid' : 'unpaid',
-        paid: row.invoice.status === 'PAID',
-        amount: Number(row.invoice.totalAmount),
+      payment: invoice ? {
+        status: invoice.status === 'PAID' ? 'paid' : 'unpaid',
+        paid: invoice.status === 'PAID',
+        amount: Number(invoice.totalAmount),
         method: payment?.method?.toLowerCase(),
-        paidAt: row.invoice.paidAt,
+        paidAt: invoice.paidAt,
       } : null,
       medicalVisit: null,
     }
@@ -113,6 +121,16 @@ export class StaffAppointmentsService {
     return {
       patientProfile: { include: { account: true } },
       branch: true,
+      bookingOrder: {
+        include: {
+          invoice: {
+            include: {
+              items: true,
+              payments: { orderBy: { createdAt: 'desc' as const }, take: 1 },
+            },
+          },
+        },
+      },
       scheduleSlot: {
         include: {
           schedule: {
@@ -124,7 +142,16 @@ export class StaffAppointmentsService {
         },
       },
       servicePackage: { include: { specialty: true, branchBookingMethod: { include: { bookingMethod: true } } } },
-      servicePackageScheduleSlot: { include: { schedule: { include: { room: true } } } },
+      servicePackageScheduleSlot: {
+        include: {
+          schedule: {
+            include: {
+              room: true,
+              servicePackage: { include: { specialty: true, branchBookingMethod: { include: { bookingMethod: true } } } },
+            },
+          },
+        },
+      },
       invoice: { include: { items: true, payments: { orderBy: { createdAt: 'desc' as const }, take: 1 } } },
       statusHistories: { orderBy: { createdAt: 'asc' as const }, take: 1, include: { actor: { select: { id: true, fullName: true, email: true, role: true } } } },
     }
@@ -328,8 +355,13 @@ export class StaffAppointmentsService {
           `;
         }
 
-        const invoice = await tx.invoice.findUnique({
-          where: { appointmentId },
+        const invoice = await tx.invoice.findFirst({
+          where: {
+            OR: [
+              { appointmentId },
+              ...(current.bookingOrderId ? [{ bookingOrderId: current.bookingOrderId }] : []),
+            ],
+          },
           include: { payments: { orderBy: { createdAt: 'desc' }, take: 1 } },
         });
         if (invoice?.payments[0]?.status === 'SUCCESS') {
