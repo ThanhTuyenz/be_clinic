@@ -34,9 +34,11 @@ model Branch {
   issuedInvoices  Invoice[]
   bookingMethods  BranchBookingMethod[]
   specialties     BranchSpecialty[]
+  aiTriageInsights AITriageInsight[]
 
   @@index([clinicId, isActive])
   @@map("branches")
+
 }
 
 model BranchSpecialty {

@@ -60,7 +60,7 @@ model Specialty {
   servicePackages ServicePackage[]
   branches        BranchSpecialty[]
   rooms           ClinicRoomSpecialty[]
-
+  aiTriageInsights AITriageInsight[]
 
   @@index([isActive, sortOrder])
   @@map("specialties")
@@ -89,9 +89,11 @@ model Doctor {
   scheduleExceptions DoctorScheduleException[]
   schedules          DoctorSchedule[]
   reviews            Review[]
+  aiTriageInsights   AITriageInsight[]
 
   @@index([isFeatured, isActive])
   @@map("doctors")
+
 }
 
 // Nhân viên tiếp nhận / Lễ tân – Table-per-Type (1-1 với User)

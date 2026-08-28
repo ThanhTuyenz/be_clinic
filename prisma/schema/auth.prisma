@@ -39,8 +39,12 @@ model User {
   auditLogs                AuditLog[]                 @relation("AuditActor")
   doctorReviews            Review[]                   @relation
   appointmentStatusChanges AppointmentStatusHistory[] @relation("AppointmentStatusActor")
+  aiConversations          AIConversation[]
+  aiBookingIntentLogs      AIBookingIntentLog[]
 
   @@index([role, status])
+
+
   @@index([isDeleted, createdAt])
   @@map("users")
 }

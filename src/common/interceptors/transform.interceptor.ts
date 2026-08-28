@@ -28,10 +28,11 @@ export class TransformInterceptor<T>
 
     return next.handle().pipe(
       map((data: T) => {
-        // Prevent wrapping file stream
-        if (data instanceof StreamableFile) {
+        // Prevent wrapping file stream or SSE stream where headers are already sent
+        if (response.headersSent || data instanceof StreamableFile) {
           return data;
         }
+
 
         // Prevent double wrapping
         if (this.isApiResponse(data)) {

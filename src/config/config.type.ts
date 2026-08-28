@@ -62,12 +62,19 @@ export type RedisConfig = {
   connectTimeoutMs: number;
 };
 
+export type GeminiConfig = {
+  apiKey?: string;
+  model: string;
+};
+
+
 export type AllConfigType = {
   app: AppConfig;
   database: DatabaseConfig;
   auth: AuthConfig;
   mailer: MailerConfig;
   google: GoogleConfig;
+  gemini: GeminiConfig;
   rabbitmq: RabbitMqConfig;
   redis: RedisConfig;
 };

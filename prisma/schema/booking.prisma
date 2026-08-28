@@ -55,8 +55,10 @@ model Appointment {
   statusHistories              AppointmentStatusHistory[]
   qrToken                      AppointmentQrToken?
   invoice                      Invoice?
+  aiBookingIntentLogs          AIBookingIntentLog[]
 
   @@index([bookingOrderId])
+
   @@index([patientProfileId, status])
   @@index([patientProfileId, createdAt])
   @@index([branchId, status, createdAt])

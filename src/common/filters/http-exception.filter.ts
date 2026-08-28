@@ -45,6 +45,10 @@ export class HttpExceptionFilter implements ExceptionFilter {
       message = this.getMessageFromErrors(errors) ?? this.getDefaultMessage(status);
     }
 
+    if (response.headersSent) {
+      return;
+    }
+
     response.status(status as number).json({
       statusCode: status as number,
       errorCode: errorCode,

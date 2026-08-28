@@ -6,6 +6,7 @@ import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler'
 import appConfig from './config/app.config.js'
 import authConfig from './config/auth.config.js'
 import googleConfig from './config/google.config.js'
+import geminiConfig from './config/gemini.config.js'
 import mailerConfig from './config/mailer.config.js'
 import rabbitMqConfig from './infrastructure/messaging/rabbitmq/rabbitmq.config.js'
 import redisConfig from './infrastructure/cache/redis/redis.config.js'
@@ -26,15 +27,17 @@ import { AdminDashboardModule } from './modules/admin-dashboard/admin-dashboard.
 import { SpecialtiesModule } from './modules/specialties/specialties.module.js'
 import { SystemCatalogModule } from './modules/system-catalog/system-catalog.module.js'
 import { SchedulesModule } from './modules/schedules/schedules.module.js'
+import { AiAssistantModule } from './modules/ai-assistant/ai-assistant.module.js'
 
 @Module({
   imports: [
     ConfigModule.forRoot({
       isGlobal: true,
       cache: true,
-      load: [appConfig, authConfig, mailerConfig, googleConfig, rabbitMqConfig, redisConfig],
+      load: [appConfig, authConfig, mailerConfig, googleConfig, geminiConfig, rabbitMqConfig, redisConfig],
       envFilePath: [`.env.${process.env.NODE_ENV || 'development'}`, '.env'],
     }),
+
     ThrottlerModule.forRoot([
       {
         name: 'short',
@@ -64,7 +67,9 @@ import { SchedulesModule } from './modules/schedules/schedules.module.js'
     SpecialtiesModule,
     SystemCatalogModule,
     SchedulesModule,
+    AiAssistantModule,
   ],
+
   controllers: [],
   providers: [
     {

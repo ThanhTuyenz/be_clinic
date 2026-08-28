@@ -1,0 +1,92 @@
+// ============================================================
+// AI Assistant: Conversation, Insights & Intent Tracking
+// ============================================================
+
+enum AIConversationType {
+  TRIAGE_CONSULTATION    // Tư vấn sàng lọc triệu chứng
+  GENERAL_INQUIRY        // Hỏi đáp dịch vụ phòng khám
+  BOOKING_ASSISTANCE     // Hỗ trợ đặt lịch
+}
+
+enum AIMessageSender {
+  USER
+  ASSISTANT
+  SYSTEM
+}
+
+model AIConversation {
+  id               String              @id @default(uuid()) @db.Uuid
+  userId           String?             @map("user_id") @db.Uuid
+  conversationType AIConversationType  @default(TRIAGE_CONSULTATION) @map("conversation_type")
+  title            String?             @map("title") @db.VarChar(255)
+  isClosed         Boolean             @default(false) @map("is_closed")
+  createdAt        DateTime            @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt        DateTime            @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  user             User?               @relation(fields: [userId], references: [id], onDelete: SetNull)
+  messages         AIMessage[]
+  triageInsights   AITriageInsight[]
+  intentLogs       AIBookingIntentLog[]
+
+  @@index([userId, createdAt])
+  @@map("ai_conversations")
+}
+
+model AIMessage {
+  id                 String          @id @default(uuid()) @db.Uuid
+  conversationId     String          @map("conversation_id") @db.Uuid
+  sender             AIMessageSender @map("sender")
+  content            String          @map("content") @db.Text
+  rawAudioUrl        String?         @map("raw_audio_url") @db.VarChar(500)
+  structuredResponse Json?           @map("structured_response")
+  tokensUsed         Int             @default(0) @map("tokens_used")
+  createdAt          DateTime        @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  conversation       AIConversation  @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+
+  @@index([conversationId, createdAt])
+  @@map("ai_messages")
+}
+
+model AITriageInsight {
+  id                   String         @id @default(uuid()) @db.Uuid
+  conversationId       String         @map("conversation_id") @db.Uuid
+  extractedSymptoms    String         @map("extracted_symptoms") @db.Text
+  preliminaryDiagnosis String?        @map("preliminary_diagnosis") @db.Text
+  userLatitude         Float?         @map("user_latitude")
+  userLongitude        Float?         @map("user_longitude")
+  confidenceScore      Float          @default(0.0) @map("confidence_score")
+  suggestedSpecialtyId Int?           @map("suggested_specialty_id")
+  suggestedDoctorId    String?        @map("suggested_doctor_id") @db.Uuid
+  suggestedBranchId    String?        @map("suggested_branch_id") @db.Uuid
+  createdAt            DateTime       @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  conversation         AIConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  specialty            Specialty?     @relation(fields: [suggestedSpecialtyId], references: [id], onDelete: SetNull)
+  doctor               Doctor?        @relation(fields: [suggestedDoctorId], references: [id], onDelete: SetNull)
+  branch               Branch?        @relation(fields: [suggestedBranchId], references: [id], onDelete: SetNull)
+
+  @@index([conversationId])
+  @@map("ai_triage_insights")
+}
+
+model AIBookingIntentLog {
+  id              String         @id @default(uuid()) @db.Uuid
+  conversationId  String         @map("conversation_id") @db.Uuid
+  userId          String?        @map("user_id") @db.Uuid
+  detectedIntent  String         @map("detected_intent") @db.VarChar(100)
+  targetDate      DateTime?      @map("target_date") @db.Date
+  targetTimeSlot  String?        @map("target_time_slot") @db.VarChar(50)
+  extractedParams Json?          @map("extracted_params")
+  isSuccessful    Boolean        @default(false) @map("is_successful")
+  appointmentId   String?        @map("appointment_id") @db.Uuid
+  createdAt       DateTime       @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  conversation    AIConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  user            User?          @relation(fields: [userId], references: [id], onDelete: SetNull)
+  appointment     Appointment?   @relation(fields: [appointmentId], references: [id], onDelete: SetNull)
+
+  @@index([conversationId])
+  @@index([userId])
+  @@map("ai_booking_intent_logs")
+}
