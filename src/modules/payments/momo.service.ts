@@ -135,8 +135,13 @@ export class MomoService {
       appointmentId: appointment?.id,
       bookingOrderId: bookingOrder?.id,
     })).toString('base64');
-    // Luồng Merchant Gateway chuẩn cho Website (All-In-One: QR Ví MoMo, Thẻ ATM Napas, Thẻ Quốc tế)
-    const requestType = 'captureWallet';
+    // Ánh xạ requestType theo phương thức thanh toán người dùng chọn
+    let requestType = 'captureWallet';
+    if (paymentMethod === 'ATM') {
+      requestType = 'payWithATM';
+    } else if (paymentMethod === 'CREDIT_CARD') {
+      requestType = 'payWithCC';
+    }
     const rawSignature = [
       `accessKey=${settings.accessKey}`,
       `amount=${amount}`,

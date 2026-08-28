@@ -58,9 +58,9 @@ model Specialty {
 
   doctors         DoctorSpecialty[]
   servicePackages ServicePackage[]
-  medicalServices MedicalService[]
   branches        BranchSpecialty[]
   rooms           ClinicRoomSpecialty[]
+
 
   @@index([isActive, sortOrder])
   @@map("specialties")

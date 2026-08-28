@@ -15,7 +15,6 @@ export class SystemCatalogService {
       'branches',
       'rooms',
       'specialties',
-      'services',
       'service-packages',
       'booking-methods',
       'branch-specialties',
@@ -27,7 +26,6 @@ export class SystemCatalogService {
       branches: this.prisma.branch,
       rooms: this.prisma.clinicRoom,
       specialties: this.prisma.specialty,
-      services: this.prisma.medicalService,
       'service-packages': this.prisma.servicePackage,
       'booking-methods': this.prisma.branchBookingMethod,
       'branch-specialties': this.prisma.branchSpecialty,
@@ -63,14 +61,13 @@ export class SystemCatalogService {
       })
       return { items: rows }
     }
-    const where: any = term ? { OR: [{ name: { contains: term, mode: 'insensitive' } }, ...(['branches','services','medicines','service-packages'].includes(resource) ? [{ code: { contains: term, mode: 'insensitive' } }] : [])] } : {}
+    const where: any = term ? { OR: [{ name: { contains: term, mode: 'insensitive' } }, ...(['branches','medicines','service-packages'].includes(resource) ? [{ code: { contains: term, mode: 'insensitive' } }] : [])] } : {}
     const include = resource === 'service-packages'
-      ? { branchBookingMethod: { include: { branch: { select: { id: true, name: true } }, bookingMethod: { select: { id: true, code: true, name: true } } } }, specialty: { select: { id: true, name: true } }, items: { include: { medicalService: { select: { id: true, code: true, name: true } } }, orderBy: { sortOrder: 'asc' } }, schedules: { include: { room: { select: { id: true, name: true, branchId: true } }, slots: { orderBy: { startTime: 'asc' } } }, orderBy: { examDate: 'asc' } } }
-      : resource === 'services'
-      ? { specialty: { select: { id: true, name: true } } }
+      ? { branchBookingMethod: { include: { branch: { select: { id: true, name: true } }, bookingMethod: { select: { id: true, code: true, name: true } } } }, specialty: { select: { id: true, name: true } }, schedules: { include: { room: { select: { id: true, name: true, branchId: true } }, slots: { orderBy: { startTime: 'asc' } } }, orderBy: { examDate: 'asc' } } }
       : resource === 'rooms' ? { branch: { select: { id: true, name: true, address: true } }, specialties: { where: { isActive: true }, include: { specialty: { select: { id: true, name: true } } }, orderBy: { priority: 'desc' } } } : undefined
     return { items: await model.findMany({ where, include, orderBy: { name: 'asc' }, take: 200 }) }
   }
+
 
   async create(userId: string, resource: string, body: any) {
     await this.manager(userId)
@@ -160,12 +157,7 @@ export class SystemCatalogService {
       if (!branchId) throw new BadRequestException('Vui lòng chọn cơ sở y tế')
       return { branchId, name: String(b.name).trim(), code: String(b.code || '').trim(), isActive: b.isActive ?? true }
     }
-    if (resource === 'services') {
-      const category = String(b.category || '').trim().toUpperCase(); if (!['LAB_TEST','IMAGING','PROCEDURE','CONSULTATION'].includes(category)) throw new BadRequestException('Nhóm dịch vụ không hợp lệ')
-      return { name: String(b.name).trim(), code: String(b.code || '').trim(), description: b.description || null, category, specialtyId: b.specialtyId ? Number(b.specialtyId) : null, price: Number(b.price) || 0, durationMin: Number(b.durationMin) || 30, isActive: b.isActive ?? true }
-    }
     if (resource === 'service-packages') {
-      const serviceIds = Array.isArray(b.medicalServiceIds) ? [...new Set<string>(b.medicalServiceIds.map(String).filter(Boolean))] : []
       if (!String(b.branchId || '')) throw new BadRequestException('Vui lòng chọn chi nhánh')
       const branchBookingMethodId = await this.resolveBranchMethod(b, 'SPECIALTY_EXAM')
       const inputSchedules = Array.isArray(b.schedules) ? b.schedules : []
@@ -192,8 +184,9 @@ export class SystemCatalogService {
         return { roomId: item.roomId ? String(item.roomId) : null, examDate, slots: { create: slots } }
       })
       const generatedPkgCode = String(b.code || '').trim() || `PKG-${new Date().getFullYear()}-${Math.floor(1000 + Math.random() * 9000)}`
-      return { name: String(b.name).trim(), code: generatedPkgCode, description: b.description || null, branchBookingMethodId, specialtyId: b.specialtyId ? Number(b.specialtyId) : null, price: Number(b.price) || 0, durationMin: Number(b.durationMin) || 30, isActive: b.isActive ?? true, items: creating ? { create: serviceIds.map((medicalServiceId, sortOrder) => ({ medicalServiceId, sortOrder })) } : { deleteMany: {}, create: serviceIds.map((medicalServiceId, sortOrder) => ({ medicalServiceId, sortOrder })) }, schedules: creating ? { create: schedules } : { deleteMany: {}, create: schedules } }
+      return { name: String(b.name).trim(), code: generatedPkgCode, description: b.description || null, branchBookingMethodId, specialtyId: b.specialtyId ? Number(b.specialtyId) : null, price: Number(b.price) || 0, durationMin: Number(b.durationMin) || 30, isActive: b.isActive ?? true, schedules: creating ? { create: schedules } : { deleteMany: {}, create: schedules } }
     }
+
     return { name: String(b.name).trim(), code: String(b.code || '').trim(), activeIngredient: b.activeIngredient || null, strength: b.strength || null, unit: b.unit || null, unitPrice: Number(b.unitPrice) || 0, stockQuantity: Number(b.stockQuantity) || 0, isActive: b.isActive ?? true }
   }
 

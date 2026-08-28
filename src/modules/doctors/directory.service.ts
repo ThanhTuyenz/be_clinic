@@ -109,12 +109,12 @@ export class DirectoryService {
       orderBy: { name: 'asc' },
       select: {
         id: true, code: true, name: true, description: true, price: true, branchBookingMethod: { select: { id: true, branchId: true } },
-        items: { orderBy: { sortOrder: 'asc' }, select: { quantity: true, medicalService: { select: { id: true, code: true, name: true, category: true } } } },
         schedules: { where: { isActive: true, examDate: { gte: this.today() }, slots: { some: { isActive: true } } }, orderBy: { examDate: 'asc' }, select: { id: true, examDate: true, room: { select: { id: true, code: true, name: true } }, slots: { where: { isActive: true }, orderBy: { startTime: 'asc' }, select: { id: true, startTime: true, endTime: true, capacity: true, occupiedCount: true } } } },
       },
     });
     return rows.map(({ branchBookingMethod, ...healthPackage }) => ({ ...healthPackage, branchId: branchBookingMethod.branchId, branchBookingMethodId: branchBookingMethod.id }));
   }
+
 
   bookingMethods(branchId: string) {
     if (!branchId) throw new BadRequestException('Thiếu chi nhánh');

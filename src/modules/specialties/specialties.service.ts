@@ -78,13 +78,6 @@ export class SpecialtiesService {
         price: true,
         durationMin: true,
         specialtyId: true,
-        items: {
-          orderBy: { sortOrder: 'asc' },
-          select: {
-            quantity: true,
-            medicalService: { select: { id: true, name: true, category: true } },
-          },
-        },
         branchBookingMethod: {
           select: {
             id: true,
@@ -102,6 +95,7 @@ export class SpecialtiesService {
       price: Number(pkg.price),
     }))
   }
+
 
   /**
    * GET /specialties/:id/doctors
@@ -166,10 +160,6 @@ export class SpecialtiesService {
       where: { id: serviceId, isActive: true },
       include: {
         specialty: { select: { id: true, name: true, iconUrl: true } },
-        items: {
-          orderBy: { sortOrder: 'asc' },
-          include: { medicalService: true },
-        },
         branchBookingMethod: {
           include: {
             branch: { select: { id: true, name: true, address: true, phoneNumber: true } },
@@ -258,13 +248,6 @@ export class SpecialtiesService {
             bookingMethod: { select: { id: true, code: true, name: true } },
           },
         },
-        items: {
-          orderBy: { sortOrder: 'asc' },
-          select: {
-            quantity: true,
-            medicalService: { select: { id: true, name: true, category: true } },
-          },
-        },
       },
     })
     return packages.map(({ branchBookingMethod, ...pkg }) => ({
@@ -276,3 +259,4 @@ export class SpecialtiesService {
     }))
   }
 }
+

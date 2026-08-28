@@ -91,9 +91,3 @@ enum OutboxStatus {
   FAILED
 }
 
-enum MedicalServiceCategory {
-  LAB_TEST
-  IMAGING
-  PROCEDURE
-  CONSULTATION
-}

@@ -408,33 +408,6 @@ async function seedBookingTables({ users, doctors, branches, rooms, doctorRooms,
   const branchMethodByCode = new Map(configuredMethods.map((item) => [item.bookingMethod.code, item]));
   const patientUser = users.get('patient@vitacare.local');
 
-  const medicalServiceCatalog = [
-    { code: 'LAB_CBC', name: 'Công thức máu toàn bộ (CBC)', description: 'Công thức máu 18/24 thông số, tầm soát thiếu máu và nhiễm trùng.', category: 'LAB_TEST', price: 120000, durationMin: 20 },
-    { code: 'LAB_GLUCOSE_HBA1C', name: 'Định lượng đường huyết (Glucose / HbA1c)', description: 'Tầm soát và theo dõi đái tháo đường.', category: 'LAB_TEST', price: 180000, durationMin: 30 },
-    { code: 'LAB_LIPID_PROFILE', name: 'Bộ mỡ máu', description: 'Định lượng Cholesterol, Triglyceride, HDL-C và LDL-C.', category: 'LAB_TEST', price: 250000, durationMin: 30 },
-    { code: 'LAB_LIVER_FUNCTION', name: 'Đánh giá chức năng gan', description: 'Định lượng AST, ALT, GGT để tầm soát tổn thương tế bào gan.', category: 'LAB_TEST', price: 220000, durationMin: 30 },
-    { code: 'LAB_KIDNEY_FUNCTION', name: 'Đánh giá chức năng thận', description: 'Định lượng Urea và Creatinine để tầm soát suy thận.', category: 'LAB_TEST', price: 180000, durationMin: 30 },
-    { code: 'LAB_URINALYSIS_10', name: 'Tổng phân tích nước tiểu 10 thông số', description: 'Sàng lọc bệnh lý tiết niệu, thận và chuyển hóa.', category: 'LAB_TEST', price: 100000, durationMin: 20 },
-    { code: 'IMG_ABDOMINAL_ULTRASOUND', name: 'Siêu âm màu ổ bụng tổng quát', description: 'Khảo sát gan, mật, tụy, lách, thận và bàng quang.', category: 'IMAGING', price: 300000, durationMin: 30 },
-    { code: 'IMG_THYROID_ULTRASOUND', name: 'Siêu âm tuyến giáp', description: 'Khảo sát cấu trúc và bất thường tuyến giáp.', category: 'IMAGING', price: 250000, durationMin: 25 },
-    { code: 'IMG_BREAST_ULTRASOUND', name: 'Siêu âm vú', description: 'Khảo sát mô tuyến vú và phát hiện bất thường.', category: 'IMAGING', price: 300000, durationMin: 30 },
-    { code: 'IMG_ECHOCARDIOGRAPHY', name: 'Siêu âm tim', description: 'Đánh giá cấu trúc và chức năng tim.', category: 'IMAGING', price: 500000, durationMin: 40 },
-    { code: 'IMG_XRAY_CHEST', name: 'X-quang kỹ thuật số ngực thẳng', description: 'Khảo sát phổi, tim và lồng ngực.', category: 'IMAGING', price: 200000, durationMin: 20 },
-    { code: 'PROC_ECG', name: 'Đo điện tâm đồ (ECG)', description: 'Tầm soát thiếu máu cơ tim và rối loạn nhịp.', category: 'PROCEDURE', price: 150000, durationMin: 20 },
-    { code: 'PROC_ENT_ENDOSCOPY', name: 'Nội soi Tai Mũi Họng ống mềm', description: 'Nội soi chẩn đoán tai, mũi và họng bằng ống mềm.', category: 'PROCEDURE', price: 250000, durationMin: 25 },
-    { code: 'PROC_DENTAL_SCALING', name: 'Lấy cao răng & đánh bóng hai hàm', description: 'Làm sạch cao răng và đánh bóng bề mặt răng.', category: 'PROCEDURE', price: 400000, durationMin: 45 },
-  ];
-
-  const medicalServicesByCode = new Map();
-  for (const service of medicalServiceCatalog) {
-    const row = await prisma.medicalService.upsert({
-      where: { code: service.code },
-      update: { ...service, isActive: true },
-      create: { ...service },
-    });
-    medicalServicesByCode.set(row.code, row);
-  }
-
   const bookingSpecialties = await prisma.specialty.findMany({ orderBy: { id: 'asc' } });
   for (const branch of branches) {
     for (const specialty of bookingSpecialties) {
@@ -493,26 +466,19 @@ async function seedBookingTables({ users, doctors, branches, rooms, doctorRooms,
   }
 
   const healthPackageSeeds = [
-    { code: 'PKG-GENERAL-BASIC', name: 'Gói khám sức khỏe tổng quát cơ bản', description: 'Tầm soát sức khỏe định kỳ với xét nghiệm và chẩn đoán hình ảnh cơ bản.', price: 1290000, itemCodes: ['LAB_CBC', 'LAB_GLUCOSE_HBA1C', 'LAB_LIVER_FUNCTION', 'LAB_KIDNEY_FUNCTION', 'LAB_URINALYSIS_10', 'IMG_XRAY_CHEST'] },
-    { code: 'PKG-CARDIO-SCREENING', name: 'Gói tầm soát nguy cơ tim mạch', description: 'Đánh giá các yếu tố nguy cơ tim mạch bằng xét nghiệm và thăm dò chức năng.', price: 990000, itemCodes: ['LAB_GLUCOSE_HBA1C', 'LAB_LIPID_PROFILE', 'PROC_ECG', 'IMG_ECHOCARDIOGRAPHY'] },
-    { code: 'PKG-WOMEN-WELLNESS', name: 'Gói kiểm tra sức khỏe nữ', description: 'Gói kiểm tra sức khỏe định kỳ dành cho nữ.', price: 1490000, itemCodes: ['LAB_CBC', 'LAB_GLUCOSE_HBA1C', 'IMG_BREAST_ULTRASOUND', 'IMG_ABDOMINAL_ULTRASOUND'] },
+    { code: 'PKG-GENERAL-BASIC', name: 'Gói khám sức khỏe tổng quát cơ bản', description: 'Tầm soát sức khỏe định kỳ với xét nghiệm và chẩn đoán hình ảnh cơ bản.', price: 1290000 },
+    { code: 'PKG-CARDIO-SCREENING', name: 'Gói tầm soát nguy cơ tim mạch', description: 'Đánh giá các yếu tố nguy cơ tim mạch bằng xét nghiệm và thăm dò chức năng.', price: 990000 },
+    { code: 'PKG-WOMEN-WELLNESS', name: 'Gói kiểm tra sức khỏe nữ', description: 'Gói kiểm tra sức khỏe định kỳ dành cho nữ.', price: 1490000 },
   ];
   for (const [packageIndex, seed] of healthPackageSeeds.entries()) {
-    const { itemCodes, ...packageData } = seed;
     const healthPackageMethod = branchMethodByCode.get('HEALTH_PACKAGE');
     if (!healthPackageMethod) continue;
     const healthPackage = await prisma.servicePackage.upsert({
       where: { code: seed.code },
-      update: { ...packageData, branchBookingMethodId: healthPackageMethod.id, isActive: true },
-      create: { ...packageData, branchBookingMethodId: healthPackageMethod.id },
+      update: { ...seed, branchBookingMethodId: healthPackageMethod.id, isActive: true },
+      create: { ...seed, branchBookingMethodId: healthPackageMethod.id },
     });
-    await prisma.servicePackageItem.deleteMany({ where: { servicePackageId: healthPackage.id } });
-    const items = itemCodes.map((code, sortOrder) => {
-      const medicalService = medicalServicesByCode.get(code);
-      if (!medicalService) throw new Error(`Không tìm thấy dịch vụ ${code} để tạo gói ${seed.code}`);
-      return { servicePackageId: healthPackage.id, medicalServiceId: medicalService.id, quantity: 1, sortOrder };
-    });
-    await prisma.servicePackageItem.createMany({ data: items });
+
     let weekdaysCreated = 0;
     for (let day = 1; weekdaysCreated < 10; day += 1) {
       const examDate = dateOnly(day);
