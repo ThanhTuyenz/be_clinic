@@ -34,10 +34,9 @@ export class StaffAppointmentsService {
     const invoice = row.invoice ?? row.bookingOrder?.invoice
     const payment = invoice?.payments?.[0]
     const doctorSlot = row.scheduleSlot
-    const packageSlot = row.servicePackageScheduleSlot
     const bookedDoctor = row.doctor ?? doctorSlot?.schedule?.doctor
-    const appointmentDate = doctorSlot?.schedule?.workDate ?? packageSlot?.schedule?.examDate
-    const room = doctorSlot?.schedule?.room ?? packageSlot?.schedule?.room
+    const appointmentDate = doctorSlot?.schedule?.workDate
+    const room = doctorSlot?.schedule?.room
     const creator = row.statusHistories?.[0]?.actor
     const createdAtClinic = creator && creator.role !== 'PATIENT'
     const specialty = row.servicePackage?.specialty ?? bookedDoctor?.specialties?.find((item: any) => item.isPrimary)?.specialty ?? bookedDoctor?.specialties?.[0]?.specialty
@@ -50,8 +49,8 @@ export class StaffAppointmentsService {
       bookingSource: createdAtClinic ? 'clinic' : 'online',
       createdByStaff: createdAtClinic ? { id: creator.id, fullName: creator.fullName, email: creator.email, role: creator.role } : null,
       appointmentDate: appointmentDate?.toISOString().slice(0, 10) ?? null,
-      startTime: doctorSlot?.startTime ? this.time(doctorSlot.startTime) : packageSlot?.startTime ? this.time(packageSlot.startTime) : null,
-      endTime: doctorSlot?.endTime ? this.time(doctorSlot.endTime) : packageSlot?.endTime ? this.time(packageSlot.endTime) : null,
+      startTime: doctorSlot?.startTime ? this.time(doctorSlot.startTime) : null,
+      endTime: doctorSlot?.endTime ? this.time(doctorSlot.endTime) : null,
       status: this.statusForClient(row.status),
       workflowStatus: row.status,
       symptoms: row.symptomsDescription || '',
@@ -81,15 +80,15 @@ export class StaffAppointmentsService {
         specialtyName: specialty?.name,
       } : null,
       specialty: specialty ? { id: specialty.id, name: specialty.name, department: specialty.department?.name } : null,
-      servicePackage: (row.servicePackage || row.servicePackageScheduleSlot?.schedule?.servicePackage) ? {
-        id: (row.servicePackage || row.servicePackageScheduleSlot?.schedule?.servicePackage).id,
-        code: (row.servicePackage || row.servicePackageScheduleSlot?.schedule?.servicePackage).code,
-        name: (row.servicePackage || row.servicePackageScheduleSlot?.schedule?.servicePackage).name,
+      servicePackage: row.servicePackage ? {
+        id: row.servicePackage.id,
+        code: row.servicePackage.code,
+        name: row.servicePackage.name,
       } : null,
-      bookingMethod: (row.servicePackage?.branchBookingMethod?.bookingMethod || row.servicePackageScheduleSlot?.schedule?.servicePackage?.branchBookingMethod?.bookingMethod)
+      bookingMethod: row.servicePackage?.branchBookingMethod?.bookingMethod
         ? {
-            code: (row.servicePackage?.branchBookingMethod?.bookingMethod || row.servicePackageScheduleSlot?.schedule?.servicePackage?.branchBookingMethod?.bookingMethod).code,
-            name: (row.servicePackage?.branchBookingMethod?.bookingMethod || row.servicePackageScheduleSlot?.schedule?.servicePackage?.branchBookingMethod?.bookingMethod).name,
+            code: row.servicePackage.branchBookingMethod.bookingMethod.code,
+            name: row.servicePackage.branchBookingMethod.bookingMethod.name,
           }
         : { code: 'DOCTOR', name: 'Khám với bác sĩ' },
       branch: row.branch ? { id: row.branch.id, code: row.branch.code, name: row.branch.name, address: row.branch.address } : null,
@@ -142,16 +141,6 @@ export class StaffAppointmentsService {
         },
       },
       servicePackage: { include: { specialty: true, branchBookingMethod: { include: { bookingMethod: true } } } },
-      servicePackageScheduleSlot: {
-        include: {
-          schedule: {
-            include: {
-              room: true,
-              servicePackage: { include: { specialty: true, branchBookingMethod: { include: { bookingMethod: true } } } },
-            },
-          },
-        },
-      },
       invoice: { include: { items: true, payments: { orderBy: { createdAt: 'desc' as const }, take: 1 } } },
       statusHistories: { orderBy: { createdAt: 'asc' as const }, take: 1, include: { actor: { select: { id: true, fullName: true, email: true, role: true } } } },
     }
@@ -243,9 +232,20 @@ export class StaffAppointmentsService {
       select: { role: true, doctor: { select: { id: true } }, patientProfiles: { select: { id: true } } },
     })
     if (!user) throw new ForbiddenException('Tài khoản không hợp lệ')
+
+    const targetProfile = await this.prisma.patientProfile.findUnique({
+      where: { id: patientId },
+      select: { nationalId: true, patientCode: true },
+    })
+
     if (user.role === 'DOCTOR') {
       const assigned = await this.prisma.appointment.findFirst({
-        where: { patientProfileId: patientId, scheduleSlot: { schedule: { doctorId: user.doctor?.id || '__none__' } } },
+        where: {
+          ...(targetProfile?.nationalId
+            ? { patientProfile: { nationalId: targetProfile.nationalId } }
+            : { patientProfileId: patientId }),
+          scheduleSlot: { schedule: { doctorId: user.doctor?.id || '__none__' } },
+        },
         select: { id: true },
       })
       if (!assigned) throw new ForbiddenException('Bệnh nhân chưa từng được phân công cho bác sĩ này')
@@ -256,7 +256,20 @@ export class StaffAppointmentsService {
     } else if (!['ADMIN', 'BRANCH_MANAGER', 'RECEPTIONIST'].includes(user.role)) {
       throw new ForbiddenException('Không có quyền xem bệnh sử')
     }
-    const rows = await this.prisma.appointment.findMany({ where: { patientProfileId: patientId }, include: this.appointmentInclude(), orderBy: { createdAt: 'desc' } })
+
+    // Với nhân viên y tế (Bác sĩ, Lễ tân, Admin): Gom toàn bộ lịch sử khám theo CCCD / Mã bệnh nhân
+    const isStaff = ['ADMIN', 'BRANCH_MANAGER', 'RECEPTIONIST', 'DOCTOR'].includes(user.role)
+    const whereAppointment = isStaff && targetProfile?.nationalId
+      ? { OR: [{ patientProfileId: patientId }, { patientProfile: { nationalId: targetProfile.nationalId } }] }
+      : isStaff && targetProfile?.patientCode
+      ? { OR: [{ patientProfileId: patientId }, { patientProfile: { patientCode: targetProfile.patientCode } }] }
+      : { patientProfileId: patientId }
+
+    const rows = await this.prisma.appointment.findMany({
+      where: whereAppointment,
+      include: this.appointmentInclude(),
+      orderBy: { createdAt: 'desc' },
+    })
     return { appointments: rows.map((row) => this.serialize(row)) }
   }
 
@@ -291,7 +304,6 @@ export class StaffAppointmentsService {
       include: {
         patientProfile: { include: { account: { select: { email: true } } } },
         scheduleSlot: { include: { schedule: { include: { doctor: { include: { user: true } }, branch: true } } } },
-        servicePackageScheduleSlot: { include: { schedule: { include: { servicePackage: true } } } },
         servicePackage: true,
         branch: true,
       },
@@ -340,13 +352,6 @@ export class StaffAppointmentsService {
 
       // Nếu chuyển sang CANCELLED
       if (status === 'CANCELLED' && current.status !== 'CANCELLED') {
-        if (current.servicePackageScheduleSlotId) {
-          await tx.$executeRaw`
-            UPDATE "service_package_schedule_slots"
-            SET "occupied_count" = GREATEST("occupied_count" - 1, 0), "updated_at" = NOW()
-            WHERE "id" = ${current.servicePackageScheduleSlotId}::uuid
-          `;
-        }
         if (current.scheduleSlotId) {
           await tx.$executeRaw`
             UPDATE "doctor_schedule_slots"
@@ -399,13 +404,12 @@ export class StaffAppointmentsService {
       const email = current.patientProfile?.account?.email;
       if (email) {
         const doctorSlot = current.scheduleSlot;
-        const packageSlot = current.servicePackageScheduleSlot;
-        const examDateStr = (packageSlot?.schedule?.examDate ?? doctorSlot?.schedule?.workDate)?.toISOString().slice(0, 10) ?? '';
-        const startTimeStr = (packageSlot?.startTime ?? doctorSlot?.startTime)?.toISOString().slice(11, 16) ?? '';
+        const examDateStr = doctorSlot?.schedule?.workDate?.toISOString().slice(0, 10) ?? '';
+        const startTimeStr = doctorSlot?.startTime?.toISOString().slice(11, 16) ?? '';
         const doctorName = doctorSlot?.schedule?.doctor
           ? `${doctorSlot.schedule.doctor.academicRank ? doctorSlot.schedule.doctor.academicRank + ' ' : ''}${doctorSlot.schedule.doctor.user?.fullName ?? ''}`.trim()
           : null;
-        const serviceName = packageSlot?.schedule?.servicePackage?.name || current.servicePackage?.name || null;
+        const serviceName = current.servicePackage?.name || null;
         const branchName = doctorSlot?.schedule?.branch?.name || current.branch?.name || 'VitaCare Clinic';
 
         try {

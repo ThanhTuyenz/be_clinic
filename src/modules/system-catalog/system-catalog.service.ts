@@ -63,7 +63,7 @@ export class SystemCatalogService {
     }
     const where: any = term ? { OR: [{ name: { contains: term, mode: 'insensitive' } }, ...(['branches','medicines','service-packages'].includes(resource) ? [{ code: { contains: term, mode: 'insensitive' } }] : [])] } : {}
     const include = resource === 'service-packages'
-      ? { branchBookingMethod: { include: { branch: { select: { id: true, name: true } }, bookingMethod: { select: { id: true, code: true, name: true } } } }, specialty: { select: { id: true, name: true } }, schedules: { include: { room: { select: { id: true, name: true, branchId: true } }, slots: { orderBy: { startTime: 'asc' } } }, orderBy: { examDate: 'asc' } } }
+      ? { branchBookingMethod: { include: { branch: { select: { id: true, name: true } }, bookingMethod: { select: { id: true, code: true, name: true } } } }, specialty: { select: { id: true, name: true } } }
       : resource === 'rooms' ? { branch: { select: { id: true, name: true, address: true } }, specialties: { where: { isActive: true }, include: { specialty: { select: { id: true, name: true } } }, orderBy: { priority: 'desc' } } } : undefined
     return { items: await model.findMany({ where, include, orderBy: { name: 'asc' }, take: 200 }) }
   }
@@ -97,30 +97,11 @@ export class SystemCatalogService {
     }
     if (resource === 'service-packages') {
       const data: any = await this.payload(resource, body, false)
-      const schedules = data.schedules?.create || []
-      delete data.schedules
-      const row = await this.prisma.$transaction(async (tx) => {
-        const updated = await tx.servicePackage.update({ where: { id }, data })
-        const activeDates: Date[] = []
-        for (const scheduleInput of schedules) {
-          const { slots, ...scheduleData } = scheduleInput
-          activeDates.push(scheduleData.examDate)
-          const schedule = await tx.servicePackageSchedule.upsert({ where: { servicePackageId_examDate: { servicePackageId: id, examDate: scheduleData.examDate } }, update: { roomId: scheduleData.roomId, isActive: true }, create: { servicePackageId: id, ...scheduleData } })
-          const activeStarts: Date[] = []
-          for (const slot of slots.create) {
-            activeStarts.push(slot.startTime)
-            await tx.servicePackageScheduleSlot.upsert({ where: { scheduleId_startTime: { scheduleId: schedule.id, startTime: slot.startTime } }, update: { endTime: slot.endTime, capacity: slot.capacity, isActive: true }, create: { scheduleId: schedule.id, ...slot } })
-          }
-          await tx.servicePackageScheduleSlot.updateMany({ where: { scheduleId: schedule.id, startTime: { notIn: activeStarts } }, data: { isActive: false } })
-        }
-        await tx.servicePackageSchedule.updateMany({ where: { servicePackageId: id, examDate: { notIn: activeDates } }, data: { isActive: false } })
-        return updated
-      })
+      const updated = await this.prisma.servicePackage.update({ where: { id }, data })
       await this.ensureBranchSpecialty(body)
-      return row
+      return updated
     }
     const row = await model.update({ where: { id: key }, data: await this.payload(resource, body, false) })
-    if (resource === 'service-packages') await this.ensureBranchSpecialty(body)
     return row
   }
   async remove(userId: string, resource: string, id: string) {
@@ -160,31 +141,17 @@ export class SystemCatalogService {
     if (resource === 'service-packages') {
       if (!String(b.branchId || '')) throw new BadRequestException('Vui lòng chọn chi nhánh')
       const branchBookingMethodId = await this.resolveBranchMethod(b, 'SPECIALTY_EXAM')
-      const inputSchedules = Array.isArray(b.schedules) ? b.schedules : []
-      if (!inputSchedules.length) throw new BadRequestException('Vui lòng cấu hình ít nhất một ngày hoạt động')
-      if (inputSchedules.some((item: any) => !String(item.roomId || ''))) throw new BadRequestException('Mỗi ngày hoạt động phải có phòng khám dự kiến')
-      const roomIds = [...new Set<string>(inputSchedules.map((item: any) => String(item.roomId || '')).filter(Boolean))]
-      const validRoomCount = await this.prisma.clinicRoom.count({ where: { id: { in: roomIds }, branchId: String(b.branchId), isActive: true } })
-      if (validRoomCount !== roomIds.length) throw new BadRequestException('Có phòng khám không thuộc chi nhánh đã chọn')
-      if (b.specialtyId && roomIds.length) {
-        const compatibleRoomCount = await this.prisma.clinicRoomSpecialty.count({ where: { roomId: { in: roomIds }, specialtyId: Number(b.specialtyId), isActive: true } })
-        if (compatibleRoomCount !== roomIds.length) throw new BadRequestException('Có phòng khám chưa được gán cho chuyên khoa của gói')
-      }
-      const schedules = inputSchedules.map((item: any) => {
-        const examDate = new Date(`${String(item.examDate || '')}T00:00:00.000Z`)
-        if (Number.isNaN(examDate.getTime())) throw new BadRequestException('Ngày khám không hợp lệ')
-        const inputSlots = Array.isArray(item.slots) ? item.slots : []
-        if (!inputSlots.length) throw new BadRequestException('Mỗi ngày hoạt động phải có ít nhất một khung giờ')
-        const slots = inputSlots.map((slot: any) => {
-          const startTime = new Date(`1970-01-01T${String(slot.startTime || '')}:00.000Z`)
-          const endTime = new Date(`1970-01-01T${String(slot.endTime || '')}:00.000Z`)
-          if (Number.isNaN(startTime.getTime()) || Number.isNaN(endTime.getTime()) || endTime <= startTime) throw new BadRequestException('Khung giờ khám không hợp lệ')
-          return { startTime, endTime, capacity: Math.max(1, Number(slot.capacity) || 20) }
-        })
-        return { roomId: item.roomId ? String(item.roomId) : null, examDate, slots: { create: slots } }
-      })
       const generatedPkgCode = String(b.code || '').trim() || `PKG-${new Date().getFullYear()}-${Math.floor(1000 + Math.random() * 9000)}`
-      return { name: String(b.name).trim(), code: generatedPkgCode, description: b.description || null, branchBookingMethodId, specialtyId: b.specialtyId ? Number(b.specialtyId) : null, price: Number(b.price) || 0, durationMin: Number(b.durationMin) || 30, isActive: b.isActive ?? true, schedules: creating ? { create: schedules } : { deleteMany: {}, create: schedules } }
+      return {
+        name: String(b.name).trim(),
+        code: generatedPkgCode,
+        description: b.description || null,
+        branchBookingMethodId,
+        specialtyId: b.specialtyId ? Number(b.specialtyId) : null,
+        price: Number(b.price) || 0,
+        durationMin: Number(b.durationMin) || 30,
+        isActive: b.isActive ?? true,
+      }
     }
 
     return { name: String(b.name).trim(), code: String(b.code || '').trim(), activeIngredient: b.activeIngredient || null, strength: b.strength || null, unit: b.unit || null, unitPrice: Number(b.unitPrice) || 0, stockQuantity: Number(b.stockQuantity) || 0, isActive: b.isActive ?? true }

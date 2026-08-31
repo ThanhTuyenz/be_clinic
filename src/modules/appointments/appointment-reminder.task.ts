@@ -44,24 +44,12 @@ export class AppointmentReminderTask {
     // Tìm tất cả lịch hẹn BOOKED chưa được nhắc, có giờ khám trong cửa sổ
     const appointments = await this.prisma.appointment.findMany({
       where: {
-        status: 'BOOKED',
-        [flagField]: false,
-        OR: [
-          // Lịch theo bác sĩ
-          {
-            scheduleSlot: {
-              startTime: { gte: windowStart, lt: windowEnd },
-              schedule: { workDate: { gte: new Date(now.toISOString().slice(0, 10)) } },
-            },
-          },
-          // Lịch theo gói dịch vụ
-          {
-            servicePackageScheduleSlot: {
-              startTime: { gte: windowStart, lt: windowEnd },
-              schedule: { examDate: { gte: new Date(now.toISOString().slice(0, 10)) } },
-            },
-          },
-        ],
+        status: { in: ['BOOKED', 'PENDING_PAYMENT'] },
+        [hoursAhead === 24 ? 'reminderSent24h' : 'reminderSent2h']: false,
+        scheduleSlot: {
+          startTime: { gte: windowStart, lt: windowEnd },
+          schedule: { workDate: { gte: new Date(now.toISOString().slice(0, 10)) } },
+        },
       },
       include: {
         patientProfile: {
@@ -77,16 +65,7 @@ export class AppointmentReminderTask {
             },
           },
         },
-        servicePackageScheduleSlot: {
-          include: {
-            schedule: {
-              include: {
-                servicePackage: { select: { name: true } },
-                room: { select: { name: true } },
-              },
-            },
-          },
-        },
+        servicePackage: { select: { name: true } },
         branch: { select: { name: true, address: true, phoneNumber: true } },
       },
       take: 200, // Giới hạn mỗi lần chạy
@@ -101,20 +80,17 @@ export class AppointmentReminderTask {
 
       try {
         const doctorSlot = appt.scheduleSlot;
-        const packageSlot = appt.servicePackageScheduleSlot;
         const branch = doctorSlot?.schedule.branch ?? appt.branch;
         const appointmentDate =
           doctorSlot?.schedule.workDate?.toISOString().slice(0, 10) ??
-          packageSlot?.schedule.examDate?.toISOString().slice(0, 10) ??
           '?';
         const startTime =
           doctorSlot?.startTime?.toISOString().slice(11, 16) ??
-          packageSlot?.startTime?.toISOString().slice(11, 16) ??
           '?';
         const doctorName = doctorSlot?.schedule.doctor
           ? `${doctorSlot.schedule.doctor.academicRank ?? ''} ${doctorSlot.schedule.doctor.user?.fullName ?? ''}`.trim()
           : null;
-        const serviceName = packageSlot?.schedule.servicePackage?.name ?? null;
+        const serviceName = appt.servicePackage?.name ?? null;
 
         const medicalNote = this.buildMedicalNote(hoursAhead, doctorName, serviceName);
 

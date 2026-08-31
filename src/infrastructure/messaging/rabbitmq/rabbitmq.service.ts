@@ -172,24 +172,7 @@ export class RabbitMqService implements OnModuleInit, OnModuleDestroy {
             },
           },
         },
-        servicePackageScheduleSlot: {
-          include: {
-            schedule: {
-              include: {
-                servicePackage: {
-                  include: {
-                    branchBookingMethod: {
-                      include: {
-                        branch: { select: { name: true, address: true, phoneNumber: true } },
-                      },
-                    },
-                  },
-                },
-                room: { select: { name: true } },
-              },
-            },
-          },
-        },
+        servicePackage: true,
         invoice: { select: { totalAmount: true } },
         branch: { select: { name: true, address: true, phoneNumber: true } },
       },
@@ -207,25 +190,22 @@ export class RabbitMqService implements OnModuleInit, OnModuleDestroy {
     }
 
     const doctorSlot = appt.scheduleSlot;
-    const packageSlot = appt.servicePackageScheduleSlot;
-    const branch = doctorSlot?.schedule.branch ?? packageSlot?.schedule.servicePackage.branchBookingMethod.branch ?? appt.branch;
-    const room = doctorSlot?.schedule.room ?? packageSlot?.schedule.room;
+    const branch = doctorSlot?.schedule.branch ?? appt.branch;
+    const room = doctorSlot?.schedule.room;
 
     const appointmentDate =
       doctorSlot?.schedule.workDate?.toISOString().slice(0, 10) ??
-      packageSlot?.schedule.examDate?.toISOString().slice(0, 10) ??
       new Date().toISOString().slice(0, 10);
 
     const startTime =
       doctorSlot?.startTime?.toISOString().slice(11, 16) ??
-      packageSlot?.startTime?.toISOString().slice(11, 16) ??
       '';
 
     const doctorName = doctorSlot?.schedule.doctor
       ? `${doctorSlot.schedule.doctor.academicRank ? doctorSlot.schedule.doctor.academicRank + ' ' : ''}${doctorSlot.schedule.doctor.user?.fullName ?? ''}`.trim()
       : null;
 
-    const servicePackageName = packageSlot?.schedule.servicePackage?.name ?? null;
+    const servicePackageName = appt.servicePackage?.name ?? null;
 
     // Sinh mã QR Code base64 Data URL (dùng chung định dạng VITACARE_CHECKIN với Web & Kiosk/Lễ tân)
     let qrCodeDataUrl: string | null = null;

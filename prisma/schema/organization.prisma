@@ -100,7 +100,6 @@ model ClinicRoom {
   updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
   branch    Branch   @relation(fields: [branchId], references: [id], onDelete: Cascade)
   schedules DoctorSchedule[]
-  servicePackageSchedules ServicePackageSchedule[]
   specialties ClinicRoomSpecialty[]
 
   @@unique([branchId, code])

@@ -119,41 +119,44 @@ export class BookingService {
           return { appointmentId: appointment.id, invoiceId: invoice.id, paymentId: payment.id, status: appointment.status, holdStartedAt: now, holdExpiresAt: expiresAt };
         }
 
-        if (!dto.servicePackageId || !dto.servicePackageScheduleSlotId) throw new BadRequestException('Thiếu gói dịch vụ hoặc khung giờ của gói');
+        if (!dto.servicePackageId) throw new BadRequestException('Thiếu gói dịch vụ');
+        const slotId = dto.scheduleSlotId || dto.servicePackageScheduleSlotId;
+        if (!slotId) throw new BadRequestException('Thiếu khung giờ khám');
 
-        const packageSlot = await tx.servicePackageScheduleSlot.findUnique({ where: { id: dto.servicePackageScheduleSlotId }, include: { schedule: { include: { room: true, servicePackage: { include: { branchBookingMethod: true } } } } } });
-        const servicePackage = packageSlot?.schedule.servicePackage;
-        if (!packageSlot || !servicePackage || servicePackage.id !== dto.servicePackageId || !packageSlot.isActive || !packageSlot.schedule.isActive || !servicePackage.isActive || !servicePackage.branchBookingMethod.isEnabled) throw new NotFoundException('Gói dịch vụ hoặc khung giờ không khả dụng');
-        this.validateBookingLeadTime(packageSlot.schedule.examDate);
-        if (!packageSlot.schedule.roomId) throw new ConflictException('Lịch khám chưa được phân phòng');
-        if (packageSlot.schedule.room?.branchId !== servicePackage.branchBookingMethod.branchId) throw new ConflictException('Phòng khám không thuộc cơ sở của gói');
-        if (servicePackage.specialtyId) {
-          const compatibleRoom = await tx.clinicRoomSpecialty.count({ where: { roomId: packageSlot.schedule.roomId, specialtyId: servicePackage.specialtyId, isActive: true } });
-          if (!compatibleRoom) throw new ConflictException('Phòng khám chưa được gán cho chuyên khoa của gói');
+        const servicePackage = await tx.servicePackage.findUnique({
+          where: { id: dto.servicePackageId },
+          include: { branchBookingMethod: true },
+        });
+        if (!servicePackage || !servicePackage.isActive || !servicePackage.branchBookingMethod.isEnabled) {
+          throw new NotFoundException('Gói dịch vụ không khả dụng');
         }
-        if (packageSlot.schedule.examDate < new Date(new Date().toISOString().slice(0, 10))) throw new BadRequestException('Ngày khám đã qua');
 
-        const doctorSlot = dto.scheduleSlotId ? await tx.doctorScheduleSlot.findUnique({ where: { id: dto.scheduleSlotId }, include: { schedule: { include: { doctor: true } } } }) : null;
-        if (dto.scheduleSlotId && (!doctorSlot || !doctorSlot.isActive || doctorSlot.schedule.status !== 'OPEN')) throw new NotFoundException('Khung giờ của bác sĩ không khả dụng');
-        if (doctorSlot) {
-          if (doctorSlot.schedule.branchId !== servicePackage.branchBookingMethod.branchId || doctorSlot.schedule.workDate.getTime() !== packageSlot.schedule.examDate.getTime() || doctorSlot.startTime.getTime() !== packageSlot.startTime.getTime()) throw new BadRequestException('Lịch bác sĩ không trùng với lịch của gói dịch vụ');
-          if (servicePackage.specialtyId) {
-            const compatible = await tx.doctorSpecialty.count({ where: { doctorId: doctorSlot.schedule.doctorId, specialtyId: servicePackage.specialtyId } });
-            if (!compatible) throw new BadRequestException('Bác sĩ không thuộc chuyên khoa của gói dịch vụ');
-          }
+        const doctorSlot = await tx.doctorScheduleSlot.findUnique({
+          where: { id: slotId },
+          include: { schedule: { include: { doctor: true, room: true } } },
+        });
+        if (!doctorSlot || !doctorSlot.isActive || doctorSlot.schedule.status !== 'OPEN') {
+          throw new NotFoundException('Khung giờ của bác sĩ không khả dụng');
+        }
+        this.validateBookingLeadTime(doctorSlot.schedule.workDate);
+
+        if (doctorSlot.schedule.branchId !== servicePackage.branchBookingMethod.branchId) {
+          throw new ConflictException('Khung giờ khám không thuộc cơ sở của gói dịch vụ');
+        }
+        if (servicePackage.specialtyId) {
+          const compatible = await tx.doctorSpecialty.count({
+            where: { doctorId: doctorSlot.schedule.doctorId, specialtyId: servicePackage.specialtyId },
+          });
+          if (!compatible) throw new BadRequestException('Bác sĩ không thuộc chuyên khoa của gói dịch vụ');
         }
 
         const duplicate = await tx.appointment.findFirst({
-          where: { patientProfileId: profile.id, servicePackageScheduleSlotId: packageSlot.id, status: { in: ACTIVE_APPOINTMENT_STATUSES } },
+          where: { patientProfileId: profile.id, scheduleSlotId: doctorSlot.id, status: { in: ACTIVE_APPOINTMENT_STATUSES } },
         });
         if (duplicate) throw new ConflictException('Người bệnh đã có lịch hẹn trong khung giờ này');
 
-        const packageReserved = await tx.$executeRaw`UPDATE "service_package_schedule_slots" SET "occupied_count" = "occupied_count" + 1, "updated_at" = NOW() WHERE "id" = ${packageSlot.id}::uuid AND "is_active" = TRUE AND "occupied_count" < "capacity"`;
-        if (packageReserved !== 1) throw new ConflictException('Khung giờ của gói dịch vụ vừa hết chỗ');
-        if (doctorSlot) {
-          const doctorReserved = await tx.$executeRaw`UPDATE "doctor_schedule_slots" SET "occupied_count" = "occupied_count" + 1, "updated_at" = NOW() WHERE "id" = ${doctorSlot.id}::uuid AND "is_active" = TRUE AND "occupied_count" < "capacity"`;
-          if (doctorReserved !== 1) throw new ConflictException('Bác sĩ vừa hết chỗ trong khung giờ này');
-        }
+        const reserved = await tx.$executeRaw`UPDATE "doctor_schedule_slots" SET "occupied_count" = "occupied_count" + 1, "updated_at" = NOW() WHERE "id" = ${doctorSlot.id}::uuid AND "is_active" = TRUE AND "occupied_count" < "capacity"`;
+        if (reserved !== 1) throw new ConflictException('Khung giờ vừa hết chỗ');
 
         const holdTtlMs = this.config.getOrThrow<RabbitMqConfig>('rabbitmq').holdTtlMs;
         const [{ now, expiresAt }] = await tx.$queryRaw<Array<{ now: Date; expiresAt: Date }>>`
@@ -165,9 +168,8 @@ export class BookingService {
           data: {
             patientProfileId: profile.id,
             branchId: servicePackage.branchBookingMethod.branchId,
-            scheduleSlotId: doctorSlot?.id,
+            scheduleSlotId: doctorSlot.id,
             servicePackageId: servicePackage.id,
-            servicePackageScheduleSlotId: packageSlot.id,
             servicePrice: servicePackage.price,
             symptomsDescription: dto.symptomsDescription,
             bookedViaAi: dto.bookedViaAi ?? false,
@@ -196,7 +198,7 @@ export class BookingService {
           data: {
             aggregateType: 'Appointment', aggregateId: appointment.id,
             eventType: 'appointment.hold.created',
-            payload: { appointmentId: appointment.id, servicePackageSlotId: packageSlot.id, doctorSlotId: doctorSlot?.id, holdExpiresAt: expiresAt.toISOString() },
+            payload: { appointmentId: appointment.id, doctorSlotId: doctorSlot.id, holdExpiresAt: expiresAt.toISOString() },
           },
         });
         return { appointmentId: appointment.id, invoiceId: invoice.id, paymentId: payment.id, status: appointment.status, holdStartedAt: now, holdExpiresAt: expiresAt };
@@ -228,13 +230,6 @@ export class BookingService {
         data: { status: 'EXPIRED' },
       });
       if (changed.count !== 1) return false;
-      if (appointment.servicePackageScheduleSlotId) {
-        await tx.$executeRaw`
-          UPDATE "service_package_schedule_slots"
-          SET "occupied_count" = GREATEST("occupied_count" - 1, 0), "updated_at" = NOW()
-          WHERE "id" = ${appointment.servicePackageScheduleSlotId}::uuid
-        `;
-      }
       if (appointment.scheduleSlotId) {
         await tx.$executeRaw`
           UPDATE "doctor_schedule_slots"
@@ -261,7 +256,6 @@ export class BookingService {
                   appointments: {
                     include: {
                       scheduleSlot: true,
-                      servicePackageScheduleSlot: true,
                     },
                   },
                 },
@@ -306,10 +300,8 @@ export class BookingService {
           return this.confirmPaid(tx, payment.id, payment.invoiceId, appointment.id, provider, dto, false);
         }
         if (appointment.status === 'EXPIRED') {
-          const packageReserved = appointment.servicePackageScheduleSlotId ? await tx.$executeRaw`UPDATE "service_package_schedule_slots" SET "occupied_count" = "occupied_count" + 1, "updated_at" = NOW() WHERE "id" = ${appointment.servicePackageScheduleSlotId}::uuid AND "occupied_count" < "capacity" AND "is_active" = TRUE` : 1;
-          const doctorReserved = packageReserved === 1 && appointment.scheduleSlotId ? await tx.$executeRaw`UPDATE "doctor_schedule_slots" SET "occupied_count" = "occupied_count" + 1, "updated_at" = NOW() WHERE "id" = ${appointment.scheduleSlotId}::uuid AND "occupied_count" < "capacity" AND "is_active" = TRUE` : appointment.scheduleSlotId ? 0 : 1;
-          if (packageReserved === 1 && doctorReserved === 1) return this.confirmPaid(tx, payment.id, payment.invoiceId, appointment.id, provider, dto, true);
-          if (packageReserved === 1) await tx.$executeRaw`UPDATE "service_package_schedule_slots" SET "occupied_count" = GREATEST("occupied_count" - 1, 0), "updated_at" = NOW() WHERE "id" = ${appointment.servicePackageScheduleSlotId}::uuid`;
+          const doctorReserved = appointment.scheduleSlotId ? await tx.$executeRaw`UPDATE "doctor_schedule_slots" SET "occupied_count" = "occupied_count" + 1, "updated_at" = NOW() WHERE "id" = ${appointment.scheduleSlotId}::uuid AND "occupied_count" < "capacity" AND "is_active" = TRUE` : 0;
+          if (doctorReserved === 1) return this.confirmPaid(tx, payment.id, payment.invoiceId, appointment.id, provider, dto, true);
           await tx.paymentTransaction.update({ where: { id: payment.id }, data: { provider, providerTransactionId: dto.providerTransactionId, status: 'REFUND_REQUIRED', paidAt: new Date(), rawPayload: dto.payload as Prisma.InputJsonValue } });
           await tx.appointment.update({ where: { id: appointment.id }, data: { status: 'REFUND_REQUIRED', statusHistories: { create: { fromStatus: 'EXPIRED', toStatus: 'REFUND_REQUIRED', reason: 'LATE_SUCCESS_SLOT_FULL' } } } });
           await tx.outboxEvent.create({ data: { aggregateType: 'PaymentTransaction', aggregateId: payment.id, eventType: 'payment.refund.required', payload: { paymentId: payment.id, appointmentId: appointment.id, reason: 'LATE_SUCCESS_SLOT_FULL' } } });
@@ -333,8 +325,8 @@ export class BookingService {
       include: {
         invoice: { include: { payments: { orderBy: { createdAt: 'desc' }, take: 1 } } },
         qrToken: true,
+        branch: true,
         scheduleSlot: { include: { schedule: { include: { room: true, branch: true } } } },
-        servicePackageScheduleSlot: { include: { schedule: { include: { room: true, servicePackage: { include: { branchBookingMethod: { include: { branch: true } } } } } } } },
       },
     });
 
@@ -349,7 +341,6 @@ export class BookingService {
               patientProfile: true,
               qrToken: true,
               scheduleSlot: { include: { schedule: { include: { room: true, branch: true } } } },
-              servicePackageScheduleSlot: { include: { schedule: { include: { room: true, servicePackage: { include: { branchBookingMethod: { include: { branch: true } } } } } } } },
             },
           },
         },
@@ -376,9 +367,8 @@ export class BookingService {
     }
 
     const doctorSlot = row.scheduleSlot;
-    const packageSlot = row.servicePackageScheduleSlot;
-    const room = doctorSlot?.schedule.room ?? packageSlot?.schedule.room;
-    const branch = doctorSlot?.schedule.branch ?? packageSlot?.schedule.servicePackage?.branchBookingMethod?.branch;
+    const room = doctorSlot?.schedule.room;
+    const branch = doctorSlot?.schedule.branch ?? row.branch;
     const estimatedQueueNumber = this.estimatedQueueNumber(row);
 
     let siblingAppts: any[] = [];
@@ -433,13 +423,11 @@ export class BookingService {
         bookingOrder: true,
         invoice: { include: { payments: { orderBy: { createdAt: 'desc' }, take: 1 } } },
         scheduleSlot: { include: { schedule: { include: { doctor: { include: { user: true } }, room: true, branch: true } } } },
-        servicePackageScheduleSlot: { include: { schedule: { include: { room: true } } } },
       },
     });
     return rows.map((row) => {
       const doctorSlot = row.scheduleSlot;
-      const packageSlot = row.servicePackageScheduleSlot;
-      const room = doctorSlot?.schedule.room ?? packageSlot?.schedule.room;
+      const room = doctorSlot?.schedule.room;
       const branch = doctorSlot?.schedule.branch ?? row.branch;
       return {
         id: row.id,
@@ -451,9 +439,9 @@ export class BookingService {
         queueNumber: row.queueNumber,
         holdExpiresAt: row.holdExpiresAt,
         createdAt: row.createdAt,
-        appointmentDate: (packageSlot?.schedule.examDate ?? doctorSlot?.schedule.workDate)?.toISOString().slice(0, 10) ?? null,
-        startTime: (packageSlot?.startTime ?? doctorSlot?.startTime)?.toISOString().slice(11, 16) ?? null,
-        endTime: (packageSlot?.endTime ?? doctorSlot?.endTime)?.toISOString().slice(11, 16) ?? null,
+        appointmentDate: doctorSlot?.schedule.workDate?.toISOString().slice(0, 10) ?? null,
+        startTime: doctorSlot?.startTime?.toISOString().slice(11, 16) ?? null,
+        endTime: doctorSlot?.endTime?.toISOString().slice(11, 16) ?? null,
         patient: { id: row.patientProfile.id, fullName: row.patientProfile.fullName },
         doctor: (() => { const d = doctorSlot?.schedule?.doctor; return d ? { id: d.id, fullName: d.user?.fullName ?? '' } : null; })(),
         service: row.servicePackage ? { id: row.servicePackage.id, name: row.servicePackage.name } : null,
@@ -491,20 +479,18 @@ export class BookingService {
             },
           },
         },
-        servicePackageScheduleSlot: { include: { schedule: { include: { room: true } } } },
       },
     });
     if (!row) throw new NotFoundException('Không tìm thấy lịch hẹn');
     if (!['BOOKED', 'CHECKED_IN'].includes(row.status)) throw new ConflictException('Lịch hẹn chưa sẵn sàng check-in');
     const doctorSlot = row.scheduleSlot;
-    const packageSlot = row.servicePackageScheduleSlot;
-    const room = doctorSlot?.schedule.room ?? packageSlot?.schedule.room;
+    const room = doctorSlot?.schedule.room;
     const branch = doctorSlot?.schedule.branch ?? row.branch;
     if (!branch) throw new ConflictException('Không xác định được cơ sở khám');
 
     const rawToken = this.checkInToken(row.id);
     const tokenHash = createHash('sha256').update(rawToken).digest('hex');
-    const appointmentDate = (doctorSlot?.schedule.workDate ?? packageSlot!.schedule.examDate).toISOString().slice(0, 10);
+    const appointmentDate = (doctorSlot?.schedule.workDate ? doctorSlot.schedule.workDate.toISOString().slice(0, 10) : new Date().toISOString().slice(0, 10));
     const expiresAt = new Date(`${appointmentDate}T23:59:59.999+07:00`);
     await this.prisma.appointmentQrToken.upsert({
       where: { appointmentId: row.id },
@@ -524,8 +510,8 @@ export class BookingService {
       queueNumber: row.queueNumber,
       estimatedQueueNumber,
       appointmentDate,
-      startTime: (doctorSlot?.startTime ?? packageSlot!.startTime).toISOString().slice(11, 16),
-      endTime: (doctorSlot?.endTime ?? packageSlot!.endTime).toISOString().slice(11, 16),
+      startTime: doctorSlot?.startTime ? doctorSlot.startTime.toISOString().slice(11, 16) : null,
+      endTime: doctorSlot?.endTime ? doctorSlot.endTime.toISOString().slice(11, 16) : null,
       room: room ? { id: room.id, code: room.code, name: room.name } : null,
       branch: { id: branch.id, name: branch.name, address: branch.address },
       doctor: doc ? { id: doc.id, fullName: doc.user?.fullName ?? '', academicRank: doc.academicRank ?? null } : null,
@@ -555,7 +541,6 @@ export class BookingService {
         bookingOrder: true,
         patientProfile: { include: { account: { select: { email: true } } } },
         scheduleSlot: { include: { schedule: { include: { doctor: { include: { user: true } }, branch: true } } } },
-        servicePackageScheduleSlot: { include: { schedule: { include: { servicePackage: true } } } },
         servicePackage: true,
         branch: true,
         invoice: { include: { payments: { orderBy: { createdAt: 'desc' }, take: 1 } } },
@@ -575,9 +560,8 @@ export class BookingService {
 
     // Tính toán thời gian khám để kiểm tra tính cấp bách (sát giờ < 24h hoặc sau 16h30 ngày trước)
     const doctorSlot = appointment.scheduleSlot;
-    const packageSlot = appointment.servicePackageScheduleSlot;
-    const examDate = packageSlot?.schedule?.examDate ?? doctorSlot?.schedule?.workDate;
-    const startTimeDate = packageSlot?.startTime ?? doctorSlot?.startTime;
+    const examDate = doctorSlot?.schedule?.workDate;
+    const startTimeDate = doctorSlot?.startTime;
 
     const now = new Date();
     let isUrgent = false;
@@ -609,13 +593,6 @@ export class BookingService {
       });
 
       // 2. Trả lại slot occupiedCount (giải phóng slot ngay lập tức)
-      if (appointment.servicePackageScheduleSlotId) {
-        await tx.$executeRaw`
-          UPDATE "service_package_schedule_slots"
-          SET "occupied_count" = GREATEST("occupied_count" - 1, 0), "updated_at" = NOW()
-          WHERE "id" = ${appointment.servicePackageScheduleSlotId}::uuid
-        `;
-      }
       if (appointment.scheduleSlotId) {
         await tx.$executeRaw`
           UPDATE "doctor_schedule_slots"
@@ -673,12 +650,12 @@ export class BookingService {
     // 5. Gửi email xác nhận hủy lịch cho bệnh nhân
     const patientEmail = appointment.patientProfile?.account?.email;
     if (patientEmail) {
-      const examDateStr = (packageSlot?.schedule?.examDate ?? doctorSlot?.schedule?.workDate)?.toISOString().slice(0, 10) ?? '';
-      const startTimeStr = (packageSlot?.startTime ?? doctorSlot?.startTime)?.toISOString().slice(11, 16) ?? '';
+      const examDateStr = doctorSlot?.schedule?.workDate?.toISOString().slice(0, 10) ?? '';
+      const startTimeStr = doctorSlot?.startTime?.toISOString().slice(11, 16) ?? '';
       const doctorName = doctorSlot?.schedule?.doctor
         ? `${doctorSlot.schedule.doctor.academicRank ? doctorSlot.schedule.doctor.academicRank + ' ' : ''}${doctorSlot.schedule.doctor.user?.fullName ?? ''}`.trim()
         : null;
-      const serviceName = packageSlot?.schedule?.servicePackage?.name || appointment.servicePackage?.name || null;
+      const serviceName = appointment.servicePackage?.name || null;
       const branchName = doctorSlot?.schedule?.branch?.name || appointment.branch?.name || 'VitaCare Clinic';
 
       try {
@@ -730,52 +707,13 @@ export class BookingService {
           patientProfile: true,
           servicePackage: true,
           scheduleSlot: { include: { schedule: { include: { doctor: true, room: true } } } },
-          servicePackageScheduleSlot: { include: { schedule: { include: { room: true } } } },
         } } },
       });
       if (!qr || qr.expiresAt <= new Date()) throw new NotFoundException('QR không hợp lệ hoặc đã hết hạn');
       const alreadyCheckedIn = qr.appointment.status === 'CHECKED_IN';
       if (!alreadyCheckedIn && qr.appointment.status !== 'BOOKED') throw new ConflictException('APPOINTMENT_NOT_CHECKIN_READY');
-      let assignedDoctorSlotId = qr.appointment.scheduleSlotId;
-      const packageSlot = qr.appointment.servicePackageScheduleSlot;
-      const specialtyId = qr.appointment.servicePackage?.specialtyId;
-      if (!assignedDoctorSlotId && packageSlot && specialtyId) {
-        const candidates = await tx.doctorScheduleSlot.findMany({
-          where: {
-            isActive: true,
-            startTime: packageSlot.startTime,
-            occupiedCount: { lt: tx.doctorScheduleSlot.fields.capacity },
-            schedule: {
-              branchId: qr.appointment.branchId,
-              workDate: packageSlot.schedule.examDate,
-              status: 'OPEN',
-              doctor: { isActive: true, specialties: { some: { specialtyId } } },
-            },
-          },
-          include: { schedule: { include: { doctor: true } } },
-          orderBy: [{ occupiedCount: 'asc' }, { createdAt: 'asc' }],
-        });
-        for (const candidate of candidates) {
-          const reserved = await tx.doctorScheduleSlot.updateMany({
-            where: { id: candidate.id, isActive: true, occupiedCount: { lt: candidate.capacity } },
-            data: { occupiedCount: { increment: 1 } },
-          });
-          if (reserved.count === 1) {
-            assignedDoctorSlotId = candidate.id;
-            break;
-          }
-        }
-        if (!assignedDoctorSlotId) throw new ConflictException('Chưa có bác sĩ đúng chuyên khoa còn chỗ trong khung giờ này');
-      }
+      const assignedDoctorSlotId = qr.appointment.scheduleSlotId;
       if (alreadyCheckedIn) {
-        if (assignedDoctorSlotId !== qr.appointment.scheduleSlotId) {
-          const repairedAppointment = await tx.appointment.update({
-            where: { id: qr.appointment.id },
-            data: { scheduleSlotId: assignedDoctorSlotId },
-            include: { patientProfile: true, servicePackage: true, scheduleSlot: { include: { schedule: { include: { doctor: true, room: true } } } }, servicePackageScheduleSlot: { include: { schedule: { include: { room: true } } } } },
-          });
-          return this.checkInResult(repairedAppointment, channel);
-        }
         return this.checkInResult(qr.appointment, channel);
       }
       let finalQueueNumber = qr.appointment.queueNumber;
@@ -784,7 +722,6 @@ export class BookingService {
           tx,
           qr.appointment.id,
           qr.appointment.scheduleSlotId,
-          qr.appointment.servicePackageScheduleSlotId,
         );
       }
 
@@ -798,7 +735,7 @@ export class BookingService {
           checkedInById: actorId,
           statusHistories: { create: { fromStatus: 'BOOKED', toStatus: 'CHECKED_IN', actorId, reason: `CHECK_IN_${channel}` } },
         },
-        include: { patientProfile: true, servicePackage: true, scheduleSlot: { include: { schedule: { include: { doctor: true, room: true } } } }, servicePackageScheduleSlot: { include: { schedule: { include: { room: true } } } } },
+        include: { patientProfile: true, servicePackage: true, scheduleSlot: { include: { schedule: { include: { doctor: true, room: true } } } } },
       });
       await tx.appointmentQrToken.update({ where: { id: qr.id }, data: { usedAt: new Date() } });
       return this.checkInResult(appointment, channel);
@@ -806,7 +743,7 @@ export class BookingService {
   }
 
   private checkInResult(appointment: any, channel: 'KIOSK' | 'RECEPTIONIST') {
-    const room = appointment.servicePackageScheduleSlot?.schedule?.room ?? appointment.scheduleSlot?.schedule?.room;
+    const room = appointment.scheduleSlot?.schedule?.room;
     const doctor = appointment.scheduleSlot?.schedule?.doctor;
     return { appointmentId: appointment.id, bookingCode: appointment.bookingCode, queueNumber: appointment.queueNumber, status: appointment.status, channel, checkedInAt: appointment.checkedInAt, patient: { fullName: appointment.patientProfile?.fullName }, doctor: doctor ? { fullName: doctor.fullName } : null, healthPackage: appointment.servicePackage ? { name: appointment.servicePackage.name } : null, room: room ? { code: room.code, name: room.name } : null };
   }
@@ -916,38 +853,46 @@ export class BookingService {
             });
           } else {
             // ── Đặt theo gói dịch vụ ─────────────────────────────
-            if (!item.servicePackageScheduleSlotId) {
-              throw new BadRequestException(`Thiếu khung giờ gói dịch vụ cho ${profile.fullName}`);
+            const slotId = item.scheduleSlotId || item.servicePackageScheduleSlotId;
+            if (!slotId) {
+              throw new BadRequestException(`Thiếu khung giờ khám cho ${profile.fullName}`);
             }
-            const packageSlot = await tx.servicePackageScheduleSlot.findUnique({
-              where: { id: item.servicePackageScheduleSlotId },
-              include: { schedule: { include: { servicePackage: { include: { branchBookingMethod: true } } } } },
+            const pkg = await tx.servicePackage.findUnique({
+              where: { id: item.servicePackageId },
+              include: { branchBookingMethod: true },
             });
-            const pkg = packageSlot?.schedule.servicePackage;
-            if (!packageSlot || !pkg || pkg.id !== item.servicePackageId || !packageSlot.isActive || !pkg.isActive) {
+            if (!pkg || !pkg.isActive) {
               throw new NotFoundException(`Gói dịch vụ không khả dụng cho ${profile.fullName}`);
             }
 
+            const doctorSlot = await tx.doctorScheduleSlot.findUnique({
+              where: { id: slotId },
+              include: { schedule: { include: { doctor: true } } },
+            });
+            if (!doctorSlot || !doctorSlot.isActive || doctorSlot.schedule.status !== 'OPEN') {
+              throw new NotFoundException(`Khung giờ khám không khả dụng cho ${profile.fullName}`);
+            }
+
             const dup = await tx.appointment.findFirst({
-              where: { patientProfileId: profile.id, servicePackageScheduleSlotId: packageSlot.id, status: { in: ACTIVE_APPOINTMENT_STATUSES } },
+              where: { patientProfileId: profile.id, scheduleSlotId: doctorSlot.id, status: { in: ACTIVE_APPOINTMENT_STATUSES } },
             });
             if (dup) throw new ConflictException(`${profile.fullName} đã có lịch hẹn trong khung giờ này`);
 
-            const pkgReserved = await tx.$executeRaw`
-              UPDATE "service_package_schedule_slots"
+            const reserved = await tx.$executeRaw`
+              UPDATE "doctor_schedule_slots"
               SET "occupied_count" = "occupied_count" + 1, "updated_at" = NOW()
-              WHERE "id" = ${packageSlot.id}::uuid
+              WHERE "id" = ${doctorSlot.id}::uuid
                 AND "is_active" = TRUE
                 AND "occupied_count" < "capacity"
             `;
-            if (pkgReserved !== 1) throw new ConflictException(`Khung giờ gói dịch vụ hết chỗ (${profile.fullName})`);
+            if (reserved !== 1) throw new ConflictException(`Khung giờ khám hết chỗ (${profile.fullName})`);
 
             totalAmount = totalAmount.add(pkg.price);
             appointmentData.push({
               patientProfileId: profile.id,
               branchId: pkg.branchBookingMethod.branchId,
+              scheduleSlotId: doctorSlot.id,
               servicePackageId: pkg.id,
-              servicePackageScheduleSlotId: packageSlot.id,
               servicePrice: pkg.price,
               symptomsDescription: item.symptomsDescription,
               bookedViaAi: item.bookedViaAi ?? false,
@@ -1142,33 +1087,7 @@ export class BookingService {
     tx: Prisma.TransactionClient,
     appointmentId: string,
     scheduleSlotId?: string | null,
-    servicePackageScheduleSlotId?: string | null,
   ): Promise<number> {
-    if (servicePackageScheduleSlotId) {
-      const currSlot = await tx.servicePackageScheduleSlot.findUnique({
-        where: { id: servicePackageScheduleSlotId },
-      });
-      if (currSlot) {
-        const earlierSlots = await tx.servicePackageScheduleSlot.findMany({
-          where: {
-            scheduleId: currSlot.scheduleId,
-            isActive: true,
-            startTime: { lt: currSlot.startTime },
-          },
-          select: { capacity: true },
-        });
-        const priorCapacity = earlierSlots.reduce((sum, s) => sum + (s.capacity || 1), 0);
-        const bookedInCurrentSlot = await tx.appointment.count({
-          where: {
-            servicePackageScheduleSlotId: currSlot.id,
-            queueNumber: { not: null },
-            id: { not: appointmentId },
-          },
-        });
-        return priorCapacity + bookedInCurrentSlot + 1;
-      }
-    }
-
     if (scheduleSlotId) {
       const currSlot = await tx.doctorScheduleSlot.findUnique({
         where: { id: scheduleSlotId },
@@ -1202,12 +1121,11 @@ export class BookingService {
     const tokenHash = createHash('sha256').update(rawToken).digest('hex');
     const bookingCode = `VC-${appointmentId.slice(0, 8).toUpperCase()}`;
 
-    // Cấp số thứ tự cố định chuẩn theo thứ tự khung giờ trong ngày làm việc của Bác sĩ / Gói khám
+    // Cấp số thứ tự cố định chuẩn theo thứ tự khung giờ trong ngày làm việc của Bác sĩ
     const existingAppt = await tx.appointment.findUnique({
       where: { id: appointmentId },
       include: {
         scheduleSlot: true,
-        servicePackageScheduleSlot: true,
       },
     });
 
@@ -1217,7 +1135,6 @@ export class BookingService {
         tx,
         appointmentId,
         existingAppt.scheduleSlotId,
-        existingAppt.servicePackageScheduleSlotId,
       );
     }
 
@@ -1281,7 +1198,6 @@ export class BookingService {
           tx,
           appt.id,
           appt.scheduleSlotId,
-          appt.servicePackageScheduleSlotId,
         );
       }
 

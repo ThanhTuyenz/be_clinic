@@ -1,4 +1,4 @@
-import { BadRequestException, Injectable } from '@nestjs/common';
+import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../../infrastructure/database/prisma/prisma.service.js';
 
 @Injectable()
@@ -83,33 +83,91 @@ export class DirectoryService {
 
   async servicePackageScheduleDates(packageId: string) {
     if (!packageId) throw new BadRequestException('Thiếu gói dịch vụ');
-    const { minDate, maxDate } = this.getBookingAllowedDateRange();
-    const rows = await this.prisma.servicePackageSchedule.findMany({
-      where: { servicePackageId: packageId, isActive: true, examDate: { gte: minDate, lte: maxDate }, slots: { some: { isActive: true } } },
-      select: { examDate: true }, orderBy: { examDate: 'asc' }, take: 90,
+    const servicePackage = await this.prisma.servicePackage.findUnique({
+      where: { id: packageId },
+      include: { branchBookingMethod: true },
     });
-    return rows.map(({ examDate }) => examDate.toISOString().slice(0, 10));
+    if (!servicePackage) throw new NotFoundException('Không tìm thấy gói dịch vụ');
+    const branchId = servicePackage.branchBookingMethod.branchId;
+    const specialtyId = servicePackage.specialtyId;
+
+    const { minDate, maxDate } = this.getBookingAllowedDateRange();
+    const rows = await this.prisma.doctorSchedule.findMany({
+      where: {
+        branchId,
+        status: 'OPEN',
+        workDate: { gte: minDate, lte: maxDate },
+        ...(specialtyId ? { doctor: { specialties: { some: { specialtyId } } } } : {}),
+        slots: { some: { isActive: true, slotStatus: 'AVAILABLE' } },
+      },
+      select: { workDate: true },
+      distinct: ['workDate'],
+      orderBy: { workDate: 'asc' },
+      take: 90,
+    });
+    return rows.map(({ workDate }) => workDate.toISOString().slice(0, 10));
   }
 
   async servicePackageTimeslots(packageId: string, date: string) {
     if (!packageId) throw new BadRequestException('Thiếu gói dịch vụ');
-    const examDate = this.parseDate(date);
-    this.validateDateWithinBookingRange(examDate);
-    const rows = await this.prisma.servicePackageScheduleSlot.findMany({
-      where: { isActive: true, schedule: { servicePackageId: packageId, examDate, isActive: true } },
-      orderBy: { startTime: 'asc' },
-      include: { schedule: { select: { room: { select: { id: true, code: true, name: true, branch: { select: { id: true, name: true, address: true } } } } } } },
+    const servicePackage = await this.prisma.servicePackage.findUnique({
+      where: { id: packageId },
+      include: { branchBookingMethod: true },
     });
-    return rows.map(({ schedule, ...slot }) => ({ ...slot, room: schedule.room, startTime: slot.startTime.toISOString().slice(11, 16), endTime: slot.endTime.toISOString().slice(11, 16), remainingCapacity: slot.capacity - slot.occupiedCount, isAvailable: slot.occupiedCount < slot.capacity }));
+    if (!servicePackage) throw new NotFoundException('Không tìm thấy gói dịch vụ');
+    const branchId = servicePackage.branchBookingMethod.branchId;
+    const specialtyId = servicePackage.specialtyId;
+
+    const workDate = this.parseDate(date);
+    this.validateDateWithinBookingRange(workDate);
+
+    const rows = await this.prisma.doctorScheduleSlot.findMany({
+      where: {
+        isActive: true,
+        slotStatus: 'AVAILABLE',
+        schedule: {
+          branchId,
+          workDate,
+          status: 'OPEN',
+          ...(specialtyId ? { doctor: { specialties: { some: { specialtyId } } } } : {}),
+        },
+      },
+      orderBy: { startTime: 'asc' },
+      include: {
+        schedule: {
+          select: {
+            room: { select: { id: true, code: true, name: true, branch: { select: { id: true, name: true, address: true } } } },
+            doctor: { select: { id: true, academicRank: true, user: { select: { fullName: true } } } },
+          },
+        },
+      },
+    });
+
+    return rows.map((slot: any) => {
+      const { schedule, ...slotData } = slot;
+      const docName = schedule.doctor?.user?.fullName
+        ? `${schedule.doctor.academicRank ? schedule.doctor.academicRank + ' ' : ''}${schedule.doctor.user.fullName}`.trim()
+        : '';
+      return {
+        ...slotData,
+        room: schedule.room,
+        doctor: schedule.doctor ? { id: schedule.doctor.id, fullName: docName } : null,
+        doctorId: schedule.doctor?.id,
+        doctorSlotId: slot.id,
+        startTime: slot.startTime.toISOString().slice(11, 16),
+        endTime: slot.endTime.toISOString().slice(11, 16),
+        remainingCapacity: slot.capacity - slot.occupiedCount,
+        isAvailable: slot.occupiedCount < slot.capacity,
+      };
+    });
   }
 
   async healthPackages(branchId?: string) {
     const rows = await this.prisma.servicePackage.findMany({
-      where: { isActive: true, branchBookingMethod: { branchId, isEnabled: true, bookingMethod: { code: 'HEALTH_PACKAGE', isActive: true } } },
+      where: { isActive: true, branchBookingMethod: { ...(branchId ? { branchId } : {}), isEnabled: true, bookingMethod: { code: 'HEALTH_PACKAGE', isActive: true } } },
       orderBy: { name: 'asc' },
       select: {
         id: true, code: true, name: true, description: true, price: true, branchBookingMethod: { select: { id: true, branchId: true } },
-        schedules: { where: { isActive: true, examDate: { gte: this.today() }, slots: { some: { isActive: true } } }, orderBy: { examDate: 'asc' }, select: { id: true, examDate: true, room: { select: { id: true, code: true, name: true } }, slots: { where: { isActive: true }, orderBy: { startTime: 'asc' }, select: { id: true, startTime: true, endTime: true, capacity: true, occupiedCount: true } } } },
       },
     });
     return rows.map(({ branchBookingMethod, ...healthPackage }) => ({ ...healthPackage, branchId: branchBookingMethod.branchId, branchBookingMethodId: branchBookingMethod.id }));

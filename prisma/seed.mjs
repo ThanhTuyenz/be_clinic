@@ -46,18 +46,20 @@ function time(hour, minute = 0) {
   return new Date(Date.UTC(1970, 0, 1, hour, minute, 0));
 }
 
-function servicePackageSlots() {
+function doctorSlots() {
   const slots = [];
   for (const [startHour, startMinute, endHour, endMinute] of [[8, 0, 11, 30], [13, 30, 16, 30]]) {
     let cursor = startHour * 60 + startMinute;
     const end = endHour * 60 + endMinute;
     while (cursor < end) {
-      slots.push({ startTime: time(Math.floor(cursor / 60), cursor % 60), endTime: time(Math.floor((cursor + 30) / 60), (cursor + 30) % 60), capacity: 7 });
+      slots.push({ startTime: time(Math.floor(cursor / 60), cursor % 60), endTime: time(Math.floor((cursor + 30) / 60), (cursor + 30) % 60), capacity: 10 });
       cursor += 30;
     }
   }
   return slots;
 }
+
+
 
 async function resetApplicationData() {
   const tables = await prisma.$queryRaw`
@@ -279,7 +281,7 @@ async function main() {
         update: { roomId: room.id, endTime: time(16, 30), status: 'OPEN', capacityPerSlot: 10 },
         create: { doctorId: doctor.id, branchId: branches[0].id, roomId: room.id, workDate, startTime: time(8), endTime: time(16, 30), capacityPerSlot: 10, status: 'OPEN' },
       });
-      for (const slot of servicePackageSlots()) {
+      for (const slot of doctorSlots()) {
         await prisma.doctorScheduleSlot.upsert({ where: { scheduleId_startTime: { scheduleId: schedule.id, startTime: slot.startTime } }, update: { endTime: slot.endTime, capacity: 10, isActive: true }, create: { scheduleId: schedule.id, startTime: slot.startTime, endTime: slot.endTime, capacity: 10 } });
       }
       weekdaysCreated += 1;
@@ -443,25 +445,11 @@ async function seedBookingTables({ users, doctors, branches, rooms, doctorRooms,
       const methodCode = service.code.endsWith('-AFTER') ? 'AFTER_HOURS' : service.code.endsWith('-ADVICE') ? 'CONSULTATION' : 'SPECIALTY_EXAM';
       const branchBookingMethod = branchMethodByCode.get(methodCode);
       if (!branchBookingMethod) continue;
-      const servicePackage = await prisma.servicePackage.upsert({
+      await prisma.servicePackage.upsert({
         where: { code: service.code },
         update: { ...service, branchBookingMethodId: branchBookingMethod.id, specialtyId: specialty.id, isActive: true },
         create: { ...service, branchBookingMethodId: branchBookingMethod.id, specialtyId: specialty.id },
       });
-      const roomId = doctorRooms[specialtyIndex % doctorRooms.length].id;
-      let scheduleDays = 0;
-      for (let day = 1; scheduleDays < 10; day += 1) {
-        const examDate = dateOnly(day);
-        if ([0, 6].includes(examDate.getUTCDay())) continue;
-        const schedule = await prisma.servicePackageSchedule.upsert({
-          where: { servicePackageId_examDate: { servicePackageId: servicePackage.id, examDate } },
-          update: { roomId, isActive: true }, create: { servicePackageId: servicePackage.id, roomId, examDate },
-        });
-        for (const slot of servicePackageSlots()) {
-          await prisma.servicePackageScheduleSlot.upsert({ where: { scheduleId_startTime: { scheduleId: schedule.id, startTime: slot.startTime } }, update: { endTime: slot.endTime, capacity: slot.capacity, isActive: true }, create: { scheduleId: schedule.id, ...slot } });
-        }
-        scheduleDays += 1;
-      }
     }
   }
 
@@ -473,32 +461,11 @@ async function seedBookingTables({ users, doctors, branches, rooms, doctorRooms,
   for (const [packageIndex, seed] of healthPackageSeeds.entries()) {
     const healthPackageMethod = branchMethodByCode.get('HEALTH_PACKAGE');
     if (!healthPackageMethod) continue;
-    const healthPackage = await prisma.servicePackage.upsert({
+    await prisma.servicePackage.upsert({
       where: { code: seed.code },
       update: { ...seed, branchBookingMethodId: healthPackageMethod.id, isActive: true },
       create: { ...seed, branchBookingMethodId: healthPackageMethod.id },
     });
-
-    let weekdaysCreated = 0;
-    for (let day = 1; weekdaysCreated < 10; day += 1) {
-      const examDate = dateOnly(day);
-      const dayOfWeek = examDate.getUTCDay();
-      if (dayOfWeek === 0 || dayOfWeek === 6) continue;
-      const roomId = receptionRoom.id;
-      const schedule = await prisma.servicePackageSchedule.upsert({
-        where: { servicePackageId_examDate: { servicePackageId: healthPackage.id, examDate } },
-        update: { roomId, isActive: true },
-        create: { servicePackageId: healthPackage.id, roomId, examDate },
-      });
-      for (const slot of servicePackageSlots()) {
-        await prisma.servicePackageScheduleSlot.upsert({
-          where: { scheduleId_startTime: { scheduleId: schedule.id, startTime: slot.startTime } },
-          update: { endTime: slot.endTime, capacity: slot.capacity, isActive: true },
-          create: { scheduleId: schedule.id, ...slot },
-        });
-      }
-      weekdaysCreated += 1;
-    }
   }
 
   if (cardioDoctor) {

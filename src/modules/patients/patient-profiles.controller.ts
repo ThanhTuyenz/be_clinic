@@ -1,8 +1,8 @@
-import { Body, Controller, Get, Post, Req } from '@nestjs/common';
+import { Body, Controller, Get, Param, Patch, Post, Req } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import type { Request } from 'express';
 import { SkipPermissions } from '../permissions/decorators/skip-permissions.decorator.js';
-import { CreatePatientProfileDto } from './patient-profiles.dto.js';
+import { CreatePatientProfileDto, UpdatePatientProfileDto } from './patient-profiles.dto.js';
 import { PatientProfilesService } from './patient-profiles.service.js';
 
 @ApiTags('Patient profiles')
@@ -15,4 +15,8 @@ export class PatientProfilesController {
   list(@Req() request: Request) { return this.service.list(request.user!.id); }
   @Post() @ApiOperation({ summary: 'Tạo hồ sơ bệnh nhân hoặc người thân' })
   create(@Req() request: Request, @Body() dto: CreatePatientProfileDto) { return this.service.create(request.user!.id, dto); }
+  @Patch(':id') @ApiOperation({ summary: 'Cập nhật thông tin hồ sơ bệnh nhân' })
+  update(@Req() request: Request, @Param('id') id: string, @Body() dto: UpdatePatientProfileDto) {
+    return this.service.update(request.user!.id, id, dto);
+  }
 }

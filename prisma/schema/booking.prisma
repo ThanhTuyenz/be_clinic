@@ -31,7 +31,6 @@ model Appointment {
   branchId                     String             @map("branch_id") @db.Uuid
   scheduleSlotId               String?            @map("schedule_slot_id") @db.Uuid
   servicePackageId             String?            @map("service_package_id") @db.Uuid
-  servicePackageScheduleSlotId String?            @map("service_package_schedule_slot_id") @db.Uuid
   servicePrice                 Decimal?           @map("service_price") @db.Decimal(12, 2)
   symptomsDescription          String?            @map("symptoms_description")
   bookedViaAi                  Boolean            @default(false) @map("booked_via_ai")
@@ -50,7 +49,6 @@ model Appointment {
   branch                       Branch                       @relation(fields: [branchId], references: [id], onDelete: Restrict)
   scheduleSlot                 DoctorScheduleSlot?          @relation(fields: [scheduleSlotId], references: [id], onDelete: Restrict)
   servicePackage               ServicePackage?              @relation(fields: [servicePackageId], references: [id], onDelete: Restrict)
-  servicePackageScheduleSlot   ServicePackageScheduleSlot?  @relation(fields: [servicePackageScheduleSlotId], references: [id], onDelete: Restrict)
   checkedInBy                  User?                        @relation("CheckedInBy", fields: [checkedInById], references: [id], onDelete: SetNull)
   statusHistories              AppointmentStatusHistory[]
   qrToken                      AppointmentQrToken?
@@ -64,7 +62,6 @@ model Appointment {
   @@index([branchId, status, createdAt])
   @@index([scheduleSlotId, status])
   @@index([servicePackageId, status])
-  @@index([servicePackageScheduleSlotId, status])
   @@map("appointments")
 }
 

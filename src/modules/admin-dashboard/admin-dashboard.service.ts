@@ -108,7 +108,6 @@ export class AdminDashboardService {
           queueNumber: true,
           patientProfile: { select: { fullName: true } },
           scheduleSlot: { select: { startTime: true, schedule: { select: { room: { select: { id: true, name: true, code: true } } } } } },
-          servicePackageScheduleSlot: { select: { startTime: true, schedule: { select: { room: { select: { id: true, name: true, code: true } } } } } },
           statusHistories: { orderBy: { createdAt: 'asc' }, take: 1, select: { actor: { select: { role: true } } } },
           invoice: { select: { status: true } },
         },
@@ -125,7 +124,7 @@ export class AdminDashboardService {
       const actorRole = appointment.statusHistories[0]?.actor?.role
       if (actorRole === 'PATIENT' || !actorRole) sourcesToday.online += 1
       else sourcesToday.clinic += 1
-      const room = appointment.servicePackageScheduleSlot?.schedule.room ?? appointment.scheduleSlot?.schedule.room
+      const room = appointment.scheduleSlot?.schedule.room
       if (room) {
         const current = roomMap.get(room.id) || { room: room.name || room.code, total: 0, pending: 0, confirmed: 0 }
         current.total += 1

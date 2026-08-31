@@ -166,31 +166,6 @@ export class SpecialtiesService {
             bookingMethod: { select: { id: true, code: true, name: true, route: true } },
           },
         },
-        schedules: {
-          where: {
-            isActive: true,
-            examDate: { gte: new Date(new Date().toISOString().slice(0, 10)) },
-            slots: { some: { isActive: true } },
-          },
-          orderBy: { examDate: 'asc' },
-          take: 60,
-          select: {
-            id: true,
-            examDate: true,
-            room: { select: { id: true, code: true, name: true } },
-            slots: {
-              where: { isActive: true },
-              orderBy: { startTime: 'asc' },
-              select: {
-                id: true,
-                startTime: true,
-                endTime: true,
-                capacity: true,
-                occupiedCount: true,
-              },
-            },
-          },
-        },
       },
     })
     if (!pkg) throw new NotFoundException('Không tìm thấy dịch vụ')
@@ -202,17 +177,7 @@ export class SpecialtiesService {
       branch: branchBookingMethod.branch,
       branchBookingMethodId: branchBookingMethod.id,
       bookingMethod: branchBookingMethod.bookingMethod,
-      schedules: rest.schedules.map((sch) => ({
-        ...sch,
-        examDate: sch.examDate.toISOString().slice(0, 10),
-        slots: sch.slots.map((slot) => ({
-          ...slot,
-          startTime: slot.startTime.toISOString().slice(11, 16),
-          endTime: slot.endTime.toISOString().slice(11, 16),
-          remainingCapacity: slot.capacity - slot.occupiedCount,
-          isAvailable: slot.occupiedCount < slot.capacity,
-        })),
-      })),
+      schedules: [],
     }
   }
 

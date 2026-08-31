@@ -1,4 +1,4 @@
-import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { ApiProperty, ApiPropertyOptional, PartialType } from '@nestjs/swagger';
 import { IsBoolean, IsDateString, IsEnum, IsOptional, IsString, MaxLength } from 'class-validator';
 
 enum GenderDto { MALE = 'MALE', FEMALE = 'FEMALE', OTHER = 'OTHER' }
@@ -31,3 +31,5 @@ export class CreatePatientProfileDto {
   @ApiPropertyOptional({ default: 'SELF' }) @IsOptional() @IsString() @MaxLength(50) relationshipToAccount?: string;
   @ApiPropertyOptional({ default: false }) @IsOptional() @IsBoolean() isMainProfile?: boolean;
 }
+
+export class UpdatePatientProfileDto extends PartialType(CreatePatientProfileDto) {}
