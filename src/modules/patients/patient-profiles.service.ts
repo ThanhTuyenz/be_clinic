@@ -123,10 +123,13 @@ export class PatientProfilesService {
     }
   }
 
-  async update(accountId: string, id: string, dto: UpdatePatientProfileDto) {
-    const profile = await this.prisma.patientProfile.findFirst({ where: { id, accountId } });
+  async update(actorId: string, id: string, dto: UpdatePatientProfileDto, isStaff = false) {
+    const profile = isStaff
+      ? await this.prisma.patientProfile.findUnique({ where: { id } })
+      : await this.prisma.patientProfile.findFirst({ where: { id, accountId: actorId } });
     if (!profile) throw new NotFoundException('Không tìm thấy hồ sơ bệnh nhân');
 
+    const accountId = profile.accountId;
     const effectiveDob = dto.dateOfBirth ? new Date(`${dto.dateOfBirth}T00:00:00.000Z`) : profile.dateOfBirth;
     const effectiveNationalId = dto.nationalId !== undefined ? dto.nationalId?.trim() || null : profile.nationalId;
     const effectiveHealthInsurance = dto.healthInsuranceNumber !== undefined ? dto.healthInsuranceNumber?.trim() || null : profile.healthInsuranceNumber;
@@ -139,8 +142,8 @@ export class PatientProfilesService {
       }
     }
 
-    // Kiểm tra trùng lặp trong cùng tài khoản
-    if (effectiveNationalId || effectiveHealthInsurance) {
+    // Kiểm tra trùng lặp trong cùng tài khoản (nếu có accountId)
+    if (accountId && (effectiveNationalId || effectiveHealthInsurance)) {
       const dup = await this.prisma.patientProfile.findFirst({
         where: {
           accountId,
@@ -151,7 +154,7 @@ export class PatientProfilesService {
           ],
         },
       });
-      if (dup) throw new ConflictException('Hồ sơ với số CCCD hoặc mã BHYT này đã tồn tại trong tài khoản của bạn.');
+      if (dup) throw new ConflictException('Hồ sơ với số CCCD hoặc mã BHYT này đã tồn tại trong tài khoản của bệnh nhân.');
     }
 
     // Đồng bộ patientCode nếu CCCD mới đã từng có mã trên hệ thống

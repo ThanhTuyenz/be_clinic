@@ -46,16 +46,10 @@ export class JwtAuthGuard implements CanActivate {
   ) {}
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
-    // Check if route is marked as public
     const isPublic = this.reflector.getAllAndOverride<boolean>(IS_PUBLIC_KEY, [
       context.getHandler(),
       context.getClass(),
     ]);
-
-    if (isPublic) {
-      this.logger.log('Public route, skipping authentication');
-      return true;
-    }
 
     const request = context.switchToHttp().getRequest<RequestWithUser>();
 
@@ -64,22 +58,38 @@ export class JwtAuthGuard implements CanActivate {
 
     if (request.cookies?.token) {
       token = request.cookies.token;
-      this.logger.log('Token found in cookie');
     } else {
       const authHeader = request.headers.authorization;
       if (authHeader && authHeader.startsWith('Bearer ')) {
         token = authHeader.split(' ')[1];
-        this.logger.log('Token found in Authorization header');
       } else if (request.query?.token && typeof request.query.token === 'string') {
         token = request.query.token;
-        this.logger.log('Token found in query parameter');
       }
     }
 
+    // Với route Public, nếu có token thì giải mã gắn vào user, nếu không có thì vẫn cho qua
+    if (isPublic) {
+      if (token) {
+        try {
+          const decoded = this.jwtService.verify<JwtPayload>(token);
+          if (decoded?.id) {
+            request.user = {
+              id: decoded.id,
+              sessionId: decoded.sessionId || '',
+              email: decoded.email,
+              role: decoded.role,
+              userType: decoded.role,
+            };
+          }
+        } catch {
+          // Token không hợp lệ trên public route thì bỏ qua
+        }
+      }
+      return true;
+    }
+
     if (!token) {
-      this.logger.warn(
-        'Không tìm thấy token trong cookie hoặc Authorization header.',
-      );
+      this.logger.warn('Không tìm thấy token trong cookie hoặc Authorization header.');
       throw new UnauthorizedException('Token không hợp lệ hoặc thiếu');
     }
 
@@ -99,7 +109,6 @@ export class JwtAuthGuard implements CanActivate {
         userType: decoded.role,
       };
 
-      // Token hiện tại chỉ có { id, sessionId } nên cần fallback lấy thêm thông tin.
       if (!requestUser.email || !requestUser.role) {
         const user = await this.usersService.findOneUser({ id: decoded.id });
         if (!user) {
@@ -108,9 +117,7 @@ export class JwtAuthGuard implements CanActivate {
         }
         if (user.isDeleted) {
           this.logger.warn(`User đã bị xóa mềm, id=${decoded.id}`);
-          throw new UnauthorizedException(
-            'Tài khoản không tồn tại hoặc đã bị xóa',
-          );
+          throw new UnauthorizedException('Tài khoản không tồn tại hoặc đã bị xóa');
         }
         if (user.isBlocked) {
           this.logger.warn(`User đã bị khóa, id=${decoded.id}`);
@@ -122,19 +129,12 @@ export class JwtAuthGuard implements CanActivate {
         requestUser.userType = user.role ?? undefined;
       }
 
-      // Các controller lịch hẹn cũ dùng `userType`; Nest Auth dùng `role`.
-      // Giữ cả hai key trong giai đoạn migrate để flow booking nhận đúng vai trò.
       requestUser.userType ||= requestUser.role;
-
       request.user = requestUser;
-      this.logger.log(`Xác thực thành công: ID ${decoded.id}`);
-
       return true;
     } catch (error) {
       if (error instanceof Error) {
         this.logger.error(`Lỗi xác thực token: ${error.message}`);
-      } else {
-        this.logger.error(`Lỗi xác thực token: Không xác định`);
       }
       throw new UnauthorizedException('Token không hợp lệ hoặc đã hết hạn');
     }

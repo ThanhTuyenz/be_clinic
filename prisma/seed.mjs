@@ -295,7 +295,7 @@ async function main() {
     data: { phoneNumber: '0909123456' },
   });
   await prisma.patientProfile.upsert({
-    where: { nationalId: '079200000001' },
+    where: { accountId_nationalId: { accountId: patient.id, nationalId: '079200000001' } },
     update: {
       accountId: patient.id,
       fullName: patient.fullName,
@@ -318,7 +318,7 @@ async function main() {
     },
   });
   await prisma.patientProfile.upsert({
-    where: { nationalId: '079201000002' },
+    where: { accountId_nationalId: { accountId: patient.id, nationalId: '079201000002' } },
     update: {
       accountId: patient.id,
       fullName: 'Nguyễn Minh An',
@@ -349,7 +349,7 @@ async function main() {
       });
     }
     await prisma.patientProfile.upsert({
-      where: { nationalId: patientSeed.nationalId },
+      where: { accountId_nationalId: { accountId: account.id, nationalId: patientSeed.nationalId } },
       update: {
         accountId: account.id,
         fullName: account.fullName,
@@ -457,6 +457,8 @@ async function seedBookingTables({ users, doctors, branches, rooms, doctorRooms,
     { code: 'PKG-GENERAL-BASIC', name: 'Gói khám sức khỏe tổng quát cơ bản', description: 'Tầm soát sức khỏe định kỳ với xét nghiệm và chẩn đoán hình ảnh cơ bản.', price: 1290000 },
     { code: 'PKG-CARDIO-SCREENING', name: 'Gói tầm soát nguy cơ tim mạch', description: 'Đánh giá các yếu tố nguy cơ tim mạch bằng xét nghiệm và thăm dò chức năng.', price: 990000 },
     { code: 'PKG-WOMEN-WELLNESS', name: 'Gói kiểm tra sức khỏe nữ', description: 'Gói kiểm tra sức khỏe định kỳ dành cho nữ.', price: 1490000 },
+    { code: 'PKG-EYE-COMPREHENSIVE', name: 'Gói khám Mắt toàn diện & Đo thị lực khúc xạ', description: 'Kiểm tra thị lực, soi đáy mắt, đo nhãn áp và tầm soát các tật khúc xạ mắt.', price: 350000 },
+    { code: 'PKG-EYE-CATARACT-SCREENING', name: 'Gói tầm soát cườm nước & Bệnh lý võng mạc', description: 'Chụp hình màu đáy mắt, đo nhãn áp không tiếp xúc và tư vấn phòng ngừa mù lòa.', price: 650000 },
   ];
   for (const [packageIndex, seed] of healthPackageSeeds.entries()) {
     const healthPackageMethod = branchMethodByCode.get('HEALTH_PACKAGE');

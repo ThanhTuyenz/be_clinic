@@ -64,3 +64,57 @@ export interface AiChatResponsePayload {
     packages: PackageCardRecommendation[]
   }
 }
+
+export class AiAgentChatDto {
+  @IsString()
+  @IsNotEmpty({ message: 'Tin nhắn không được để trống' })
+  message: string
+
+  @IsString()
+  @IsOptional()
+  sessionId?: string
+
+  @IsOptional()
+  confirmBooking?: boolean
+
+  @IsString()
+  @IsOptional()
+  selectedSlotId?: string
+
+  @IsString()
+  @IsOptional()
+  selectedProfileId?: string
+}
+
+export interface AiAgentBookingProposal {
+  slotId: string
+  doctorId: string
+  doctorName: string
+  specialtyName: string
+  branchId: string
+  branchName: string
+  date: string
+  startTime: string
+  endTime: string
+  fee: number
+  patientProfileId?: string
+  patientProfileName?: string
+}
+
+export interface AiAgentChatResponse {
+  sessionId: string
+  message: string
+  step: 'GREETING' | 'COLLECTING_INFO' | 'PROPOSED' | 'CONFIRMED' | 'SUCCESS' | 'ERROR'
+  proposal?: AiAgentBookingProposal | null
+  proposedPackages?: PackageCardRecommendation[]
+  missingSlots?: string[]
+  quickSuggestions?: string[]
+  bookingResult?: {
+    appointmentId: string
+    bookingCode: string
+    totalAmount: number
+    holdExpiresAt: string
+    paymentId?: string
+  } | null
+  availableProfiles?: Array<{ id: string; fullName: string; isMain: boolean; relationship: string }>
+}

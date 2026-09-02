@@ -52,7 +52,12 @@ export class AppointmentItemDto {
 }
 
 // ─── DTO đặt đơn lẻ (backward compat) ───────────────────────
-export class CheckoutAppointmentDto extends AppointmentItemDto {}
+export class CheckoutAppointmentDto extends AppointmentItemDto {
+  @ApiPropertyOptional({ description: 'Mã giảm giá voucher (nếu có)' })
+  @IsOptional()
+  @IsString()
+  voucherCode?: string;
+}
 
 // ─── DTO đặt nhóm / gia đình ────────────────────────────────
 export class BatchCheckoutDto {
@@ -77,4 +82,10 @@ export class BatchCheckoutDto {
   @IsString()
   @MaxLength(500)
   note?: string;
+
+  @ApiPropertyOptional({ description: 'Mã giảm giá voucher (nếu có)' })
+  @IsOptional()
+  @IsString()
+  voucherCode?: string;
 }
+

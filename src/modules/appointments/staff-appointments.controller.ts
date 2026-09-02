@@ -30,4 +30,20 @@ export class StaffAppointmentsController {
   finish(@Req() request: Request, @Param('id') id: string) {
     return this.staffAppointments.finishMedicalVisit(request.user!.id, id)
   }
+
+  @Post('doctor-leave/impact-analysis')
+  doctorLeaveImpact(
+    @Req() request: Request,
+    @Body() body: { doctorId: string; fromDate: string; toDate: string },
+  ) {
+    return this.staffAppointments.doctorLeaveImpactAnalysis(request.user!.id, body)
+  }
+
+  @Post('doctor-leave/smart-reschedule')
+  smartReschedule(
+    @Req() request: Request,
+    @Body() body: { items: Array<{ appointmentId: string; newSlotId: string }> },
+  ) {
+    return this.staffAppointments.executeSmartReschedule(request.user!.id, body)
+  }
 }

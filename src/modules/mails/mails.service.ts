@@ -7,7 +7,9 @@ import { ConfigService } from '@nestjs/config'
 import nodemailer, { Transporter } from 'nodemailer'
 import type { AllConfigType, MailerConfig } from '../../config/config.type.js'
 import type {
+  AppointmentCancellationMail,
   AppointmentReminderMail,
+  AppointmentRescheduledMail,
   BookingConfirmationMail,
   ForgotPasswordMail,
   IMailsService,
@@ -140,7 +142,7 @@ export class MailsService implements IMailsService {
             <div style="display: inline-block; padding: 10px; background-color: #ffffff; border: 1px solid #cbd5e1; border-radius: 6px;">
               <img src="cid:vitacare_qr_checkin" alt="Mã QR Check-in" width="160" height="160" style="display: block; width: 160px; height: 160px; margin: 0 auto; background-color: #ffffff;" />
             </div>
-            <div style="margin-top: 8px; font-size: 12px; color: #64748b;">Quét mã này tại Kiosk hoặc xuất trình cho Lễ tân khi đến phòng khám</div>
+            <div style="margin-top: 8px; font-size: 12px; color: #64748b;">Xuất trình mã này tại Quầy Lễ tân khi đến phòng khám</div>
           </div>
         `
       }
@@ -323,6 +325,76 @@ export class MailsService implements IMailsService {
       to: mail.to,
       subject,
       text: `Thông báo hủy lịch hẹn #${d.bookingCode}: ${d.doctorOrServiceName} ngày ${d.appointmentDate} lúc ${d.startTime}.`,
+      html,
+    })
+  }
+
+  async sendAppointmentRescheduled(mail: AppointmentRescheduledMail): Promise<void> {
+    const d = mail.data
+    const subject = `[VitaCare] Xác nhận đổi lịch khám thành công #${d.bookingCode}`
+
+    const html = `
+      <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; max-width: 600px; margin: 0 auto; border: 1px solid #e2e8f0; border-radius: 8px; overflow: hidden; background-color: #ffffff;">
+        <div style="background-color: #059669; padding: 20px; text-align: center;">
+          <h1 style="color: #ffffff; margin: 0; font-size: 20px; font-weight: 700;">VitaCare Clinic</h1>
+          <p style="color: #a7f3d0; margin: 4px 0 0; font-size: 13px;">Xác nhận đổi lịch khám bệnh</p>
+        </div>
+
+        <div style="padding: 24px 20px;">
+          <p style="font-size: 14px; color: #334155; margin-top: 0;">
+            Kính gửi <strong>${this.escapeHtml(d.patientName)}</strong>,
+          </p>
+          <p style="font-size: 13.5px; color: #475569; line-height: 1.6;">
+            Lịch khám của quý khách với mã đặt lịch <strong>#${this.escapeHtml(d.bookingCode)}</strong> đã được cập nhật sang thời gian mới thành công.
+          </p>
+
+          <div style="background-color: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 6px; padding: 16px; margin: 18px 0;">
+            <table style="width: 100%; border-collapse: collapse; font-size: 13px;">
+              <tr>
+                <td style="padding: 6px 0; color: #64748b; width: 140px;">Bác sĩ / Dịch vụ:</td>
+                <td style="padding: 6px 0; font-weight: 600; color: #0f172a;">${this.escapeHtml(d.doctorOrServiceName)}</td>
+              </tr>
+              <tr>
+                <td style="padding: 6px 0; color: #64748b;">Thời gian mới:</td>
+                <td style="padding: 6px 0; font-weight: 700; color: #059669;">${this.escapeHtml(d.newStartTime)} – ${this.escapeHtml(d.newEndTime)}, ngày ${this.escapeHtml(d.newAppointmentDate)}</td>
+              </tr>
+              ${d.roomName ? `
+              <tr>
+                <td style="padding: 6px 0; color: #64748b;">Phòng khám:</td>
+                <td style="padding: 6px 0; font-weight: 600; color: #0f172a;">${this.escapeHtml(d.roomName)}</td>
+              </tr>` : ''}
+              ${d.queueNumber ? `
+              <tr>
+                <td style="padding: 6px 0; color: #64748b;">STT khám dự kiến:</td>
+                <td style="padding: 6px 0; font-weight: 700; color: #059669;">Số ${d.queueNumber}</td>
+              </tr>` : ''}
+              <tr>
+                <td style="padding: 6px 0; color: #64748b;">Cơ sở khám:</td>
+                <td style="padding: 6px 0; font-weight: 600; color: #0f172a;">${this.escapeHtml(d.branchName)}${d.branchAddress ? ` (${this.escapeHtml(d.branchAddress)})` : ''}</td>
+              </tr>
+              ${d.reason ? `
+              <tr>
+                <td style="padding: 6px 0; color: #64748b;">Lý do đổi:</td>
+                <td style="padding: 6px 0; color: #475569;">${this.escapeHtml(d.reason)}</td>
+              </tr>` : ''}
+            </table>
+          </div>
+
+          <p style="margin: 0; font-size: 12.5px; color: #64748b; line-height: 1.5;">
+            * Quý khách vui lòng xuất trình mã QR check-in trên ứng dụng/website tại quầy tiếp đón trước giờ hẹn 10–15 phút.
+          </p>
+        </div>
+
+        <div style="background-color: #f8fafc; padding: 12px 20px; text-align: center; border-top: 1px solid #e2e8f0; font-size: 11.5px; color: #94a3b8;">
+          <div>VitaCare Clinic · Hotline Hỗ trợ 24/7</div>
+        </div>
+      </div>
+    `
+
+    await this.send({
+      to: mail.to,
+      subject,
+      text: `Xác nhận đổi lịch khám #${d.bookingCode} thành công sang ngày ${d.newAppointmentDate} lúc ${d.newStartTime}.`,
       html,
     })
   }

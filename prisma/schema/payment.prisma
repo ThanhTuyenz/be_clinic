@@ -7,6 +7,10 @@ model Invoice {
   appointmentId  String?              @unique @map("appointment_id") @db.Uuid
   bookingOrderId String?              @unique @map("booking_order_id") @db.Uuid
   issuedBranchId String               @map("issued_branch_id") @db.Uuid
+  subtotal       Decimal              @default(0) @map("subtotal") @db.Decimal(12, 2)
+  serviceFee     Decimal              @default(0) @map("service_fee") @db.Decimal(12, 2)
+  discountAmount Decimal              @default(0) @map("discount_amount") @db.Decimal(12, 2)
+  voucherCode    String?              @map("voucher_code") @db.VarChar(50)
   totalAmount    Decimal              @map("total_amount") @db.Decimal(12, 2)
   status         InvoiceStatus        @default(UNPAID)
   paidAt         DateTime?            @map("paid_at") @db.Timestamptz(3)

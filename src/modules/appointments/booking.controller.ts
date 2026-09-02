@@ -7,6 +7,7 @@ import { buildGoogleCalendarUrl, buildIcsContent } from './helpers/calendar.help
 import { BookingService } from './booking.service.js';
 import { BatchCheckoutDto, CheckoutAppointmentDto } from './dtos/checkout-appointment.dto.js';
 import { PaymentWebhookDto } from './dtos/payment-webhook.dto.js';
+import { RescheduleAppointmentDto } from './dtos/reschedule-appointment.dto.js';
 import { PaymentWebhookSignatureService } from './payment-webhook-signature.service.js';
 
 @ApiTags('Appointments')
@@ -46,6 +47,17 @@ export class BookingController {
   @ApiParam({ name: 'id', format: 'uuid' })
   cancelAppointment(@Req() request: Request, @Param('id') id: string, @Body() body: { reason?: string }) {
     return this.bookingService.cancelMyAppointment(request.user!.id, id, body?.reason);
+  }
+
+  @Post(':id/reschedule')
+  @ApiOperation({ summary: 'Bệnh nhân đổi lịch khám sang khung giờ mới' })
+  @ApiParam({ name: 'id', format: 'uuid' })
+  rescheduleAppointment(
+    @Req() request: Request,
+    @Param('id') id: string,
+    @Body() dto: RescheduleAppointmentDto,
+  ) {
+    return this.bookingService.rescheduleMyAppointment(request.user!.id, id, dto);
   }
 
   // ─── Batch Checkout (Đặt nhóm / Gia đình) ──────────────────
@@ -152,14 +164,20 @@ export class CheckInController {
 
   @Post('scan')
   @ApiOperation({ summary: 'Nhân viên tiếp nhận quét QR của bệnh nhân' })
-  staffScan(@Req() request: Request, @Body() body: { token: string }) {
-    return this.bookingService.checkIn(body.token, request.user!.id, 'RECEPTIONIST');
+  staffScan(@Req() request: Request, @Body() body: { token: string; branchId?: string }) {
+    return this.bookingService.checkIn(body.token, request.user!.id, 'RECEPTIONIST', body.branchId);
   }
 
   @Public()
-  @Post('kiosk/scan')
-  @ApiOperation({ summary: 'Máy kiosk tự phục vụ quét QR check-in' })
-  kioskScan(@Body() body: { token: string }) {
-    return this.bookingService.checkIn(body.token, null, 'KIOSK');
+  @Post('preview')
+  @ApiOperation({ summary: 'Xem trước thông tin lịch hẹn trước khi xác nhận check-in' })
+  preview(@Body() body: { token: string; branchId?: string }) {
+    return this.bookingService.previewCheckIn(body.token, body.branchId);
+  }
+
+  @Post('by-national-id')
+  @ApiOperation({ summary: 'Check-in tiếp đón bằng số CCCD hoặc mã QR thẻ CCCD' })
+  checkInByNationalId(@Req() request: Request, @Body() body: { nationalId: string; branchId?: string }) {
+    return this.bookingService.checkInByNationalId(body.nationalId, request.user!.id, body.branchId);
   }
 }

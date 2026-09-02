@@ -91,3 +91,9 @@ enum OutboxStatus {
   FAILED
 }
 
+enum DiscountType {
+  PERCENTAGE
+  FIXED_AMOUNT
+}
+
+

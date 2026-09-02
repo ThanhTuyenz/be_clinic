@@ -65,6 +65,23 @@ export type AppointmentCancellationMail = {
   }
 }
 
+export type AppointmentRescheduledMail = {
+  to: string
+  data: {
+    patientName: string
+    bookingCode: string
+    newAppointmentDate: string // YYYY-MM-DD
+    newStartTime: string // HH:MM
+    newEndTime: string // HH:MM
+    branchName: string
+    branchAddress?: string
+    doctorOrServiceName: string
+    roomName?: string | null
+    queueNumber?: number | null
+    reason?: string | null
+  }
+}
+
 export interface IMailsService {
   confirmRegisterUser(data: RegistrationOtpMail): Promise<void>
   forgotPassword(data: ForgotPasswordMail): Promise<void>
@@ -72,5 +89,6 @@ export interface IMailsService {
   sendAppointmentReminder(data: AppointmentReminderMail): Promise<void>
   sendBookingConfirmation(data: BookingConfirmationMail): Promise<void>
   sendAppointmentCancellation(data: AppointmentCancellationMail): Promise<void>
+  sendAppointmentRescheduled(data: AppointmentRescheduledMail): Promise<void>
 }
 

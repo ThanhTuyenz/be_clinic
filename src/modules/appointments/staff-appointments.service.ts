@@ -192,7 +192,17 @@ export class StaffAppointmentsService {
       where: {
         ...(query.status && query.status !== 'all' ? { status: statusMap[query.status] || query.status.toUpperCase() } : {}),
         ...(start || end ? { scheduleSlot: { schedule: { workDate: { ...(start ? { gte: start } : {}), ...(end ? { lte: end } : {}) } } } } : {}),
-        ...(term ? { OR: [{ bookingCode: { contains: term, mode: 'insensitive' } }, { patientProfile: { fullName: { contains: term, mode: 'insensitive' } } }] } : {}),
+        ...(term
+          ? {
+              OR: [
+                { bookingCode: { contains: term, mode: 'insensitive' } },
+                { patientProfile: { fullName: { contains: term, mode: 'insensitive' } } },
+                { patientProfile: { nationalId: { contains: term, mode: 'insensitive' } } },
+                { patientProfile: { phoneNumber: { contains: term, mode: 'insensitive' } } },
+                { patientProfile: { patientCode: { contains: term, mode: 'insensitive' } } },
+              ],
+            }
+          : {}),
       },
       include: this.appointmentInclude(),
       orderBy: { createdAt: 'desc' },
@@ -203,7 +213,19 @@ export class StaffAppointmentsService {
 
   async lookupTicket(userId: string, ticket: string) {
     await this.roleOf(userId)
-    const row = await this.prisma.appointment.findFirst({ where: { bookingCode: { equals: ticket, mode: 'insensitive' } }, include: this.appointmentInclude() })
+    const cleanTicket = String(ticket || '').trim()
+    const row = await this.prisma.appointment.findFirst({
+      where: {
+        OR: [
+          { bookingCode: { equals: cleanTicket, mode: 'insensitive' } },
+          { id: cleanTicket.length === 36 ? cleanTicket : undefined },
+          { patientProfile: { nationalId: cleanTicket } },
+          { patientProfile: { phoneNumber: cleanTicket } },
+        ],
+      },
+      include: this.appointmentInclude(),
+      orderBy: { createdAt: 'desc' },
+    })
     if (!row) throw new NotFoundException('Không tìm thấy lịch hẹn')
     return { appointment: this.serialize(row) }
   }
@@ -345,9 +367,29 @@ export class StaffAppointmentsService {
           data: { roomId },
         })
       }
+      let queueNum = input.visitQueueNumber != null ? Number(input.visitQueueNumber) : current.queueNumber
+      if (status === 'CHECKED_IN' && !queueNum && current.scheduleSlotId) {
+        const currSlot = await tx.doctorScheduleSlot.findUnique({ where: { id: current.scheduleSlotId } })
+        if (currSlot) {
+          const earlierSlots = await tx.doctorScheduleSlot.findMany({
+            where: { scheduleId: currSlot.scheduleId, isActive: true, startTime: { lt: currSlot.startTime } },
+            select: { capacity: true },
+          })
+          const priorCapacity = earlierSlots.reduce((sum, s) => sum + (s.capacity || 1), 0)
+          const bookedInCurrentSlot = await tx.appointment.count({
+            where: { scheduleSlotId: currSlot.id, queueNumber: { not: null }, id: { not: appointmentId } },
+          })
+          queueNum = priorCapacity + bookedInCurrentSlot + 1
+        }
+      }
+
       await tx.appointment.update({
         where: { id: appointmentId },
-        data: { status, ...(input.visitQueueNumber != null ? { queueNumber: Number(input.visitQueueNumber) } : {}) },
+        data: {
+          status,
+          ...(queueNum != null ? { queueNumber: queueNum } : {}),
+          ...(status === 'CHECKED_IN' ? { checkedInAt: new Date(), checkedInById: userId } : {}),
+        },
       })
 
       // Nếu chuyển sang CANCELLED
@@ -629,5 +671,162 @@ export class StaffAppointmentsService {
       return tx.appointment.findUniqueOrThrow({ where: { id: appointmentId }, include: this.appointmentInclude() })
     })
     return { appointment: this.serialize(row) }
+  }
+
+  async doctorLeaveImpactAnalysis(userId: string, body: { doctorId: string; fromDate: string; toDate: string }) {
+    await this.roleOf(userId)
+    const { doctorId, fromDate, toDate } = body
+    if (!doctorId || !fromDate || !toDate) throw new BadRequestException('Thiếu thông tin bác sĩ hoặc khoảng thời gian nghỉ')
+
+    const start = new Date(`${fromDate}T00:00:00.000Z`)
+    const end = new Date(`${toDate}T23:59:59.999Z`)
+
+    const doctor = await this.prisma.doctor.findUnique({
+      where: { id: doctorId },
+      include: {
+        user: true,
+        specialties: { include: { specialty: true } },
+      },
+    })
+    if (!doctor) throw new NotFoundException('Không tìm thấy bác sĩ')
+
+    const specialtyIds = doctor.specialties.map((s) => s.specialtyId)
+
+    const affectedAppointments = await this.prisma.appointment.findMany({
+      where: {
+        status: 'BOOKED',
+        scheduleSlot: {
+          schedule: {
+            doctorId,
+            workDate: { gte: start, lte: end },
+          },
+        },
+      },
+      include: this.appointmentInclude(),
+      orderBy: { scheduleSlot: { schedule: { workDate: 'asc' } } },
+    })
+
+    const analyzed = await Promise.all(
+      affectedAppointments.map(async (appt) => {
+        const originalWorkDate = appt.scheduleSlot?.schedule?.workDate || start
+        const searchFrom = new Date(originalWorkDate)
+        const searchTo = new Date(originalWorkDate)
+        searchTo.setDate(searchTo.getDate() + 5)
+
+        const alternativeSlots = await this.prisma.doctorScheduleSlot.findMany({
+          where: {
+            isActive: true,
+            slotStatus: 'AVAILABLE',
+            schedule: {
+              status: 'OPEN',
+              doctorId: { not: doctorId },
+              doctor: { specialties: { some: { specialtyId: { in: specialtyIds } } } },
+              workDate: { gte: searchFrom, lte: searchTo },
+            },
+          },
+          include: {
+            schedule: {
+              include: {
+                doctor: { include: { user: true } },
+                branch: true,
+                room: true,
+              },
+            },
+          },
+          orderBy: [{ schedule: { workDate: 'asc' } }, { startTime: 'asc' }],
+          take: 5,
+        })
+
+        const availableAlternatives = alternativeSlots
+          .filter((s) => s.occupiedCount < s.capacity)
+          .map((s) => ({
+            slotId: s.id,
+            doctorName: s.schedule.doctor?.user?.fullName || 'Bác sĩ chuyên khoa',
+            workDate: s.schedule.workDate.toISOString().slice(0, 10),
+            startTime: s.startTime.toISOString().slice(11, 16),
+            endTime: s.endTime.toISOString().slice(11, 16),
+            branchName: s.schedule.branch?.name || '',
+            roomName: s.schedule.room?.name || '',
+          }))
+
+        return {
+          appointment: this.serialize(appt),
+          suggestedSlots: availableAlternatives,
+        }
+      }),
+    )
+
+    return {
+      doctor: {
+        id: doctor.id,
+        fullName: doctor.user?.fullName,
+        specialtyName: doctor.specialties[0]?.specialty?.name || '',
+      },
+      affectedCount: affectedAppointments.length,
+      impacts: analyzed,
+    }
+  }
+
+  async executeSmartReschedule(userId: string, body: { items: Array<{ appointmentId: string; newSlotId: string }> }) {
+    await this.roleOf(userId)
+    if (!body.items || body.items.length === 0) throw new BadRequestException('Danh sách đổi lịch không được rỗng')
+
+    const results = []
+    for (const item of body.items) {
+      const { appointmentId, newSlotId } = item
+      try {
+        const appt = await this.prisma.appointment.findUnique({
+          where: { id: appointmentId },
+          include: { scheduleSlot: true },
+        })
+        if (!appt) continue
+
+        const newSlot = await this.prisma.doctorScheduleSlot.findUnique({
+          where: { id: newSlotId },
+          include: { schedule: { include: { doctor: { include: { user: true } }, branch: true } } },
+        })
+        if (!newSlot || newSlot.occupiedCount >= newSlot.capacity) continue
+
+        await this.prisma.$transaction(async (tx) => {
+          if (appt.scheduleSlotId) {
+            await tx.doctorScheduleSlot.update({
+              where: { id: appt.scheduleSlotId },
+              data: { occupiedCount: { decrement: 1 } },
+            })
+          }
+          await tx.doctorScheduleSlot.update({
+            where: { id: newSlotId },
+            data: { occupiedCount: { increment: 1 } },
+          })
+          await tx.appointment.update({
+            where: { id: appointmentId },
+            data: {
+              scheduleSlotId: newSlotId,
+              branchId: newSlot.schedule.branchId,
+              statusHistories: {
+                create: {
+                  fromStatus: appt.status,
+                  toStatus: appt.status,
+                  actorId: userId,
+                  reason: 'DOCTOR_LEAVE_AI_RESCHEDULE',
+                },
+              },
+            },
+          })
+        })
+
+        results.push({
+          appointmentId,
+          success: true,
+          newDoctorName: newSlot.schedule.doctor?.user?.fullName,
+          newDate: newSlot.schedule.workDate.toISOString().slice(0, 10),
+          newTime: newSlot.startTime.toISOString().slice(11, 16),
+        })
+      } catch (err: any) {
+        results.push({ appointmentId, success: false, error: err?.message })
+      }
+    }
+
+    return { total: body.items.length, successCount: results.filter((r) => r.success).length, results }
   }
 }

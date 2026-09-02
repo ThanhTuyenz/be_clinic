@@ -16,6 +16,7 @@ model BookingOrder {
   account         User               @relation(fields: [accountId], references: [id], onDelete: Restrict)
   appointments    Appointment[]
   invoice         Invoice?
+  voucherUsages   VoucherUsage[]
 
   @@index([accountId, status])
   @@index([status, createdAt])
@@ -41,6 +42,7 @@ model Appointment {
   checkedInById                String?            @map("checked_in_by_id") @db.Uuid
   reminderSent24h              Boolean            @default(false) @map("reminder_sent_24h")
   reminderSent2h               Boolean            @default(false) @map("reminder_sent_2h")
+  rescheduleCount              Int                @default(0) @map("reschedule_count")
   createdAt                    DateTime           @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt                    DateTime           @updatedAt @map("updated_at") @db.Timestamptz(3)
 
@@ -53,6 +55,7 @@ model Appointment {
   statusHistories              AppointmentStatusHistory[]
   qrToken                      AppointmentQrToken?
   invoice                      Invoice?
+  voucherUsages                VoucherUsage[]
   aiBookingIntentLogs          AIBookingIntentLog[]
 
   @@index([bookingOrderId])
@@ -91,3 +94,43 @@ model AppointmentQrToken {
 
   @@map("appointment_qr_tokens")
 }
+
+model Voucher {
+  id             String         @id @default(uuid()) @db.Uuid
+  code           String         @unique @db.VarChar(50)
+  name           String         @db.VarChar(150)
+  description    String?        @db.Text
+  discountType   DiscountType   @map("discount_type")
+  discountValue  Decimal        @map("discount_value") @db.Decimal(12, 2)
+  minOrderValue  Decimal?       @map("min_order_value") @db.Decimal(12, 2)
+  maxDiscount    Decimal?       @map("max_discount") @db.Decimal(12, 2)
+  usageLimit     Int?           @map("usage_limit")
+  usedCount      Int            @default(0) @map("used_count")
+  userUsageLimit Int            @default(1) @map("user_usage_limit")
+  startDate      DateTime       @default(now()) @map("start_date") @db.Timestamptz(3)
+  endDate        DateTime       @map("end_date") @db.Timestamptz(3)
+  isActive       Boolean        @default(true) @map("is_active")
+  createdAt      DateTime       @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt      DateTime       @updatedAt @map("updated_at") @db.Timestamptz(3)
+  usages         VoucherUsage[]
+
+  @@map("vouchers")
+}
+
+model VoucherUsage {
+  id             String        @id @default(uuid()) @db.Uuid
+  voucherId      String        @map("voucher_id") @db.Uuid
+  accountId      String        @map("account_id") @db.Uuid
+  bookingOrderId String?       @map("booking_order_id") @db.Uuid
+  appointmentId  String?       @map("appointment_id") @db.Uuid
+  discountAmount Decimal       @map("discount_amount") @db.Decimal(12, 2)
+  usedAt         DateTime      @default(now()) @map("used_at") @db.Timestamptz(3)
+  voucher        Voucher       @relation(fields: [voucherId], references: [id], onDelete: Cascade)
+  user           User          @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  bookingOrder   BookingOrder? @relation(fields: [bookingOrderId], references: [id], onDelete: SetNull)
+  appointment    Appointment?  @relation(fields: [appointmentId], references: [id], onDelete: SetNull)
+
+  @@index([voucherId, accountId])
+  @@map("voucher_usages")
+}
+

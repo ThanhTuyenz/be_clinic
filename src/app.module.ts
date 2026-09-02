@@ -8,11 +8,12 @@ import authConfig from './config/auth.config.js'
 import googleConfig from './config/google.config.js'
 import geminiConfig from './config/gemini.config.js'
 import mailerConfig from './config/mailer.config.js'
-import rabbitMqConfig from './infrastructure/messaging/rabbitmq/rabbitmq.config.js'
+import rabbitMqConfig from './config/rabbitmq.config.js'
 import redisConfig from './infrastructure/cache/redis/redis.config.js'
 import { AppFeatureModule } from './modules/app/app.module.js'
 import { AppointmentsModule } from './modules/appointments/appointments.module.js'
 import { AuthModule } from './modules/auth/auth-local/auth.module.js'
+import { AuthGoogleModule } from './modules/auth/auth-google/auth-google.module.js'
 import { JwtAuthCoreModule } from './modules/auth/jwt-auth-core/jwt-auth-core.module.js'
 import { ClinicRoomsModule } from './modules/clinic-rooms/clinic-rooms.module.js'
 import { DoctorsModule } from './modules/doctors/doctors.module.js'
@@ -28,6 +29,7 @@ import { SpecialtiesModule } from './modules/specialties/specialties.module.js'
 import { SystemCatalogModule } from './modules/system-catalog/system-catalog.module.js'
 import { SchedulesModule } from './modules/schedules/schedules.module.js'
 import { AiAssistantModule } from './modules/ai-assistant/ai-assistant.module.js'
+import { VouchersModule } from './modules/vouchers/vouchers.module.js'
 
 @Module({
   imports: [
@@ -56,6 +58,7 @@ import { AiAssistantModule } from './modules/ai-assistant/ai-assistant.module.js
     AppFeatureModule,
     JwtAuthCoreModule,
     AuthModule,
+    AuthGoogleModule,
     DoctorsModule,
     ClinicRoomsModule,
     AppointmentsModule,
@@ -68,6 +71,7 @@ import { AiAssistantModule } from './modules/ai-assistant/ai-assistant.module.js
     SystemCatalogModule,
     SchedulesModule,
     AiAssistantModule,
+    VouchersModule,
   ],
 
   controllers: [],

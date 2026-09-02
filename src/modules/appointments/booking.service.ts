@@ -5,12 +5,16 @@ import { createHash, createHmac } from 'crypto';
 import { RabbitMqConfig } from '../../config/config.type.js';
 import { PrismaService } from '../../infrastructure/database/prisma/prisma.service.js';
 import { MailsService } from '../mails/mails.service.js';
+import { VouchersService } from '../vouchers/vouchers.service.js';
 import { AppointmentItemDto, BatchCheckoutDto, CheckoutAppointmentDto } from './dtos/checkout-appointment.dto.js';
 import { PaymentWebhookDto } from './dtos/payment-webhook.dto.js';
+import { RescheduleAppointmentDto } from './dtos/reschedule-appointment.dto.js';
 
 const ACTIVE_APPOINTMENT_STATUSES: AppointmentStatus[] = [
   'PENDING_PAYMENT', 'BOOKED', 'CHECKED_IN',
 ];
+
+export const BOOKING_SERVICE_FEE = 10_000;
 
 @Injectable()
 export class BookingService {
@@ -18,6 +22,7 @@ export class BookingService {
     private readonly prisma: PrismaService,
     private readonly config: ConfigService,
     private readonly mailsService: MailsService,
+    private readonly vouchersService: VouchersService,
   ) {}
 
 
@@ -112,11 +117,52 @@ export class BookingService {
           const holdTtlMs = this.config.getOrThrow<RabbitMqConfig>('rabbitmq').holdTtlMs;
           const [{ now, expiresAt }] = await tx.$queryRaw<Array<{ now: Date; expiresAt: Date }>>`SELECT NOW() AS "now", NOW() + (${holdTtlMs} * INTERVAL '1 millisecond') AS "expiresAt"`;
           const price = doctorSlot.schedule.doctor.consultationFee;
+          const subtotal = Number(price);
+          const serviceFee = BOOKING_SERVICE_FEE;
+          let discountAmount = 0;
+          let voucherApplied: any = null;
+          if (dto.voucherCode) {
+            const vResult = await this.vouchersService.validateVoucher(dto.voucherCode, subtotal, accountId);
+            discountAmount = vResult.discountAmount;
+            voucherApplied = vResult.voucher;
+          }
+          const totalAmount = Math.max(0, subtotal + serviceFee - discountAmount);
+
           const appointment = await tx.appointment.create({ data: { patientProfileId: profile.id, branchId: doctorSlot.schedule.branchId, scheduleSlotId: doctorSlot.id, servicePrice: price, symptomsDescription: dto.symptomsDescription, bookedViaAi: dto.bookedViaAi ?? false, holdExpiresAt: expiresAt, statusHistories: { create: { toStatus: 'PENDING_PAYMENT', actorId: accountId } } } });
-          const invoice = await tx.invoice.create({ data: { appointmentId: appointment.id, issuedBranchId: doctorSlot.schedule.branchId, totalAmount: price, items: { create: { description: `Khám với ${doctorSlot.schedule.doctor.fullName}`, quantity: 1, unitPrice: price, amount: price } } } });
+
+          const invoiceItems = [
+            { description: `Khám với ${doctorSlot.schedule.doctor.fullName}`, quantity: 1, unitPrice: price, amount: price },
+            { description: 'Phí tiện ích dịch vụ', quantity: 1, unitPrice: new Prisma.Decimal(serviceFee), amount: new Prisma.Decimal(serviceFee) },
+          ];
+          if (discountAmount > 0 && voucherApplied) {
+            invoiceItems.push({
+              description: `Mã ưu đãi (${voucherApplied.code})`,
+              quantity: 1,
+              unitPrice: new Prisma.Decimal(-discountAmount),
+              amount: new Prisma.Decimal(-discountAmount),
+            });
+          }
+
+          const invoice = await tx.invoice.create({
+            data: {
+              appointmentId: appointment.id,
+              issuedBranchId: doctorSlot.schedule.branchId,
+              subtotal: price,
+              serviceFee: new Prisma.Decimal(serviceFee),
+              discountAmount: new Prisma.Decimal(discountAmount),
+              voucherCode: voucherApplied?.code ?? null,
+              totalAmount: new Prisma.Decimal(totalAmount),
+              items: { create: invoiceItems },
+            },
+          });
+
+          if (voucherApplied && discountAmount > 0) {
+            await this.vouchersService.recordVoucherUsage(tx, voucherApplied.id, accountId, discountAmount, { appointmentId: appointment.id });
+          }
+
           const payment = await tx.paymentTransaction.create({ data: { invoiceId: invoice.id, provider: 'PENDING_SELECTION', idempotencyKey: `checkout:${appointment.id}`, method: 'ONLINE', amount: invoice.totalAmount } });
           await tx.outboxEvent.create({ data: { aggregateType: 'Appointment', aggregateId: appointment.id, eventType: 'appointment.hold.created', payload: { appointmentId: appointment.id, doctorSlotId: doctorSlot.id, holdExpiresAt: expiresAt.toISOString() } } });
-          return { appointmentId: appointment.id, invoiceId: invoice.id, paymentId: payment.id, status: appointment.status, holdStartedAt: now, holdExpiresAt: expiresAt };
+          return { appointmentId: appointment.id, invoiceId: invoice.id, paymentId: payment.id, status: appointment.status, holdStartedAt: now, holdExpiresAt: expiresAt, subtotal, serviceFee, discountAmount, totalAmount };
         }
 
         if (!dto.servicePackageId) throw new BadRequestException('Thiếu gói dịch vụ');
@@ -164,6 +210,18 @@ export class BookingService {
             NOW() AS "now",
             NOW() + (${holdTtlMs} * INTERVAL '1 millisecond') AS "expiresAt"
         `;
+
+        const subtotal = Number(servicePackage.price);
+        const serviceFee = BOOKING_SERVICE_FEE;
+        let discountAmount = 0;
+        let voucherApplied: any = null;
+        if (dto.voucherCode) {
+          const vResult = await this.vouchersService.validateVoucher(dto.voucherCode, subtotal, accountId);
+          discountAmount = vResult.discountAmount;
+          voucherApplied = vResult.voucher;
+        }
+        const totalAmount = Math.max(0, subtotal + serviceFee - discountAmount);
+
         const appointment = await tx.appointment.create({
           data: {
             patientProfileId: profile.id,
@@ -177,14 +235,37 @@ export class BookingService {
             statusHistories: { create: { toStatus: 'PENDING_PAYMENT', actorId: accountId } },
           },
         });
+
+        const invoiceItems = [
+          { description: servicePackage.name, quantity: 1, unitPrice: servicePackage.price, amount: servicePackage.price },
+          { description: 'Phí tiện ích dịch vụ', quantity: 1, unitPrice: new Prisma.Decimal(serviceFee), amount: new Prisma.Decimal(serviceFee) },
+        ];
+        if (discountAmount > 0 && voucherApplied) {
+          invoiceItems.push({
+            description: `Mã ưu đãi (${voucherApplied.code})`,
+            quantity: 1,
+            unitPrice: new Prisma.Decimal(-discountAmount),
+            amount: new Prisma.Decimal(-discountAmount),
+          });
+        }
+
         const invoice = await tx.invoice.create({
           data: {
             appointmentId: appointment.id,
             issuedBranchId: servicePackage.branchBookingMethod.branchId,
-            totalAmount: servicePackage.price,
-            items: { create: { description: servicePackage.name, quantity: 1, unitPrice: servicePackage.price, amount: servicePackage.price } },
+            subtotal: servicePackage.price,
+            serviceFee: new Prisma.Decimal(serviceFee),
+            discountAmount: new Prisma.Decimal(discountAmount),
+            voucherCode: voucherApplied?.code ?? null,
+            totalAmount: new Prisma.Decimal(totalAmount),
+            items: { create: invoiceItems },
           },
         });
+
+        if (voucherApplied && discountAmount > 0) {
+          await this.vouchersService.recordVoucherUsage(tx, voucherApplied.id, accountId, discountAmount, { appointmentId: appointment.id });
+        }
+
         const payment = await tx.paymentTransaction.create({
           data: {
             invoiceId: invoice.id,
@@ -201,8 +282,9 @@ export class BookingService {
             payload: { appointmentId: appointment.id, doctorSlotId: doctorSlot.id, holdExpiresAt: expiresAt.toISOString() },
           },
         });
-        return { appointmentId: appointment.id, invoiceId: invoice.id, paymentId: payment.id, status: appointment.status, holdStartedAt: now, holdExpiresAt: expiresAt };
+        return { appointmentId: appointment.id, invoiceId: invoice.id, paymentId: payment.id, status: appointment.status, holdStartedAt: now, holdExpiresAt: expiresAt, subtotal, serviceFee, discountAmount, totalAmount };
       }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
+
     } catch (error) {
       if (error instanceof ConflictException || error instanceof NotFoundException) throw error;
       if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
@@ -438,15 +520,20 @@ export class BookingService {
         status: row.status,
         queueNumber: row.queueNumber,
         holdExpiresAt: row.holdExpiresAt,
+        rescheduleCount: (row as any).rescheduleCount ?? 0,
         createdAt: row.createdAt,
         appointmentDate: doctorSlot?.schedule.workDate?.toISOString().slice(0, 10) ?? null,
         startTime: doctorSlot?.startTime?.toISOString().slice(11, 16) ?? null,
         endTime: doctorSlot?.endTime?.toISOString().slice(11, 16) ?? null,
+        scheduleSlotId: row.scheduleSlotId,
+        servicePackageId: row.servicePackageId,
         patient: { id: row.patientProfile.id, fullName: row.patientProfile.fullName },
         doctor: (() => { const d = doctorSlot?.schedule?.doctor; return d ? { id: d.id, fullName: d.user?.fullName ?? '' } : null; })(),
+        doctorId: doctorSlot?.schedule?.doctorId ?? null,
         service: row.servicePackage ? { id: row.servicePackage.id, name: row.servicePackage.name } : null,
         healthPackage: row.servicePackage ? { id: row.servicePackage.id, name: row.servicePackage.name } : null,
         branch: branch ? { id: branch.id, name: branch.name, address: branch.address } : null,
+        branchId: branch?.id ?? row.branchId,
         room: room ? { id: room.id, code: room.code, name: room.name } : null,
         totalAmount: Number(row.invoice?.totalAmount ?? row.servicePrice ?? 0),
         invoiceStatus: row.invoice?.status ?? null,
@@ -691,14 +778,314 @@ export class BookingService {
     };
   }
 
-  async checkIn(rawPayload: string, actorId: string | null, channel: 'KIOSK' | 'RECEPTIONIST') {
+  /**
+   * Đổi lịch khám sang khung giờ mới (Reschedule)
+   * Nghiệp vụ chuẩn y tế:
+   * - Chỉ áp dụng cho lịch đã xác nhận (BOOKED)
+   * - Phải trước giờ khám ít nhất 6 giờ (hoặc trong vòng 30 phút sau khi vừa đặt)
+   * - Tối đa 2 lần đổi lịch
+   * - Khóa và chuyển slot nguyên tử (Atomic Transfer)
+   * - Cập nhật queueNumber, gửi email thông báo
+   */
+  async rescheduleMyAppointment(accountId: string, appointmentId: string, dto: RescheduleAppointmentDto) {
+    const appointment = await this.prisma.appointment.findUnique({
+      where: { id: appointmentId },
+      include: {
+        bookingOrder: true,
+        patientProfile: { include: { account: { select: { email: true } } } },
+        scheduleSlot: { include: { schedule: { include: { doctor: { include: { user: true } }, branch: true, room: true } } } },
+        servicePackage: true,
+        branch: true,
+      },
+    });
 
+    if (!appointment) throw new NotFoundException('Không tìm thấy lịch hẹn');
+
+    // 1. Kiểm tra quyền sở hữu lịch hẹn
+    const isOwner = appointment.bookingOrder?.accountId === accountId || appointment.patientProfile?.accountId === accountId;
+    if (!isOwner) throw new ForbiddenException('Bạn không có quyền đổi lịch hẹn này');
+
+    // 2. Chỉ cho phép đổi khi đang ở trạng thái BOOKED
+    if (appointment.status !== 'BOOKED') {
+      throw new BadRequestException(`Không thể đổi lịch hẹn đang ở trạng thái «${appointment.status}». Chỉ áp dụng cho lịch đã xác nhận.`);
+    }
+
+    // 3. Kiểm tra số lần đổi lịch (tối đa 2 lần)
+    if (appointment.rescheduleCount >= 2) {
+      throw new BadRequestException('Lịch hẹn này đã đạt giới hạn tối đa 2 lần đổi lịch.');
+    }
+
+    // 4. Kiểm tra thời gian tối thiểu 6 giờ (hoặc ân hạn 30 phút sau khi đặt)
+    const oldSlot = appointment.scheduleSlot;
+    const oldWorkDate = oldSlot?.schedule?.workDate;
+    const oldStartTime = oldSlot?.startTime;
+
+    const now = new Date();
+    const createdRecently = (now.getTime() - appointment.createdAt.getTime()) <= 30 * 60 * 1000; // Trong vòng 30 phút sau khi đặt
+
+    if (!createdRecently && oldWorkDate && oldStartTime) {
+      const dateStr = oldWorkDate.toISOString().slice(0, 10);
+      const timeStr = oldStartTime.toISOString().slice(11, 16);
+      const apptDateTime = new Date(`${dateStr}T${timeStr}:00+07:00`);
+      const hoursUntilExam = (apptDateTime.getTime() - now.getTime()) / (1000 * 60 * 60);
+
+      if (hoursUntilExam < 6) {
+        throw new BadRequestException('Chỉ được đổi lịch trước giờ khám ít nhất 6 giờ. Lịch khám của bạn đã quá sát giờ, vui lòng liên hệ hotline phòng khám để được hỗ trợ.');
+      }
+    }
+
+    // 5. Xác thực slot mới
+    let newSlot: any = null;
+    if (dto.newScheduleSlotId.startsWith('virtual_')) {
+      const parts = dto.newScheduleSlotId.split('_');
+      const scheduleId = parts[1];
+      const startTimeStr = parts[2];
+      const schedule = await this.prisma.doctorSchedule.findUnique({ where: { id: scheduleId }, include: { doctor: true } });
+      if (!schedule || schedule.status !== 'OPEN' || !schedule.doctor.isActive) throw new NotFoundException('Lịch làm việc mới không khả dụng');
+
+      const dateStr = schedule.workDate.toISOString().slice(0, 10);
+      const startDt = new Date(`${dateStr}T${startTimeStr}:00.000Z`);
+      const endDt = new Date(startDt.getTime() + (schedule.slotDurationMin || 30) * 60000);
+
+      newSlot = await this.prisma.doctorScheduleSlot.upsert({
+        where: { scheduleId_startTime: { scheduleId, startTime: startDt } },
+        update: {},
+        create: { scheduleId, startTime: startDt, endTime: endDt, capacity: 1, occupiedCount: 0 },
+        include: { schedule: { include: { doctor: { include: { user: true } }, branch: true, room: true } } },
+      });
+    } else {
+      newSlot = await this.prisma.doctorScheduleSlot.findUnique({
+        where: { id: dto.newScheduleSlotId },
+        include: { schedule: { include: { doctor: { include: { user: true } }, branch: true, room: true } } },
+      });
+    }
+
+    if (!newSlot || !newSlot.isActive || newSlot.schedule.status !== 'OPEN') {
+      throw new NotFoundException('Khung giờ khám mới không khả dụng');
+    }
+
+    if (newSlot.id === appointment.scheduleSlotId) {
+      throw new BadRequestException('Khung giờ mới trùng với khung giờ hiện tại');
+    }
+
+    // Kiểm tra phạm vi đổi lịch:
+    // Nếu là khám bác sĩ -> phải cùng bác sĩ
+    if (!appointment.servicePackageId && oldSlot?.schedule?.doctorId) {
+      if (newSlot.schedule.doctorId !== oldSlot.schedule.doctorId) {
+        throw new BadRequestException('Khung giờ mới phải thuộc cùng Bác sĩ phụ trách');
+      }
+    }
+    // Nếu là gói khám -> phải cùng chi nhánh
+    if (appointment.servicePackageId && appointment.branchId) {
+      if (newSlot.schedule.branchId !== appointment.branchId) {
+        throw new BadRequestException('Khung giờ mới phải thuộc cùng cơ sở khám của gói dịch vụ');
+      }
+    }
+
+    // Kiểm tra ngày khám mới phải trong tương lai
+    const newWorkDate = newSlot.schedule.workDate;
+    const newStartTime = newSlot.startTime;
+    const newDateStr = newWorkDate.toISOString().slice(0, 10);
+    const newTimeStr = newStartTime.toISOString().slice(11, 16);
+    const newApptDateTime = new Date(`${newDateStr}T${newTimeStr}:00+07:00`);
+    if (newApptDateTime.getTime() <= now.getTime()) {
+      throw new BadRequestException('Không thể đổi sang khung giờ trong quá khứ');
+    }
+
+    // 6. Thực thi chuyển đổi nguyên tử (Atomic Transfer Transaction)
+    const result = await this.prisma.$transaction(async (tx) => {
+      // 6a. Khóa và tăng slot mới
+      const reservedNew = await tx.$executeRaw`
+        UPDATE "doctor_schedule_slots"
+        SET "occupied_count" = "occupied_count" + 1, "updated_at" = NOW()
+        WHERE "id" = ${newSlot.id}::uuid AND "is_active" = TRUE AND "occupied_count" < "capacity"
+      `;
+      if (reservedNew !== 1) {
+        throw new ConflictException('Khung giờ mới vừa hết chỗ, vui lòng chọn khung giờ khác');
+      }
+
+      // 6b. Nhả slot cũ
+      if (appointment.scheduleSlotId) {
+        await tx.$executeRaw`
+          UPDATE "doctor_schedule_slots"
+          SET "occupied_count" = GREATEST("occupied_count" - 1, 0), "updated_at" = NOW()
+          WHERE "id" = ${appointment.scheduleSlotId}::uuid
+        `;
+      }
+
+      // 6c. Tính lại số thứ tự khám cho slot/ngày mới
+      const newQueueNumber = await this.computeQueueNumber(tx, appointmentId, newSlot.id);
+
+      // 6d. Cập nhật lịch hẹn
+      const updated = await tx.appointment.update({
+        where: { id: appointmentId },
+        data: {
+          scheduleSlotId: newSlot.id,
+          queueNumber: newQueueNumber,
+          rescheduleCount: { increment: 1 },
+          updatedAt: new Date(),
+          statusHistories: {
+            create: {
+              fromStatus: 'BOOKED',
+              toStatus: 'BOOKED',
+              actorId: accountId,
+              reason: `RESCHEDULED: Đổi từ slot [${oldSlot?.startTime?.toISOString().slice(11, 16)} ${oldWorkDate?.toISOString().slice(0, 10)}] sang [${newTimeStr} ${newDateStr}]. Lý do: ${dto.reason?.trim() || 'Người bệnh yêu cầu đổi lịch'}`,
+            },
+          },
+        },
+      });
+
+      // 6e. Tạo sự kiện Outbox thông báo
+      await tx.outboxEvent.create({
+        data: {
+          aggregateType: 'Appointment',
+          aggregateId: appointmentId,
+          eventType: 'appointment.rescheduled',
+          payload: {
+            appointmentId,
+            oldSlotId: oldSlot?.id,
+            newSlotId: newSlot.id,
+            newAppointmentDate: newDateStr,
+            newStartTime: newTimeStr,
+            newEndTime: newSlot.endTime.toISOString().slice(11, 16),
+            queueNumber: newQueueNumber,
+            reason: dto.reason?.trim(),
+          },
+        },
+      });
+
+      return {
+        success: true,
+        message: 'Đổi lịch khám thành công',
+        appointmentId: updated.id,
+        bookingCode: updated.bookingCode,
+        newDate: newDateStr,
+        newTime: `${newTimeStr} - ${newSlot.endTime.toISOString().slice(11, 16)}`,
+        newQueueNumber,
+        rescheduleCount: updated.rescheduleCount,
+      };
+    });
+
+    // 7. Gửi email thông báo đổi lịch cho bệnh nhân
+    const patientEmail = appointment.patientProfile?.account?.email;
+    if (patientEmail) {
+      const docName = newSlot.schedule?.doctor
+        ? `${newSlot.schedule.doctor.academicRank ? newSlot.schedule.doctor.academicRank + ' ' : ''}${newSlot.schedule.doctor.user?.fullName ?? ''}`.trim()
+        : null;
+      const serviceName = appointment.servicePackage?.name || null;
+      const branchName = newSlot.schedule?.branch?.name || appointment.branch?.name || 'VitaCare Clinic';
+      const branchAddress = newSlot.schedule?.branch?.address || appointment.branch?.address || '';
+      const roomName = newSlot.schedule?.room?.name ? `${newSlot.schedule.room.code} · ${newSlot.schedule.room.name}` : null;
+
+      try {
+        await this.mailsService.sendAppointmentRescheduled({
+          to: patientEmail,
+          data: {
+            patientName: appointment.patientProfile.fullName,
+            bookingCode: appointment.bookingCode || appointment.id,
+            newAppointmentDate: result.newDate,
+            newStartTime: newTimeStr,
+            newEndTime: newSlot.endTime.toISOString().slice(11, 16),
+            branchName,
+            branchAddress,
+            doctorOrServiceName: docName ? `Bác sĩ ${docName}` : (serviceName || 'Khám chuyên khoa'),
+            roomName,
+            queueNumber: result.newQueueNumber,
+            reason: dto.reason?.trim() || null,
+          },
+        });
+      } catch {
+        // Không block response nếu email gửi lỗi
+      }
+    }
+
+    return result;
+  }
+
+  async previewCheckIn(rawPayload: string, branchId?: string) {
     const rawToken = String(rawPayload || '').trim().replace(/^VITACARE_CHECKIN:/, '');
     if (!rawToken) throw new BadRequestException('Thiếu mã QR check-in');
-    if (channel === 'RECEPTIONIST') {
-      const actor = await this.prisma.user.findUnique({ where: { id: actorId || '' }, select: { role: true } });
-      if (!actor || !['ADMIN', 'BRANCH_MANAGER', 'RECEPTIONIST'].includes(actor.role)) throw new ForbiddenException('Không có quyền check-in bệnh nhân');
+    const tokenHash = createHash('sha256').update(rawToken).digest('hex');
+
+    const qr = await this.prisma.appointmentQrToken.findUnique({
+      where: { tokenHash },
+      include: {
+        appointment: {
+          include: {
+            patientProfile: true,
+            servicePackage: true,
+            branch: true,
+            scheduleSlot: {
+              include: {
+                schedule: {
+                  include: {
+                    doctor: { include: { user: true } },
+                    room: true,
+                    branch: true,
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+    });
+
+    if (!qr || qr.expiresAt <= new Date()) throw new NotFoundException('Mã QR không hợp lệ hoặc đã hết hạn');
+
+    const appt = qr.appointment;
+    if (branchId) {
+      const apptBranchId = appt.branchId || appt.scheduleSlot?.schedule?.branchId;
+      if (apptBranchId && apptBranchId !== branchId) {
+        const branchName = appt.branch?.name || appt.scheduleSlot?.schedule?.branch?.name || 'cơ sở khác';
+        throw new BadRequestException(`Lịch hẹn này được đặt tại ${branchName}. Vui lòng kiểm tra lại cơ sở khám.`);
+      }
     }
+
+    const doctor = appt.scheduleSlot?.schedule?.doctor;
+    const room = appt.scheduleSlot?.schedule?.room;
+    const branch = appt.branch || appt.scheduleSlot?.schedule?.branch;
+
+    return {
+      appointmentId: appt.id,
+      bookingCode: appt.bookingCode,
+      status: appt.status,
+      queueNumber: appt.queueNumber,
+      patient: {
+        id: appt.patientProfile.id,
+        fullName: appt.patientProfile.fullName,
+        gender: appt.patientProfile.gender,
+        dateOfBirth: appt.patientProfile.dateOfBirth ? appt.patientProfile.dateOfBirth.toISOString().slice(0, 10) : null,
+        nationalId: appt.patientProfile.nationalId || '',
+        healthInsuranceNumber: appt.patientProfile.healthInsuranceNumber || '',
+        phoneNumber: appt.patientProfile.phoneNumber || '',
+        address: appt.patientProfile.address || '',
+      },
+      doctor: doctor ? {
+        id: doctor.id,
+        fullName: doctor.user?.fullName || '',
+      } : null,
+      healthPackage: appt.servicePackage ? {
+        id: appt.servicePackage.id,
+        name: appt.servicePackage.name,
+      } : null,
+      room: room ? {
+        id: room.id,
+        code: room.code,
+        name: room.name,
+      } : null,
+      branch: branch ? {
+        id: branch.id,
+        name: branch.name,
+      } : null,
+    };
+  }
+
+  async checkIn(rawPayload: string, actorId: string | null, channel: 'RECEPTIONIST' = 'RECEPTIONIST', branchId?: string) {
+    const rawToken = String(rawPayload || '').trim().replace(/^VITACARE_CHECKIN:/, '');
+    if (!rawToken) throw new BadRequestException('Thiếu mã QR check-in');
+    const actor = await this.prisma.user.findUnique({ where: { id: actorId || '' }, select: { role: true } });
+    if (!actor || !['ADMIN', 'BRANCH_MANAGER', 'RECEPTIONIST'].includes(actor.role)) throw new ForbiddenException('Không có quyền check-in bệnh nhân');
     const tokenHash = createHash('sha256').update(rawToken).digest('hex');
     return this.prisma.$transaction(async (tx) => {
       const qr = await tx.appointmentQrToken.findUnique({
@@ -706,10 +1093,20 @@ export class BookingService {
         include: { appointment: { include: {
           patientProfile: true,
           servicePackage: true,
-          scheduleSlot: { include: { schedule: { include: { doctor: true, room: true } } } },
+          branch: true,
+          scheduleSlot: { include: { schedule: { include: { doctor: { include: { user: true } }, room: true, branch: true } } } },
         } } },
       });
       if (!qr || qr.expiresAt <= new Date()) throw new NotFoundException('QR không hợp lệ hoặc đã hết hạn');
+
+      if (branchId) {
+        const apptBranchId = qr.appointment.branchId || qr.appointment.scheduleSlot?.schedule?.branchId;
+        if (apptBranchId && apptBranchId !== branchId) {
+          const branchName = qr.appointment.branch?.name || qr.appointment.scheduleSlot?.schedule?.branch?.name || 'cơ sở khác';
+          throw new BadRequestException(`Lịch hẹn này được đặt tại ${branchName}. Vui lòng kiểm tra lại cơ sở khám.`);
+        }
+      }
+
       const alreadyCheckedIn = qr.appointment.status === 'CHECKED_IN';
       if (!alreadyCheckedIn && qr.appointment.status !== 'BOOKED') throw new ConflictException('APPOINTMENT_NOT_CHECKIN_READY');
       const assignedDoctorSlotId = qr.appointment.scheduleSlotId;
@@ -735,17 +1132,192 @@ export class BookingService {
           checkedInById: actorId,
           statusHistories: { create: { fromStatus: 'BOOKED', toStatus: 'CHECKED_IN', actorId, reason: `CHECK_IN_${channel}` } },
         },
-        include: { patientProfile: true, servicePackage: true, scheduleSlot: { include: { schedule: { include: { doctor: true, room: true } } } } },
+        include: { patientProfile: true, servicePackage: true, scheduleSlot: { include: { schedule: { include: { doctor: { include: { user: true } }, room: true, branch: true } } } } },
       });
       await tx.appointmentQrToken.update({ where: { id: qr.id }, data: { usedAt: new Date() } });
       return this.checkInResult(appointment, channel);
     }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
   }
 
-  private checkInResult(appointment: any, channel: 'KIOSK' | 'RECEPTIONIST') {
+  private checkInResult(appointment: any, channel: 'RECEPTIONIST' = 'RECEPTIONIST') {
     const room = appointment.scheduleSlot?.schedule?.room;
     const doctor = appointment.scheduleSlot?.schedule?.doctor;
-    return { appointmentId: appointment.id, bookingCode: appointment.bookingCode, queueNumber: appointment.queueNumber, status: appointment.status, channel, checkedInAt: appointment.checkedInAt, patient: { fullName: appointment.patientProfile?.fullName }, doctor: doctor ? { fullName: doctor.fullName } : null, healthPackage: appointment.servicePackage ? { name: appointment.servicePackage.name } : null, room: room ? { code: room.code, name: room.name } : null };
+    const doctorName = doctor?.user?.fullName || null;
+    return {
+      appointmentId: appointment.id,
+      bookingCode: appointment.bookingCode,
+      queueNumber: appointment.queueNumber,
+      status: appointment.status,
+      channel,
+      checkedInAt: appointment.checkedInAt,
+      patient: {
+        id: appointment.patientProfile?.id,
+        fullName: appointment.patientProfile?.fullName,
+        nationalId: appointment.patientProfile?.nationalId,
+        phoneNumber: appointment.patientProfile?.phoneNumber,
+        gender: appointment.patientProfile?.gender,
+        dateOfBirth: appointment.patientProfile?.dateOfBirth,
+        address: appointment.patientProfile?.address,
+      },
+      doctor: doctorName ? { fullName: doctorName } : null,
+      healthPackage: appointment.servicePackage ? { name: appointment.servicePackage.name } : null,
+      room: room ? { code: room.code, name: room.name } : null,
+    };
+  }
+
+  /**
+   * Bóc tách số CCCD 12 chữ số từ chuỗi nhập vào hoặc mã QR thẻ CCCD Bộ Công An
+   * Ví dụ QR CCCD: "079090123456|012345678|Nguyễn Văn A|15031999|Nam|Địa chỉ...|..."
+   */
+  private extractNationalId(rawInput: string): string {
+    const text = String(rawInput || '').trim();
+    if (!text) return '';
+    if (text.includes('|')) {
+      const parts = text.split('|');
+      const firstPart = parts[0]?.trim();
+      if (/^\d{9,12}$/.test(firstPart)) {
+        return firstPart;
+      }
+    }
+    const match = text.match(/\b\d{9,12}\b/);
+    if (match) return match[0];
+    return text;
+  }
+
+  async checkInByNationalId(rawInput: string, actorId: string, branchId?: string) {
+    const actor = await this.prisma.user.findUnique({ where: { id: actorId }, select: { role: true } });
+    if (!actor || !['ADMIN', 'BRANCH_MANAGER', 'RECEPTIONIST'].includes(actor.role)) {
+      throw new ForbiddenException('Không có quyền check-in bệnh nhân');
+    }
+
+    const nationalId = this.extractNationalId(rawInput);
+    if (!nationalId) {
+      throw new BadRequestException('Số CCCD hoặc mã QR thẻ CCCD không hợp lệ');
+    }
+
+    const now = new Date();
+    const startOfDay = new Date(Date.UTC(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0));
+    const endOfDay = new Date(Date.UTC(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999));
+
+    // Tìm lịch hẹn hôm nay của bệnh nhân này
+    let appt = await this.prisma.appointment.findFirst({
+      where: {
+        patientProfile: { nationalId },
+        status: { in: ['BOOKED', 'CHECKED_IN'] },
+        scheduleSlot: {
+          schedule: {
+            workDate: { gte: startOfDay, lte: endOfDay },
+          },
+        },
+      },
+      include: {
+        patientProfile: true,
+        servicePackage: true,
+        branch: true,
+        scheduleSlot: {
+          include: {
+            schedule: {
+              include: {
+                doctor: { include: { user: true } },
+                room: true,
+                branch: true,
+              },
+            },
+          },
+        },
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    // Nếu hôm nay không tìm thấy, tìm lịch hẹn trạng thái BOOKED gần nhất
+    if (!appt) {
+      appt = await this.prisma.appointment.findFirst({
+        where: {
+          patientProfile: { nationalId },
+          status: 'BOOKED',
+        },
+        include: {
+          patientProfile: true,
+          servicePackage: true,
+          branch: true,
+          scheduleSlot: {
+            include: {
+              schedule: {
+                include: {
+                  doctor: { include: { user: true } },
+                  room: true,
+                  branch: true,
+                },
+              },
+            },
+          },
+        },
+        orderBy: { createdAt: 'desc' },
+      });
+    }
+
+    if (!appt) {
+      throw new NotFoundException(`Không tìm thấy lịch hẹn phù hợp cho số CCCD ${nationalId}`);
+    }
+
+    if (branchId) {
+      const apptBranchId = appt.branchId || appt.scheduleSlot?.schedule?.branchId;
+      if (apptBranchId && apptBranchId !== branchId) {
+        const branchName = appt.branch?.name || appt.scheduleSlot?.schedule?.branch?.name || 'cơ sở khác';
+        throw new BadRequestException(`Lịch hẹn này được đặt tại ${branchName}. Vui lòng kiểm tra lại cơ sở khám.`);
+      }
+    }
+
+    if (appt.status === 'CHECKED_IN') {
+      return this.checkInResult(appt, 'RECEPTIONIST');
+    }
+
+    return this.prisma.$transaction(async (tx) => {
+      let finalQueueNumber = appt.queueNumber;
+      if (finalQueueNumber == null) {
+        finalQueueNumber = await this.computeQueueNumber(
+          tx,
+          appt.id,
+          appt.scheduleSlotId,
+        );
+      }
+
+      const updated = await tx.appointment.update({
+        where: { id: appt.id },
+        data: {
+          status: 'CHECKED_IN',
+          queueNumber: finalQueueNumber,
+          checkedInAt: new Date(),
+          checkedInById: actorId,
+          statusHistories: {
+            create: {
+              fromStatus: 'BOOKED',
+              toStatus: 'CHECKED_IN',
+              actorId,
+              reason: 'CHECK_IN_NATIONAL_ID',
+            },
+          },
+        },
+        include: {
+          patientProfile: true,
+          servicePackage: true,
+          branch: true,
+          scheduleSlot: {
+            include: {
+              schedule: {
+                include: {
+                  doctor: { include: { user: true } },
+                  room: true,
+                  branch: true,
+                },
+              },
+            },
+          },
+        },
+      });
+
+      return this.checkInResult(updated, 'RECEPTIONIST');
+    }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
   }
 
   // ─────────────────────────────────────────────────────────────
@@ -907,6 +1479,32 @@ export class BookingService {
           }
         }
 
+        const subtotal = Number(totalAmount);
+        const serviceFee = BOOKING_SERVICE_FEE;
+        let discountAmount = 0;
+        let voucherApplied: any = null;
+        if (dto.voucherCode) {
+          const vResult = await this.vouchersService.validateVoucher(dto.voucherCode, subtotal, accountId);
+          discountAmount = vResult.discountAmount;
+          voucherApplied = vResult.voucher;
+        }
+        const finalTotalAmount = Math.max(0, subtotal + serviceFee - discountAmount);
+
+        invoiceItems.push({
+          description: 'Phí tiện ích dịch vụ (Ưu đãi đơn nhóm)',
+          quantity: 1,
+          unitPrice: new Prisma.Decimal(serviceFee),
+          amount: new Prisma.Decimal(serviceFee),
+        });
+        if (discountAmount > 0 && voucherApplied) {
+          invoiceItems.push({
+            description: `Mã ưu đãi (${voucherApplied.code})`,
+            quantity: 1,
+            unitPrice: new Prisma.Decimal(-discountAmount),
+            amount: new Prisma.Decimal(-discountAmount),
+          });
+        }
+
         // Tạo BookingOrder tổng
         const orderCode = `ORD-${Date.now().toString(36).toUpperCase()}`;
         const branchId = appointmentData[0]?.branchId;
@@ -915,7 +1513,7 @@ export class BookingService {
             accountId,
             orderCode,
             groupType,
-            totalAmount,
+            totalAmount: new Prisma.Decimal(finalTotalAmount),
             note: dto.note,
           },
         });
@@ -938,10 +1536,18 @@ export class BookingService {
           data: {
             bookingOrderId: bookingOrder.id,
             issuedBranchId: branchId,
-            totalAmount,
+            subtotal: new Prisma.Decimal(subtotal),
+            serviceFee: new Prisma.Decimal(serviceFee),
+            discountAmount: new Prisma.Decimal(discountAmount),
+            voucherCode: voucherApplied?.code ?? null,
+            totalAmount: new Prisma.Decimal(finalTotalAmount),
             items: { create: invoiceItems },
           } as any,
         });
+
+        if (voucherApplied && discountAmount > 0) {
+          await this.vouchersService.recordVoucherUsage(tx, voucherApplied.id, accountId, discountAmount, { bookingOrderId: bookingOrder.id });
+        }
 
         const payment = await tx.paymentTransaction.create({
           data: {
@@ -949,7 +1555,7 @@ export class BookingService {
             provider: 'PENDING_SELECTION',
             idempotencyKey: `checkout:${bookingOrder.id}`,
             method: 'ONLINE',
-            amount: totalAmount,
+            amount: new Prisma.Decimal(finalTotalAmount),
           },
         });
 
@@ -967,7 +1573,10 @@ export class BookingService {
           orderCode,
           invoiceId: invoice.id,
           paymentId: payment.id,
-          totalAmount: Number(totalAmount),
+          subtotal,
+          serviceFee,
+          discountAmount,
+          totalAmount: finalTotalAmount,
           groupType,
           holdStartedAt: now,
           holdExpiresAt: expiresAt,

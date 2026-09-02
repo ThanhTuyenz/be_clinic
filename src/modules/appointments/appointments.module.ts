@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common'
 import { ScheduleModule } from '@nestjs/schedule'
 import { AppointmentsController } from '../../controllers/appointments.controller.js'
 import { MailsModule } from '../mails/mails.module.js'
+import { VouchersModule } from '../vouchers/vouchers.module.js'
 import { AppointmentReminderTask } from './appointment-reminder.task.js'
 import { BookingController, CheckInController, PaymentWebhookController } from './booking.controller.js'
 import { BookingService } from './booking.service.js'
@@ -12,6 +13,7 @@ import { StaffAppointmentsService } from './staff-appointments.service.js'
 @Module({
   imports: [
     MailsModule,
+    VouchersModule,
   ],
   controllers: [
     AppointmentsController,
