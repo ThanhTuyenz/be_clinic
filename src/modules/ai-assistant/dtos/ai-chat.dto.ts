@@ -42,6 +42,7 @@ export interface PackageCardRecommendation {
   id: string
   code: string
   name: string
+  description?: string
   price: number
   branchName?: string
 }
@@ -83,14 +84,21 @@ export class AiAgentChatDto {
 
   @IsString()
   @IsOptional()
+  servicePackageId?: string
+
+  @IsString()
+  @IsOptional()
   selectedProfileId?: string
 }
 
 export interface AiAgentBookingProposal {
   slotId: string
+  servicePackageId?: string
   doctorId: string
   doctorName: string
   specialtyName: string
+  packageName?: string
+  description?: string
   branchId: string
   branchName: string
   date: string

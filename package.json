@@ -16,15 +16,9 @@
     "prisma:migrate": "prisma migrate dev",
     "prisma:deploy": "prisma migrate deploy",
     "prisma:studio": "prisma studio",
-    "prisma:seed": "prisma db seed",
+    "prisma:seed": "node prisma/seed.mjs",
     "seed:prisma": "node prisma/seed.mjs",
-    "seed:prod": "node -e \"process.env.ENV_FILE='.env.production'; require('child_process').execSync('node prisma/seed.mjs', {stdio: 'inherit', env: process.env})\"",
-    "migrate:auth:mongo-to-prisma": "node scripts/migrate-auth-to-prisma.mjs",
-    "migrate:admin:mongo-to-prisma": "node scripts/migrate-admin-mongo-to-prisma.mjs",
-    "seed:booking": "node scripts/seed-booking.mjs",
-    "seed:users": "node scripts/seed-users.mjs",
-    "start:legacy": "node server.mjs",
-    "dev:legacy": "node --watch server.mjs"
+    "seed:prod": "node -e \"process.env.ENV_FILE='.env.production'; require('child_process').execSync('node prisma/seed.mjs', {stdio: 'inherit', env: process.env})\""
   },
   "dependencies": {
     "@google/genai": "^2.19.0",

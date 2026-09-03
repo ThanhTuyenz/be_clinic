@@ -1381,6 +1381,10 @@ export class BookingService {
                 include: { schedule: { include: { doctor: true } } },
               });
             } else {
+              const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+              if (!UUID_REGEX.test(item.scheduleSlotId || '')) {
+                throw new BadRequestException(`Khung giờ khám không hợp lệ cho ${profile.fullName}. Vui lòng chọn lại khung giờ khám.`);
+              }
               doctorSlot = await tx.doctorScheduleSlot.findUnique({
                 where: { id: item.scheduleSlotId },
                 include: { schedule: { include: { doctor: true } } },
@@ -1426,8 +1430,9 @@ export class BookingService {
           } else {
             // ── Đặt theo gói dịch vụ ─────────────────────────────
             const slotId = item.scheduleSlotId || item.servicePackageScheduleSlotId;
-            if (!slotId) {
-              throw new BadRequestException(`Thiếu khung giờ khám cho ${profile.fullName}`);
+            const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+            if (!slotId || !UUID_REGEX.test(slotId)) {
+              throw new BadRequestException(`Khung giờ khám không hợp lệ cho ${profile.fullName}. Vui lòng chọn lại khung giờ khám.`);
             }
             const pkg = await tx.servicePackage.findUnique({
               where: { id: item.servicePackageId },
