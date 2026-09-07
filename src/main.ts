@@ -1,4 +1,5 @@
 import 'reflect-metadata'
+// Trigger reload: RabbitMQ & Redis enabled
 import { join } from 'node:path'
 import { NestFactory } from '@nestjs/core'
 import express from 'express'

@@ -5,10 +5,8 @@ import validateConfig from '../common/utils/validate-config.js';
 import { RabbitMqConfig } from './config.type.js';
 
 class RabbitMqEnvironmentValidator {
-  @Transform(({ value }) => value === 'true' || value === true)
-  @IsBoolean()
   @IsOptional()
-  RABBITMQ_ENABLED?: boolean;
+  RABBITMQ_ENABLED?: string;
 
   @IsString()
   @IsOptional()
@@ -40,7 +38,7 @@ class RabbitMqEnvironmentValidator {
 export default registerAs<RabbitMqConfig>('rabbitmq', () => {
   const env = validateConfig(process.env, RabbitMqEnvironmentValidator);
   return {
-    enabled: env.RABBITMQ_ENABLED ?? false,
+    enabled: process.env.RABBITMQ_ENABLED === 'true',
     url: env.RABBITMQ_URL,
     holdTtlMs: env.RABBITMQ_HOLD_TTL_MS ?? 60_000,
     prefetch: env.RABBITMQ_PREFETCH ?? 10,

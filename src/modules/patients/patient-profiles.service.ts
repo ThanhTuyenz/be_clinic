@@ -2,10 +2,14 @@ import { BadRequestException, ConflictException, Injectable, NotFoundException }
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../infrastructure/database/prisma/prisma.service.js';
 import { CreatePatientProfileDto, UpdatePatientProfileDto } from './patient-profiles.dto.js';
+import { RecommendationService } from '../recommendations/recommendation.service.js';
 
 @Injectable()
 export class PatientProfilesService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly recommendationService: RecommendationService,
+  ) {}
 
   list(accountId: string) {
     return this.prisma.patientProfile.findMany({ where: { accountId }, orderBy: [{ isMainProfile: 'desc' }, { createdAt: 'asc' }] });
@@ -39,7 +43,7 @@ export class PatientProfilesService {
     }
 
     try {
-      return await this.prisma.$transaction(async (tx) => {
+      const created = await this.prisma.$transaction(async (tx) => {
         const count = await tx.patientProfile.count({ where: { accountId } });
         const makeMain = dto.isMainProfile === true || count === 0;
         if (makeMain) await tx.patientProfile.updateMany({ where: { accountId, isMainProfile: true }, data: { isMainProfile: false } });
@@ -120,6 +124,8 @@ export class PatientProfilesService {
           }
         });
       });
+      this.recommendationService.triggerAsyncRecommendation(created.id);
+      return created;
     } catch (error) {
       if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
         throw new ConflictException('Hồ sơ với số CCCD hoặc mã BHYT này đã tồn tại trong tài khoản của bạn.');
@@ -189,7 +195,7 @@ export class PatientProfilesService {
     ].filter(Boolean).join(', ');
 
     try {
-      return await this.prisma.patientProfile.update({
+      const updated = await this.prisma.patientProfile.update({
         where: { id },
         data: {
           patientCode: syncedPatientCode,
@@ -221,6 +227,9 @@ export class PatientProfilesService {
           ...(dto.relationshipToAccount !== undefined && { relationshipToAccount: dto.relationshipToAccount }),
         },
       });
+      await this.recommendationService.invalidateCache(id);
+      this.recommendationService.triggerAsyncRecommendation(id);
+      return updated;
     } catch (error) {
       if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
         throw new ConflictException('Hồ sơ với số CCCD hoặc mã BHYT này đã tồn tại trong tài khoản của bạn.');

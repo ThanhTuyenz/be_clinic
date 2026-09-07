@@ -5,6 +5,7 @@ import QRCode from 'qrcode';
 import { PrismaService } from '../../database/prisma/prisma.service.js';
 import { BookingService } from '../../../modules/appointments/booking.service.js';
 import { MailsService } from '../../../modules/mails/mails.service.js';
+import { RecommendationService } from '../../../modules/recommendations/recommendation.service.js';
 import { RabbitMqConfig } from '../../../config/config.type.js';
 import { RABBITMQ_TOPOLOGY as topology } from './rabbitmq.constants.js';
 
@@ -21,6 +22,7 @@ export class RabbitMqService implements OnModuleInit, OnModuleDestroy {
     private readonly prisma: PrismaService,
     private readonly bookingService: BookingService,
     private readonly mailsService: MailsService,
+    private readonly recommendationService: RecommendationService,
   ) {}
 
   async onModuleInit(): Promise<void> {
@@ -37,6 +39,7 @@ export class RabbitMqService implements OnModuleInit, OnModuleDestroy {
     await this.declareTopology();
     await this.consumeExpiredHolds();
     await this.consumeBookedAppointments();
+    await this.consumeRecommendationTasks();
     this.publisherTimer = setInterval(() => void this.publishOutboxBatch(), rabbit.outboxPollMs);
     this.publisherTimer.unref();
   }
@@ -78,6 +81,10 @@ export class RabbitMqService implements OnModuleInit, OnModuleDestroy {
     // Booked appointment email queue
     await this.channel.assertQueue(topology.bookedQueue, { durable: true });
     await this.channel.bindQueue(topology.bookedQueue, topology.eventsExchange, topology.bookedRoutingKey);
+
+    // Recommendation profile analyze queue
+    await this.channel.assertQueue(topology.recommendationQueue, { durable: true });
+    await this.channel.bindQueue(topology.recommendationQueue, topology.eventsExchange, topology.recommendationRoutingKey);
 
     await this.channel.prefetch(this.rabbitConfig().prefetch);
   }
@@ -147,6 +154,36 @@ export class RabbitMqService implements OnModuleInit, OnModuleDestroy {
         this.channel.ack(message);
       } catch (error) {
         this.logger.error('Unable to process booked appointment email notification', error);
+        this.channel.nack(message, false, false);
+      }
+    }, { noAck: false });
+  }
+
+  private async consumeRecommendationTasks(): Promise<void> {
+    await this.channel.consume(topology.recommendationQueue, async (message: any) => {
+      if (!message) return;
+      try {
+        const payload = JSON.parse(message.content.toString()) as {
+          eventId?: string;
+          profileId: string;
+          branchId?: string;
+        };
+        this.logger.log(`[RabbitMQ] Received recommendation analyze task for profile: ${payload.profileId}`);
+        if (payload.eventId) {
+          const processed = await this.prisma.processedEvent.findUnique({ where: { eventId: payload.eventId } });
+          if (!processed) {
+            await this.recommendationService.analyzeAndCacheRecommendations(payload.profileId, payload.branchId);
+            await this.prisma.processedEvent.create({
+              data: { eventId: payload.eventId, consumer: 'recommendation-analyzer' },
+            });
+          }
+        } else {
+          await this.recommendationService.analyzeAndCacheRecommendations(payload.profileId, payload.branchId);
+        }
+        this.channel.ack(message);
+        this.logger.log(`[RabbitMQ] Successfully analyzed & cached recommendations for profile: ${payload.profileId}`);
+      } catch (error: any) {
+        this.logger.error(`[RabbitMQ] Failed to analyze recommendations for profile: ${error?.message}`, error);
         this.channel.nack(message, false, false);
       }
     }, { noAck: false });

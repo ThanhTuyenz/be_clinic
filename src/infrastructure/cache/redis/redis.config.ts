@@ -4,7 +4,7 @@ import validateConfig from '../../../common/utils/validate-config.js';
 import { RedisConfig } from '../../../config/config.type.js';
 
 class RedisEnvironmentValidator {
-  @IsBoolean() @IsOptional() REDIS_ENABLED?: boolean;
+  @IsOptional() REDIS_ENABLED?: string;
   @IsString() @IsOptional() REDIS_URL?: string;
   @IsString() @IsOptional() REDIS_KEY_PREFIX?: string;
   @IsInt() @Min(0) @Max(15) @IsOptional() REDIS_DB?: number;
@@ -15,7 +15,7 @@ class RedisEnvironmentValidator {
 export default registerAs<RedisConfig>('redis', () => {
   const env = validateConfig(process.env, RedisEnvironmentValidator);
   return {
-    enabled: env.REDIS_ENABLED ?? false,
+    enabled: process.env.REDIS_ENABLED === 'true',
     url: env.REDIS_URL,
     keyPrefix: env.REDIS_KEY_PREFIX ?? 'vitacare:',
     db: env.REDIS_DB ?? 0,

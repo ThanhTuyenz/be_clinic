@@ -11,4 +11,6 @@ export const RABBITMQ_TOPOLOGY = {
   eventsExchange: 'amq.topic',
   bookedRoutingKey: 'appointment.booked',
   bookedQueue: 'appointments.booked.mail',
+  recommendationRoutingKey: 'recommendation.profile.analyze',
+  recommendationQueue: 'recommendations.profile.analyze',
 } as const;

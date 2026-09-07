@@ -30,6 +30,7 @@ import { SystemCatalogModule } from './modules/system-catalog/system-catalog.mod
 import { SchedulesModule } from './modules/schedules/schedules.module.js'
 import { AiAssistantModule } from './modules/ai-assistant/ai-assistant.module.js'
 import { VouchersModule } from './modules/vouchers/vouchers.module.js'
+import { RecommendationModule } from './modules/recommendations/recommendation.module.js'
 
 @Module({
   imports: [
@@ -72,6 +73,7 @@ import { VouchersModule } from './modules/vouchers/vouchers.module.js'
     SchedulesModule,
     AiAssistantModule,
     VouchersModule,
+    RecommendationModule,
   ],
 
   controllers: [],
