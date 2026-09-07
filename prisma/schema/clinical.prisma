@@ -33,6 +33,13 @@ model PatientProfile {
   guardianPhone         String?       @map("guardian_phone") @db.VarChar(20)
   guardianRelationship  String?       @map("guardian_relationship") @db.VarChar(50)
 
+  // Thông tin sức khỏe & tiền sử y tế hỗ trợ phân tích AI/CDSS
+  medicalHistory        String?       @map("medical_history") @db.Text
+  allergies             String?       @map("allergies") @db.Text
+  bloodGroup            String?       @map("blood_group") @db.VarChar(10)
+  height                Float?        @map("height")
+  weight                Float?        @map("weight")
+
   relationshipToAccount String        @default("SELF") @map("relationship_to_account") @db.VarChar(50)
   isMainProfile         Boolean       @default(false) @map("is_main_profile")
   createdAt             DateTime      @default(now()) @map("created_at") @db.Timestamptz(3)

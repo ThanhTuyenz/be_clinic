@@ -31,7 +31,6 @@ export class AdminDashboardService {
         {
           OR: [
             { scheduleSlot: { schedule: { workDate: { gte: from, lt: to } } } },
-            { servicePackageScheduleSlot: { schedule: { examDate: { gte: from, lt: to } } } },
             { checkedInAt: { gte: from, lt: to } },
             { createdAt: { gte: from, lt: to } },
           ],

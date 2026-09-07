@@ -6,7 +6,7 @@ export class DirectoryService {
   constructor(private readonly prisma: PrismaService) {}
 
   branches() {
-    return this.prisma.branch.findMany({ where: { isActive: true }, orderBy: { name: 'asc' }, select: { id: true, code: true, name: true, address: true, phoneNumber: true, timezone: true } });
+    return this.prisma.branch.findMany({ where: { isActive: true }, orderBy: { name: 'asc' }, select: { id: true, code: true, name: true, address: true, latitude: true, longitude: true, phoneNumber: true, timezone: true } });
   }
 
   async publicNavigation() {
@@ -23,7 +23,7 @@ export class DirectoryService {
       this.prisma.branch.findMany({
         where: { isActive: true },
         orderBy: { name: 'asc' },
-        select: { id: true, code: true, name: true, address: true, phoneNumber: true },
+        select: { id: true, code: true, name: true, address: true, latitude: true, longitude: true, phoneNumber: true },
       }),
     ]);
 
@@ -39,8 +39,8 @@ export class DirectoryService {
 
   async homepage(branchId?: string) {
     const selectedBranch = branchId
-      ? await this.prisma.branch.findFirst({ where: { id: branchId, isActive: true }, select: { id: true, code: true, name: true, address: true, phoneNumber: true } })
-      : await this.prisma.branch.findFirst({ where: { isActive: true }, orderBy: [{ code: 'asc' }, { name: 'asc' }], select: { id: true, code: true, name: true, address: true, phoneNumber: true } });
+      ? await this.prisma.branch.findFirst({ where: { id: branchId, isActive: true }, select: { id: true, code: true, name: true, address: true, latitude: true, longitude: true, phoneNumber: true } })
+      : await this.prisma.branch.findFirst({ where: { isActive: true }, orderBy: [{ code: 'asc' }, { name: 'asc' }], select: { id: true, code: true, name: true, address: true, latitude: true, longitude: true, phoneNumber: true } });
     const activeBranchId = selectedBranch?.id;
     const [navigation, featuredDoctors, specialtyPackages, healthPackages, bookingMethods, doctorCount, specialtyCount, reviewAggregate] = await Promise.all([
       this.publicNavigation(),
@@ -243,6 +243,108 @@ export class DirectoryService {
       take: 90,
     });
     return Array.from(new Set(schedules.map(({ workDate }) => workDate.toISOString().slice(0, 10))));
+  }
+
+  async branchAvailableDates(branchId: string, specialtyId?: number) {
+    const { minDate, maxDate } = this.getBookingAllowedDateRange();
+    const schedules = await this.prisma.doctorSchedule.findMany({
+      where: {
+        branchId,
+        status: 'OPEN',
+        workDate: { gte: minDate, lte: maxDate },
+        ...(specialtyId ? { doctor: { specialties: { some: { specialtyId } } } } : {}),
+        slots: { some: { isActive: true, slotStatus: 'AVAILABLE' } },
+      },
+      select: { workDate: true },
+      distinct: ['workDate'],
+      orderBy: { workDate: 'asc' },
+      take: 90,
+    });
+    return Array.from(new Set(schedules.map(({ workDate }) => workDate.toISOString().slice(0, 10))));
+  }
+
+  async branchTimeslots(branchId: string, date: string, specialtyId?: number) {
+    const workDate = this.parseDate(date);
+    this.validateDateWithinBookingRange(workDate);
+
+    const schedules = await this.prisma.doctorSchedule.findMany({
+      where: {
+        branchId,
+        workDate,
+        status: 'OPEN',
+        ...(specialtyId ? { doctor: { specialties: { some: { specialtyId } } } } : {}),
+        slots: { some: { isActive: true, slotStatus: 'AVAILABLE' } },
+      },
+      include: {
+        room: { select: { id: true, code: true, name: true, branch: { select: { id: true, name: true, address: true } } } },
+        doctor: {
+          include: {
+            user: { select: { fullName: true } },
+            specialties: { include: { specialty: true } },
+          },
+        },
+        slots: {
+          where: { isActive: true, slotStatus: 'AVAILABLE' },
+          orderBy: { startTime: 'asc' },
+        },
+      },
+    });
+
+    const result: Array<{
+      id: string;
+      doctorSlotId: string;
+      startTime: string;
+      endTime: string;
+      capacity: number;
+      occupiedCount: number;
+      remainingCapacity: number;
+      isAvailable: boolean;
+      slotStatus: string;
+      room: any;
+      doctor: {
+        id: string;
+        displayName: string;
+        avatarUrl: string;
+        consultationFee: number;
+        specialtyName: string;
+        specialtyID: string;
+        academicRank: string | null;
+      };
+    }> = [];
+
+    for (const sch of (schedules as any[])) {
+      const doc = sch.doctor;
+      const docName = doc?.user?.fullName || 'Bác sĩ';
+      const spec = doc?.specialties?.[0]?.specialty?.name || 'Đa khoa';
+      const specId = doc?.specialties?.[0]?.specialtyId ? String(doc.specialties[0].specialtyId) : '';
+
+      for (const s of (sch.slots || [])) {
+        if (s.occupiedCount >= s.capacity) continue;
+        result.push({
+          id: s.id,
+          doctorSlotId: s.id,
+          startTime: s.startTime.toISOString().slice(11, 16),
+          endTime: s.endTime.toISOString().slice(11, 16),
+          capacity: s.capacity,
+          occupiedCount: s.occupiedCount,
+          remainingCapacity: Math.max(s.capacity - s.occupiedCount, 0),
+          isAvailable: true,
+          slotStatus: s.slotStatus,
+          room: sch.room,
+          doctor: {
+            id: doc.id,
+            displayName: docName,
+            avatarUrl: doc.avatarUrl || '',
+            consultationFee: Number(doc.consultationFee || 200000),
+            specialtyName: spec,
+            specialtyID: specId,
+            academicRank: doc.academicRank || null,
+          },
+        });
+      }
+    }
+
+    return result;
   }
 
   async timeslots(doctorId: string, branchId: string, date: string) {

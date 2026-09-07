@@ -20,6 +20,8 @@ model Branch {
   code            String                    @unique @db.VarChar(30)
   name            String                    @db.VarChar(150)
   address         String?
+  latitude        Float?                    @map("latitude")
+  longitude       Float?                    @map("longitude")
   phoneNumber     String?                   @map("phone_number") @db.VarChar(20)
   timezone        String                    @default("Asia/Ho_Chi_Minh") @db.VarChar(50)
   isActive        Boolean                   @default(true) @map("is_active")

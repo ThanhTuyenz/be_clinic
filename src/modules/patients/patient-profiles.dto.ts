@@ -1,5 +1,5 @@
 import { ApiProperty, ApiPropertyOptional, PartialType } from '@nestjs/swagger';
-import { IsBoolean, IsDateString, IsEnum, IsOptional, IsString, MaxLength } from 'class-validator';
+import { IsBoolean, IsDateString, IsEnum, IsNumber, IsOptional, IsString, MaxLength } from 'class-validator';
 
 enum GenderDto { MALE = 'MALE', FEMALE = 'FEMALE', OTHER = 'OTHER' }
 
@@ -30,6 +30,12 @@ export class CreatePatientProfileDto {
 
   @ApiPropertyOptional({ default: 'SELF' }) @IsOptional() @IsString() @MaxLength(50) relationshipToAccount?: string;
   @ApiPropertyOptional({ default: false }) @IsOptional() @IsBoolean() isMainProfile?: boolean;
+
+  @ApiPropertyOptional({ description: 'Tiền sử bệnh mạn tính / bệnh nền' }) @IsOptional() @IsString() medicalHistory?: string;
+  @ApiPropertyOptional({ description: 'Tiền sử dị ứng thuốc / thực phẩm' }) @IsOptional() @IsString() allergies?: string;
+  @ApiPropertyOptional({ description: 'Nhóm máu (A, B, AB, O, Rh...)' }) @IsOptional() @IsString() @MaxLength(10) bloodGroup?: string;
+  @ApiPropertyOptional({ description: 'Chiều cao (cm)' }) @IsOptional() @IsNumber() height?: number;
+  @ApiPropertyOptional({ description: 'Cân nặng (kg)' }) @IsOptional() @IsNumber() weight?: number;
 }
 
 export class UpdatePatientProfileDto extends PartialType(CreatePatientProfileDto) {}

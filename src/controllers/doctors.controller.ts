@@ -55,6 +55,23 @@ export class PublicDirectoryController {
   @Get('booking-methods')
   @ApiOperation({ summary: 'Hình thức đặt khám đang bật tại một chi nhánh' })
   bookingMethods(@Query('branchId') branchId: string) { return this.directory.bookingMethods(branchId); }
+
+  @Get('branch-available-dates')
+  @ApiOperation({ summary: 'Các ngày có bác sĩ nhận khám tại cơ sở' })
+  @ApiQuery({ name: 'branchId' })
+  @ApiQuery({ name: 'specialtyId', required: false, type: Number })
+  branchAvailableDates(@Query('branchId') branchId: string, @Query('specialtyId') specialtyId?: string) {
+    return this.directory.branchAvailableDates(branchId, specialtyId ? Number(specialtyId) : undefined);
+  }
+
+  @Get('branch-timeslots')
+  @ApiOperation({ summary: 'Khung giờ khám theo ngày tại cơ sở kèm danh sách bác sĩ' })
+  @ApiQuery({ name: 'branchId' })
+  @ApiQuery({ name: 'date', example: '2026-09-07' })
+  @ApiQuery({ name: 'specialtyId', required: false, type: Number })
+  branchTimeslots(@Query('branchId') branchId: string, @Query('date') date: string, @Query('specialtyId') specialtyId?: string) {
+    return this.directory.branchTimeslots(branchId, date, specialtyId ? Number(specialtyId) : undefined);
+  }
 }
 
 @Public()

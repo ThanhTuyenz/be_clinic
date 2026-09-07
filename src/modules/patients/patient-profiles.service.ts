@@ -110,6 +110,11 @@ export class PatientProfilesService {
             guardianName: dto.guardianName?.trim() || null,
             guardianPhone: dto.guardianPhone?.trim() || null,
             guardianRelationship: dto.guardianRelationship?.trim() || null,
+            medicalHistory: dto.medicalHistory?.trim() || null,
+            allergies: dto.allergies?.trim() || null,
+            bloodGroup: dto.bloodGroup?.trim() || null,
+            height: dto.height !== undefined && dto.height !== null ? Number(dto.height) : null,
+            weight: dto.weight !== undefined && dto.weight !== null ? Number(dto.weight) : null,
             relationshipToAccount: dto.relationshipToAccount ?? (makeMain ? 'SELF' : 'OTHER'),
             isMainProfile: makeMain
           }
@@ -208,6 +213,11 @@ export class PatientProfilesService {
           ...(dto.guardianName !== undefined && { guardianName: dto.guardianName?.trim() || null }),
           ...(dto.guardianPhone !== undefined && { guardianPhone: dto.guardianPhone?.trim() || null }),
           ...(dto.guardianRelationship !== undefined && { guardianRelationship: dto.guardianRelationship?.trim() || null }),
+          ...(dto.medicalHistory !== undefined && { medicalHistory: dto.medicalHistory?.trim() || null }),
+          ...(dto.allergies !== undefined && { allergies: dto.allergies?.trim() || null }),
+          ...(dto.bloodGroup !== undefined && { bloodGroup: dto.bloodGroup?.trim() || null }),
+          ...(dto.height !== undefined && { height: dto.height !== null ? Number(dto.height) : null }),
+          ...(dto.weight !== undefined && { weight: dto.weight !== null ? Number(dto.weight) : null }),
           ...(dto.relationshipToAccount !== undefined && { relationshipToAccount: dto.relationshipToAccount }),
         },
       });

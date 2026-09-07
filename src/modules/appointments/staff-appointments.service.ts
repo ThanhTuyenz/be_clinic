@@ -1,5 +1,5 @@
 import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common'
-import { randomUUID } from 'node:crypto'
+import { createHash, randomUUID } from 'node:crypto'
 import { Gender } from '@prisma/client'
 import { PrismaService } from '../../infrastructure/database/prisma/prisma.service.js'
 import { MailsService } from '../mails/mails.service.js'
@@ -73,8 +73,9 @@ export class StaffAppointmentsService {
       },
       doctor: bookedDoctor ? {
         id: bookedDoctor.id,
-        fullName: bookedDoctor.fullName,
-        name: bookedDoctor.fullName,
+        fullName: bookedDoctor.user?.fullName || bookedDoctor.fullName || bookedDoctor.name || '',
+        name: bookedDoctor.user?.fullName || bookedDoctor.name || bookedDoctor.fullName || '',
+        displayName: bookedDoctor.user?.fullName || bookedDoctor.displayName || bookedDoctor.fullName || '',
         department: bookedDoctor.department?.name,
         specialtyId: specialty?.id,
         specialtyName: specialty?.name,
@@ -135,7 +136,7 @@ export class StaffAppointmentsService {
           schedule: {
             include: {
               room: true,
-              doctor: { include: { specialties: { include: { specialty: true } } } },
+              doctor: { include: { user: true, specialties: { include: { specialty: true } } } },
             },
           },
         },
@@ -213,7 +214,29 @@ export class StaffAppointmentsService {
 
   async lookupTicket(userId: string, ticket: string) {
     await this.roleOf(userId)
-    const cleanTicket = String(ticket || '').trim()
+    let cleanTicket = String(ticket || '').trim()
+
+    // 1. Nhận diện mã QR check-in bảo mật VITACARE_CHECKIN:
+    if (cleanTicket.startsWith('VITACARE_CHECKIN:')) {
+      const rawToken = cleanTicket.replace(/^VITACARE_CHECKIN:/, '')
+      const tokenHash = createHash('sha256').update(rawToken).digest('hex')
+      const qr = await this.prisma.appointmentQrToken.findUnique({
+        where: { tokenHash },
+        include: { appointment: { include: this.appointmentInclude() } },
+      })
+      if (qr?.appointment) {
+        return { appointment: this.serialize(qr.appointment) }
+      }
+    }
+
+    // 2. Nhận diện mã QR thẻ CCCD gắn chip (chứa pipe |)
+    if (cleanTicket.includes('|')) {
+      const parts = cleanTicket.split('|')
+      if (parts[0] && /^\d{9,12}$/.test(parts[0])) {
+        cleanTicket = parts[0]
+      }
+    }
+
     const row = await this.prisma.appointment.findFirst({
       where: {
         OR: [
@@ -221,12 +244,13 @@ export class StaffAppointmentsService {
           { id: cleanTicket.length === 36 ? cleanTicket : undefined },
           { patientProfile: { nationalId: cleanTicket } },
           { patientProfile: { phoneNumber: cleanTicket } },
+          { patientProfile: { patientCode: { equals: cleanTicket, mode: 'insensitive' } } },
         ],
       },
       include: this.appointmentInclude(),
       orderBy: { createdAt: 'desc' },
     })
-    if (!row) throw new NotFoundException('Không tìm thấy lịch hẹn')
+    if (!row) throw new NotFoundException('Không tìm thấy lịch hẹn phù hợp')
     return { appointment: this.serialize(row) }
   }
 
