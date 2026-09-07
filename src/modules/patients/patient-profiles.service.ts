@@ -1,4 +1,4 @@
-import { BadRequestException, ConflictException, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ConflictException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../infrastructure/database/prisma/prisma.service.js';
 import { CreatePatientProfileDto, UpdatePatientProfileDto } from './patient-profiles.dto.js';
@@ -236,5 +236,186 @@ export class PatientProfilesService {
       }
       throw error;
     }
+  }
+
+  async getMedicalRecord(userId: string, patientProfileId: string) {
+    if (!patientProfileId) throw new BadRequestException('Thiếu mã hồ sơ bệnh nhân');
+
+    const profile = await this.prisma.patientProfile.findUnique({
+      where: { id: patientProfileId },
+    });
+    if (!profile) throw new NotFoundException('Không tìm thấy hồ sơ bệnh nhân');
+
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: { role: true },
+    });
+    const isStaff = user && ['ADMIN', 'SUPER_ADMIN', 'BRANCH_MANAGER', 'RECEPTIONIST', 'DOCTOR'].includes(user.role);
+    if (!isStaff && profile.accountId !== userId) {
+      throw new ForbiddenException('Không có quyền truy cập hồ sơ bệnh án này');
+    }
+
+    const appointments = await this.prisma.appointment.findMany({
+      where: {
+        OR: [
+          { patientProfileId: profile.id },
+          ...(profile.nationalId ? [{ patientProfile: { nationalId: profile.nationalId } }] : []),
+          ...(profile.patientCode ? [{ patientProfile: { patientCode: profile.patientCode } }] : []),
+        ],
+      },
+      orderBy: { createdAt: 'desc' },
+      select: {
+        id: true,
+        bookingCode: true,
+        createdAt: true,
+        status: true,
+        symptomsDescription: true,
+        queueNumber: true,
+        branch: { select: { id: true, name: true, address: true } },
+        servicePackage: { select: { id: true, name: true, code: true, price: true } },
+        scheduleSlot: {
+          select: {
+            startTime: true,
+            endTime: true,
+            schedule: {
+              select: {
+                workDate: true,
+                room: { select: { code: true, name: true } },
+                branch: { select: { id: true, name: true, address: true } },
+                doctor: {
+                  select: {
+                    id: true,
+                    academicRank: true,
+                    user: { select: { fullName: true } },
+                  },
+                },
+              },
+            },
+          },
+        },
+        invoice: {
+          select: {
+            status: true,
+            totalAmount: true,
+            payments: {
+              select: { method: true },
+              orderBy: { createdAt: 'desc' },
+              take: 1,
+            },
+          },
+        },
+      },
+    });
+
+    const visits = appointments.map((appt) => {
+      const slot = appt.scheduleSlot;
+      const doc = slot?.schedule?.doctor;
+      const docUser = doc?.user;
+      const branch = slot?.schedule?.branch || appt.branch;
+      const room = slot?.schedule?.room;
+      const apptDate = slot?.schedule?.workDate
+        ? slot.schedule.workDate.toISOString().slice(0, 10)
+        : appt.createdAt.toISOString().slice(0, 10);
+      const startTime = slot?.startTime ? slot.startTime.toISOString().slice(11, 16) : null;
+      const endTime = slot?.endTime ? slot.endTime.toISOString().slice(11, 16) : null;
+
+      const isCompleted = ['COMPLETED', 'FINISHED'].includes(appt.status);
+
+      return {
+        id: appt.id,
+        visitCode: appt.bookingCode || `KB-${appt.id.slice(0, 8).toUpperCase()}`,
+        createdAt: appt.createdAt.toISOString(),
+        status: appt.status,
+        reasonForVisit: appt.symptomsDescription || appt.servicePackage?.name || 'Khám chuyên khoa',
+        preliminaryDiagnosis: appt.symptomsDescription
+          ? `Triệu chứng ghi nhận: ${appt.symptomsDescription}`
+          : (appt.servicePackage?.name ? `Chẩn đoán sơ bộ theo gói ${appt.servicePackage.name}` : null),
+        finalDiagnosis: isCompleted
+          ? (appt.servicePackage?.name ? `Khám chuyên khoa: ${appt.servicePackage.name} - Đã có kết luận lâm sàng` : 'Hoàn thành khám lâm sàng')
+          : null,
+        treatmentPlan: isCompleted
+          ? 'Tuân thủ đơn thuốc và hướng dẫn chăm sóc y tế của bác sĩ phụ trách.'
+          : null,
+        notes: appt.symptomsDescription ? `Ghi chú tiếp nhận: ${appt.symptomsDescription}` : null,
+        appointment: {
+          id: appt.id,
+          appointmentDate: apptDate,
+          startTime,
+          endTime,
+          status: appt.status,
+          queueNumber: appt.queueNumber,
+          doctor: doc ? {
+            id: doc.id,
+            fullName: docUser?.fullName || 'Bác sĩ chuyên khoa',
+            academicRank: doc.academicRank || 'BS.',
+          } : null,
+          branch: branch ? {
+            id: branch.id,
+            name: branch.name,
+            address: branch.address,
+          } : null,
+          servicePackage: appt.servicePackage ? {
+            id: appt.servicePackage.id,
+            name: appt.servicePackage.name,
+            code: appt.servicePackage.code,
+            price: Number(appt.servicePackage.price),
+          } : null,
+          scheduleSlot: slot ? {
+            schedule: {
+              room: room ? { code: room.code, name: room.name } : null,
+            },
+          } : null,
+          payment: appt.invoice ? {
+            status: appt.invoice.status,
+            amount: Number(appt.invoice.totalAmount),
+            method: appt.invoice.payments?.[0]?.method || 'MoMo',
+          } : null,
+        },
+      };
+    });
+
+    return {
+      medicalRecord: {
+        id: profile.id,
+        recordCode: profile.patientCode || `BN${profile.id.slice(0, 8).toUpperCase()}`,
+        allergies: profile.allergies || null,
+        medicalHistory: profile.medicalHistory || null,
+        bloodGroup: profile.bloodGroup || null,
+        height: profile.height || null,
+        weight: profile.weight || null,
+        surgicalHistory: null,
+        familyHistory: null,
+        notes: null,
+        profile: {
+          id: profile.id,
+          patientCode: profile.patientCode,
+          fullName: profile.fullName,
+          dateOfBirth: profile.dateOfBirth,
+          gender: profile.gender,
+          phoneNumber: profile.phoneNumber,
+          nationalId: profile.nationalId,
+          healthInsuranceNumber: profile.healthInsuranceNumber,
+          address: profile.address,
+          provinceName: profile.provinceName,
+          districtName: profile.districtName,
+          wardName: profile.wardName,
+          streetAddress: profile.streetAddress,
+          ethnicity: profile.ethnicity,
+          nationality: profile.nationality,
+          occupation: profile.occupation,
+          guardianName: profile.guardianName,
+          guardianPhone: profile.guardianPhone,
+          guardianRelationship: profile.guardianRelationship,
+          relationshipToAccount: profile.relationshipToAccount,
+          isMainProfile: profile.isMainProfile,
+          medicalHistory: profile.medicalHistory,
+          allergies: profile.allergies,
+          bloodGroup: profile.bloodGroup,
+          height: profile.height,
+          weight: profile.weight,
+        },
+        visits,
+      },
+    };
   }
 }

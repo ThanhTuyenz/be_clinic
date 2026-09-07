@@ -1,11 +1,12 @@
 import { Module } from '@nestjs/common';
 import { PatientProfilesController } from './patient-profiles.controller.js';
+import { MedicalRecordsController } from './medical-records.controller.js';
 import { PatientProfilesService } from './patient-profiles.service.js';
 import { RecommendationModule } from '../recommendations/recommendation.module.js';
 
 @Module({
   imports: [RecommendationModule],
-  controllers: [PatientProfilesController],
+  controllers: [PatientProfilesController, MedicalRecordsController],
   providers: [PatientProfilesService],
   exports: [PatientProfilesService],
 })

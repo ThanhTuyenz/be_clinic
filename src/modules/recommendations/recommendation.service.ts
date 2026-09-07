@@ -18,7 +18,7 @@ export class RecommendationService {
     private readonly redis: RedisService,
   ) {
     const apiKey = this.config.get<string>('gemini.apiKey') || process.env.GEMINI_API_KEY;
-    this.modelName = this.config.get<string>('gemini.model') || process.env.GEMINI_MODEL || 'gemini-3.6-flash';
+    this.modelName = this.config.get<string>('gemini.model') || process.env.GEMINI_MODEL || 'gemini-2.5-flash';
     if (apiKey) {
       try {
         this.aiClient = new GoogleGenAI({ apiKey });
@@ -34,8 +34,8 @@ export class RecommendationService {
    * Lấy danh sách gói khám khuyến nghị cho một hồ sơ bệnh nhân.
    * Ưu tiên đọc từ Redis Cache (< 5ms). Nếu cache miss, tự động phân tích và lưu cache.
    */
-  async getRecommendations(profileId: string, branchId?: string): Promise<ProfileRecommendationResponseDto> {
-    const cacheKey = this.buildCacheKey(profileId, branchId);
+  async getRecommendations(profileId: string, _branchId?: string): Promise<ProfileRecommendationResponseDto> {
+    const cacheKey = this.buildCacheKey(profileId);
     
     // 1. Kiểm tra Redis
     try {
@@ -50,7 +50,7 @@ export class RecommendationService {
     }
 
     // 2. Cache miss -> Phân tích và lưu cache
-    return this.analyzeAndCacheRecommendations(profileId, branchId);
+    return this.analyzeAndCacheRecommendations(profileId);
   }
 
   /**
@@ -88,9 +88,10 @@ export class RecommendationService {
   async invalidateCache(profileId: string): Promise<void> {
     try {
       if (this.redis.isEnabled()) {
-        const pattern = `rec:profile:${profileId}:*`;
-        const defaultKey = this.buildCacheKey(profileId);
-        await this.redis.delete(defaultKey);
+        const key = this.buildCacheKey(profileId);
+        await this.redis.delete(key);
+        // Xóa thêm legacy key nếu có
+        await this.redis.delete(`${key}:all`);
         this.logger.log(`Invalidated recommendation cache for profile ${profileId}`);
       }
     } catch (err: any) {
@@ -105,9 +106,19 @@ export class RecommendationService {
     profileId: string,
     branchId?: string,
   ): Promise<ProfileRecommendationResponseDto> {
-    // 1. Lấy thông tin hồ sơ bệnh nhân
+    // 1. Lấy thông tin hồ sơ bệnh nhân (chỉ select các trường lâm sàng cần thiết)
     const profile = await this.prisma.patientProfile.findUnique({
       where: { id: profileId },
+      select: {
+        id: true,
+        fullName: true,
+        dateOfBirth: true,
+        gender: true,
+        height: true,
+        weight: true,
+        medicalHistory: true,
+        allergies: true,
+      },
     });
 
     if (!profile) {
@@ -131,66 +142,26 @@ export class RecommendationService {
     const allergies = (profile.allergies || '').trim();
     const gender = (profile.gender || 'OTHER').toString().toUpperCase();
 
-    // 3. Lọc lịch sử thăm khám (Appointments) của hồ sơ này
-    // Quy tắc Clinical Recency & Suppression:
-    // - Gói khám đã hoàn thành trong vòng 90 ngày -> LỌC BỎ (tạm ẩn để tránh gợi ý trùng lặp).
-    // - Gói khám đã khám cách đây > 180 ngày -> Gắn cờ NHẮC TÁI KIỂM TRA ĐỊNH KỲ.
-    const ninetyDaysAgo = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000);
-    const oneEightyDaysAgo = new Date(Date.now() - 180 * 24 * 60 * 60 * 1000);
-
-    const pastAppointments = await this.prisma.appointment.findMany({
-      where: {
-        patientProfileId: profileId,
-        status: { in: ['COMPLETED', 'BOOKED', 'CHECKED_IN'] },
-      },
-      select: {
-        servicePackageId: true,
-        createdAt: true,
-        servicePackage: { select: { id: true, name: true, specialtyId: true } },
-      },
-      orderBy: { createdAt: 'desc' },
-      take: 10,
-    });
-
-    const suppressedPackageIds = new Set<string>();
-    const dueForFollowUpPackageIds = new Set<string>();
-
-    for (const app of pastAppointments) {
-      if (!app.servicePackageId) continue;
-      const appTime = new Date(app.createdAt).getTime();
-      if (!isNaN(appTime)) {
-        if (appTime >= ninetyDaysAgo.getTime()) {
-          suppressedPackageIds.add(app.servicePackageId);
-        } else if (appTime <= oneEightyDaysAgo.getTime()) {
-          dueForFollowUpPackageIds.add(app.servicePackageId);
-        }
-      }
-    }
-
-    // 4. Lấy danh sách gói khám đang hoạt động tại phòng khám / chi nhánh
-    let availablePackages = await this.prisma.servicePackage.findMany({
+    // 3. Lấy danh sách gói khám đang hoạt động (tối ưu select và lọc theo cơ sở nếu có)
+    const allActivePackages = await this.prisma.servicePackage.findMany({
       where: {
         isActive: true,
-        ...(branchId ? { branchBookingMethod: { branchId } } : {}),
+        ...(branchId ? { branchBookingMethod: { branchId, isEnabled: true } } : {}),
       },
-      include: {
+      select: {
+        id: true,
+        code: true,
+        name: true,
+        description: true,
+        price: true,
+        durationMin: true,
+        specialtyId: true,
         specialty: { select: { id: true, name: true, slug: true } },
       },
-      take: 20,
+      orderBy: { price: 'asc' },
     });
 
-    // Nếu chi nhánh này không có gói, lấy các gói chung toàn hệ thống
-    if (availablePackages.length === 0) {
-      availablePackages = await this.prisma.servicePackage.findMany({
-        where: { isActive: true },
-        include: {
-          specialty: { select: { id: true, name: true, slug: true } },
-        },
-        take: 20,
-      });
-    }
-
-    if (availablePackages.length === 0) {
+    if (allActivePackages.length === 0) {
       return {
         profileId,
         profileName: profile.fullName,
@@ -200,20 +171,129 @@ export class RecommendationService {
       };
     }
 
-    // Lọc bỏ những gói vừa khám trong 90 ngày (Suppression)
-    const candidatePackages = availablePackages.filter(
-      (pkg) => !suppressedPackageIds.has(pkg.id)
-    );
+    // 4. KIỂM TRA LỊCH SỬ THĂM KHÁM (Deterministic Rule cho Gói Tái Khám)
+    // - Không cần dùng AI: Nếu bệnh nhân đã hoàn tất (COMPLETED) khám chuyên khoa X trước đó,
+    //   tự động kích hoạt chính xác gói "Tái khám [Chuyên khoa X]" đưa lên vị trí ưu tiên #1.
+    const pastAppointments = await this.prisma.appointment.findMany({
+      where: {
+        patientProfileId: profileId,
+        status: { in: ['COMPLETED', 'BOOKED', 'CHECKED_IN'] },
+      },
+      select: {
+        id: true,
+        servicePackageId: true,
+        status: true,
+        createdAt: true,
+        updatedAt: true,
+        servicePackage: {
+          select: {
+            id: true,
+            name: true,
+            code: true,
+            specialtyId: true,
+            specialty: { select: { id: true, name: true } },
+          },
+        },
+        scheduleSlot: {
+          select: {
+            schedule: {
+              select: {
+                doctor: {
+                  select: {
+                    id: true,
+                    specialties: {
+                      select: {
+                        isPrimary: true,
+                        specialtyId: true,
+                        specialty: { select: { id: true, name: true } },
+                      },
+                    },
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+      orderBy: { createdAt: 'desc' },
+      take: 5,
+    });
 
-    const targetCandidates = candidatePackages.length > 0 ? candidatePackages : availablePackages;
+    // Lọc các gói vừa khám trong 30 ngày để tránh spam
+    const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+    const suppressedPackageIds = new Set<string>();
+    for (const app of pastAppointments) {
+      if (!app.servicePackageId) continue;
+      const appTime = new Date(app.createdAt).getTime();
+      if (!isNaN(appTime) && appTime >= thirtyDaysAgo.getTime()) {
+        suppressedPackageIds.add(app.servicePackageId);
+      }
+    }
 
-    // 5. Thử phân tích bằng Gemini AI (Semantic Re-ranker)
-    let recommendedList: RecommendedPackageItemDto[] = [];
+    // TẦNG 1: RULE TÁI KHÁM (0ms, không dùng AI, chính xác tuyệt đối)
+    const completedAppointments = pastAppointments.filter((app) => app.status === 'COMPLETED');
+    let followUpRecommendation: RecommendedPackageItemDto | null = null;
+    const usedPackageIds = new Set<string>();
+
+    if (completedAppointments.length > 0) {
+      const latest = completedAppointments[0];
+      const primaryDocSpecialty =
+        latest.scheduleSlot?.schedule?.doctor?.specialties?.find((s) => s.isPrimary) ||
+        latest.scheduleSlot?.schedule?.doctor?.specialties?.[0];
+
+      const specialtyId = latest.servicePackage?.specialtyId || primaryDocSpecialty?.specialtyId;
+      const specialtyName =
+        latest.servicePackage?.specialty?.name ||
+        primaryDocSpecialty?.specialty?.name ||
+        'Chuyên khoa';
+
+      const visitDate = new Date(latest.updatedAt || latest.createdAt);
+      const daysAgo = Math.max(1, Math.floor((Date.now() - visitDate.getTime()) / (24 * 60 * 60 * 1000)));
+
+      if (specialtyId) {
+        // Tìm gói tái khám tương ứng cùng chuyên khoa trong database
+        const followUpPkg = allActivePackages.find(
+          (p) =>
+            p.specialtyId === specialtyId &&
+            (p.code.endsWith('-FOLLOWUP') || p.name.toLowerCase().includes('tái khám'))
+        );
+
+        if (followUpPkg) {
+          usedPackageIds.add(followUpPkg.id);
+          followUpRecommendation = {
+            packageId: followUpPkg.id,
+            code: followUpPkg.code,
+            name: followUpPkg.name,
+            price: Number(followUpPkg.price),
+            durationMin: followUpPkg.durationMin,
+            specialtyId: followUpPkg.specialtyId,
+            specialtyName: followUpPkg.specialty?.name || specialtyName,
+            priority: 'HIGH',
+            badge: daysAgo <= 45 ? 'Tái khám theo hẹn' : 'Tái khám định kỳ',
+            clinicalReason: `Bệnh nhân đã hoàn thành đợt khám ${specialtyName} (${daysAgo} ngày trước) · Chỉ định tái khám để đánh giá đáp ứng điều trị và điều chỉnh phác đồ.`,
+          };
+        }
+      }
+    }
+
+    // TẦNG 2: LỌC DANH SÁCH ỨNG VIÊN ĐƯA CHO AI (Chỉ gồm gói Tầm soát / Khám ban đầu)
+    // Tuyệt đối loại bỏ các gói tái khám khỏi AI để tránh việc AI gợi ý gói tái khám cho người chưa từng khám
+    const screeningCandidates = allActivePackages.filter((pkg) => {
+      const isFollowUpPkg = pkg.code.endsWith('-FOLLOWUP') || pkg.name.toLowerCase().includes('tái khám');
+      if (isFollowUpPkg) return false;
+      if (usedPackageIds.has(pkg.id)) return false;
+      if (suppressedPackageIds.has(pkg.id)) return false;
+      return true;
+    });
+
+    // Phân tích tầm soát bằng Gemini AI (hoặc Heuristic Rule)
+    const targetCount = followUpRecommendation ? 3 : 4;
+    let aiRecommendedList: RecommendedPackageItemDto[] = [];
     let source: 'AI_GEMINI' | 'RULE_FALLBACK' = 'RULE_FALLBACK';
 
-    if (this.aiClient) {
+    if (this.aiClient && screeningCandidates.length > 0) {
       try {
-        recommendedList = await this.evaluateWithGemini({
+        aiRecommendedList = await this.evaluateWithGemini({
           profile: {
             fullName: profile.fullName,
             age,
@@ -222,8 +302,8 @@ export class RecommendationService {
             medicalHistory,
             allergies,
           },
-          dueForFollowUpPackageIds,
-          candidates: targetCandidates.map((p) => ({
+          targetCount,
+          candidates: screeningCandidates.map((p) => ({
             id: p.id,
             name: p.name,
             code: p.code,
@@ -234,7 +314,7 @@ export class RecommendationService {
             durationMin: p.durationMin,
           })),
         });
-        if (recommendedList.length > 0) {
+        if (aiRecommendedList.length > 0) {
           source = 'AI_GEMINI';
         }
       } catch (err: any) {
@@ -242,16 +322,26 @@ export class RecommendationService {
       }
     }
 
-    // 6. Nếu AI thất bại hoặc chưa cấu hình API key -> Dùng Heuristic Fallback
-    if (recommendedList.length === 0) {
-      recommendedList = this.evaluateWithClinicalHeuristics({
+    if (aiRecommendedList.length === 0 && screeningCandidates.length > 0) {
+      aiRecommendedList = this.evaluateWithClinicalHeuristics({
         age,
         gender,
         bmi,
         medicalHistory,
-        dueForFollowUpPackageIds,
-        candidates: targetCandidates,
+        candidates: screeningCandidates,
       });
+    }
+
+    // TỔNG HỢP HYBRID: [Gói Tái khám từ Rule] + [Các gói Tầm soát từ AI]
+    const finalList: RecommendedPackageItemDto[] = [];
+    if (followUpRecommendation) {
+      finalList.push(followUpRecommendation);
+    }
+    for (const item of aiRecommendedList) {
+      if (finalList.length >= 4) break;
+      if (!finalList.some((x) => x.packageId === item.packageId)) {
+        finalList.push(item);
+      }
     }
 
     const result: ProfileRecommendationResponseDto = {
@@ -259,18 +349,27 @@ export class RecommendationService {
       profileName: profile.fullName,
       updatedAt: new Date().toISOString(),
       source,
-      packages: recommendedList,
+      packages: finalList,
     };
 
-    // 7. Lưu kết quả vào Redis Cache với TTL (7 ngày)
-    try {
-      if (this.redis.isEnabled()) {
-        const cacheKey = this.buildCacheKey(profileId, branchId);
-        await this.redis.set(cacheKey, result, this.CACHE_TTL_SECONDS);
-        this.logger.log(`Cached recommendation for profile ${profileId} into Redis (TTL: ${this.CACHE_TTL_SECONDS}s)`);
+    // 7. Chỉ lưu vào Redis Cache khi kết quả được phân tích thành công bởi AI_GEMINI (TTL 7 ngày)
+    // Dữ liệu Fallback tuyệt đối KHÔNG lưu cache để các lượt truy cập sau tự động thử lại với Gemini AI
+    if (source === 'AI_GEMINI') {
+      try {
+        if (this.redis.isEnabled()) {
+          const cacheKey = this.buildCacheKey(profileId);
+          await this.redis.set(cacheKey, result, this.CACHE_TTL_SECONDS);
+          this.logger.log(
+            `Cached AI recommendation for profile ${profileId} into Redis [key: ${cacheKey}] (TTL: ${this.CACHE_TTL_SECONDS}s)`,
+          );
+        }
+      } catch (err: any) {
+        this.logger.warn(`Failed to set Redis cache: ${err?.message}`);
       }
-    } catch (err: any) {
-      this.logger.warn(`Failed to set Redis cache: ${err?.message}`);
+    } else {
+      this.logger.log(
+        `Skipped Redis cache for profile ${profileId} because result source is RULE_FALLBACK (will retry Gemini AI on next visit)`,
+      );
     }
 
     return result;
@@ -288,7 +387,7 @@ export class RecommendationService {
       medicalHistory: string;
       allergies: string;
     };
-    dueForFollowUpPackageIds: Set<string>;
+    targetCount?: number;
     candidates: Array<{
       id: string;
       name: string;
@@ -302,8 +401,9 @@ export class RecommendationService {
   }): Promise<RecommendedPackageItemDto[]> {
     if (!this.aiClient) return [];
 
+    const maxCount = context.targetCount || 3;
     const prompt = `
-Bạn là Bác sĩ Trưởng khoa Khám sàng lọc ban đầu. Hãy phân tích hồ sơ bệnh nhân và đề xuất từ 2 đến 4 gói khám y tế phù hợp nhất từ danh sách gói khám thực tế được cung cấp.
+Bạn là Bác sĩ Trưởng khoa Khám sàng lọc ban đầu. Hãy phân tích hồ sơ bệnh nhân và đề xuất từ 2 đến ${maxCount} gói khám y tế phù hợp nhất từ danh sách gói khám thực tế được cung cấp để tầm soát và phát hiện sớm các nguy cơ sức khỏe.
 
 THÔNG TIN BỆNH NHÂN:
 - Họ tên: ${context.profile.fullName}
@@ -313,19 +413,15 @@ THÔNG TIN BỆNH NHÂN:
 - Tiền sử bệnh lý mạn tính: "${context.profile.medicalHistory || 'Không ghi nhận'}"
 - Tiền sử dị ứng: "${context.profile.allergies || 'Không ghi nhận'}"
 
-DANH MỤC GÓI KHÁM THỰC TẾ ĐANG HOẠT ĐỘNG:
+DANH MỤC GÓI KHÁM TẦM SOÁT THỰC TẾ ĐANG HOẠT ĐỘNG:
 ${JSON.stringify(
-  context.candidates.map((c) => ({
+  context.candidates.slice(0, 16).map((c) => ({
     id: c.id,
     name: c.name,
-    code: c.code,
     specialty: c.specialtyName,
-    description: c.description,
     price: c.price,
-    isDueForFollowUp: context.dueForFollowUpPackageIds.has(c.id),
-  })),
-  null,
-  2
+    description: (c.description || '').slice(0, 80),
+  }))
 )}
 
 QUY TẮC Y KHOA BẮT BUỘC:
@@ -334,9 +430,7 @@ QUY TẮC Y KHOA BẮT BUỘC:
    - "HIGH": Gói cấp thiết nhất tương ứng với bệnh lý chính hoặc nguy cơ cao nhất.
    - "MEDIUM": Gói tầm soát các nguy cơ thứ hai hoặc theo độ tuổi/thể trạng.
    - "LOW": Gói chăm sóc định kỳ bổ trợ.
-3. Huy hiệu nhãn (badge):
-   - Nếu bệnh nhân chưa từng khám vấn đề này -> Đặt là "Khám sàng lọc ban đầu" hoặc "Theo dõi [Tên bệnh]".
-   - Nếu gói này đã đến hạn tái khám định kỳ (isDueForFollowUp = true) -> Đặt là "Nhắc kiểm tra định kỳ hàng năm".
+3. Huy hiệu nhãn (badge): Đặt ngắn gọn như "Khám sàng lọc ban đầu" hoặc "Tầm soát định kỳ" hoặc "Theo dõi [Tên bệnh]".
 4. Lý do lâm sàng (clinicalReason): Viết ngắn gọn 1-2 câu giải thích vì sao gói này phù hợp dựa trên tiền sử/thể trạng thực tế của bệnh nhân.
 5. Chỉ chọn các ID có thật trong danh sách được cung cấp. Không tự bịa ra gói khám mới.
 `;
@@ -402,7 +496,6 @@ QUY TẮC Y KHOA BẮT BUỘC:
     gender: string;
     bmi: number | null;
     medicalHistory: string;
-    dueForFollowUpPackageIds: Set<string>;
     candidates: any[];
   }): RecommendedPackageItemDto[] {
     const medHistory = context.medicalHistory.toLowerCase();
@@ -430,7 +523,6 @@ QUY TẮC Y KHOA BẮT BUỘC:
       );
       if (p) {
         usedIds.add(p.id);
-        const isFollowUp = context.dueForFollowUpPackageIds.has(p.id);
         list.push({
           packageId: p.id,
           code: p.code,
@@ -440,7 +532,7 @@ QUY TẮC Y KHOA BẮT BUỘC:
           specialtyId: p.specialtyId,
           specialtyName: p.specialty?.name || 'Tim mạch',
           priority: 'HIGH',
-          badge: isFollowUp ? 'Nhắc kiểm tra định kỳ' : 'Khám sàng lọc ban đầu',
+          badge: 'Khám sàng lọc ban đầu',
           clinicalReason: context.medicalHistory
             ? `Tiền sử: ${context.medicalHistory} · Khuyến nghị đo điện tim ECG & siêu âm tim`
             : 'Khuyến nghị đánh giá nguy cơ tim mạch & chức năng tuần hoàn',
@@ -573,7 +665,7 @@ QUY TẮC Y KHOA BẮT BUỘC:
     return list;
   }
 
-  private buildCacheKey(profileId: string, branchId?: string): string {
-    return `rec:profile:${profileId}:${branchId || 'all'}`;
+  private buildCacheKey(profileId: string): string {
+    return `rec:profile:${profileId}`;
   }
 }

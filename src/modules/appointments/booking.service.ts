@@ -404,11 +404,26 @@ export class BookingService {
           { bookingOrder: { accountId } },
         ],
       },
-      include: {
-        invoice: { include: { payments: { orderBy: { createdAt: 'desc' }, take: 1 } } },
-        qrToken: true,
-        branch: true,
-        scheduleSlot: { include: { schedule: { include: { room: true, branch: true } } } },
+      select: {
+        id: true,
+        bookingOrderId: true,
+        status: true,
+        holdExpiresAt: true,
+        bookingCode: true,
+        queueNumber: true,
+        invoice: { select: { payments: { select: { status: true }, orderBy: { createdAt: 'desc' }, take: 1 } } },
+        qrToken: { select: { id: true } },
+        branch: { select: { id: true, name: true, address: true } },
+        scheduleSlot: {
+          select: {
+            schedule: {
+              select: {
+                room: { select: { id: true, code: true, name: true } },
+                branch: { select: { id: true, name: true, address: true } },
+              },
+            },
+          },
+        },
       },
     });
 
@@ -416,13 +431,21 @@ export class BookingService {
       // Thử tìm theo bookingOrderId
       const order = await (this.prisma as any).bookingOrder.findFirst({
         where: { id: appointmentIdOrOrderId, accountId },
-        include: {
-          invoice: { include: { payments: { orderBy: { createdAt: 'desc' }, take: 1 } } },
+        select: {
+          id: true,
+          orderCode: true,
+          groupType: true,
+          status: true,
+          totalAmount: true,
+          invoice: { select: { payments: { select: { status: true }, orderBy: { createdAt: 'desc' }, take: 1 } } },
           appointments: {
-            include: {
-              patientProfile: true,
-              qrToken: true,
-              scheduleSlot: { include: { schedule: { include: { room: true, branch: true } } } },
+            select: {
+              id: true,
+              bookingCode: true,
+              status: true,
+              queueNumber: true,
+              patientProfile: { select: { id: true, fullName: true } },
+              qrToken: { select: { id: true } },
             },
           },
         },
@@ -457,9 +480,13 @@ export class BookingService {
     if (row.bookingOrderId) {
       const siblings = await (this.prisma as any).appointment.findMany({
         where: { bookingOrderId: row.bookingOrderId },
-        include: {
-          patientProfile: true,
-          qrToken: true,
+        select: {
+          id: true,
+          bookingCode: true,
+          status: true,
+          queueNumber: true,
+          patientProfile: { select: { id: true, fullName: true } },
+          qrToken: { select: { id: true } },
         },
         orderBy: { createdAt: 'asc' },
       });
@@ -498,13 +525,66 @@ export class BookingService {
         ],
       },
       orderBy: { createdAt: 'desc' },
-      include: {
-        patientProfile: true,
-        servicePackage: true,
-        branch: true,
-        bookingOrder: true,
-        invoice: { include: { payments: { orderBy: { createdAt: 'desc' }, take: 1 } } },
-        scheduleSlot: { include: { schedule: { include: { doctor: { include: { user: true } }, room: true, branch: true } } } },
+      select: {
+        id: true,
+        bookingCode: true,
+        bookingOrderId: true,
+        status: true,
+        queueNumber: true,
+        holdExpiresAt: true,
+        rescheduleCount: true,
+        createdAt: true,
+        servicePrice: true,
+        servicePackageId: true,
+        scheduleSlotId: true,
+        branchId: true,
+        patientProfile: {
+          select: { id: true, fullName: true },
+        },
+        servicePackage: {
+          select: { id: true, name: true },
+        },
+        branch: {
+          select: { id: true, name: true, address: true },
+        },
+        bookingOrder: {
+          select: { orderCode: true, groupType: true },
+        },
+        invoice: {
+          select: {
+            totalAmount: true,
+            status: true,
+            payments: {
+              select: { status: true },
+              orderBy: { createdAt: 'desc' },
+              take: 1,
+            },
+          },
+        },
+        scheduleSlot: {
+          select: {
+            startTime: true,
+            endTime: true,
+            schedule: {
+              select: {
+                workDate: true,
+                doctorId: true,
+                doctor: {
+                  select: {
+                    id: true,
+                    user: { select: { fullName: true } },
+                  },
+                },
+                room: {
+                  select: { id: true, code: true, name: true },
+                },
+                branch: {
+                  select: { id: true, name: true, address: true },
+                },
+              },
+            },
+          },
+        },
       },
     });
     return rows.map((row) => {
@@ -545,23 +625,61 @@ export class BookingService {
   async issueCheckInPass(appointmentId: string, accountId: string) {
     const row = await this.prisma.appointment.findFirst({
       where: { id: appointmentId, patientProfile: { accountId } },
-      include: {
-        patientProfile: true,
-        servicePackage: true,
-        branch: true,
-        invoice: { include: { payments: { orderBy: { createdAt: 'desc' }, take: 1 } } },
+      select: {
+        id: true,
+        bookingCode: true,
+        status: true,
+        queueNumber: true,
+        servicePrice: true,
+        patientProfile: {
+          select: {
+            id: true,
+            fullName: true,
+            gender: true,
+            dateOfBirth: true,
+            nationalId: true,
+            phoneNumber: true,
+          },
+        },
+        servicePackage: {
+          select: { id: true, name: true },
+        },
+        branch: {
+          select: { id: true, name: true, address: true },
+        },
+        invoice: {
+          select: {
+            totalAmount: true,
+            status: true,
+            payments: {
+              select: { status: true },
+              orderBy: { createdAt: 'desc' },
+              take: 1,
+            },
+          },
+        },
         scheduleSlot: {
-          include: {
+          select: {
+            startTime: true,
+            endTime: true,
             schedule: {
-              include: {
+              select: {
+                workDate: true,
+                room: { select: { id: true, code: true, name: true } },
+                branch: { select: { id: true, name: true, address: true } },
                 doctor: {
-                  include: {
-                    user: true,
-                    specialties: { include: { specialty: true } },
+                  select: {
+                    id: true,
+                    academicRank: true,
+                    user: { select: { fullName: true } },
+                    specialties: {
+                      select: {
+                        specialty: { select: { name: true } },
+                      },
+                      take: 1,
+                    },
                   },
                 },
-                room: true,
-                branch: true,
               },
             },
           },
@@ -1629,9 +1747,14 @@ export class BookingService {
           },
         },
       },
-      include: {
+      select: {
+        id: true,
+        startTime: true,
+        endTime: true,
+        capacity: true,
+        occupiedCount: true,
         schedule: {
-          include: {
+          select: {
             doctor: { select: { id: true, academicRank: true, consultationFee: true, user: { select: { fullName: true } } } },
           },
         },

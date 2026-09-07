@@ -119,7 +119,7 @@ export class StaffAppointmentsService {
 
   private appointmentInclude() {
     return {
-      patientProfile: { include: { account: true } },
+      patientProfile: { include: { account: { select: { id: true, email: true, phoneNumber: true } } } },
       branch: true,
       bookingOrder: {
         include: {
@@ -136,7 +136,12 @@ export class StaffAppointmentsService {
           schedule: {
             include: {
               room: true,
-              doctor: { include: { user: true, specialties: { include: { specialty: true } } } },
+              doctor: {
+                include: {
+                  user: { select: { id: true, fullName: true, email: true, phoneNumber: true } },
+                  specialties: { include: { specialty: true } },
+                },
+              },
             },
           },
         },
@@ -265,7 +270,7 @@ export class StaffAppointmentsService {
       ...(query.account ? { account: { email: { contains: query.account, mode: 'insensitive' } } } : {}),
     }
     const [rows, total] = await Promise.all([
-      this.prisma.patientProfile.findMany({ where, include: { account: true }, skip: (page - 1) * pageSize, take: pageSize, orderBy: { fullName: 'asc' } }),
+      this.prisma.patientProfile.findMany({ where, include: { account: { select: { id: true, email: true, phoneNumber: true } } }, skip: (page - 1) * pageSize, take: pageSize, orderBy: { fullName: 'asc' } }),
       this.prisma.patientProfile.count({ where }),
     ])
     return { patients: rows.map((row) => ({ ...row, patientCode: row.patientCode || row.nationalId || row.id, phone: row.account?.phoneNumber, email: row.account?.email })), total, page, pageSize }
@@ -321,7 +326,7 @@ export class StaffAppointmentsService {
 
   async patientByCode(userId: string, code: string) {
     await this.roleOf(userId)
-    const row = await this.prisma.patientProfile.findFirst({ where: { OR: [{ patientCode: code }, { nationalId: code }, { id: code }] }, include: { account: true } })
+    const row = await this.prisma.patientProfile.findFirst({ where: { OR: [{ patientCode: code }, { nationalId: code }, { id: code }] }, include: { account: { select: { id: true, email: true, phoneNumber: true } } } })
     if (!row) throw new NotFoundException('Không tìm thấy bệnh nhân')
     return { patient: { ...row, patientCode: row.patientCode || row.nationalId || row.id, phone: row.account?.phoneNumber, email: row.account?.email } }
   }

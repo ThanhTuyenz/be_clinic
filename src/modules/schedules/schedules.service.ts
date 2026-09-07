@@ -85,6 +85,13 @@ export class SchedulesService {
             isActive: true,
             slotStatus: 'AVAILABLE' as any,
           },
+          select: {
+            id: true,
+            startTime: true,
+            endTime: true,
+            capacity: true,
+            occupiedCount: true,
+          },
           orderBy: { startTime: 'asc' },
         },
       },
