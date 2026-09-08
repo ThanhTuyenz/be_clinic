@@ -22,6 +22,7 @@ import { JwtAuthGuard } from './modules/auth/auth-local/guards/jwt-auth.guard.js
 import { ContactsModule } from './modules/contacts/contacts.module.js'
 import { PrismaModule } from './infrastructure/database/prisma/prisma.module.js'
 import { RabbitMqModule } from './infrastructure/messaging/rabbitmq/rabbitmq.module.js'
+import { RealtimeModule } from './infrastructure/realtime/realtime.module.js'
 import { PatientsModule } from './modules/patients/patients.module.js'
 import { PaymentsModule } from './modules/payments/payments.module.js'
 import { AdminDashboardModule } from './modules/admin-dashboard/admin-dashboard.module.js'
@@ -65,6 +66,7 @@ import { RecommendationModule } from './modules/recommendations/recommendation.m
     AppointmentsModule,
     ContactsModule,
     RabbitMqModule,
+    RealtimeModule,
     PatientsModule,
     PaymentsModule,
     AdminDashboardModule,

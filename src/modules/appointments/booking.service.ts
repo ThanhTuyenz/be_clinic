@@ -9,6 +9,7 @@ import { VouchersService } from '../vouchers/vouchers.service.js';
 import { AppointmentItemDto, BatchCheckoutDto, CheckoutAppointmentDto } from './dtos/checkout-appointment.dto.js';
 import { PaymentWebhookDto } from './dtos/payment-webhook.dto.js';
 import { RescheduleAppointmentDto } from './dtos/reschedule-appointment.dto.js';
+import { RealtimeGateway } from '../../infrastructure/realtime/realtime.gateway.js';
 
 const ACTIVE_APPOINTMENT_STATUSES: AppointmentStatus[] = [
   'PENDING_PAYMENT', 'BOOKED', 'CHECKED_IN',
@@ -23,6 +24,7 @@ export class BookingService {
     private readonly config: ConfigService,
     private readonly mailsService: MailsService,
     private readonly vouchersService: VouchersService,
+    private readonly realtimeGateway: RealtimeGateway,
   ) {}
 
 
@@ -1886,9 +1888,43 @@ export class BookingService {
         holdExpiresAt: null,
         statusHistories: { create: { fromStatus: late ? 'EXPIRED' : 'PENDING_PAYMENT', toStatus: 'BOOKED', reason: late ? 'LATE_SUCCESS_CAPACITY_REACQUIRED' : 'PAYMENT_SUCCESS' } },
       },
+      include: {
+        patientProfile: true,
+        scheduleSlot: {
+          include: {
+            schedule: {
+              include: {
+                doctor: {
+                  include: { user: true },
+                },
+              },
+            },
+          },
+        },
+      },
     });
     await tx.appointmentQrToken.upsert({ where: { appointmentId }, update: { tokenHash, expiresAt: new Date(Date.now() + 48 * 60 * 60 * 1000), usedAt: null }, create: { appointmentId, tokenHash, expiresAt: new Date(Date.now() + 48 * 60 * 60 * 1000) } });
     await tx.outboxEvent.create({ data: { aggregateType: 'Appointment', aggregateId: appointmentId, eventType: 'appointment.booked', payload: { appointmentId, bookingCode, queueNumber: assignedQueueNumber, lateSuccess: late } } });
+    
+    // Bắn sự kiện realtime socket tới Quầy tiếp đón & Bác sĩ
+    try {
+      this.realtimeGateway.emitAppointmentBooked({
+        appointmentId,
+        bookingCode,
+        queueNumber: assignedQueueNumber ?? undefined,
+        patientName: appointment.patientProfile?.fullName,
+        patientPhone: appointment.patientProfile?.phoneNumber,
+        doctorName: appointment.scheduleSlot?.schedule?.doctor?.user?.fullName,
+        branchId: appointment.branchId,
+        appointmentDate: appointment.scheduleSlot?.schedule?.workDate?.toISOString().slice(0, 10),
+        startTime: appointment.scheduleSlot?.startTime?.toISOString().slice(11, 16),
+        endTime: appointment.scheduleSlot?.endTime?.toISOString().slice(11, 16),
+        status: 'BOOKED',
+      });
+    } catch {
+      // Ignore socket emit error
+    }
+
     return { status: late ? PaymentStatus.LATE_SUCCESS : PaymentStatus.SUCCESS, appointmentStatus: appointment.status, bookingCode, queueNumber: assignedQueueNumber, qrToken: rawToken };
   }
 
@@ -1953,6 +1989,20 @@ export class BookingService {
             },
           },
         },
+        include: {
+          patientProfile: true,
+          scheduleSlot: {
+            include: {
+              schedule: {
+                include: {
+                  doctor: {
+                    include: { user: true },
+                  },
+                },
+              },
+            },
+          },
+        },
       });
 
       await tx.appointmentQrToken.upsert({
@@ -1982,6 +2032,25 @@ export class BookingService {
           },
         },
       });
+
+      // Bắn sự kiện realtime socket cho từng lịch hẹn trong gói gia đình
+      try {
+        this.realtimeGateway.emitAppointmentBooked({
+          appointmentId: updated.id,
+          bookingCode,
+          queueNumber: assignedQueueNumber ?? undefined,
+          patientName: updated.patientProfile?.fullName,
+          patientPhone: updated.patientProfile?.phoneNumber,
+          doctorName: updated.scheduleSlot?.schedule?.doctor?.user?.fullName,
+          branchId: updated.branchId,
+          appointmentDate: updated.scheduleSlot?.schedule?.workDate?.toISOString().slice(0, 10),
+          startTime: updated.scheduleSlot?.startTime?.toISOString().slice(11, 16),
+          endTime: updated.scheduleSlot?.endTime?.toISOString().slice(11, 16),
+          status: 'BOOKED',
+        });
+      } catch {
+        // Ignore socket emit error
+      }
 
       confirmedAppointments.push({
         appointmentId: updated.id,

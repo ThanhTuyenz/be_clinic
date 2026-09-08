@@ -46,6 +46,19 @@ function time(hour, minute = 0) {
   return new Date(Date.UTC(1970, 0, 1, hour, minute, 0));
 }
 
+function toSlug(str) {
+  if (!str) return '';
+  return str
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[đĐ]/g, 'd')
+    .replace(/[^a-z0-9\s-]/g, '')
+    .trim()
+    .replace(/\s+/g, '-')
+    .replace(/-+/g, '-');
+}
+
 function doctorSlots() {
   const slots = [];
   for (const [startHour, startMinute, endHour, endMinute] of [[8, 0, 11, 30], [13, 30, 16, 30]]) {
@@ -98,8 +111,8 @@ async function main() {
   });
 
   const branchInputs = [
-    { code: 'VC-CENTRAL', name: 'VitaCare Trung tâm', address: 'Quận 1, TP.HCM' },
-    { code: 'VC-EAST', name: 'VitaCare Cơ sở Đông', address: 'TP. Thủ Đức, TP.HCM' },
+    { code: 'VC-CENTRAL', name: 'VitaCare Trung tâm', slug: 'vitacare-trung-tam', address: 'Quận 1, TP.HCM' },
+    { code: 'VC-EAST', name: 'VitaCare Cơ sở Đông', slug: 'vitacare-co-so-dong', address: 'TP. Thủ Đức, TP.HCM' },
   ];
   const branches = [];
   for (const item of branchInputs) {
@@ -445,10 +458,11 @@ async function seedBookingTables({ users, doctors, branches, rooms, doctorRooms,
       const methodCode = service.code.endsWith('-AFTER') ? 'AFTER_HOURS' : service.code.endsWith('-ADVICE') ? 'CONSULTATION' : 'SPECIALTY_EXAM';
       const branchBookingMethod = branchMethodByCode.get(methodCode);
       if (!branchBookingMethod) continue;
+      const slug = toSlug(service.name);
       await prisma.servicePackage.upsert({
         where: { code: service.code },
-        update: { ...service, branchBookingMethodId: branchBookingMethod.id, specialtyId: specialty.id, isActive: true },
-        create: { ...service, branchBookingMethodId: branchBookingMethod.id, specialtyId: specialty.id },
+        update: { ...service, slug, branchBookingMethodId: branchBookingMethod.id, specialtyId: specialty.id, isActive: true },
+        create: { ...service, slug, branchBookingMethodId: branchBookingMethod.id, specialtyId: specialty.id },
       });
     }
   }
@@ -463,10 +477,11 @@ async function seedBookingTables({ users, doctors, branches, rooms, doctorRooms,
   for (const [packageIndex, seed] of healthPackageSeeds.entries()) {
     const healthPackageMethod = branchMethodByCode.get('HEALTH_PACKAGE');
     if (!healthPackageMethod) continue;
+    const slug = toSlug(seed.name);
     await prisma.servicePackage.upsert({
       where: { code: seed.code },
-      update: { ...seed, branchBookingMethodId: healthPackageMethod.id, isActive: true },
-      create: { ...seed, branchBookingMethodId: healthPackageMethod.id },
+      update: { ...seed, slug, branchBookingMethodId: healthPackageMethod.id, isActive: true },
+      create: { ...seed, slug, branchBookingMethodId: healthPackageMethod.id },
     });
   }
 

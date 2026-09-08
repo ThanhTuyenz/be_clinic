@@ -5,21 +5,33 @@ import { PrismaService } from '../../infrastructure/database/prisma/prisma.servi
 export class SpecialtiesService {
   constructor(private readonly prisma: PrismaService) {}
 
+  private async resolveBranchId(identifier?: string): Promise<string | undefined> {
+    if (!identifier) return undefined;
+    if (/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(identifier)) return identifier;
+    const branch = await this.prisma.branch.findFirst({
+      where: { OR: [{ slug: identifier }, { code: identifier }], isActive: true },
+      select: { id: true },
+    });
+    return branch?.id ?? identifier;
+  }
+
   /**
    * GET /specialties
    * Danh sách tất cả chuyên khoa đang hoạt động
    */
   async getSpecialties(branchId?: string) {
+    const effectiveBranchId = await this.resolveBranchId(branchId);
     const specialties = await this.prisma.specialty.findMany({
       where: {
-        ...(branchId
-          ? { branches: { some: { branchId, isActive: true } } }
+        ...(effectiveBranchId
+          ? { branches: { some: { branchId: effectiveBranchId, isActive: true } } }
           : {}),
       } as any,
       orderBy: [{ name: 'asc' }],
       select: {
         id: true,
         name: true,
+        slug: true,
         description: true,
         _count: {
           select: {
@@ -46,7 +58,7 @@ export class SpecialtiesService {
       include: {
         branches: {
           where: { isActive: true },
-          select: { branchId: true, branch: { select: { id: true, name: true, address: true } } },
+          select: { branchId: true, branch: { select: { id: true, code: true, slug: true, name: true, address: true } } },
         },
       },
     })
@@ -59,6 +71,7 @@ export class SpecialtiesService {
    * Gói khám / dịch vụ thuộc chuyên khoa (NULL specialtyId = gói tổng quát)
    */
   async getSpecialtyServices(specialtyId: number, branchId?: string) {
+    const effectiveBranchId = await this.resolveBranchId(branchId);
     const packages = await this.prisma.servicePackage.findMany({
       where: {
         specialtyId,
@@ -66,13 +79,14 @@ export class SpecialtiesService {
         branchBookingMethod: {
           isEnabled: true,
           bookingMethod: { isActive: true },
-          ...(branchId ? { branchId } : {}),
+          ...(effectiveBranchId ? { branchId: effectiveBranchId } : {}),
         },
       },
       orderBy: [{ price: 'asc' }, { name: 'asc' }],
       select: {
         id: true,
         code: true,
+        slug: true,
         name: true,
         description: true,
         price: true,
@@ -82,6 +96,7 @@ export class SpecialtiesService {
           select: {
             id: true,
             branchId: true,
+            branch: { select: { id: true, code: true, slug: true } },
             bookingMethod: { select: { id: true, code: true, name: true, route: true } },
           },
         },
@@ -90,6 +105,7 @@ export class SpecialtiesService {
     return packages.map(({ branchBookingMethod, ...pkg }) => ({
       ...pkg,
       branchId: branchBookingMethod.branchId,
+      branchSlug: branchBookingMethod.branch?.slug ?? null,
       branchBookingMethodId: branchBookingMethod.id,
       bookingMethod: branchBookingMethod.bookingMethod,
       price: Number(pkg.price),
@@ -102,6 +118,7 @@ export class SpecialtiesService {
    * Bác sĩ thuộc chuyên khoa
    */
   async getSpecialtyDoctors(specialtyId: number, branchId?: string, q?: string) {
+    const effectiveBranchId = await this.resolveBranchId(branchId);
     const term = q?.trim()
     const doctors = await this.prisma.doctor.findMany({
       where: {
@@ -109,7 +126,7 @@ export class SpecialtiesService {
         specialties: { some: { specialtyId } },
         user: {
           ...(term ? { fullName: { contains: term, mode: 'insensitive' } } : {}),
-          ...(branchId ? { branchAssignments: { some: { branchId } } } : {}),
+          ...(effectiveBranchId ? { branchAssignments: { some: { branchId: effectiveBranchId } } } : {}),
         },
       },
       orderBy: [{ isFeatured: 'desc' }, { ratingAverage: 'desc' }, { user: { fullName: 'asc' } }],
@@ -126,17 +143,17 @@ export class SpecialtiesService {
         specialties: {
           select: {
             isPrimary: true,
-            specialty: { select: { id: true, name: true } },
+            specialty: { select: { id: true, name: true, slug: true } },
           },
         },
         user: {
           select: {
             fullName: true,
             branchAssignments: {
-              where: branchId ? { branchId } : undefined,
+              where: effectiveBranchId ? { branchId: effectiveBranchId } : undefined,
               select: {
                 isPrimary: true,
-                branch: { select: { id: true, name: true, address: true } },
+                branch: { select: { id: true, code: true, slug: true, name: true, address: true } },
               },
             },
           },

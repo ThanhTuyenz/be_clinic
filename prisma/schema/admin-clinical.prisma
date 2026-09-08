@@ -7,6 +7,7 @@ model ServicePackage {
   branchBookingMethodId String   @map("branch_booking_method_id") @db.Uuid
   specialtyId           Int?     @map("specialty_id")
   code                  String   @unique @db.VarChar(50)
+  slug                  String?  @unique @db.VarChar(150)
   name                  String   @db.VarChar(150)
   description           String?  @db.Text
   price                 Decimal  @db.Decimal(12, 2)

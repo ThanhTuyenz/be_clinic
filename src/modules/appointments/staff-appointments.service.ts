@@ -3,12 +3,14 @@ import { createHash, randomUUID } from 'node:crypto'
 import { Gender } from '@prisma/client'
 import { PrismaService } from '../../infrastructure/database/prisma/prisma.service.js'
 import { MailsService } from '../mails/mails.service.js'
+import { RealtimeGateway } from '../../infrastructure/realtime/realtime.gateway.js'
 
 @Injectable()
 export class StaffAppointmentsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly mailsService: MailsService,
+    private readonly realtimeGateway: RealtimeGateway,
   ) { }
 
 
@@ -505,6 +507,20 @@ export class StaffAppointmentsService {
     }
 
     const row = await this.prisma.appointment.findUniqueOrThrow({ where: { id: appointmentId }, include: this.appointmentInclude() })
+    
+    // Bắn realtime socket khi trạng thái lịch khám thay đổi
+    try {
+      this.realtimeGateway.emitAppointmentStatusChanged({
+        appointmentId: row.id,
+        status: row.status,
+        previousStatus: current.status,
+        bookingCode: row.bookingCode,
+        branchId: row.branchId,
+      })
+    } catch {
+      // Ignore socket error
+    }
+
     return { appointment: this.serialize(row) }
   }
 
@@ -606,6 +622,26 @@ export class StaffAppointmentsService {
       })
     })
     const row = await this.prisma.appointment.findUniqueOrThrow({ where: { id: appointmentId }, include: this.appointmentInclude() })
+    
+    // Bắn realtime socket khi tạo lịch hẹn tại quầy tiếp đón
+    try {
+      this.realtimeGateway.emitAppointmentBooked({
+        appointmentId: row.id,
+        bookingCode: row.bookingCode,
+        queueNumber: row.queueNumber ?? undefined,
+        patientName: row.patientProfile?.fullName,
+        patientPhone: row.patientProfile?.phoneNumber,
+        doctorName: row.scheduleSlot?.schedule?.doctor?.user?.fullName ?? (doctor as any)?.user?.fullName,
+        branchId: row.branchId,
+        appointmentDate: row.scheduleSlot?.schedule?.workDate?.toISOString().slice(0, 10),
+        startTime: row.scheduleSlot?.startTime ? this.time(row.scheduleSlot.startTime) : undefined,
+        endTime: row.scheduleSlot?.endTime ? this.time(row.scheduleSlot.endTime) : undefined,
+        status: row.status,
+      })
+    } catch {
+      // Ignore socket error
+    }
+
     return { appointment: this.serialize(row) }
   }
 

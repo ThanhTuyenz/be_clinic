@@ -151,6 +151,7 @@ export class RecommendationService {
       select: {
         id: true,
         code: true,
+        slug: true,
         name: true,
         description: true,
         price: true,
@@ -270,7 +271,7 @@ export class RecommendationService {
             specialtyName: followUpPkg.specialty?.name || specialtyName,
             priority: 'HIGH',
             badge: daysAgo <= 45 ? 'Tái khám theo hẹn' : 'Tái khám định kỳ',
-            clinicalReason: `Bệnh nhân đã hoàn thành đợt khám ${specialtyName} (${daysAgo} ngày trước) · Chỉ định tái khám để đánh giá đáp ứng điều trị và điều chỉnh phác đồ.`,
+            clinicalReason: `Bệnh nhân đã hoàn thành đợt khám ${specialtyName} (${daysAgo} ngày trước) · Khuyến nghị tái khám để đánh giá đáp ứng điều trị và điều chỉnh phác đồ.`,
           };
         }
       }

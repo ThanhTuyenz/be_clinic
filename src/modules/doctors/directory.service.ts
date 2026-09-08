@@ -5,8 +5,26 @@ import { PrismaService } from '../../infrastructure/database/prisma/prisma.servi
 export class DirectoryService {
   constructor(private readonly prisma: PrismaService) {}
 
+  private isUuid(val?: string | null): boolean {
+    return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(val || '');
+  }
+
+  private async resolveBranchId(identifier?: string): Promise<string | undefined> {
+    if (!identifier) return undefined;
+    if (this.isUuid(identifier)) return identifier;
+    const branch = await this.prisma.branch.findFirst({
+      where: { OR: [{ slug: identifier }, { code: identifier }], isActive: true },
+      select: { id: true },
+    });
+    return branch?.id ?? identifier;
+  }
+
   branches() {
-    return this.prisma.branch.findMany({ where: { isActive: true }, orderBy: { name: 'asc' }, select: { id: true, code: true, name: true, address: true, latitude: true, longitude: true, phoneNumber: true, timezone: true } });
+    return this.prisma.branch.findMany({
+      where: { isActive: true },
+      orderBy: { name: 'asc' },
+      select: { id: true, code: true, slug: true, name: true, address: true, latitude: true, longitude: true, phoneNumber: true, timezone: true },
+    });
   }
 
   async publicNavigation() {
@@ -16,6 +34,7 @@ export class DirectoryService {
         select: {
           id: true,
           name: true,
+          slug: true,
           description: true,
           branches: { where: { isActive: true }, select: { branchId: true } },
         },
@@ -23,7 +42,7 @@ export class DirectoryService {
       this.prisma.branch.findMany({
         where: { isActive: true },
         orderBy: { name: 'asc' },
-        select: { id: true, code: true, name: true, address: true, latitude: true, longitude: true, phoneNumber: true },
+        select: { id: true, code: true, slug: true, name: true, address: true, latitude: true, longitude: true, phoneNumber: true },
       }),
     ]);
 
@@ -33,14 +52,24 @@ export class DirectoryService {
   specialties() {
     return this.prisma.specialty.findMany({
       orderBy: { name: 'asc' },
-      select: { id: true, name: true, description: true, branches: { where: { isActive: true }, select: { branchId: true } } },
+      select: { id: true, name: true, slug: true, description: true, branches: { where: { isActive: true }, select: { branchId: true } } },
     });
   }
 
-  async homepage(branchId?: string) {
-    const selectedBranch = branchId
-      ? await this.prisma.branch.findFirst({ where: { id: branchId, isActive: true }, select: { id: true, code: true, name: true, address: true, latitude: true, longitude: true, phoneNumber: true } })
-      : await this.prisma.branch.findFirst({ where: { isActive: true }, orderBy: [{ code: 'asc' }, { name: 'asc' }], select: { id: true, code: true, name: true, address: true, latitude: true, longitude: true, phoneNumber: true } });
+  async homepage(branchIdentifier?: string) {
+    const isId = this.isUuid(branchIdentifier);
+    const selectedBranch = branchIdentifier
+      ? await this.prisma.branch.findFirst({
+          where: isId
+            ? { id: branchIdentifier, isActive: true }
+            : { OR: [{ slug: branchIdentifier }, { code: branchIdentifier }], isActive: true },
+          select: { id: true, code: true, slug: true, name: true, address: true, latitude: true, longitude: true, phoneNumber: true },
+        })
+      : await this.prisma.branch.findFirst({
+          where: { isActive: true },
+          orderBy: [{ code: 'asc' }, { name: 'asc' }],
+          select: { id: true, code: true, slug: true, name: true, address: true, latitude: true, longitude: true, phoneNumber: true },
+        });
     const activeBranchId = selectedBranch?.id;
     const [navigation, featuredDoctors, specialtyPackages, healthPackages, bookingMethods, doctorCount, specialtyCount, reviewAggregate] = await Promise.all([
       this.publicNavigation(),
@@ -60,33 +89,60 @@ export class DirectoryService {
       where: { isActive: true, branchBookingMethod: { branchId, isEnabled: true, bookingMethod: { code: 'SPECIALTY_EXAM', isActive: true } } },
       orderBy: [{ specialty: { name: 'asc' } }, { price: 'asc' }],
       take: 8,
-      select: { id: true, code: true, name: true, description: true, price: true, durationMin: true, specialtyId: true, specialty: { select: { id: true, name: true } }, branchBookingMethod: { select: { branchId: true } } },
+      select: {
+        id: true,
+        code: true,
+        slug: true,
+        name: true,
+        description: true,
+        price: true,
+        durationMin: true,
+        specialtyId: true,
+        specialty: { select: { id: true, name: true, slug: true } },
+        branchBookingMethod: { select: { branchId: true, branch: { select: { id: true, code: true, slug: true } } } },
+      },
     });
-    return rows.map(({ branchBookingMethod, ...item }) => ({ ...item, branchId: branchBookingMethod.branchId }));
+    return rows.map(({ branchBookingMethod, ...item }) => ({
+      ...item,
+      branchId: branchBookingMethod.branchId,
+      branchSlug: branchBookingMethod.branch?.slug ?? null,
+    }));
   }
 
   departments(branchId: string) {
     return this.prisma.specialty.findMany({
       where: { branches: { some: { branchId, isActive: true } } },
-      orderBy: { name: 'asc' }, select: { id: true, name: true, description: true },
+      orderBy: { name: 'asc' }, select: { id: true, name: true, slug: true, description: true },
     });
   }
 
-  async specialtyServices(branchId: string | undefined, specialtyId: number) {
+  async specialtyServices(branchIdentifier: string | undefined, specialtyId: number) {
     if (!Number.isInteger(specialtyId)) throw new BadRequestException('Thiếu chuyên khoa');
+    const branchId = await this.resolveBranchId(branchIdentifier);
     const rows = await this.prisma.servicePackage.findMany({
       where: { specialtyId, isActive: true, branchBookingMethod: { ...(branchId ? { branchId } : {}), isEnabled: true, bookingMethod: { isActive: true } } },
       orderBy: [{ price: 'asc' }, { name: 'asc' }],
-      select: { id: true, code: true, name: true, description: true, price: true, durationMin: true, specialtyId: true, branchBookingMethod: { select: { id: true, branchId: true, bookingMethod: { select: { id: true, code: true, name: true } } } } },
+      select: {
+        id: true,
+        code: true,
+        slug: true,
+        name: true,
+        description: true,
+        price: true,
+        durationMin: true,
+        specialtyId: true,
+        branchBookingMethod: { select: { id: true, branchId: true, bookingMethod: { select: { id: true, code: true, name: true } } } },
+      },
     });
     return rows.map(({ branchBookingMethod, ...service }) => ({ ...service, branchId: branchBookingMethod.branchId, branchBookingMethodId: branchBookingMethod.id, bookingMethod: branchBookingMethod.bookingMethod }));
   }
 
-  async servicePackageScheduleDates(packageId: string) {
-    if (!packageId) throw new BadRequestException('Thiếu gói dịch vụ');
-    const servicePackage = await this.prisma.servicePackage.findUnique({
-      where: { id: packageId },
-      select: { specialtyId: true, branchBookingMethod: { select: { branchId: true } } },
+  async servicePackageScheduleDates(packageIdentifier: string) {
+    if (!packageIdentifier) throw new BadRequestException('Thiếu gói dịch vụ');
+    const isId = this.isUuid(packageIdentifier);
+    const servicePackage = await this.prisma.servicePackage.findFirst({
+      where: isId ? { id: packageIdentifier } : { OR: [{ slug: packageIdentifier }, { code: packageIdentifier }] },
+      select: { id: true, specialtyId: true, branchBookingMethod: { select: { branchId: true } } },
     });
     if (!servicePackage) throw new NotFoundException('Không tìm thấy gói dịch vụ');
     const branchId = servicePackage.branchBookingMethod.branchId;
@@ -109,11 +165,12 @@ export class DirectoryService {
     return rows.map(({ workDate }) => workDate.toISOString().slice(0, 10));
   }
 
-  async servicePackageTimeslots(packageId: string, date: string) {
-    if (!packageId) throw new BadRequestException('Thiếu gói dịch vụ');
-    const servicePackage = await this.prisma.servicePackage.findUnique({
-      where: { id: packageId },
-      select: { specialtyId: true, branchBookingMethod: { select: { branchId: true } } },
+  async servicePackageTimeslots(packageIdentifier: string, date: string) {
+    if (!packageIdentifier) throw new BadRequestException('Thiếu gói dịch vụ');
+    const isId = this.isUuid(packageIdentifier);
+    const servicePackage = await this.prisma.servicePackage.findFirst({
+      where: isId ? { id: packageIdentifier } : { OR: [{ slug: packageIdentifier }, { code: packageIdentifier }] },
+      select: { id: true, specialtyId: true, branchBookingMethod: { select: { branchId: true } } },
     });
     if (!servicePackage) throw new NotFoundException('Không tìm thấy gói dịch vụ');
     const branchId = servicePackage.branchBookingMethod.branchId;
@@ -143,8 +200,10 @@ export class DirectoryService {
         slotStatus: true,
         schedule: {
           select: {
-            room: { select: { id: true, code: true, name: true, branch: { select: { id: true, name: true, address: true } } } },
-            doctor: { select: { id: true, academicRank: true, user: { select: { fullName: true } } } },
+            room: { select: { id: true, code: true, name: true } },
+            doctor: {
+              select: { id: true, academicRank: true, user: { select: { fullName: true } } },
+            },
           },
         },
       },
@@ -169,21 +228,33 @@ export class DirectoryService {
     });
   }
 
-  async healthPackages(branchId?: string, limit?: number) {
+  async healthPackages(branchIdentifier?: string, limit?: number) {
+    const branchId = await this.resolveBranchId(branchIdentifier);
     const rows = await this.prisma.servicePackage.findMany({
       where: { isActive: true, branchBookingMethod: { ...(branchId ? { branchId } : {}), isEnabled: true, bookingMethod: { code: 'HEALTH_PACKAGE', isActive: true } } },
       orderBy: { name: 'asc' },
       ...(limit ? { take: limit } : {}),
       select: {
-        id: true, code: true, name: true, description: true, price: true, branchBookingMethod: { select: { id: true, branchId: true } },
+        id: true,
+        code: true,
+        slug: true,
+        name: true,
+        description: true,
+        price: true,
+        branchBookingMethod: { select: { id: true, branchId: true, branch: { select: { id: true, code: true, slug: true } } } },
       },
     });
-    return rows.map(({ branchBookingMethod, ...healthPackage }) => ({ ...healthPackage, branchId: branchBookingMethod.branchId, branchBookingMethodId: branchBookingMethod.id }));
+    return rows.map(({ branchBookingMethod, ...healthPackage }) => ({
+      ...healthPackage,
+      branchId: branchBookingMethod.branchId,
+      branchSlug: branchBookingMethod.branch?.slug ?? null,
+      branchBookingMethodId: branchBookingMethod.id,
+    }));
   }
 
-
-  bookingMethods(branchId: string) {
-    if (!branchId) throw new BadRequestException('Thiếu chi nhánh');
+  async bookingMethods(branchIdentifier: string) {
+    if (!branchIdentifier) throw new BadRequestException('Thiếu chi nhánh');
+    const branchId = await this.resolveBranchId(branchIdentifier);
     return this.prisma.branchBookingMethod.findMany({
       where: { branchId, isEnabled: true },
       orderBy: { sortOrder: 'asc' },
@@ -191,8 +262,9 @@ export class DirectoryService {
     }).then((rows) => rows.map(({ bookingMethod, ...item }) => ({ ...item, bookingMethodId: bookingMethod.id, type: bookingMethod.code, code: bookingMethod.code, displayName: bookingMethod.name, description: bookingMethod.description, route: bookingMethod.route })));
   }
 
-  async doctors(branchId?: string, departmentId?: number, specialtyId?: number, q?: string, featuredOnly = false, limit?: number) {
+  async doctors(branchIdentifier?: string, departmentId?: number, specialtyId?: number, q?: string, featuredOnly = false, limit?: number) {
     if (specialtyId !== undefined && !Number.isInteger(specialtyId)) throw new BadRequestException('specialtyId không hợp lệ');
+    const branchId = await this.resolveBranchId(branchIdentifier);
     const term = q?.trim();
     const effectiveLimit = limit ?? (featuredOnly ? 6 : (term ? 30 : 50));
     const rows = await this.prisma.doctor.findMany({
