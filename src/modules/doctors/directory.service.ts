@@ -209,23 +209,50 @@ export class DirectoryService {
       },
     });
 
-    return rows.map((slot: any) => {
-      const { schedule, ...slotData } = slot;
+    const slotMap = new Map<string, any>();
+    for (const slot of rows) {
+      const { schedule, ...slotData } = slot as any;
+      const start = slot.startTime.toISOString().slice(11, 16);
+      const end = slot.endTime.toISOString().slice(11, 16);
+      const key = `${start}-${end}`;
       const docName = schedule.doctor?.user?.fullName
         ? `${schedule.doctor.academicRank ? schedule.doctor.academicRank + ' ' : ''}${schedule.doctor.user.fullName}`.trim()
         : '';
-      return {
-        ...slotData,
-        room: schedule.room,
-        doctor: schedule.doctor ? { id: schedule.doctor.id, fullName: docName } : null,
-        doctorId: schedule.doctor?.id,
-        doctorSlotId: slot.id,
-        startTime: slot.startTime.toISOString().slice(11, 16),
-        endTime: slot.endTime.toISOString().slice(11, 16),
-        remainingCapacity: slot.capacity - slot.occupiedCount,
-        isAvailable: slot.occupiedCount < slot.capacity,
-      };
-    });
+      const rem = Math.max(slot.capacity - slot.occupiedCount, 0);
+      const isAvail = rem > 0;
+
+      if (!slotMap.has(key)) {
+        slotMap.set(key, {
+          ...slotData,
+          room: schedule.room,
+          doctor: schedule.doctor ? { id: schedule.doctor.id, fullName: docName } : null,
+          doctorId: schedule.doctor?.id,
+          doctorSlotId: slot.id,
+          startTime: start,
+          endTime: end,
+          capacity: slot.capacity,
+          occupiedCount: slot.occupiedCount,
+          remainingCapacity: rem,
+          isAvailable: isAvail,
+        });
+      } else {
+        const existing = slotMap.get(key);
+        existing.capacity += slot.capacity;
+        existing.occupiedCount += slot.occupiedCount;
+        existing.remainingCapacity += rem;
+        existing.isAvailable = existing.isAvailable || isAvail;
+        if (existing.remainingCapacity <= rem && isAvail) {
+          existing.id = slot.id;
+          existing.doctorSlotId = slot.id;
+          if (schedule.doctor) {
+            existing.doctor = { id: schedule.doctor.id, fullName: docName };
+            existing.doctorId = schedule.doctor.id;
+          }
+        }
+      }
+    }
+
+    return Array.from(slotMap.values());
   }
 
   async healthPackages(branchIdentifier?: string, limit?: number) {

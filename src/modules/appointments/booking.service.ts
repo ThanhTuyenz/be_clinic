@@ -203,7 +203,38 @@ export class BookingService {
         });
         if (duplicate) throw new ConflictException('Người bệnh đã có lịch hẹn trong khung giờ này');
 
-        const reserved = await tx.$executeRaw`UPDATE "doctor_schedule_slots" SET "occupied_count" = "occupied_count" + 1, "updated_at" = NOW() WHERE "id" = ${doctorSlot.id}::uuid AND "is_active" = TRUE AND "occupied_count" < "capacity"`;
+        let activeSlot = doctorSlot;
+        let reserved = await tx.$executeRaw`UPDATE "doctor_schedule_slots" SET "occupied_count" = "occupied_count" + 1, "updated_at" = NOW() WHERE "id" = ${activeSlot.id}::uuid AND "is_active" = TRUE AND "occupied_count" < "capacity"`;
+
+        if (reserved !== 1) {
+          // Nếu slot cụ thể này vừa bị giữ chỗ, tự động tìm slot còn trống của bác sĩ khác cùng ca/khung giờ tại cơ sở
+          const candidateSlots: any[] = await tx.$queryRaw`
+            SELECT s."id" FROM "doctor_schedule_slots" s
+            JOIN "doctor_schedules" sch ON s."schedule_id" = sch."id"
+            WHERE sch."branch_id" = ${servicePackage.branchBookingMethod.branchId}::uuid
+              AND sch."work_date" = ${doctorSlot.schedule.workDate}::date
+              AND sch."status" = 'OPEN'
+              AND s."start_time" = ${doctorSlot.startTime}::time
+              AND s."is_active" = TRUE
+              AND s."occupied_count" < s."capacity"
+              AND s."id" != ${doctorSlot.id}::uuid
+            LIMIT 1
+          `;
+
+          if (candidateSlots && candidateSlots.length > 0) {
+            const altSlotId = candidateSlots[0].id;
+            const altReserved = await tx.$executeRaw`UPDATE "doctor_schedule_slots" SET "occupied_count" = "occupied_count" + 1, "updated_at" = NOW() WHERE "id" = ${altSlotId}::uuid AND "is_active" = TRUE AND "occupied_count" < "capacity"`;
+            if (altReserved === 1) {
+              reserved = 1;
+              const foundSlot = await tx.doctorScheduleSlot.findUnique({
+                where: { id: altSlotId },
+                include: { schedule: { include: { doctor: true, room: true } } },
+              });
+              if (foundSlot) activeSlot = foundSlot;
+            }
+          }
+        }
+
         if (reserved !== 1) throw new ConflictException('Khung giờ vừa hết chỗ');
 
         const holdTtlMs = this.config.getOrThrow<RabbitMqConfig>('rabbitmq').holdTtlMs;
@@ -228,7 +259,7 @@ export class BookingService {
           data: {
             patientProfileId: profile.id,
             branchId: servicePackage.branchBookingMethod.branchId,
-            scheduleSlotId: doctorSlot.id,
+            scheduleSlotId: activeSlot.id,
             servicePackageId: servicePackage.id,
             servicePrice: servicePackage.price,
             symptomsDescription: dto.symptomsDescription,
@@ -281,7 +312,7 @@ export class BookingService {
           data: {
             aggregateType: 'Appointment', aggregateId: appointment.id,
             eventType: 'appointment.hold.created',
-            payload: { appointmentId: appointment.id, doctorSlotId: doctorSlot.id, holdExpiresAt: expiresAt.toISOString() },
+            payload: { appointmentId: appointment.id, doctorSlotId: activeSlot.id, holdExpiresAt: expiresAt.toISOString() },
           },
         });
         return { appointmentId: appointment.id, invoiceId: invoice.id, paymentId: payment.id, status: appointment.status, holdStartedAt: now, holdExpiresAt: expiresAt, subtotal, serviceFee, discountAmount, totalAmount };
@@ -575,6 +606,9 @@ export class BookingService {
                   select: {
                     id: true,
                     user: { select: { fullName: true } },
+                    specialties: {
+                      include: { specialty: { select: { name: true } } },
+                    },
                   },
                 },
                 room: {
@@ -612,6 +646,7 @@ export class BookingService {
         patient: { id: row.patientProfile.id, fullName: row.patientProfile.fullName },
         doctor: (() => { const d = doctorSlot?.schedule?.doctor; return d ? { id: d.id, fullName: d.user?.fullName ?? '' } : null; })(),
         doctorId: doctorSlot?.schedule?.doctorId ?? null,
+        specialty: doctorSlot?.schedule?.doctor?.specialties?.[0]?.specialty?.name ?? null,
         service: row.servicePackage ? { id: row.servicePackage.id, name: row.servicePackage.name } : null,
         healthPackage: row.servicePackage ? { id: row.servicePackage.id, name: row.servicePackage.name } : null,
         branch: branch ? { id: branch.id, name: branch.name, address: branch.address } : null,
@@ -1890,6 +1925,12 @@ export class BookingService {
       },
       include: {
         patientProfile: true,
+        servicePackage: {
+          include: {
+            specialty: true,
+          },
+        },
+        branch: true,
         scheduleSlot: {
           include: {
             schedule: {
@@ -1908,14 +1949,25 @@ export class BookingService {
     
     // Bắn sự kiện realtime socket tới Quầy tiếp đón & Bác sĩ
     try {
+      const isHealthPkg = Boolean(appointment.servicePackageId && !appointment.servicePackage?.specialtyId);
+      const servicePackageName = appointment.servicePackage?.name;
+      const specialtyName = appointment.servicePackage?.specialty?.name;
+      const assignedDoctor = appointment.scheduleSlot?.schedule?.doctor;
+
       this.realtimeGateway.emitAppointmentBooked({
         appointmentId,
         bookingCode,
         queueNumber: assignedQueueNumber ?? undefined,
         patientName: appointment.patientProfile?.fullName,
         patientPhone: appointment.patientProfile?.phoneNumber,
-        doctorName: appointment.scheduleSlot?.schedule?.doctor?.user?.fullName,
+        doctorId: assignedDoctor?.id,
+        doctorName: assignedDoctor?.user?.fullName,
+        specialtyName,
+        servicePackageName,
+        packageName: servicePackageName,
+        bookingType: isHealthPkg ? 'HEALTH_PACKAGE' : (appointment.servicePackageId ? 'SERVICE_PACKAGE' : 'DOCTOR'),
         branchId: appointment.branchId,
+        branchName: appointment.branch?.name,
         appointmentDate: appointment.scheduleSlot?.schedule?.workDate?.toISOString().slice(0, 10),
         startTime: appointment.scheduleSlot?.startTime?.toISOString().slice(11, 16),
         endTime: appointment.scheduleSlot?.endTime?.toISOString().slice(11, 16),
@@ -1991,6 +2043,12 @@ export class BookingService {
         },
         include: {
           patientProfile: true,
+          servicePackage: {
+            include: {
+              specialty: true,
+            },
+          },
+          branch: true,
           scheduleSlot: {
             include: {
               schedule: {
@@ -2035,14 +2093,25 @@ export class BookingService {
 
       // Bắn sự kiện realtime socket cho từng lịch hẹn trong gói gia đình
       try {
+        const isHealthPkg = Boolean(updated.servicePackageId && !updated.servicePackage?.specialtyId);
+        const servicePackageName = updated.servicePackage?.name;
+        const specialtyName = updated.servicePackage?.specialty?.name;
+        const assignedDoctor = updated.scheduleSlot?.schedule?.doctor;
+
         this.realtimeGateway.emitAppointmentBooked({
           appointmentId: updated.id,
           bookingCode,
           queueNumber: assignedQueueNumber ?? undefined,
           patientName: updated.patientProfile?.fullName,
           patientPhone: updated.patientProfile?.phoneNumber,
-          doctorName: updated.scheduleSlot?.schedule?.doctor?.user?.fullName,
+          doctorId: assignedDoctor?.id,
+          doctorName: assignedDoctor?.user?.fullName,
+          specialtyName,
+          servicePackageName,
+          packageName: servicePackageName,
+          bookingType: isHealthPkg ? 'HEALTH_PACKAGE' : (updated.servicePackageId ? 'SERVICE_PACKAGE' : 'DOCTOR'),
           branchId: updated.branchId,
+          branchName: updated.branch?.name,
           appointmentDate: updated.scheduleSlot?.schedule?.workDate?.toISOString().slice(0, 10),
           startTime: updated.scheduleSlot?.startTime?.toISOString().slice(11, 16),
           endTime: updated.scheduleSlot?.endTime?.toISOString().slice(11, 16),

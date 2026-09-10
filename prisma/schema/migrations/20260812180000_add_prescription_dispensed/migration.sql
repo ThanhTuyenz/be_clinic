@@ -1,1 +1,0 @@
-ALTER TYPE "PrescriptionStatus" ADD VALUE IF NOT EXISTS 'DISPENSED';

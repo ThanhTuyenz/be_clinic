@@ -1,5 +1,14 @@
+-- CreateSchema
+CREATE SCHEMA IF NOT EXISTS "public";
+
 -- CreateEnum
-CREATE TYPE "UserRole" AS ENUM ('admin', 'branch_manager', 'doctor', 'pharmacist', 'cashier', 'receptionist', 'patient');
+CREATE TYPE "AIConversationType" AS ENUM ('TRIAGE_CONSULTATION', 'GENERAL_INQUIRY', 'BOOKING_ASSISTANCE');
+
+-- CreateEnum
+CREATE TYPE "AIMessageSender" AS ENUM ('USER', 'ASSISTANT', 'SYSTEM');
+
+-- CreateEnum
+CREATE TYPE "UserRole" AS ENUM ('admin', 'branch_manager', 'doctor', 'receptionist', 'patient');
 
 -- CreateEnum
 CREATE TYPE "UserStatus" AS ENUM ('active', 'inactive');
@@ -14,7 +23,13 @@ CREATE TYPE "Gender" AS ENUM ('MALE', 'FEMALE', 'OTHER');
 CREATE TYPE "ScheduleStatus" AS ENUM ('OPEN', 'CLOSED', 'CANCELLED');
 
 -- CreateEnum
+CREATE TYPE "SlotStatus" AS ENUM ('AVAILABLE', 'FULL', 'BLOCKED');
+
+-- CreateEnum
 CREATE TYPE "AppointmentStatus" AS ENUM ('PENDING_PAYMENT', 'BOOKED', 'CHECKED_IN', 'IN_EXAMINATION', 'COMPLETED', 'CANCELLED', 'EXPIRED', 'NO_SHOW', 'REFUND_REQUIRED', 'MANUAL_REVIEW');
+
+-- CreateEnum
+CREATE TYPE "BookingOrderStatus" AS ENUM ('PENDING_PAYMENT', 'PAID', 'PARTIALLY_CANCELLED', 'CANCELLED', 'REFUNDED');
 
 -- CreateEnum
 CREATE TYPE "InvoiceStatus" AS ENUM ('UNPAID', 'PAID', 'REFUNDED', 'CANCELLED');
@@ -29,139 +44,7 @@ CREATE TYPE "PaymentMethod" AS ENUM ('CASH', 'VIETQR', 'POS_CARD', 'ONLINE');
 CREATE TYPE "OutboxStatus" AS ENUM ('PENDING', 'PUBLISHED', 'FAILED');
 
 -- CreateEnum
-CREATE TYPE "MedicalVisitStatus" AS ENUM ('DRAFT', 'FINALIZED', 'AMENDED');
-
--- CreateEnum
-CREATE TYPE "PrescriptionStatus" AS ENUM ('DRAFT', 'ISSUED', 'CANCELLED');
-
--- CreateEnum
-CREATE TYPE "ClinicalOrderStatus" AS ENUM ('ORDERED', 'IN_PROGRESS', 'COMPLETED', 'CANCELLED');
-
--- CreateEnum
-CREATE TYPE "MedicalServiceCategory" AS ENUM ('LAB_TEST', 'IMAGING', 'PROCEDURE');
-
--- CreateEnum
-CREATE TYPE "InventoryMovementType" AS ENUM ('IMPORT', 'DISPENSE', 'ADJUSTMENT', 'RETURN', 'EXPIRED');
-
--- CreateTable
-CREATE TABLE "medical_visits" (
-    "id" UUID NOT NULL,
-    "medical_record_id" UUID NOT NULL,
-    "appointment_id" UUID,
-    "doctor_id" UUID NOT NULL,
-    "branch_id" UUID NOT NULL,
-    "created_by_id" UUID NOT NULL,
-    "status" "MedicalVisitStatus" NOT NULL DEFAULT 'DRAFT',
-    "symptoms" TEXT,
-    "clinical_notes" TEXT,
-    "treatment_plan" TEXT,
-    "temperature" DECIMAL(4,1),
-    "respiratory_rate" INTEGER,
-    "systolic_bp" INTEGER,
-    "diastolic_bp" INTEGER,
-    "pulse" INTEGER,
-    "height_cm" DECIMAL(5,2),
-    "weight_kg" DECIMAL(5,2),
-    "spo2" DECIMAL(5,2),
-    "follow_up_at" TIMESTAMPTZ(3),
-    "finalized_at" TIMESTAMPTZ(3),
-    "payload" JSONB NOT NULL,
-    "created_at" TIMESTAMPTZ(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    "updated_at" TIMESTAMPTZ(3) NOT NULL,
-
-    CONSTRAINT "medical_visits_pkey" PRIMARY KEY ("id")
-);
-
--- CreateTable
-CREATE TABLE "visit_diagnoses" (
-    "id" BIGSERIAL NOT NULL,
-    "medical_visit_id" UUID NOT NULL,
-    "icd10_code_id" UUID NOT NULL,
-    "is_primary" BOOLEAN NOT NULL DEFAULT false,
-    "note" TEXT,
-
-    CONSTRAINT "visit_diagnoses_pkey" PRIMARY KEY ("id")
-);
-
--- CreateTable
-CREATE TABLE "prescriptions" (
-    "id" UUID NOT NULL,
-    "medical_visit_id" UUID NOT NULL,
-    "status" "PrescriptionStatus" NOT NULL DEFAULT 'DRAFT',
-    "note" TEXT,
-    "issued_at" TIMESTAMPTZ(3),
-    "created_at" TIMESTAMPTZ(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    "updated_at" TIMESTAMPTZ(3) NOT NULL,
-
-    CONSTRAINT "prescriptions_pkey" PRIMARY KEY ("id")
-);
-
--- CreateTable
-CREATE TABLE "prescription_items" (
-    "id" BIGSERIAL NOT NULL,
-    "prescription_id" UUID NOT NULL,
-    "medicine_id" UUID NOT NULL,
-    "medicine_name" VARCHAR(255) NOT NULL,
-    "strength" VARCHAR(100),
-    "unit" VARCHAR(50),
-    "quantity" DECIMAL(10,2) NOT NULL,
-    "dosage_amount" VARCHAR(100) NOT NULL,
-    "frequency_per_day" INTEGER,
-    "duration_days" INTEGER,
-    "instructions" TEXT,
-
-    CONSTRAINT "prescription_items_pkey" PRIMARY KEY ("id")
-);
-
--- CreateTable
-CREATE TABLE "clinical_orders" (
-    "id" UUID NOT NULL,
-    "medical_visit_id" UUID NOT NULL,
-    "medical_service_id" UUID NOT NULL,
-    "status" "ClinicalOrderStatus" NOT NULL DEFAULT 'ORDERED',
-    "service_name" VARCHAR(200) NOT NULL,
-    "price" DECIMAL(12,2) NOT NULL,
-    "note" TEXT,
-    "result_payload" JSONB,
-    "ordered_at" TIMESTAMPTZ(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    "completed_at" TIMESTAMPTZ(3),
-
-    CONSTRAINT "clinical_orders_pkey" PRIMARY KEY ("id")
-);
-
--- CreateTable
-CREATE TABLE "medicines" (
-    "id" UUID NOT NULL,
-    "code" VARCHAR(50) NOT NULL,
-    "name" VARCHAR(255) NOT NULL,
-    "active_ingredient" VARCHAR(255),
-    "strength" VARCHAR(100),
-    "unit" VARCHAR(50),
-    "unit_price" DECIMAL(12,2) NOT NULL DEFAULT 0,
-    "stock_quantity" INTEGER NOT NULL DEFAULT 0,
-    "is_active" BOOLEAN NOT NULL DEFAULT true,
-    "created_at" TIMESTAMPTZ(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    "updated_at" TIMESTAMPTZ(3) NOT NULL,
-
-    CONSTRAINT "medicines_pkey" PRIMARY KEY ("id")
-);
-
--- CreateTable
-CREATE TABLE "medical_services" (
-    "id" UUID NOT NULL,
-    "department_id" INTEGER,
-    "code" VARCHAR(50) NOT NULL,
-    "name" VARCHAR(200) NOT NULL,
-    "description" TEXT,
-    "category" "MedicalServiceCategory" NOT NULL,
-    "price" DECIMAL(12,2) NOT NULL DEFAULT 0,
-    "duration_min" INTEGER NOT NULL DEFAULT 30,
-    "is_active" BOOLEAN NOT NULL DEFAULT true,
-    "created_at" TIMESTAMPTZ(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    "updated_at" TIMESTAMPTZ(3) NOT NULL,
-
-    CONSTRAINT "medical_services_pkey" PRIMARY KEY ("id")
-);
+CREATE TYPE "DiscountType" AS ENUM ('PERCENTAGE', 'FIXED_AMOUNT');
 
 -- CreateTable
 CREATE TABLE "service_packages" (
@@ -169,6 +52,7 @@ CREATE TABLE "service_packages" (
     "branch_booking_method_id" UUID NOT NULL,
     "specialty_id" INTEGER,
     "code" VARCHAR(50) NOT NULL,
+    "slug" VARCHAR(150),
     "name" VARCHAR(150) NOT NULL,
     "description" TEXT,
     "price" DECIMAL(12,2) NOT NULL,
@@ -181,54 +65,63 @@ CREATE TABLE "service_packages" (
 );
 
 -- CreateTable
-CREATE TABLE "service_package_schedules" (
+CREATE TABLE "ai_conversations" (
     "id" UUID NOT NULL,
-    "service_package_id" UUID NOT NULL,
-    "room_id" UUID,
-    "exam_date" DATE NOT NULL,
-    "is_active" BOOLEAN NOT NULL DEFAULT true,
+    "user_id" UUID,
+    "conversation_type" "AIConversationType" NOT NULL DEFAULT 'TRIAGE_CONSULTATION',
+    "title" VARCHAR(255),
+    "is_closed" BOOLEAN NOT NULL DEFAULT false,
     "created_at" TIMESTAMPTZ(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updated_at" TIMESTAMPTZ(3) NOT NULL,
 
-    CONSTRAINT "service_package_schedules_pkey" PRIMARY KEY ("id")
+    CONSTRAINT "ai_conversations_pkey" PRIMARY KEY ("id")
 );
 
 -- CreateTable
-CREATE TABLE "service_package_schedule_slots" (
-    "id" UUID NOT NULL DEFAULT gen_random_uuid(),
-    "schedule_id" UUID NOT NULL,
-    "start_time" TIME(0) NOT NULL,
-    "end_time" TIME(0) NOT NULL,
-    "capacity" INTEGER NOT NULL DEFAULT 20,
-    "occupied_count" INTEGER NOT NULL DEFAULT 0,
-    "next_queue_number" INTEGER NOT NULL DEFAULT 0,
-    "is_active" BOOLEAN NOT NULL DEFAULT true,
-    "created_at" TIMESTAMPTZ(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    "updated_at" TIMESTAMPTZ(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-
-    CONSTRAINT "service_package_schedule_slots_pkey" PRIMARY KEY ("id")
-);
-
--- CreateTable
-CREATE TABLE "service_package_items" (
-    "service_package_id" UUID NOT NULL,
-    "medical_service_id" UUID NOT NULL,
-    "quantity" INTEGER NOT NULL DEFAULT 1,
-    "sort_order" INTEGER NOT NULL DEFAULT 0,
-
-    CONSTRAINT "service_package_items_pkey" PRIMARY KEY ("service_package_id","medical_service_id")
-);
-
--- CreateTable
-CREATE TABLE "icd10_codes" (
+CREATE TABLE "ai_messages" (
     "id" UUID NOT NULL,
-    "code" VARCHAR(20) NOT NULL,
-    "description" VARCHAR(500) NOT NULL,
-    "department_id" INTEGER,
-    "is_active" BOOLEAN NOT NULL DEFAULT true,
+    "conversation_id" UUID NOT NULL,
+    "sender" "AIMessageSender" NOT NULL,
+    "content" TEXT NOT NULL,
+    "raw_audio_url" VARCHAR(500),
+    "structured_response" JSONB,
+    "tokens_used" INTEGER NOT NULL DEFAULT 0,
     "created_at" TIMESTAMPTZ(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
-    CONSTRAINT "icd10_codes_pkey" PRIMARY KEY ("id")
+    CONSTRAINT "ai_messages_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "ai_triage_insights" (
+    "id" UUID NOT NULL,
+    "conversation_id" UUID NOT NULL,
+    "extracted_symptoms" TEXT NOT NULL,
+    "preliminary_diagnosis" TEXT,
+    "user_latitude" DOUBLE PRECISION,
+    "user_longitude" DOUBLE PRECISION,
+    "confidence_score" DOUBLE PRECISION NOT NULL DEFAULT 0.0,
+    "suggested_specialty_id" INTEGER,
+    "suggested_doctor_id" UUID,
+    "suggested_branch_id" UUID,
+    "created_at" TIMESTAMPTZ(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT "ai_triage_insights_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "ai_booking_intent_logs" (
+    "id" UUID NOT NULL,
+    "conversation_id" UUID NOT NULL,
+    "user_id" UUID,
+    "detected_intent" VARCHAR(100) NOT NULL,
+    "target_date" DATE,
+    "target_time_slot" VARCHAR(50),
+    "extracted_params" JSONB,
+    "is_successful" BOOLEAN NOT NULL DEFAULT false,
+    "appointment_id" UUID,
+    "created_at" TIMESTAMPTZ(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT "ai_booking_intent_logs_pkey" PRIMARY KEY ("id")
 );
 
 -- CreateTable
@@ -312,15 +205,29 @@ CREATE TABLE "password_reset_tokens" (
 );
 
 -- CreateTable
+CREATE TABLE "booking_orders" (
+    "id" UUID NOT NULL,
+    "account_id" UUID NOT NULL,
+    "order_code" VARCHAR(30) NOT NULL,
+    "group_type" VARCHAR(20) NOT NULL DEFAULT 'SINGLE',
+    "status" "BookingOrderStatus" NOT NULL DEFAULT 'PENDING_PAYMENT',
+    "total_amount" DECIMAL(12,2) NOT NULL,
+    "note" TEXT,
+    "created_at" TIMESTAMPTZ(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updated_at" TIMESTAMPTZ(3) NOT NULL,
+
+    CONSTRAINT "booking_orders_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
 CREATE TABLE "appointments" (
     "id" UUID NOT NULL,
+    "booking_order_id" UUID,
     "booking_code" VARCHAR(30),
     "patient_profile_id" UUID NOT NULL,
-    "doctor_id" UUID,
     "branch_id" UUID NOT NULL,
     "schedule_slot_id" UUID,
     "service_package_id" UUID,
-    "service_package_schedule_slot_id" UUID,
     "service_price" DECIMAL(12,2),
     "symptoms_description" TEXT,
     "booked_via_ai" BOOLEAN NOT NULL DEFAULT false,
@@ -329,6 +236,9 @@ CREATE TABLE "appointments" (
     "queue_number" INTEGER,
     "checked_in_at" TIMESTAMPTZ(3),
     "checked_in_by_id" UUID,
+    "reminder_sent_24h" BOOLEAN NOT NULL DEFAULT false,
+    "reminder_sent_2h" BOOLEAN NOT NULL DEFAULT false,
+    "reschedule_count" INTEGER NOT NULL DEFAULT 0,
     "created_at" TIMESTAMPTZ(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updated_at" TIMESTAMPTZ(3) NOT NULL,
 
@@ -361,15 +271,70 @@ CREATE TABLE "appointment_qr_tokens" (
 );
 
 -- CreateTable
+CREATE TABLE "vouchers" (
+    "id" UUID NOT NULL,
+    "code" VARCHAR(50) NOT NULL,
+    "name" VARCHAR(150) NOT NULL,
+    "description" TEXT,
+    "discount_type" "DiscountType" NOT NULL,
+    "discount_value" DECIMAL(12,2) NOT NULL,
+    "min_order_value" DECIMAL(12,2),
+    "max_discount" DECIMAL(12,2),
+    "usage_limit" INTEGER,
+    "used_count" INTEGER NOT NULL DEFAULT 0,
+    "user_usage_limit" INTEGER NOT NULL DEFAULT 1,
+    "start_date" TIMESTAMPTZ(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "end_date" TIMESTAMPTZ(3) NOT NULL,
+    "is_active" BOOLEAN NOT NULL DEFAULT true,
+    "created_at" TIMESTAMPTZ(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updated_at" TIMESTAMPTZ(3) NOT NULL,
+
+    CONSTRAINT "vouchers_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "voucher_usages" (
+    "id" UUID NOT NULL,
+    "voucher_id" UUID NOT NULL,
+    "account_id" UUID NOT NULL,
+    "booking_order_id" UUID,
+    "appointment_id" UUID,
+    "discount_amount" DECIMAL(12,2) NOT NULL,
+    "used_at" TIMESTAMPTZ(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT "voucher_usages_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
 CREATE TABLE "patient_profiles" (
     "id" UUID NOT NULL,
+    "patient_code" VARCHAR(30),
     "account_id" UUID,
     "full_name" VARCHAR(100) NOT NULL,
+    "phone_number" VARCHAR(20),
     "national_id" VARCHAR(20),
     "health_insurance_number" VARCHAR(20),
     "date_of_birth" DATE NOT NULL,
     "gender" "Gender",
+    "province_code" VARCHAR(20),
+    "province_name" VARCHAR(100),
+    "district_code" VARCHAR(20),
+    "district_name" VARCHAR(100),
+    "ward_code" VARCHAR(20),
+    "ward_name" VARCHAR(100),
+    "street_address" VARCHAR(255),
     "address" TEXT,
+    "ethnicity" VARCHAR(50),
+    "nationality" VARCHAR(50) DEFAULT 'Việt Nam',
+    "occupation" VARCHAR(100),
+    "guardian_name" VARCHAR(100),
+    "guardian_phone" VARCHAR(20),
+    "guardian_relationship" VARCHAR(50),
+    "medical_history" TEXT,
+    "allergies" TEXT,
+    "blood_group" VARCHAR(10),
+    "height" DOUBLE PRECISION,
+    "weight" DOUBLE PRECISION,
     "relationship_to_account" VARCHAR(50) NOT NULL DEFAULT 'SELF',
     "is_main_profile" BOOLEAN NOT NULL DEFAULT false,
     "created_at" TIMESTAMPTZ(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -379,38 +344,16 @@ CREATE TABLE "patient_profiles" (
 );
 
 -- CreateTable
-CREATE TABLE "medical_records" (
-    "id" UUID NOT NULL,
-    "patient_profile_id" UUID NOT NULL,
-    "record_code" VARCHAR(30) NOT NULL,
-    "blood_type" VARCHAR(10),
-    "allergies" TEXT,
-    "chronic_conditions" TEXT,
-    "medical_history" TEXT,
-    "family_history" TEXT,
-    "surgical_history" TEXT,
-    "notes" TEXT,
-    "created_at" TIMESTAMPTZ(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    "updated_at" TIMESTAMPTZ(3) NOT NULL,
-
-    CONSTRAINT "medical_records_pkey" PRIMARY KEY ("id")
-);
-
--- CreateTable
-CREATE TABLE "departments" (
-    "id" SERIAL NOT NULL,
-    "name" VARCHAR(100) NOT NULL,
-    "description" TEXT,
-
-    CONSTRAINT "departments_pkey" PRIMARY KEY ("id")
-);
-
--- CreateTable
 CREATE TABLE "specialties" (
     "id" SERIAL NOT NULL,
-    "department_id" INTEGER NOT NULL,
     "name" VARCHAR(100) NOT NULL,
+    "slug" VARCHAR(120),
     "description" TEXT,
+    "icon_url" VARCHAR(500),
+    "is_active" BOOLEAN NOT NULL DEFAULT true,
+    "sort_order" INTEGER NOT NULL DEFAULT 0,
+    "created_at" TIMESTAMPTZ(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updated_at" TIMESTAMPTZ(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
     CONSTRAINT "specialties_pkey" PRIMARY KEY ("id")
 );
@@ -419,12 +362,11 @@ CREATE TABLE "specialties" (
 CREATE TABLE "doctors" (
     "id" UUID NOT NULL,
     "user_id" UUID NOT NULL,
-    "department_id" INTEGER,
-    "full_name" VARCHAR(100) NOT NULL,
     "academic_rank" VARCHAR(50),
     "license_number" VARCHAR(50),
     "experience_years" INTEGER NOT NULL DEFAULT 0,
     "biography" TEXT,
+    "avatar_url" VARCHAR(500),
     "consultation_fee" DECIMAL(12,2) NOT NULL DEFAULT 0,
     "slot_duration" INTEGER NOT NULL DEFAULT 30,
     "rating_average" DOUBLE PRECISION NOT NULL DEFAULT 0.0,
@@ -435,6 +377,19 @@ CREATE TABLE "doctors" (
     "updated_at" TIMESTAMPTZ(3) NOT NULL,
 
     CONSTRAINT "doctors_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "receptionists" (
+    "id" UUID NOT NULL,
+    "user_id" UUID NOT NULL,
+    "employee_code" VARCHAR(50) NOT NULL,
+    "desk_number" VARCHAR(50),
+    "is_active" BOOLEAN NOT NULL DEFAULT true,
+    "created_at" TIMESTAMPTZ(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updated_at" TIMESTAMPTZ(3) NOT NULL,
+
+    CONSTRAINT "receptionists_pkey" PRIMARY KEY ("id")
 );
 
 -- CreateTable
@@ -516,8 +471,11 @@ CREATE TABLE "branches" (
     "id" UUID NOT NULL,
     "clinic_id" UUID NOT NULL,
     "code" VARCHAR(30) NOT NULL,
+    "slug" VARCHAR(120),
     "name" VARCHAR(150) NOT NULL,
     "address" TEXT,
+    "latitude" DOUBLE PRECISION,
+    "longitude" DOUBLE PRECISION,
     "phone_number" VARCHAR(20),
     "timezone" VARCHAR(50) NOT NULL DEFAULT 'Asia/Ho_Chi_Minh',
     "is_active" BOOLEAN NOT NULL DEFAULT true,
@@ -567,31 +525,6 @@ CREATE TABLE "branch_booking_methods" (
 );
 
 -- CreateTable
-CREATE TABLE "inventory_stocks" (
-    "branch_id" UUID NOT NULL,
-    "medicine_id" UUID NOT NULL,
-    "quantity" DECIMAL(14,2) NOT NULL DEFAULT 0,
-    "updated_at" TIMESTAMPTZ(3) NOT NULL,
-
-    CONSTRAINT "inventory_stocks_pkey" PRIMARY KEY ("branch_id","medicine_id")
-);
-
--- CreateTable
-CREATE TABLE "inventory_movements" (
-    "id" BIGSERIAL NOT NULL,
-    "branch_id" UUID NOT NULL,
-    "medicine_id" UUID NOT NULL,
-    "type" "InventoryMovementType" NOT NULL,
-    "quantity" DECIMAL(14,2) NOT NULL,
-    "reference_id" VARCHAR(100),
-    "note" TEXT,
-    "created_by_id" UUID NOT NULL,
-    "created_at" TIMESTAMPTZ(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-
-    CONSTRAINT "inventory_movements_pkey" PRIMARY KEY ("id")
-);
-
--- CreateTable
 CREATE TABLE "clinic_rooms" (
     "id" UUID NOT NULL,
     "branch_id" UUID NOT NULL,
@@ -631,9 +564,13 @@ CREATE TABLE "user_branch_assignments" (
 -- CreateTable
 CREATE TABLE "invoices" (
     "id" UUID NOT NULL,
-    "appointment_id" UUID NOT NULL,
+    "appointment_id" UUID,
+    "booking_order_id" UUID,
     "issued_branch_id" UUID NOT NULL,
-    "cashier_id" UUID,
+    "subtotal" DECIMAL(12,2) NOT NULL DEFAULT 0,
+    "service_fee" DECIMAL(12,2) NOT NULL DEFAULT 0,
+    "discount_amount" DECIMAL(12,2) NOT NULL DEFAULT 0,
+    "voucher_code" VARCHAR(50),
     "total_amount" DECIMAL(12,2) NOT NULL,
     "status" "InvoiceStatus" NOT NULL DEFAULT 'UNPAID',
     "paid_at" TIMESTAMPTZ(3),
@@ -674,34 +611,16 @@ CREATE TABLE "payment_transactions" (
 );
 
 -- CreateTable
-CREATE TABLE "doctor_schedule_templates" (
-    "id" UUID NOT NULL,
-    "doctor_id" UUID NOT NULL,
-    "branch_id" UUID NOT NULL,
-    "day_of_week" INTEGER NOT NULL,
-    "shift_start_time" TIME(0) NOT NULL,
-    "shift_end_time" TIME(0) NOT NULL,
-    "slot_duration_min" INTEGER NOT NULL,
-    "default_capacity" INTEGER NOT NULL,
-    "valid_from" DATE NOT NULL,
-    "valid_until" DATE,
-    "is_active" BOOLEAN NOT NULL DEFAULT true,
-    "created_at" TIMESTAMPTZ(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    "updated_at" TIMESTAMPTZ(3) NOT NULL,
-
-    CONSTRAINT "doctor_schedule_templates_pkey" PRIMARY KEY ("id")
-);
-
--- CreateTable
 CREATE TABLE "doctor_schedules" (
     "id" UUID NOT NULL,
-    "template_id" UUID,
     "doctor_id" UUID NOT NULL,
     "branch_id" UUID NOT NULL,
     "room_id" UUID,
     "work_date" DATE NOT NULL,
     "start_time" TIME(0) NOT NULL,
     "end_time" TIME(0) NOT NULL,
+    "slot_duration_min" INTEGER NOT NULL DEFAULT 30,
+    "capacity_per_slot" INTEGER NOT NULL DEFAULT 1,
     "status" "ScheduleStatus" NOT NULL DEFAULT 'OPEN',
     "created_at" TIMESTAMPTZ(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updated_at" TIMESTAMPTZ(3) NOT NULL,
@@ -715,9 +634,10 @@ CREATE TABLE "doctor_schedule_slots" (
     "schedule_id" UUID NOT NULL,
     "start_time" TIME(0) NOT NULL,
     "end_time" TIME(0) NOT NULL,
-    "capacity" INTEGER NOT NULL,
+    "capacity" INTEGER NOT NULL DEFAULT 1,
     "occupied_count" INTEGER NOT NULL DEFAULT 0,
-    "next_queue_number" INTEGER NOT NULL DEFAULT 0,
+    "next_queue_number" INTEGER NOT NULL DEFAULT 1,
+    "slot_status" "SlotStatus" NOT NULL DEFAULT 'AVAILABLE',
     "is_active" BOOLEAN NOT NULL DEFAULT true,
     "created_at" TIMESTAMPTZ(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updated_at" TIMESTAMPTZ(3) NOT NULL,
@@ -739,88 +659,28 @@ CREATE TABLE "doctor_schedule_exceptions" (
 );
 
 -- CreateIndex
-CREATE UNIQUE INDEX "medical_visits_appointment_id_key" ON "medical_visits"("appointment_id");
-
--- CreateIndex
-CREATE INDEX "medical_visits_medical_record_id_created_at_idx" ON "medical_visits"("medical_record_id", "created_at");
-
--- CreateIndex
-CREATE INDEX "medical_visits_doctor_id_status_created_at_idx" ON "medical_visits"("doctor_id", "status", "created_at");
-
--- CreateIndex
-CREATE INDEX "medical_visits_branch_id_created_at_idx" ON "medical_visits"("branch_id", "created_at");
-
--- CreateIndex
-CREATE INDEX "medical_visits_created_by_id_updated_at_idx" ON "medical_visits"("created_by_id", "updated_at");
-
--- CreateIndex
-CREATE INDEX "visit_diagnoses_icd10_code_id_idx" ON "visit_diagnoses"("icd10_code_id");
-
--- CreateIndex
-CREATE UNIQUE INDEX "visit_diagnoses_medical_visit_id_icd10_code_id_key" ON "visit_diagnoses"("medical_visit_id", "icd10_code_id");
-
--- CreateIndex
-CREATE UNIQUE INDEX "prescriptions_medical_visit_id_key" ON "prescriptions"("medical_visit_id");
-
--- CreateIndex
-CREATE INDEX "prescription_items_prescription_id_idx" ON "prescription_items"("prescription_id");
-
--- CreateIndex
-CREATE INDEX "prescription_items_medicine_id_idx" ON "prescription_items"("medicine_id");
-
--- CreateIndex
-CREATE INDEX "clinical_orders_medical_visit_id_status_idx" ON "clinical_orders"("medical_visit_id", "status");
-
--- CreateIndex
-CREATE INDEX "clinical_orders_medical_service_id_ordered_at_idx" ON "clinical_orders"("medical_service_id", "ordered_at");
-
--- CreateIndex
-CREATE UNIQUE INDEX "medicines_code_key" ON "medicines"("code");
-
--- CreateIndex
-CREATE INDEX "medicines_is_active_name_idx" ON "medicines"("is_active", "name");
-
--- CreateIndex
-CREATE UNIQUE INDEX "medical_services_code_key" ON "medical_services"("code");
-
--- CreateIndex
-CREATE INDEX "medical_services_department_id_is_active_idx" ON "medical_services"("department_id", "is_active");
-
--- CreateIndex
-CREATE INDEX "medical_services_category_is_active_name_idx" ON "medical_services"("category", "is_active", "name");
-
--- CreateIndex
-CREATE INDEX "medical_services_is_active_name_idx" ON "medical_services"("is_active", "name");
-
--- CreateIndex
 CREATE UNIQUE INDEX "service_packages_code_key" ON "service_packages"("code");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "service_packages_slug_key" ON "service_packages"("slug");
 
 -- CreateIndex
 CREATE INDEX "service_packages_branch_booking_method_id_specialty_id_is_a_idx" ON "service_packages"("branch_booking_method_id", "specialty_id", "is_active");
 
 -- CreateIndex
-CREATE INDEX "service_package_schedules_exam_date_is_active_idx" ON "service_package_schedules"("exam_date", "is_active");
+CREATE INDEX "ai_conversations_user_id_created_at_idx" ON "ai_conversations"("user_id", "created_at");
 
 -- CreateIndex
-CREATE UNIQUE INDEX "service_package_schedules_service_package_id_exam_date_key" ON "service_package_schedules"("service_package_id", "exam_date");
+CREATE INDEX "ai_messages_conversation_id_created_at_idx" ON "ai_messages"("conversation_id", "created_at");
 
 -- CreateIndex
-CREATE INDEX "service_package_schedule_slots_schedule_id_is_active_idx" ON "service_package_schedule_slots"("schedule_id", "is_active");
+CREATE INDEX "ai_triage_insights_conversation_id_idx" ON "ai_triage_insights"("conversation_id");
 
 -- CreateIndex
-CREATE UNIQUE INDEX "service_package_schedule_slots_schedule_id_start_time_key" ON "service_package_schedule_slots"("schedule_id", "start_time");
+CREATE INDEX "ai_booking_intent_logs_conversation_id_idx" ON "ai_booking_intent_logs"("conversation_id");
 
 -- CreateIndex
-CREATE INDEX "service_package_items_medical_service_id_idx" ON "service_package_items"("medical_service_id");
-
--- CreateIndex
-CREATE UNIQUE INDEX "icd10_codes_code_key" ON "icd10_codes"("code");
-
--- CreateIndex
-CREATE INDEX "icd10_codes_department_id_is_active_idx" ON "icd10_codes"("department_id", "is_active");
-
--- CreateIndex
-CREATE INDEX "icd10_codes_is_active_code_idx" ON "icd10_codes"("is_active", "code");
+CREATE INDEX "ai_booking_intent_logs_user_id_idx" ON "ai_booking_intent_logs"("user_id");
 
 -- CreateIndex
 CREATE UNIQUE INDEX "users_email_key" ON "users"("email");
@@ -853,16 +713,25 @@ CREATE UNIQUE INDEX "password_reset_tokens_token_hash_key" ON "password_reset_to
 CREATE INDEX "password_reset_tokens_user_id_expires_at_idx" ON "password_reset_tokens"("user_id", "expires_at");
 
 -- CreateIndex
+CREATE UNIQUE INDEX "booking_orders_order_code_key" ON "booking_orders"("order_code");
+
+-- CreateIndex
+CREATE INDEX "booking_orders_account_id_status_idx" ON "booking_orders"("account_id", "status");
+
+-- CreateIndex
+CREATE INDEX "booking_orders_status_created_at_idx" ON "booking_orders"("status", "created_at");
+
+-- CreateIndex
 CREATE UNIQUE INDEX "appointments_booking_code_key" ON "appointments"("booking_code");
+
+-- CreateIndex
+CREATE INDEX "appointments_booking_order_id_idx" ON "appointments"("booking_order_id");
 
 -- CreateIndex
 CREATE INDEX "appointments_patient_profile_id_status_idx" ON "appointments"("patient_profile_id", "status");
 
 -- CreateIndex
 CREATE INDEX "appointments_patient_profile_id_created_at_idx" ON "appointments"("patient_profile_id", "created_at");
-
--- CreateIndex
-CREATE INDEX "appointments_doctor_id_status_created_at_idx" ON "appointments"("doctor_id", "status", "created_at");
 
 -- CreateIndex
 CREATE INDEX "appointments_branch_id_status_created_at_idx" ON "appointments"("branch_id", "status", "created_at");
@@ -874,12 +743,6 @@ CREATE INDEX "appointments_schedule_slot_id_status_idx" ON "appointments"("sched
 CREATE INDEX "appointments_service_package_id_status_idx" ON "appointments"("service_package_id", "status");
 
 -- CreateIndex
-CREATE INDEX "appointments_service_package_schedule_slot_id_status_idx" ON "appointments"("service_package_schedule_slot_id", "status");
-
--- CreateIndex
-CREATE UNIQUE INDEX "appointments_schedule_slot_id_queue_number_key" ON "appointments"("schedule_slot_id", "queue_number");
-
--- CreateIndex
 CREATE INDEX "appointment_status_histories_appointment_id_created_at_idx" ON "appointment_status_histories"("appointment_id", "created_at");
 
 -- CreateIndex
@@ -889,25 +752,37 @@ CREATE UNIQUE INDEX "appointment_qr_tokens_appointment_id_key" ON "appointment_q
 CREATE UNIQUE INDEX "appointment_qr_tokens_token_hash_key" ON "appointment_qr_tokens"("token_hash");
 
 -- CreateIndex
-CREATE UNIQUE INDEX "patient_profiles_national_id_key" ON "patient_profiles"("national_id");
+CREATE UNIQUE INDEX "vouchers_code_key" ON "vouchers"("code");
 
 -- CreateIndex
-CREATE UNIQUE INDEX "patient_profiles_health_insurance_number_key" ON "patient_profiles"("health_insurance_number");
+CREATE INDEX "voucher_usages_voucher_id_account_id_idx" ON "voucher_usages"("voucher_id", "account_id");
 
 -- CreateIndex
 CREATE INDEX "patient_profiles_account_id_is_main_profile_idx" ON "patient_profiles"("account_id", "is_main_profile");
 
 -- CreateIndex
-CREATE UNIQUE INDEX "medical_records_patient_profile_id_key" ON "medical_records"("patient_profile_id");
+CREATE INDEX "patient_profiles_national_id_idx" ON "patient_profiles"("national_id");
 
 -- CreateIndex
-CREATE UNIQUE INDEX "medical_records_record_code_key" ON "medical_records"("record_code");
+CREATE INDEX "patient_profiles_health_insurance_number_idx" ON "patient_profiles"("health_insurance_number");
 
 -- CreateIndex
-CREATE UNIQUE INDEX "departments_name_key" ON "departments"("name");
+CREATE INDEX "patient_profiles_patient_code_idx" ON "patient_profiles"("patient_code");
 
 -- CreateIndex
-CREATE UNIQUE INDEX "specialties_department_id_name_key" ON "specialties"("department_id", "name");
+CREATE UNIQUE INDEX "patient_profiles_account_id_national_id_key" ON "patient_profiles"("account_id", "national_id");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "patient_profiles_account_id_health_insurance_number_key" ON "patient_profiles"("account_id", "health_insurance_number");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "specialties_name_key" ON "specialties"("name");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "specialties_slug_key" ON "specialties"("slug");
+
+-- CreateIndex
+CREATE INDEX "specialties_is_active_sort_order_idx" ON "specialties"("is_active", "sort_order");
 
 -- CreateIndex
 CREATE UNIQUE INDEX "doctors_user_id_key" ON "doctors"("user_id");
@@ -916,10 +791,16 @@ CREATE UNIQUE INDEX "doctors_user_id_key" ON "doctors"("user_id");
 CREATE UNIQUE INDEX "doctors_license_number_key" ON "doctors"("license_number");
 
 -- CreateIndex
-CREATE INDEX "doctors_department_id_is_active_idx" ON "doctors"("department_id", "is_active");
+CREATE INDEX "doctors_is_featured_is_active_idx" ON "doctors"("is_featured", "is_active");
 
 -- CreateIndex
-CREATE INDEX "doctors_is_featured_is_active_idx" ON "doctors"("is_featured", "is_active");
+CREATE UNIQUE INDEX "receptionists_user_id_key" ON "receptionists"("user_id");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "receptionists_employee_code_key" ON "receptionists"("employee_code");
+
+-- CreateIndex
+CREATE INDEX "receptionists_is_active_idx" ON "receptionists"("is_active");
 
 -- CreateIndex
 CREATE INDEX "reviews_doctor_id_is_active_created_at_idx" ON "reviews"("doctor_id", "is_active", "created_at");
@@ -949,6 +830,9 @@ CREATE UNIQUE INDEX "clinics_slug_key" ON "clinics"("slug");
 CREATE UNIQUE INDEX "branches_code_key" ON "branches"("code");
 
 -- CreateIndex
+CREATE UNIQUE INDEX "branches_slug_key" ON "branches"("slug");
+
+-- CreateIndex
 CREATE INDEX "branches_clinic_id_is_active_idx" ON "branches"("clinic_id", "is_active");
 
 -- CreateIndex
@@ -976,12 +860,6 @@ CREATE INDEX "branch_booking_methods_booking_method_id_idx" ON "branch_booking_m
 CREATE UNIQUE INDEX "branch_booking_methods_branch_id_booking_method_id_key" ON "branch_booking_methods"("branch_id", "booking_method_id");
 
 -- CreateIndex
-CREATE INDEX "inventory_movements_branch_id_medicine_id_created_at_idx" ON "inventory_movements"("branch_id", "medicine_id", "created_at");
-
--- CreateIndex
-CREATE INDEX "inventory_movements_reference_id_idx" ON "inventory_movements"("reference_id");
-
--- CreateIndex
 CREATE UNIQUE INDEX "clinic_rooms_branch_id_code_key" ON "clinic_rooms"("branch_id", "code");
 
 -- CreateIndex
@@ -1000,6 +878,9 @@ CREATE UNIQUE INDEX "user_branch_assignments_user_id_branch_id_key" ON "user_bra
 CREATE UNIQUE INDEX "invoices_appointment_id_key" ON "invoices"("appointment_id");
 
 -- CreateIndex
+CREATE UNIQUE INDEX "invoices_booking_order_id_key" ON "invoices"("booking_order_id");
+
+-- CreateIndex
 CREATE INDEX "invoices_issued_branch_id_status_created_at_idx" ON "invoices"("issued_branch_id", "status", "created_at");
 
 -- CreateIndex
@@ -1015,7 +896,7 @@ CREATE UNIQUE INDEX "payment_transactions_idempotency_key_key" ON "payment_trans
 CREATE INDEX "payment_transactions_invoice_id_status_idx" ON "payment_transactions"("invoice_id", "status");
 
 -- CreateIndex
-CREATE INDEX "doctor_schedule_templates_doctor_id_branch_id_day_of_week_i_idx" ON "doctor_schedule_templates"("doctor_id", "branch_id", "day_of_week", "is_active");
+CREATE INDEX "doctor_schedules_doctor_id_work_date_status_idx" ON "doctor_schedules"("doctor_id", "work_date", "status");
 
 -- CreateIndex
 CREATE INDEX "doctor_schedules_branch_id_work_date_status_idx" ON "doctor_schedules"("branch_id", "work_date", "status");
@@ -1024,7 +905,10 @@ CREATE INDEX "doctor_schedules_branch_id_work_date_status_idx" ON "doctor_schedu
 CREATE UNIQUE INDEX "doctor_schedules_doctor_id_branch_id_work_date_start_time_key" ON "doctor_schedules"("doctor_id", "branch_id", "work_date", "start_time");
 
 -- CreateIndex
-CREATE INDEX "doctor_schedule_slots_schedule_id_is_active_idx" ON "doctor_schedule_slots"("schedule_id", "is_active");
+CREATE INDEX "doctor_schedule_slots_schedule_id_slot_status_is_active_idx" ON "doctor_schedule_slots"("schedule_id", "slot_status", "is_active");
+
+-- CreateIndex
+CREATE INDEX "doctor_schedule_slots_schedule_id_is_active_occupied_count_idx" ON "doctor_schedule_slots"("schedule_id", "is_active", "occupied_count");
 
 -- CreateIndex
 CREATE UNIQUE INDEX "doctor_schedule_slots_schedule_id_start_time_key" ON "doctor_schedule_slots"("schedule_id", "start_time");
@@ -1033,67 +917,37 @@ CREATE UNIQUE INDEX "doctor_schedule_slots_schedule_id_start_time_key" ON "docto
 CREATE UNIQUE INDEX "doctor_schedule_exceptions_doctor_id_branch_id_date_key" ON "doctor_schedule_exceptions"("doctor_id", "branch_id", "date");
 
 -- AddForeignKey
-ALTER TABLE "medical_visits" ADD CONSTRAINT "medical_visits_medical_record_id_fkey" FOREIGN KEY ("medical_record_id") REFERENCES "medical_records"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE "medical_visits" ADD CONSTRAINT "medical_visits_appointment_id_fkey" FOREIGN KEY ("appointment_id") REFERENCES "appointments"("id") ON DELETE SET NULL ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE "medical_visits" ADD CONSTRAINT "medical_visits_doctor_id_fkey" FOREIGN KEY ("doctor_id") REFERENCES "doctors"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE "medical_visits" ADD CONSTRAINT "medical_visits_branch_id_fkey" FOREIGN KEY ("branch_id") REFERENCES "branches"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE "medical_visits" ADD CONSTRAINT "medical_visits_created_by_id_fkey" FOREIGN KEY ("created_by_id") REFERENCES "users"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE "visit_diagnoses" ADD CONSTRAINT "visit_diagnoses_medical_visit_id_fkey" FOREIGN KEY ("medical_visit_id") REFERENCES "medical_visits"("id") ON DELETE CASCADE ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE "visit_diagnoses" ADD CONSTRAINT "visit_diagnoses_icd10_code_id_fkey" FOREIGN KEY ("icd10_code_id") REFERENCES "icd10_codes"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE "prescriptions" ADD CONSTRAINT "prescriptions_medical_visit_id_fkey" FOREIGN KEY ("medical_visit_id") REFERENCES "medical_visits"("id") ON DELETE CASCADE ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE "prescription_items" ADD CONSTRAINT "prescription_items_prescription_id_fkey" FOREIGN KEY ("prescription_id") REFERENCES "prescriptions"("id") ON DELETE CASCADE ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE "prescription_items" ADD CONSTRAINT "prescription_items_medicine_id_fkey" FOREIGN KEY ("medicine_id") REFERENCES "medicines"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE "clinical_orders" ADD CONSTRAINT "clinical_orders_medical_visit_id_fkey" FOREIGN KEY ("medical_visit_id") REFERENCES "medical_visits"("id") ON DELETE CASCADE ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE "clinical_orders" ADD CONSTRAINT "clinical_orders_medical_service_id_fkey" FOREIGN KEY ("medical_service_id") REFERENCES "medical_services"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE "medical_services" ADD CONSTRAINT "medical_services_department_id_fkey" FOREIGN KEY ("department_id") REFERENCES "departments"("id") ON DELETE SET NULL ON UPDATE CASCADE;
-
--- AddForeignKey
 ALTER TABLE "service_packages" ADD CONSTRAINT "service_packages_branch_booking_method_id_fkey" FOREIGN KEY ("branch_booking_method_id") REFERENCES "branch_booking_methods"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE "service_packages" ADD CONSTRAINT "service_packages_specialty_id_fkey" FOREIGN KEY ("specialty_id") REFERENCES "specialties"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE "service_package_schedules" ADD CONSTRAINT "service_package_schedules_service_package_id_fkey" FOREIGN KEY ("service_package_id") REFERENCES "service_packages"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+ALTER TABLE "ai_conversations" ADD CONSTRAINT "ai_conversations_user_id_fkey" FOREIGN KEY ("user_id") REFERENCES "users"("id") ON DELETE SET NULL ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE "service_package_schedules" ADD CONSTRAINT "service_package_schedules_room_id_fkey" FOREIGN KEY ("room_id") REFERENCES "clinic_rooms"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+ALTER TABLE "ai_messages" ADD CONSTRAINT "ai_messages_conversation_id_fkey" FOREIGN KEY ("conversation_id") REFERENCES "ai_conversations"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE "service_package_schedule_slots" ADD CONSTRAINT "service_package_schedule_slots_schedule_id_fkey" FOREIGN KEY ("schedule_id") REFERENCES "service_package_schedules"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+ALTER TABLE "ai_triage_insights" ADD CONSTRAINT "ai_triage_insights_conversation_id_fkey" FOREIGN KEY ("conversation_id") REFERENCES "ai_conversations"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE "service_package_items" ADD CONSTRAINT "service_package_items_service_package_id_fkey" FOREIGN KEY ("service_package_id") REFERENCES "service_packages"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+ALTER TABLE "ai_triage_insights" ADD CONSTRAINT "ai_triage_insights_suggested_specialty_id_fkey" FOREIGN KEY ("suggested_specialty_id") REFERENCES "specialties"("id") ON DELETE SET NULL ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE "service_package_items" ADD CONSTRAINT "service_package_items_medical_service_id_fkey" FOREIGN KEY ("medical_service_id") REFERENCES "medical_services"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+ALTER TABLE "ai_triage_insights" ADD CONSTRAINT "ai_triage_insights_suggested_doctor_id_fkey" FOREIGN KEY ("suggested_doctor_id") REFERENCES "doctors"("id") ON DELETE SET NULL ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE "icd10_codes" ADD CONSTRAINT "icd10_codes_department_id_fkey" FOREIGN KEY ("department_id") REFERENCES "departments"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+ALTER TABLE "ai_triage_insights" ADD CONSTRAINT "ai_triage_insights_suggested_branch_id_fkey" FOREIGN KEY ("suggested_branch_id") REFERENCES "branches"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "ai_booking_intent_logs" ADD CONSTRAINT "ai_booking_intent_logs_conversation_id_fkey" FOREIGN KEY ("conversation_id") REFERENCES "ai_conversations"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "ai_booking_intent_logs" ADD CONSTRAINT "ai_booking_intent_logs_user_id_fkey" FOREIGN KEY ("user_id") REFERENCES "users"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "ai_booking_intent_logs" ADD CONSTRAINT "ai_booking_intent_logs_appointment_id_fkey" FOREIGN KEY ("appointment_id") REFERENCES "appointments"("id") ON DELETE SET NULL ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE "sessions" ADD CONSTRAINT "sessions_user_id_fkey" FOREIGN KEY ("user_id") REFERENCES "users"("id") ON DELETE CASCADE ON UPDATE CASCADE;
@@ -1108,10 +962,13 @@ ALTER TABLE "auth_verification_tokens" ADD CONSTRAINT "auth_verification_tokens_
 ALTER TABLE "password_reset_tokens" ADD CONSTRAINT "password_reset_tokens_user_id_fkey" FOREIGN KEY ("user_id") REFERENCES "users"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE "appointments" ADD CONSTRAINT "appointments_patient_profile_id_fkey" FOREIGN KEY ("patient_profile_id") REFERENCES "patient_profiles"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+ALTER TABLE "booking_orders" ADD CONSTRAINT "booking_orders_account_id_fkey" FOREIGN KEY ("account_id") REFERENCES "users"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE "appointments" ADD CONSTRAINT "appointments_doctor_id_fkey" FOREIGN KEY ("doctor_id") REFERENCES "doctors"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+ALTER TABLE "appointments" ADD CONSTRAINT "appointments_booking_order_id_fkey" FOREIGN KEY ("booking_order_id") REFERENCES "booking_orders"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "appointments" ADD CONSTRAINT "appointments_patient_profile_id_fkey" FOREIGN KEY ("patient_profile_id") REFERENCES "patient_profiles"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE "appointments" ADD CONSTRAINT "appointments_branch_id_fkey" FOREIGN KEY ("branch_id") REFERENCES "branches"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
@@ -1121,9 +978,6 @@ ALTER TABLE "appointments" ADD CONSTRAINT "appointments_schedule_slot_id_fkey" F
 
 -- AddForeignKey
 ALTER TABLE "appointments" ADD CONSTRAINT "appointments_service_package_id_fkey" FOREIGN KEY ("service_package_id") REFERENCES "service_packages"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE "appointments" ADD CONSTRAINT "appointments_service_package_schedule_slot_id_fkey" FOREIGN KEY ("service_package_schedule_slot_id") REFERENCES "service_package_schedule_slots"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE "appointments" ADD CONSTRAINT "appointments_checked_in_by_id_fkey" FOREIGN KEY ("checked_in_by_id") REFERENCES "users"("id") ON DELETE SET NULL ON UPDATE CASCADE;
@@ -1138,19 +992,25 @@ ALTER TABLE "appointment_status_histories" ADD CONSTRAINT "appointment_status_hi
 ALTER TABLE "appointment_qr_tokens" ADD CONSTRAINT "appointment_qr_tokens_appointment_id_fkey" FOREIGN KEY ("appointment_id") REFERENCES "appointments"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 
 -- AddForeignKey
+ALTER TABLE "voucher_usages" ADD CONSTRAINT "voucher_usages_voucher_id_fkey" FOREIGN KEY ("voucher_id") REFERENCES "vouchers"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "voucher_usages" ADD CONSTRAINT "voucher_usages_account_id_fkey" FOREIGN KEY ("account_id") REFERENCES "users"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "voucher_usages" ADD CONSTRAINT "voucher_usages_booking_order_id_fkey" FOREIGN KEY ("booking_order_id") REFERENCES "booking_orders"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "voucher_usages" ADD CONSTRAINT "voucher_usages_appointment_id_fkey" FOREIGN KEY ("appointment_id") REFERENCES "appointments"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+
+-- AddForeignKey
 ALTER TABLE "patient_profiles" ADD CONSTRAINT "patient_profiles_account_id_fkey" FOREIGN KEY ("account_id") REFERENCES "users"("id") ON DELETE SET NULL ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE "medical_records" ADD CONSTRAINT "medical_records_patient_profile_id_fkey" FOREIGN KEY ("patient_profile_id") REFERENCES "patient_profiles"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE "specialties" ADD CONSTRAINT "specialties_department_id_fkey" FOREIGN KEY ("department_id") REFERENCES "departments"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE "doctors" ADD CONSTRAINT "doctors_user_id_fkey" FOREIGN KEY ("user_id") REFERENCES "users"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE "doctors" ADD CONSTRAINT "doctors_department_id_fkey" FOREIGN KEY ("department_id") REFERENCES "departments"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+ALTER TABLE "receptionists" ADD CONSTRAINT "receptionists_user_id_fkey" FOREIGN KEY ("user_id") REFERENCES "users"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE "reviews" ADD CONSTRAINT "reviews_doctor_id_fkey" FOREIGN KEY ("doctor_id") REFERENCES "doctors"("id") ON DELETE CASCADE ON UPDATE CASCADE;
@@ -1183,21 +1043,6 @@ ALTER TABLE "branch_booking_methods" ADD CONSTRAINT "branch_booking_methods_bran
 ALTER TABLE "branch_booking_methods" ADD CONSTRAINT "branch_booking_methods_booking_method_id_fkey" FOREIGN KEY ("booking_method_id") REFERENCES "booking_methods"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE "inventory_stocks" ADD CONSTRAINT "inventory_stocks_branch_id_fkey" FOREIGN KEY ("branch_id") REFERENCES "branches"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE "inventory_stocks" ADD CONSTRAINT "inventory_stocks_medicine_id_fkey" FOREIGN KEY ("medicine_id") REFERENCES "medicines"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE "inventory_movements" ADD CONSTRAINT "inventory_movements_branch_id_fkey" FOREIGN KEY ("branch_id") REFERENCES "branches"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE "inventory_movements" ADD CONSTRAINT "inventory_movements_medicine_id_fkey" FOREIGN KEY ("medicine_id") REFERENCES "medicines"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE "inventory_movements" ADD CONSTRAINT "inventory_movements_created_by_id_fkey" FOREIGN KEY ("created_by_id") REFERENCES "users"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
-
--- AddForeignKey
 ALTER TABLE "clinic_rooms" ADD CONSTRAINT "clinic_rooms_branch_id_fkey" FOREIGN KEY ("branch_id") REFERENCES "branches"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 
 -- AddForeignKey
@@ -1216,25 +1061,16 @@ ALTER TABLE "user_branch_assignments" ADD CONSTRAINT "user_branch_assignments_br
 ALTER TABLE "invoices" ADD CONSTRAINT "invoices_appointment_id_fkey" FOREIGN KEY ("appointment_id") REFERENCES "appointments"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE "invoices" ADD CONSTRAINT "invoices_issued_branch_id_fkey" FOREIGN KEY ("issued_branch_id") REFERENCES "branches"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+ALTER TABLE "invoices" ADD CONSTRAINT "invoices_booking_order_id_fkey" FOREIGN KEY ("booking_order_id") REFERENCES "booking_orders"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE "invoices" ADD CONSTRAINT "invoices_cashier_id_fkey" FOREIGN KEY ("cashier_id") REFERENCES "users"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+ALTER TABLE "invoices" ADD CONSTRAINT "invoices_issued_branch_id_fkey" FOREIGN KEY ("issued_branch_id") REFERENCES "branches"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE "invoice_items" ADD CONSTRAINT "invoice_items_invoice_id_fkey" FOREIGN KEY ("invoice_id") REFERENCES "invoices"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE "payment_transactions" ADD CONSTRAINT "payment_transactions_invoice_id_fkey" FOREIGN KEY ("invoice_id") REFERENCES "invoices"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE "doctor_schedule_templates" ADD CONSTRAINT "doctor_schedule_templates_doctor_id_fkey" FOREIGN KEY ("doctor_id") REFERENCES "doctors"("id") ON DELETE CASCADE ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE "doctor_schedule_templates" ADD CONSTRAINT "doctor_schedule_templates_branch_id_fkey" FOREIGN KEY ("branch_id") REFERENCES "branches"("id") ON DELETE CASCADE ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE "doctor_schedules" ADD CONSTRAINT "doctor_schedules_template_id_fkey" FOREIGN KEY ("template_id") REFERENCES "doctor_schedule_templates"("id") ON DELETE SET NULL ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE "doctor_schedules" ADD CONSTRAINT "doctor_schedules_doctor_id_fkey" FOREIGN KEY ("doctor_id") REFERENCES "doctors"("id") ON DELETE CASCADE ON UPDATE CASCADE;

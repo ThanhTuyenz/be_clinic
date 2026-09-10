@@ -4,6 +4,7 @@ import { Gender } from '@prisma/client'
 import { PrismaService } from '../../infrastructure/database/prisma/prisma.service.js'
 import { MailsService } from '../mails/mails.service.js'
 import { RealtimeGateway } from '../../infrastructure/realtime/realtime.gateway.js'
+import { RecommendationService } from '../recommendations/recommendation.service.js'
 
 @Injectable()
 export class StaffAppointmentsService {
@@ -11,6 +12,7 @@ export class StaffAppointmentsService {
     private readonly prisma: PrismaService,
     private readonly mailsService: MailsService,
     private readonly realtimeGateway: RealtimeGateway,
+    private readonly recommendationService: RecommendationService,
   ) { }
 
 
@@ -521,6 +523,12 @@ export class StaffAppointmentsService {
       // Ignore socket error
     }
 
+    // Nếu chuyển sang COMPLETED: Invalidate cache & Trigger AI gợi ý phân tích lại
+    if (status === 'COMPLETED' && current.patientProfileId) {
+      this.recommendationService.invalidateCache(current.patientProfileId).catch(() => {})
+      this.recommendationService.triggerAsyncRecommendation(current.patientProfileId)
+    }
+
     return { appointment: this.serialize(row) }
   }
 
@@ -625,14 +633,26 @@ export class StaffAppointmentsService {
     
     // Bắn realtime socket khi tạo lịch hẹn tại quầy tiếp đón
     try {
+      const isHealthPkg = Boolean(row.servicePackageId && !row.servicePackage?.specialtyId);
+      const servicePackageName = row.servicePackage?.name;
+      const specialtyName = row.servicePackage?.specialty?.name || (row.scheduleSlot?.schedule?.doctor as any)?.specialties?.[0]?.specialty?.name;
+      const docId = row.scheduleSlot?.schedule?.doctor?.id ?? (doctor as any)?.id;
+      const docName = row.scheduleSlot?.schedule?.doctor?.user?.fullName ?? (doctor as any)?.user?.fullName;
+
       this.realtimeGateway.emitAppointmentBooked({
         appointmentId: row.id,
         bookingCode: row.bookingCode,
         queueNumber: row.queueNumber ?? undefined,
         patientName: row.patientProfile?.fullName,
         patientPhone: row.patientProfile?.phoneNumber,
-        doctorName: row.scheduleSlot?.schedule?.doctor?.user?.fullName ?? (doctor as any)?.user?.fullName,
+        doctorId: docId,
+        doctorName: docName,
+        specialtyName,
+        servicePackageName,
+        packageName: servicePackageName,
+        bookingType: isHealthPkg ? 'HEALTH_PACKAGE' : (row.servicePackageId ? 'SERVICE_PACKAGE' : 'DOCTOR'),
         branchId: row.branchId,
+        branchName: row.branch?.name,
         appointmentDate: row.scheduleSlot?.schedule?.workDate?.toISOString().slice(0, 10),
         startTime: row.scheduleSlot?.startTime ? this.time(row.scheduleSlot.startTime) : undefined,
         endTime: row.scheduleSlot?.endTime ? this.time(row.scheduleSlot.endTime) : undefined,
@@ -735,6 +755,26 @@ export class StaffAppointmentsService {
       })
       return tx.appointment.findUniqueOrThrow({ where: { id: appointmentId }, include: this.appointmentInclude() })
     })
+    // Bắn realtime socket khi kết thúc khám
+    try {
+      this.realtimeGateway.emitAppointmentStatusChanged({
+        appointmentId: row.id,
+        status: row.status,
+        previousStatus: appointment.status,
+        bookingCode: row.bookingCode,
+        branchId: row.branchId,
+      })
+    } catch {
+      // Ignore socket error
+    }
+
+    // Trigger AI gợi ý gói khám / tái khám cho bệnh nhân
+    const patientProfileId = appointment.patientProfileId || (row as any).patientProfileId
+    if (patientProfileId) {
+      this.recommendationService.invalidateCache(patientProfileId).catch(() => {})
+      this.recommendationService.triggerAsyncRecommendation(patientProfileId)
+    }
+
     return { appointment: this.serialize(row) }
   }
 

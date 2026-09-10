@@ -18,9 +18,14 @@ export interface AppointmentBookedPayload {
   queueNumber?: number | string;
   patientName?: string;
   patientPhone?: string;
+  doctorId?: string;
   doctorName?: string;
   specialtyName?: string;
+  servicePackageName?: string;
+  packageName?: string;
+  bookingType?: 'DOCTOR' | 'SERVICE_PACKAGE' | 'HEALTH_PACKAGE';
   branchId?: string;
+  branchName?: string;
   appointmentDate?: string;
   startTime?: string;
   endTime?: string;
@@ -112,11 +117,15 @@ export class RealtimeGateway
    */
   emitAppointmentBooked(payload: AppointmentBookedPayload) {
     try {
-      this.logger.log(`[Realtime] Emitting ${REALTIME_EVENTS.APPOINTMENT_BOOKED} for #${payload.bookingCode || payload.appointmentId}`);
+      const typeLabel = payload.servicePackageName || (payload.doctorName ? `BS. ${payload.doctorName}` : 'Lịch khám');
+      this.logger.log(`[Realtime] Emitting ${REALTIME_EVENTS.APPOINTMENT_BOOKED} for #${payload.bookingCode || payload.appointmentId} (${typeLabel})`);
       if (this.server) {
         this.server.emit(REALTIME_EVENTS.APPOINTMENT_BOOKED, payload);
         if (payload.branchId) {
           this.server.to(REALTIME_ROOMS.BRANCH(payload.branchId)).emit(REALTIME_EVENTS.APPOINTMENT_BOOKED, payload);
+        }
+        if (payload.doctorId) {
+          this.server.to(REALTIME_ROOMS.DOCTOR(payload.doctorId)).emit(REALTIME_EVENTS.APPOINTMENT_BOOKED, payload);
         }
       }
     } catch (err) {

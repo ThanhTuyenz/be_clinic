@@ -287,8 +287,8 @@ export class RecommendationService {
       return true;
     });
 
-    // Phân tích tầm soát bằng Gemini AI (hoặc Heuristic Rule)
-    const targetCount = followUpRecommendation ? 3 : 4;
+    // Phân tích tầm soát bằng Gemini AI (hoặc Heuristic Rule) - không giới hạn số gói
+    const targetCount = screeningCandidates.length; // Cho AI xem và chọn toàn bộ gói phù hợp
     let aiRecommendedList: RecommendedPackageItemDto[] = [];
     let source: 'AI_GEMINI' | 'RULE_FALLBACK' = 'RULE_FALLBACK';
 
@@ -333,13 +333,13 @@ export class RecommendationService {
       });
     }
 
-    // TỔNG HỢP HYBRID: [Gói Tái khám từ Rule] + [Các gói Tầm soát từ AI]
+    // TỔNG HỢP HYBRID: [Gói Tái khám từ Rule] + [Tất cả gói Tầm soát từ AI]
     const finalList: RecommendedPackageItemDto[] = [];
     if (followUpRecommendation) {
       finalList.push(followUpRecommendation);
     }
     for (const item of aiRecommendedList) {
-      if (finalList.length >= 4) break;
+      // Không giới hạn số lượng — chỉ tránh trùng lặp
       if (!finalList.some((x) => x.packageId === item.packageId)) {
         finalList.push(item);
       }
@@ -402,9 +402,8 @@ export class RecommendationService {
   }): Promise<RecommendedPackageItemDto[]> {
     if (!this.aiClient) return [];
 
-    const maxCount = context.targetCount || 3;
     const prompt = `
-Bạn là Bác sĩ Trưởng khoa Khám sàng lọc ban đầu. Hãy phân tích hồ sơ bệnh nhân và đề xuất từ 2 đến ${maxCount} gói khám y tế phù hợp nhất từ danh sách gói khám thực tế được cung cấp để tầm soát và phát hiện sớm các nguy cơ sức khỏe.
+Bạn là Bác sĩ Trưởng khoa Khám sàng lọc ban đầu. Hãy phân tích hồ sơ bệnh nhân và đề xuất TẤT CẢ các gói khám y tế phù hợp từ danh sách gói khám thực tế được cung cấp để tầm soát và phát hiện sớm các nguy cơ sức khỏe. Không giới hạn số lượng gói — chỉ chọn những gói thực sự phù hợp với tình trạng sức khỏe của bệnh nhân.
 
 THÔNG TIN BỆNH NHÂN:
 - Họ tên: ${context.profile.fullName}
@@ -414,14 +413,14 @@ THÔNG TIN BỆNH NHÂN:
 - Tiền sử bệnh lý mạn tính: "${context.profile.medicalHistory || 'Không ghi nhận'}"
 - Tiền sử dị ứng: "${context.profile.allergies || 'Không ghi nhận'}"
 
-DANH MỤC GÓI KHÁM TẦM SOÁT THỰC TẾ ĐANG HOẠT ĐỘNG:
+DANH MỤC GÓI KHÁM TẦM SOÁT THỰC TẾ ĐANG HOẠT ĐỘNG (toàn bộ danh sách):
 ${JSON.stringify(
-  context.candidates.slice(0, 16).map((c) => ({
+  context.candidates.map((c) => ({
     id: c.id,
     name: c.name,
     specialty: c.specialtyName,
     price: c.price,
-    description: (c.description || '').slice(0, 80),
+    description: (c.description || '').slice(0, 120),
   }))
 )}
 
