@@ -10,6 +10,7 @@ import geminiConfig from './config/gemini.config.js'
 import mailerConfig from './config/mailer.config.js'
 import rabbitMqConfig from './config/rabbitmq.config.js'
 import redisConfig from './infrastructure/cache/redis/redis.config.js'
+import httpsmsConfig from './config/httpsms.config.js'
 import { AppFeatureModule } from './modules/app/app.module.js'
 import { AppointmentsModule } from './modules/appointments/appointments.module.js'
 import { AuthModule } from './modules/auth/auth-local/auth.module.js'
@@ -32,13 +33,14 @@ import { SchedulesModule } from './modules/schedules/schedules.module.js'
 import { AiAssistantModule } from './modules/ai-assistant/ai-assistant.module.js'
 import { VouchersModule } from './modules/vouchers/vouchers.module.js'
 import { RecommendationModule } from './modules/recommendations/recommendation.module.js'
+import { SmsModule } from './modules/sms/sms.module.js'
 
 @Module({
   imports: [
     ConfigModule.forRoot({
       isGlobal: true,
       cache: true,
-      load: [appConfig, authConfig, mailerConfig, googleConfig, geminiConfig, rabbitMqConfig, redisConfig],
+      load: [appConfig, authConfig, mailerConfig, googleConfig, geminiConfig, rabbitMqConfig, redisConfig, httpsmsConfig],
       envFilePath: [`.env.${process.env.NODE_ENV || 'development'}`, '.env'],
     }),
 
@@ -76,6 +78,7 @@ import { RecommendationModule } from './modules/recommendations/recommendation.m
     AiAssistantModule,
     VouchersModule,
     RecommendationModule,
+    SmsModule,
   ],
 
   controllers: [],

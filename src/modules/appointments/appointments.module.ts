@@ -4,6 +4,7 @@ import { AppointmentsController } from '../../controllers/appointments.controlle
 import { MailsModule } from '../mails/mails.module.js'
 import { VouchersModule } from '../vouchers/vouchers.module.js'
 import { RecommendationModule } from '../recommendations/recommendation.module.js'
+import { SmsModule } from '../sms/sms.module.js'
 import { AppointmentReminderTask } from './appointment-reminder.task.js'
 import { BookingController, CheckInController, PaymentWebhookController } from './booking.controller.js'
 import { BookingService } from './booking.service.js'
@@ -16,6 +17,7 @@ import { StaffAppointmentsService } from './staff-appointments.service.js'
     MailsModule,
     VouchersModule,
     RecommendationModule,
+    SmsModule,
   ],
   controllers: [
     AppointmentsController,

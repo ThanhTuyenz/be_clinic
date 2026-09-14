@@ -86,7 +86,29 @@ export class DirectoryService {
 
   private async homepageSpecialtyPackages(branchId: string) {
     const rows = await this.prisma.servicePackage.findMany({
-      where: { isActive: true, branchBookingMethod: { branchId, isEnabled: true, bookingMethod: { code: 'SPECIALTY_EXAM', isActive: true } } },
+      where: {
+        isActive: true,
+        OR: [
+          {
+            branchBookingMethods: {
+              some: {
+                branchBookingMethod: {
+                  branchId,
+                  isEnabled: true,
+                  bookingMethod: { code: 'SPECIALTY_EXAM', isActive: true },
+                },
+              },
+            },
+          },
+          {
+            branchBookingMethod: {
+              branchId,
+              isEnabled: true,
+              bookingMethod: { code: 'SPECIALTY_EXAM', isActive: true },
+            },
+          },
+        ],
+      },
       orderBy: [{ specialty: { name: 'asc' } }, { price: 'asc' }],
       take: 8,
       select: {
@@ -97,16 +119,22 @@ export class DirectoryService {
         description: true,
         price: true,
         durationMin: true,
+        sessionType: true,
+        activeDaysOfWeek: true,
         specialtyId: true,
         specialty: { select: { id: true, name: true, slug: true } },
         branchBookingMethod: { select: { branchId: true, branch: { select: { id: true, code: true, slug: true } } } },
+        branchBookingMethods: { select: { branchBookingMethod: { select: { branchId: true, branch: { select: { id: true, code: true, slug: true } } } } } },
       },
     });
-    return rows.map(({ branchBookingMethod, ...item }) => ({
-      ...item,
-      branchId: branchBookingMethod.branchId,
-      branchSlug: branchBookingMethod.branch?.slug ?? null,
-    }));
+    return rows.map(({ branchBookingMethod, branchBookingMethods, ...item }) => {
+      const bbm = branchBookingMethods?.find((l) => l.branchBookingMethod.branchId === branchId)?.branchBookingMethod || branchBookingMethod;
+      return {
+        ...item,
+        branchId: bbm?.branchId || branchId,
+        branchSlug: bbm?.branch?.slug ?? null,
+      };
+    });
   }
 
   departments(branchId: string) {
@@ -120,7 +148,30 @@ export class DirectoryService {
     if (!Number.isInteger(specialtyId)) throw new BadRequestException('Thiếu chuyên khoa');
     const branchId = await this.resolveBranchId(branchIdentifier);
     const rows = await this.prisma.servicePackage.findMany({
-      where: { specialtyId, isActive: true, branchBookingMethod: { ...(branchId ? { branchId } : {}), isEnabled: true, bookingMethod: { isActive: true } } },
+      where: {
+        specialtyId,
+        isActive: true,
+        OR: [
+          {
+            branchBookingMethods: {
+              some: {
+                branchBookingMethod: {
+                  ...(branchId ? { branchId } : {}),
+                  isEnabled: true,
+                  bookingMethod: { isActive: true },
+                },
+              },
+            },
+          },
+          {
+            branchBookingMethod: {
+              ...(branchId ? { branchId } : {}),
+              isEnabled: true,
+              bookingMethod: { isActive: true },
+            },
+          },
+        ],
+      },
       orderBy: [{ price: 'asc' }, { name: 'asc' }],
       select: {
         id: true,
@@ -130,23 +181,50 @@ export class DirectoryService {
         description: true,
         price: true,
         durationMin: true,
+        sessionType: true,
+        activeDaysOfWeek: true,
         specialtyId: true,
         branchBookingMethod: { select: { id: true, branchId: true, bookingMethod: { select: { id: true, code: true, name: true } } } },
+        branchBookingMethods: { select: { branchBookingMethod: { select: { id: true, branchId: true, bookingMethod: { select: { id: true, code: true, name: true } } } } } },
       },
     });
-    return rows.map(({ branchBookingMethod, ...service }) => ({ ...service, branchId: branchBookingMethod.branchId, branchBookingMethodId: branchBookingMethod.id, bookingMethod: branchBookingMethod.bookingMethod }));
+    return rows.map(({ branchBookingMethod, branchBookingMethods, ...service }) => {
+      const bbm = branchBookingMethods?.find((l) => !branchId || l.branchBookingMethod.branchId === branchId)?.branchBookingMethod || branchBookingMethod;
+      return {
+        ...service,
+        branchId: bbm?.branchId,
+        branchBookingMethodId: bbm?.id,
+        bookingMethod: bbm?.bookingMethod,
+      };
+    });
   }
 
-  async servicePackageScheduleDates(packageIdentifier: string) {
+  async servicePackageScheduleDates(packageIdentifier: string, branchIdentifier?: string) {
     if (!packageIdentifier) throw new BadRequestException('Thiếu gói dịch vụ');
     const isId = this.isUuid(packageIdentifier);
     const servicePackage = await this.prisma.servicePackage.findFirst({
       where: isId ? { id: packageIdentifier } : { OR: [{ slug: packageIdentifier }, { code: packageIdentifier }] },
-      select: { id: true, specialtyId: true, branchBookingMethod: { select: { branchId: true } } },
+      select: {
+        id: true,
+        specialtyId: true,
+        sessionType: true,
+        activeDaysOfWeek: true,
+        branchBookingMethod: { select: { branchId: true } },
+        branchBookingMethods: { select: { branchBookingMethod: { select: { branchId: true } } } },
+      },
     });
     if (!servicePackage) throw new NotFoundException('Không tìm thấy gói dịch vụ');
-    const branchId = servicePackage.branchBookingMethod.branchId;
+    const resolvedBranchId = branchIdentifier ? await this.resolveBranchId(branchIdentifier) : null;
+    const branchId =
+      resolvedBranchId ||
+      servicePackage.branchBookingMethods?.[0]?.branchBookingMethod?.branchId ||
+      servicePackage.branchBookingMethod?.branchId;
+    if (!branchId) throw new BadRequestException('Không tìm thấy cơ sở y tế cho gói khám này');
     const specialtyId = servicePackage.specialtyId;
+    const sessionType = (servicePackage as any).sessionType || 'ALL_DAY';
+    const activeDays: number[] = (servicePackage as any).activeDaysOfWeek?.length
+      ? (servicePackage as any).activeDaysOfWeek
+      : [0, 1, 2, 3, 4, 5, 6];
 
     const { minDate, maxDate } = this.getBookingAllowedDateRange();
     const rows = await this.prisma.doctorSchedule.findMany({
@@ -157,27 +235,78 @@ export class DirectoryService {
         ...(specialtyId ? { doctor: { specialties: { some: { specialtyId } } } } : {}),
         slots: { some: { isActive: true, slotStatus: 'AVAILABLE' } },
       },
-      select: { workDate: true },
-      distinct: ['workDate'],
+      select: {
+        workDate: true,
+        slots: {
+          where: { isActive: true, slotStatus: 'AVAILABLE' },
+          select: { startTime: true },
+        },
+      },
       orderBy: { workDate: 'asc' },
       take: 90,
     });
-    return rows.map(({ workDate }) => workDate.toISOString().slice(0, 10));
+
+    const dateSet = new Set<string>();
+    for (const row of rows) {
+      const dayOfWeek = row.workDate.getDay();
+      if (!activeDays.includes(dayOfWeek)) continue;
+
+      const dateStr = row.workDate.toISOString().slice(0, 10);
+      if (sessionType === 'MORNING') {
+        const hasMorningSlot = row.slots.some((s) => s.startTime.toISOString().slice(11, 16) < '12:00');
+        if (hasMorningSlot) dateSet.add(dateStr);
+      } else if (sessionType === 'AFTERNOON') {
+        const hasAfternoonSlot = row.slots.some((s) => {
+          const t = s.startTime.toISOString().slice(11, 16);
+          return t >= '12:00' && t < '17:00';
+        });
+        if (hasAfternoonSlot) dateSet.add(dateStr);
+      } else if (sessionType === 'EVENING') {
+        const hasEveningSlot = row.slots.some((s) => s.startTime.toISOString().slice(11, 16) >= '17:00');
+        if (hasEveningSlot) dateSet.add(dateStr);
+      } else if (sessionType === 'OFFICE_HOURS') {
+        const hasOfficeSlot = row.slots.some((s) => s.startTime.toISOString().slice(11, 16) < '17:00');
+        if (hasOfficeSlot) dateSet.add(dateStr);
+      } else {
+        if (row.slots.length > 0) dateSet.add(dateStr);
+      }
+    }
+    return Array.from(dateSet);
   }
 
-  async servicePackageTimeslots(packageIdentifier: string, date: string) {
+  async servicePackageTimeslots(packageIdentifier: string, date: string, branchIdentifier?: string) {
     if (!packageIdentifier) throw new BadRequestException('Thiếu gói dịch vụ');
     const isId = this.isUuid(packageIdentifier);
     const servicePackage = await this.prisma.servicePackage.findFirst({
       where: isId ? { id: packageIdentifier } : { OR: [{ slug: packageIdentifier }, { code: packageIdentifier }] },
-      select: { id: true, specialtyId: true, branchBookingMethod: { select: { branchId: true } } },
+      select: {
+        id: true,
+        specialtyId: true,
+        sessionType: true,
+        activeDaysOfWeek: true,
+        branchBookingMethod: { select: { branchId: true } },
+        branchBookingMethods: { select: { branchBookingMethod: { select: { branchId: true } } } },
+      },
     });
     if (!servicePackage) throw new NotFoundException('Không tìm thấy gói dịch vụ');
-    const branchId = servicePackage.branchBookingMethod.branchId;
+    const resolvedBranchId = branchIdentifier ? await this.resolveBranchId(branchIdentifier) : null;
+    const branchId =
+      resolvedBranchId ||
+      servicePackage.branchBookingMethods?.[0]?.branchBookingMethod?.branchId ||
+      servicePackage.branchBookingMethod?.branchId;
+    if (!branchId) throw new BadRequestException('Không tìm thấy cơ sở y tế cho gói khám này');
     const specialtyId = servicePackage.specialtyId;
+    const sessionType = (servicePackage as any).sessionType || 'ALL_DAY';
+    const activeDays: number[] = (servicePackage as any).activeDaysOfWeek?.length
+      ? (servicePackage as any).activeDaysOfWeek
+      : [0, 1, 2, 3, 4, 5, 6];
 
     const workDate = this.parseDate(date);
     this.validateDateWithinBookingRange(workDate);
+
+    if (!activeDays.includes(workDate.getDay())) {
+      return [];
+    }
 
     const rows = await this.prisma.doctorScheduleSlot.findMany({
       where: {
@@ -214,26 +343,35 @@ export class DirectoryService {
       const { schedule, ...slotData } = slot as any;
       const start = slot.startTime.toISOString().slice(11, 16);
       const end = slot.endTime.toISOString().slice(11, 16);
+
+      // Lọc slot theo buổi tiếp nhận của gói khám
+      if (sessionType === 'MORNING' && start >= '12:00') continue;
+      if (sessionType === 'AFTERNOON' && (start < '12:00' || start >= '17:00')) continue;
+      if (sessionType === 'EVENING' && start < '17:00') continue;
+      if (sessionType === 'OFFICE_HOURS' && start >= '17:00') continue;
+
       const key = `${start}-${end}`;
-      const docName = schedule.doctor?.user?.fullName
-        ? `${schedule.doctor.academicRank ? schedule.doctor.academicRank + ' ' : ''}${schedule.doctor.user.fullName}`.trim()
-        : '';
-      const rem = Math.max(slot.capacity - slot.occupiedCount, 0);
-      const isAvail = rem > 0;
+      const docName = schedule.doctor?.academicRank
+        ? `${schedule.doctor.academicRank} ${schedule.doctor.user?.fullName || ''}`.trim()
+        : schedule.doctor?.user?.fullName || 'Bác sĩ trực khám';
+
+      const isAvail = slot.slotStatus === 'AVAILABLE' && (slot.capacity - slot.occupiedCount > 0);
+      const rem = Math.max(0, slot.capacity - slot.occupiedCount);
 
       if (!slotMap.has(key)) {
         slotMap.set(key, {
-          ...slotData,
-          room: schedule.room,
-          doctor: schedule.doctor ? { id: schedule.doctor.id, fullName: docName } : null,
-          doctorId: schedule.doctor?.id,
+          id: slot.id,
           doctorSlotId: slot.id,
           startTime: start,
           endTime: end,
+          label: `${start} - ${end}`,
           capacity: slot.capacity,
           occupiedCount: slot.occupiedCount,
           remainingCapacity: rem,
           isAvailable: isAvail,
+          doctor: schedule.doctor ? { id: schedule.doctor.id, fullName: docName } : null,
+          doctorId: schedule.doctor?.id,
+          room: schedule.room,
         });
       } else {
         const existing = slotMap.get(key);
@@ -258,7 +396,29 @@ export class DirectoryService {
   async healthPackages(branchIdentifier?: string, limit?: number) {
     const branchId = await this.resolveBranchId(branchIdentifier);
     const rows = await this.prisma.servicePackage.findMany({
-      where: { isActive: true, branchBookingMethod: { ...(branchId ? { branchId } : {}), isEnabled: true, bookingMethod: { code: 'HEALTH_PACKAGE', isActive: true } } },
+      where: {
+        isActive: true,
+        OR: [
+          {
+            branchBookingMethods: {
+              some: {
+                branchBookingMethod: {
+                  ...(branchId ? { branchId } : {}),
+                  isEnabled: true,
+                  bookingMethod: { code: 'HEALTH_PACKAGE', isActive: true },
+                },
+              },
+            },
+          },
+          {
+            branchBookingMethod: {
+              ...(branchId ? { branchId } : {}),
+              isEnabled: true,
+              bookingMethod: { code: 'HEALTH_PACKAGE', isActive: true },
+            },
+          },
+        ],
+      },
       orderBy: { name: 'asc' },
       ...(limit ? { take: limit } : {}),
       select: {
@@ -268,15 +428,21 @@ export class DirectoryService {
         name: true,
         description: true,
         price: true,
+        sessionType: true,
+        activeDaysOfWeek: true,
         branchBookingMethod: { select: { id: true, branchId: true, branch: { select: { id: true, code: true, slug: true } } } },
+        branchBookingMethods: { select: { branchBookingMethod: { select: { id: true, branchId: true, branch: { select: { id: true, code: true, slug: true } } } } } },
       },
     });
-    return rows.map(({ branchBookingMethod, ...healthPackage }) => ({
-      ...healthPackage,
-      branchId: branchBookingMethod.branchId,
-      branchSlug: branchBookingMethod.branch?.slug ?? null,
-      branchBookingMethodId: branchBookingMethod.id,
-    }));
+    return rows.map(({ branchBookingMethod, branchBookingMethods, ...healthPackage }) => {
+      const bbm = branchBookingMethods?.find((l) => !branchId || l.branchBookingMethod.branchId === branchId)?.branchBookingMethod || branchBookingMethod;
+      return {
+        ...healthPackage,
+        branchId: bbm?.branchId || branchId,
+        branchSlug: bbm?.branch?.slug ?? null,
+        branchBookingMethodId: bbm?.id,
+      };
+    });
   }
 
   async bookingMethods(branchIdentifier: string) {

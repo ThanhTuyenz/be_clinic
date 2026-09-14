@@ -68,6 +68,14 @@ export type GeminiConfig = {
 };
 
 
+export type HttpSmsConfig = {
+  enabled: boolean;
+  apiKey?: string;
+  fromNumber?: string;
+  isSandbox: boolean;
+  endpoint: string;
+};
+
 export type AllConfigType = {
   app: AppConfig;
   database: DatabaseConfig;
@@ -77,4 +85,5 @@ export type AllConfigType = {
   gemini: GeminiConfig;
   rabbitmq: RabbitMqConfig;
   redis: RedisConfig;
+  httpsms: HttpSmsConfig;
 };

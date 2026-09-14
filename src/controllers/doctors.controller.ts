@@ -43,10 +43,14 @@ export class PublicDirectoryController {
   }
 
   @Get('service-package-schedule-dates')
-  servicePackageScheduleDates(@Query('packageId') packageId: string) { return this.directory.servicePackageScheduleDates(packageId); }
+  servicePackageScheduleDates(@Query('packageId') packageId: string, @Query('branchId') branchId?: string) {
+    return this.directory.servicePackageScheduleDates(packageId, branchId);
+  }
 
   @Get('service-package-timeslots')
-  servicePackageTimeslots(@Query('packageId') packageId: string, @Query('date') date: string) { return this.directory.servicePackageTimeslots(packageId, date); }
+  servicePackageTimeslots(@Query('packageId') packageId: string, @Query('date') date: string, @Query('branchId') branchId?: string) {
+    return this.directory.servicePackageTimeslots(packageId, date, branchId);
+  }
 
   @Get('health-packages')
   @ApiOperation({ summary: 'Danh sách gói khám sức khỏe công khai' })

@@ -23,10 +23,14 @@ export class UsersService implements IUsersService {
   ) {}
 
   async createUser(dto: CreateUserDto): Promise<User> {
-    const email = dto.email?.trim().toLowerCase();
-    if (!email) throw new Error('Email không được gửi tới server.');
-    if (await this.prisma.user.findUnique({ where: { email } })) {
-      throw new HttpException('User already exists', HttpStatus.CONFLICT);
+    const email = dto.email ? dto.email.trim().toLowerCase() : null;
+    const phoneNumber = (dto as any).phoneNumber ? String((dto as any).phoneNumber).trim() : null;
+    if (!email && !phoneNumber) throw new Error('Email hoặc số điện thoại không được gửi tới server.');
+    if (email && (await this.prisma.user.findUnique({ where: { email } }))) {
+      throw new HttpException('Email này đã được sử dụng', HttpStatus.CONFLICT);
+    }
+    if (phoneNumber && (await this.prisma.user.findFirst({ where: { phoneNumber } }))) {
+      throw new HttpException('Số điện thoại này đã được sử dụng', HttpStatus.CONFLICT);
     }
     if (dto.roleId) await this.rolesService.findOne(dto.roleId);
     const row = await this.prisma.user.create({
@@ -34,7 +38,7 @@ export class UsersService implements IUsersService {
         email,
         password: dto.password ? await hashPassword(dto.password) : null,
         fullName: dto.fullName,
-        phoneNumber: (dto as any).phoneNumber ?? null,
+        phoneNumber: phoneNumber ?? null,
         role: this.toPrismaRole(dto.role ?? UserRole.Patient),
         status: this.toPrismaStatus(dto.status ?? UserStatus.Active),
         provider: this.toPrismaProvider(dto.provider ?? 'email'),

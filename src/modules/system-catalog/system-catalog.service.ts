@@ -1,9 +1,71 @@
 import { BadRequestException, ForbiddenException, Injectable, InternalServerErrorException, NotFoundException } from '@nestjs/common'
 import { PrismaService } from '../../infrastructure/database/prisma/prisma.service.js'
+import { RedisService } from '../../infrastructure/cache/redis/redis.service.js'
+import { EmbeddingService } from '../recommendations/embedding.service.js'
 
 @Injectable()
 export class SystemCatalogService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly redis: RedisService,
+    private readonly embeddingService: EmbeddingService,
+  ) {}
+
+  private async syncPackageVector(pkg: any): Promise<void> {
+    try {
+      // 1. Tạo sự kiện Transactional Outbox để RabbitMQ xử lý nền
+      await this.prisma.outboxEvent.create({
+        data: {
+          aggregateType: 'ServicePackage',
+          aggregateId: pkg.id,
+          eventType: 'package.vector.sync',
+          payload: {
+            packageId: pkg.id,
+            code: pkg.code,
+            name: pkg.name,
+            description: pkg.description || '',
+            price: Number(pkg.price) || 0,
+            durationMin: pkg.durationMin || 30,
+            specialtyId: pkg.specialtyId,
+            specialtyName: pkg.specialty?.name || 'Đa khoa',
+          },
+        },
+      })
+    } catch {
+      // 2. Fallback trực tiếp nếu Outbox gặp trục trặc
+      if (this.redis.isEnabled()) {
+        try {
+          await this.embeddingService.getOrComputePackageVector({
+            id: pkg.id,
+            code: pkg.code,
+            name: pkg.name,
+            description: pkg.description || '',
+            price: Number(pkg.price) || 0,
+            durationMin: pkg.durationMin || 30,
+            specialtyId: pkg.specialtyId,
+            specialtyName: pkg.specialty?.name || 'Đa khoa',
+          })
+        } catch (err: any) {
+          console.warn(`[SystemCatalogService] Failed to auto-generate vector for package ${pkg.id}:`, err?.message)
+        }
+      }
+    }
+  }
+
+  async syncAllPackageVectors(userId: string) {
+    await this.manager(userId)
+    if (!this.redis.isEnabled()) {
+      return { message: 'Redis is disabled', total: 0, synced: 0 }
+    }
+    const packages = await this.prisma.servicePackage.findMany({
+      where: { isActive: true },
+      include: { specialty: true },
+    })
+    for (const pkg of packages) {
+      await this.syncPackageVector(pkg)
+    }
+    return { message: 'Đã đồng bộ vector embedding vào Redis', total: packages.length }
+  }
 
   private async manager(userId: string) {
     const user = await this.prisma.user.findUnique({ where: { id: userId }, select: { role: true } })
@@ -63,7 +125,20 @@ export class SystemCatalogService {
     }
     const where: any = term ? { OR: [{ name: { contains: term, mode: 'insensitive' } }, ...(['branches','medicines','service-packages'].includes(resource) ? [{ code: { contains: term, mode: 'insensitive' } }] : [])] } : {}
     const include = resource === 'service-packages'
-      ? { branchBookingMethod: { include: { branch: { select: { id: true, name: true } }, bookingMethod: { select: { id: true, code: true, name: true } } } }, specialty: { select: { id: true, name: true } } }
+      ? {
+          branchBookingMethod: { include: { branch: { select: { id: true, name: true } }, bookingMethod: { select: { id: true, code: true, name: true } } } },
+          specialty: { select: { id: true, name: true } },
+          branchBookingMethods: {
+            include: {
+              branchBookingMethod: {
+                include: {
+                  branch: { select: { id: true, name: true } },
+                  bookingMethod: { select: { id: true, code: true, name: true } },
+                },
+              },
+            },
+          },
+        }
       : resource === 'rooms' ? { branch: { select: { id: true, name: true, address: true } }, specialties: { where: { isActive: true }, include: { specialty: { select: { id: true, name: true } } }, orderBy: { priority: 'desc' } } } : undefined
     return { items: await model.findMany({ where, include, orderBy: { name: 'asc' }, take: 200 }) }
   }
@@ -82,8 +157,10 @@ export class SystemCatalogService {
         return { ...row, type: bookingMethod.code, code: bookingMethod.code, displayName: bookingMethod.name, description: bookingMethod.description, route: bookingMethod.route }
       })
     }
+    if (resource === 'service-packages') {
+      return this.createServicePackages(body)
+    }
     const row = await this.model(resource).create({ data: await this.payload(resource, body, true) })
-    if (resource === 'service-packages') await this.ensureBranchSpecialty(body)
     return row
   }
   async update(userId: string, resource: string, id: string, body: any) {
@@ -97,8 +174,78 @@ export class SystemCatalogService {
     }
     if (resource === 'service-packages') {
       const data: any = await this.payload(resource, body, false)
-      const updated = await this.prisma.servicePackage.update({ where: { id }, data })
+
+      const branchIds: string[] = body.applyAllBranches
+        ? (await this.prisma.branch.findMany({ where: { isActive: true }, select: { id: true } })).map((b) => b.id)
+        : Array.isArray(body.branchIds) && body.branchIds.length > 0
+        ? body.branchIds
+        : body.branchId ? [body.branchId] : []
+
+      const methodCodes: string[] = Array.isArray(body.bookingMethodCodes) && body.bookingMethodCodes.length > 0
+        ? body.bookingMethodCodes.map((c: string) => String(c).trim().toUpperCase())
+        : body.branchBookingMethodId
+        ? [(await this.prisma.branchBookingMethod.findUnique({ where: { id: body.branchBookingMethodId }, include: { bookingMethod: true } }))?.bookingMethod.code].filter(Boolean) as string[]
+        : []
+
+      if (branchIds.length > 0 && methodCodes.length > 0) {
+        const bbmIds: string[] = []
+        for (const branchId of branchIds) {
+          for (const methodCode of methodCodes) {
+            let bbm = await this.prisma.branchBookingMethod.findFirst({
+              where: { branchId, isEnabled: true, bookingMethod: { code: methodCode, isActive: true } },
+            })
+            if (!bbm) {
+              const bm = await this.prisma.bookingMethod.findFirst({ where: { code: methodCode, isActive: true } })
+              if (bm) {
+                bbm = await this.prisma.branchBookingMethod.upsert({
+                  where: { branchId_bookingMethodId: { branchId, bookingMethodId: bm.id } },
+                  update: { isEnabled: true },
+                  create: { branchId, bookingMethodId: bm.id, isEnabled: true },
+                })
+              }
+            }
+            if (bbm) bbmIds.push(bbm.id)
+          }
+        }
+        await this.prisma.servicePackageBranchBookingMethod.deleteMany({
+          where: { servicePackageId: id, branchBookingMethodId: { notIn: bbmIds } },
+        })
+        for (const bbmId of bbmIds) {
+          await this.prisma.servicePackageBranchBookingMethod.upsert({
+            where: { servicePackageId_branchBookingMethodId: { servicePackageId: id, branchBookingMethodId: bbmId } },
+            update: {},
+            create: { servicePackageId: id, branchBookingMethodId: bbmId },
+          })
+        }
+        if (bbmIds.length > 0) {
+          data.branchBookingMethodId = bbmIds[0]
+        }
+      }
+
+      const updated = await this.prisma.servicePackage.update({
+        where: { id },
+        data,
+        include: {
+          branchBookingMethod: {
+            include: { branch: true, bookingMethod: true },
+          },
+          specialty: true,
+          branchBookingMethods: {
+            include: {
+              branchBookingMethod: {
+                include: { branch: true, bookingMethod: true },
+              },
+            },
+          },
+        },
+      })
       await this.ensureBranchSpecialty(body)
+      if (this.redis.isEnabled()) {
+        try {
+          await this.embeddingService.invalidatePackageVector(id)
+        } catch {}
+      }
+      void this.syncPackageVector(updated)
       return updated
     }
     const row = await model.update({ where: { id: key }, data: await this.payload(resource, body, false) })
@@ -108,6 +255,11 @@ export class SystemCatalogService {
     await this.manager(userId); const model = this.model(resource); const key = resource === 'specialties' ? Number(id) : id
     if (!await model.findUnique({ where: { id: key } })) throw new NotFoundException('Không tìm thấy dữ liệu')
     if (resource === 'specialties') return model.delete({ where: { id: key } })
+    if (resource === 'service-packages' && this.redis.isEnabled()) {
+      try {
+        await this.embeddingService.invalidatePackageVector(id)
+      } catch {}
+    }
     return model.update({ where: { id: key }, data: resource === 'booking-methods' ? { isEnabled: false } : { isActive: false } })
   }
 
@@ -139,19 +291,26 @@ export class SystemCatalogService {
       return { branchId, name: String(b.name).trim(), code: String(b.code || '').trim(), isActive: b.isActive ?? true }
     }
     if (resource === 'service-packages') {
-      if (!String(b.branchId || '')) throw new BadRequestException('Vui lòng chọn chi nhánh')
-      const branchBookingMethodId = await this.resolveBranchMethod(b, 'SPECIALTY_EXAM')
       const generatedPkgCode = String(b.code || '').trim() || `PKG-${new Date().getFullYear()}-${Math.floor(1000 + Math.random() * 9000)}`
-      return {
+      const data: any = {
         name: String(b.name).trim(),
         code: generatedPkgCode,
         description: b.description || null,
-        branchBookingMethodId,
         specialtyId: b.specialtyId ? Number(b.specialtyId) : null,
         price: Number(b.price) || 0,
         durationMin: Number(b.durationMin) || 30,
+        sessionType: b.sessionType || 'ALL_DAY',
+        activeDaysOfWeek: Array.isArray(b.activeDaysOfWeek) && b.activeDaysOfWeek.length > 0
+          ? b.activeDaysOfWeek.map(Number)
+          : [1, 2, 3, 4, 5, 6, 0],
         isActive: b.isActive ?? true,
       }
+      if (b.branchBookingMethodId || b.branchId) {
+        try {
+          data.branchBookingMethodId = await this.resolveBranchMethod(b, 'HEALTH_PACKAGE')
+        } catch {}
+      }
+      return data
     }
 
     return { name: String(b.name).trim(), code: String(b.code || '').trim(), activeIngredient: b.activeIngredient || null, strength: b.strength || null, unit: b.unit || null, unitPrice: Number(b.unitPrice) || 0, stockQuantity: Number(b.stockQuantity) || 0, isActive: b.isActive ?? true }
@@ -174,5 +333,127 @@ export class SystemCatalogService {
     const row = await this.prisma.branchBookingMethod.findFirst({ where: { branchId, isEnabled: true, bookingMethod: { code, isActive: true } } })
     if (!row) throw new BadRequestException(`Chi nhánh chưa bật hình thức đặt khám ${code}`)
     return row.id
+  }
+
+  private async createServicePackages(b: any) {
+    if (!String(b.name || '').trim()) throw new BadRequestException('Tên gói khám không được để trống')
+
+    // 1. Xác định danh sách cơ sở áp dụng
+    let branches: { id: string; code: string; name: string }[] = []
+    if (b.applyAllBranches || (Array.isArray(b.branchIds) && b.branchIds.includes('ALL')) || (!b.branchIds?.length && !b.branchId)) {
+      branches = await this.prisma.branch.findMany({ where: { isActive: true }, select: { id: true, code: true, name: true } })
+    } else if (Array.isArray(b.branchIds) && b.branchIds.length > 0) {
+      branches = await this.prisma.branch.findMany({ where: { id: { in: b.branchIds }, isActive: true }, select: { id: true, code: true, name: true } })
+    } else if (b.branchId) {
+      branches = await this.prisma.branch.findMany({ where: { id: b.branchId, isActive: true }, select: { id: true, code: true, name: true } })
+    }
+
+    if (branches.length === 0) {
+      throw new BadRequestException('Vui lòng chọn ít nhất một cơ sở y tế')
+    }
+
+    // 2. Xác định danh sách hình thức đặt khám áp dụng
+    let methodCodes: string[] = []
+    if (Array.isArray(b.bookingMethodCodes) && b.bookingMethodCodes.length > 0) {
+      methodCodes = b.bookingMethodCodes.map((c: string) => String(c).trim().toUpperCase())
+    } else if (Array.isArray(b.branchBookingMethodIds) && b.branchBookingMethodIds.length > 0) {
+      const rows = await this.prisma.branchBookingMethod.findMany({
+        where: { id: { in: b.branchBookingMethodIds } },
+        include: { bookingMethod: true },
+      })
+      methodCodes = [...new Set(rows.map((r) => r.bookingMethod.code))]
+    } else if (b.branchBookingMethodId) {
+      const row = await this.prisma.branchBookingMethod.findUnique({
+        where: { id: b.branchBookingMethodId },
+        include: { bookingMethod: true },
+      })
+      if (row) methodCodes = [row.bookingMethod.code]
+    } else if (b.bookingMethodCode) {
+      methodCodes = [String(b.bookingMethodCode).trim().toUpperCase()]
+    }
+
+    if (methodCodes.length === 0) {
+      methodCodes = ['HEALTH_PACKAGE', 'SPECIALTY_EXAM']
+    }
+
+    const bbmList: any[] = []
+    for (const branch of branches) {
+      for (const methodCode of methodCodes) {
+        let bbm = await this.prisma.branchBookingMethod.findFirst({
+          where: { branchId: branch.id, isEnabled: true, bookingMethod: { code: methodCode, isActive: true } },
+        })
+        if (!bbm) {
+          const bm = await this.prisma.bookingMethod.findFirst({ where: { code: methodCode, isActive: true } })
+          if (bm) {
+            bbm = await this.prisma.branchBookingMethod.upsert({
+              where: { branchId_bookingMethodId: { branchId: branch.id, bookingMethodId: bm.id } },
+              update: { isEnabled: true },
+              create: { branchId: branch.id, bookingMethodId: bm.id, isEnabled: true },
+            })
+          }
+        }
+        if (bbm) bbmList.push(bbm)
+      }
+    }
+
+    if (bbmList.length === 0) {
+      throw new BadRequestException('Không thể liên kết gói khám với cơ sở và hình thức đã chọn. Vui lòng kiểm tra lại cấu hình chi nhánh.')
+    }
+
+    let pkgCode = String(b.code || '').trim() || `PKG-${new Date().getFullYear()}-${Math.floor(1000 + Math.random() * 9000)}`
+    let exists = await this.prisma.servicePackage.findUnique({ where: { code: pkgCode } })
+    let attempt = 1
+    while (exists && attempt <= 5) {
+      pkgCode = `PKG-${new Date().getFullYear()}-${Math.floor(1000 + Math.random() * 9000)}`
+      exists = await this.prisma.servicePackage.findUnique({ where: { code: pkgCode } })
+      attempt++
+    }
+
+    // TẠO ĐÚNG 1 BẢN GHI ServicePackage DUY NHẤT và liên kết các cơ sở/hình thức
+    const pkg = await this.prisma.servicePackage.create({
+      data: {
+        name: String(b.name).trim(),
+        code: pkgCode,
+        description: b.description || null,
+        branchBookingMethodId: bbmList[0]?.id || null,
+        specialtyId: b.specialtyId ? Number(b.specialtyId) : null,
+        price: Number(b.price) || 0,
+        durationMin: 30,
+        sessionType: b.sessionType || 'ALL_DAY',
+        activeDaysOfWeek: Array.isArray(b.activeDaysOfWeek) && b.activeDaysOfWeek.length > 0
+          ? b.activeDaysOfWeek.map(Number)
+          : [1, 2, 3, 4, 5, 6, 0],
+        isActive: b.isActive ?? true,
+        branchBookingMethods: {
+          create: bbmList.map((bbm) => ({
+            branchBookingMethodId: bbm.id,
+          })),
+        },
+      },
+      include: {
+        branchBookingMethod: {
+          include: { branch: true, bookingMethod: true },
+        },
+        branchBookingMethods: {
+          include: {
+            branchBookingMethod: {
+              include: { branch: true, bookingMethod: true },
+            },
+          },
+        },
+        specialty: true,
+      },
+    })
+
+    for (const branch of branches) {
+      if (b.specialtyId) {
+        await this.ensureBranchSpecialty({ branchId: branch.id, specialtyId: b.specialtyId })
+      }
+    }
+
+    // Tự động sinh ngay vector embedding và lưu vào Redis
+    void this.syncPackageVector(pkg)
+
+    return pkg
   }
 }

@@ -1,15 +1,13 @@
-import { IsEmail, IsNotEmpty } from 'class-validator';
-import { Transform } from 'class-transformer';
-import { lowerCaseTransformer } from '../../../../common/utils/transformers/lower-case.transformer';
+import { IsNotEmpty } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
 
 export class AuthEmailLoginDto {
-  @Transform(lowerCaseTransformer)
-  @IsEmail()
-  @IsNotEmpty()
+  @ApiProperty({ example: 'user@example.com hoặc 0946135382' })
+  @IsNotEmpty({ message: 'Vui lòng nhập email hoặc số điện thoại.' })
   email: string;
 
   @ApiProperty()
-  @IsNotEmpty()
+  @IsNotEmpty({ message: 'Vui lòng nhập mật khẩu.' })
   password: string;
 }
+

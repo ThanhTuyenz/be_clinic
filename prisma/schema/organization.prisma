@@ -86,6 +86,7 @@ model BranchBookingMethod {
   branch          Branch        @relation(fields: [branchId], references: [id], onDelete: Cascade)
   bookingMethod   BookingMethod @relation(fields: [bookingMethodId], references: [id], onDelete: Restrict)
   servicePackages ServicePackage[]
+  servicePackageLinks ServicePackageBranchBookingMethod[]
 
   @@unique([branchId, bookingMethodId])
   @@index([branchId, isEnabled, sortOrder])

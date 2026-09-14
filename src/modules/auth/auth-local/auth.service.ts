@@ -55,9 +55,23 @@ export class AuthService implements IAuthService {
   }
 
   async validateLogin(loginDto: AuthEmailLoginDto): Promise<LoginResponseType> {
-    const user = await this.usersService.findOneUser({
-      email: loginDto.email,
-    });
+    const rawInput = (loginDto.email || '').trim();
+    const isEmail = rawInput.includes('@');
+
+    let user: User | null = null;
+    if (isEmail) {
+      user = await this.usersService.findOneUser({
+        email: rawInput.toLowerCase(),
+      });
+    } else {
+      const phoneNorm = rawInput.startsWith('0') ? `+84${rawInput.slice(1)}` : rawInput;
+      const phoneRaw0 = rawInput.startsWith('+84') ? `0${rawInput.slice(3)}` : rawInput;
+      user =
+        (await this.usersService.findOneUser({ phoneNumber: rawInput } as any)) ||
+        (await this.usersService.findOneUser({ phoneNumber: phoneNorm } as any)) ||
+        (await this.usersService.findOneUser({ phoneNumber: phoneRaw0 } as any)) ||
+        (await this.usersService.findOneUser({ email: `${rawInput.replace(/[\s\+]/g, '')}@phone.vitacare.vn` }));
+    }
 
     if (!user) {
       throw new HttpException(
@@ -227,15 +241,57 @@ export class AuthService implements IAuthService {
   }
 
   async registerUser(registerDto: AuthRegisterDto): Promise<void> {
-    const existingUser = await this.usersService.findOneUser({
-      email: registerDto.email,
-    });
-    if (existingUser?.status === UserStatus.Active) {
-      throw new HttpException('User already exists', HttpStatus.CONFLICT);
+    const rawAccount = (registerDto.email || '').trim();
+    const isEmail = rawAccount.includes('@');
+    const email = isEmail ? rawAccount.toLowerCase() : null;
+    const phoneNumber = !isEmail ? rawAccount : (registerDto.phoneNumber || null);
+
+    if (email) {
+      const existingUser = await this.usersService.findOneUser({ email });
+      if (existingUser?.status === UserStatus.Active) {
+        throw new HttpException('Email này đã được sử dụng.', HttpStatus.CONFLICT);
+      }
     }
 
+    if (phoneNumber) {
+      const phoneNorm = phoneNumber.startsWith('0') ? `+84${phoneNumber.slice(1)}` : phoneNumber;
+      const phoneRaw0 = phoneNumber.startsWith('+84') ? `0${phoneNumber.slice(3)}` : phoneNumber;
+      const existingPhoneUser =
+        (await this.usersService.findOneUser({ phoneNumber } as any)) ||
+        (await this.usersService.findOneUser({ phoneNumber: phoneNorm } as any)) ||
+        (await this.usersService.findOneUser({ phoneNumber: phoneRaw0 } as any));
+
+      if (existingPhoneUser?.status === UserStatus.Active) {
+        throw new HttpException('Số điện thoại này đã được sử dụng.', HttpStatus.CONFLICT);
+      }
+    }
+
+    // Nếu đăng ký bằng số điện thoại: kích hoạt luôn tài khoản để bệnh nhân đăng nhập ngay lập tức!
+    if (!isEmail && phoneNumber) {
+      const virtualEmail = `${phoneNumber.replace(/[\s\+]/g, '')}@phone.vitacare.vn`;
+      await this.usersService.createUser({
+        fullName: registerDto.fullName,
+        password: registerDto.password,
+        email: virtualEmail,
+        phoneNumber,
+        status: UserStatus.Active,
+        role: UserRole.Patient,
+      } as any);
+
+      await this.historyService.create({
+        action: HISTORY_ACTIONS.USER_REGISTERED,
+        message: `Đăng ký tài khoản mới bằng số điện thoại ${phoneNumber}`,
+        actorEmail: phoneNumber,
+        targetType: 'user',
+        targetId: phoneNumber,
+      });
+      return;
+    }
+
+    // Nếu đăng ký bằng email: gửi mã OTP qua Gmail
     const otp = this.generateOtp();
     const otpData = this.createOtpData(otp);
+    const existingUser = email ? await this.usersService.findOneUser({ email }) : null;
     if (existingUser) {
       existingUser.password = registerDto.password;
       existingUser.fullName = registerDto.fullName;
@@ -246,7 +302,7 @@ export class AuthService implements IAuthService {
     } else {
       await this.usersService.createUser({
         ...registerDto,
-        email: registerDto.email,
+        email: email!,
         status: UserStatus.Inactive,
         role: UserRole.Patient,
         ...otpData,
@@ -254,17 +310,18 @@ export class AuthService implements IAuthService {
     }
     await this.historyService.create({
       action: HISTORY_ACTIONS.USER_REGISTERED,
-      message: `Đăng ký tài khoản mới`,
-      actorEmail: registerDto.email,
+      message: `Đăng ký tài khoản mới qua email ${email}`,
+      actorEmail: email!,
       targetType: 'user',
-      targetId: registerDto.email,
+      targetId: email!,
     });
 
     await this.mailsService.confirmRegisterUser({
-      to: registerDto.email,
+      to: email!,
       data: { otp, user: registerDto.fullName, expiresInMinutes: 10 },
     });
   }
+
 
   async verifyRegistrationOtp(email: string, otp: string): Promise<void> {
     const user = await this.usersService.findOneUser({ email });

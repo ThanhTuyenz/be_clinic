@@ -17,8 +17,9 @@
     "prisma:deploy": "prisma migrate deploy",
     "prisma:studio": "prisma studio",
     "prisma:seed": "node prisma/seed.mjs",
-    "seed:prisma": "node prisma/seed.mjs",
-    "seed:prod": "node -e \"process.env.ENV_FILE='.env.production'; require('child_process').execSync('node prisma/seed.mjs', {stdio: 'inherit', env: process.env})\""
+    "prisma:seed:prod": "node -e \"process.env.ENV_FILE='.env.production'; require('child_process').execSync('node prisma/seed.mjs', {stdio: 'inherit', env: process.env})\"",
+    "seed:prod": "npm run prisma:seed:prod",
+    "vector:sync": "node scripts/sync-vectors.mjs"
   },
   "dependencies": {
     "@google/genai": "^2.19.0",
@@ -46,7 +47,6 @@
     "@types/passport-jwt": "^4.0.1",
     "amqplib": "^2.0.1",
     "bcrypt": "^6.0.0",
-    "bcryptjs": "^2.4.3",
     "class-transformer": "^0.5.1",
     "class-validator": "^0.15.1",
     "cookie-parser": "^1.4.7",

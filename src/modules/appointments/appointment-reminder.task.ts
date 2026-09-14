@@ -2,6 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { Cron } from '@nestjs/schedule';
 import { PrismaService } from '../../infrastructure/database/prisma/prisma.service.js';
 import { MailsService } from '../mails/mails.service.js';
+import { HttpSmsService } from '../sms/httpsms.service.js';
 
 /**
  * Cron job tự động nhắc lịch hẹn bệnh nhân.
@@ -20,6 +21,7 @@ export class AppointmentReminderTask {
   constructor(
     private readonly prisma: PrismaService,
     private readonly mails: MailsService,
+    private readonly sms: HttpSmsService,
   ) {}
 
   // Chạy mỗi giờ đúng (:00)
@@ -76,7 +78,8 @@ export class AppointmentReminderTask {
 
     for (const appt of appointments) {
       const email = appt.patientProfile.account?.email;
-      if (!email) continue;
+      const phone = appt.patientProfile.phoneNumber || appt.patientProfile.account?.phoneNumber;
+      if (!email && !phone) continue;
 
       try {
         const doctorSlot = appt.scheduleSlot;
@@ -92,24 +95,50 @@ export class AppointmentReminderTask {
           : null;
         const serviceName = appt.servicePackage?.name ?? null;
 
-        const medicalNote = this.buildMedicalNote(hoursAhead, doctorName, serviceName);
+        const tasks: Promise<any>[] = [];
 
-        await this.mails.sendAppointmentReminder({
-          to: email,
-          data: {
-            patientName: appt.patientProfile.fullName,
-            bookingCode: appt.bookingCode ?? appt.id,
-            appointmentDate,
-            startTime,
-            branchName: branch?.name ?? 'VitaCare Clinic',
-            branchAddress: branch?.address ?? '',
-            branchPhone: branch?.phoneNumber ?? '',
-            doctorName,
-            serviceName,
-            medicalNote,
-            hoursAhead,
-          },
-        });
+        if (email) {
+          const medicalNote = this.buildMedicalNote(hoursAhead, doctorName, serviceName);
+          tasks.push(
+            this.mails.sendAppointmentReminder({
+              to: email,
+              data: {
+                patientName: appt.patientProfile.fullName,
+                bookingCode: appt.bookingCode ?? appt.id,
+                appointmentDate,
+                startTime,
+                branchName: branch?.name ?? 'VitaCare Clinic',
+                branchAddress: branch?.address ?? '',
+                branchPhone: branch?.phoneNumber ?? '',
+                doctorName,
+                serviceName,
+                medicalNote,
+                hoursAhead,
+              },
+            }).catch((mailErr) => {
+              this.logger.error(`Lỗi gửi mail nhắc lịch cho ${email}: ${mailErr?.message}`);
+            })
+          );
+        }
+
+        if (phone) {
+          tasks.push(
+            this.sms.sendAppointmentReminder({
+              to: phone,
+              patientName: appt.patientProfile.fullName,
+              bookingCode: appt.bookingCode ?? appt.id,
+              hoursAhead,
+              appointmentDate,
+              startTime,
+              branchName: branch?.name ?? 'VitaCare',
+              branchPhone: branch?.phoneNumber ?? undefined,
+            }).catch((smsErr) => {
+              this.logger.error(`Lỗi gửi SMS nhắc lịch cho ${phone}: ${smsErr?.message}`);
+            })
+          );
+        }
+
+        await Promise.allSettled(tasks);
 
         // Đánh dấu đã gửi
         await this.prisma.appointment.update({

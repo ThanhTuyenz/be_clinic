@@ -6,6 +6,8 @@ import { PrismaService } from '../../database/prisma/prisma.service.js';
 import { BookingService } from '../../../modules/appointments/booking.service.js';
 import { MailsService } from '../../../modules/mails/mails.service.js';
 import { RecommendationService } from '../../../modules/recommendations/recommendation.service.js';
+import { HttpSmsService } from '../../../modules/sms/httpsms.service.js';
+import { EmbeddingService } from '../../../modules/recommendations/embedding.service.js';
 import { RabbitMqConfig } from '../../../config/config.type.js';
 import { RABBITMQ_TOPOLOGY as topology } from './rabbitmq.constants.js';
 
@@ -23,6 +25,8 @@ export class RabbitMqService implements OnModuleInit, OnModuleDestroy {
     private readonly bookingService: BookingService,
     private readonly mailsService: MailsService,
     private readonly recommendationService: RecommendationService,
+    private readonly smsService: HttpSmsService,
+    private readonly embeddingService: EmbeddingService,
   ) {}
 
   async onModuleInit(): Promise<void> {
@@ -40,6 +44,7 @@ export class RabbitMqService implements OnModuleInit, OnModuleDestroy {
     await this.consumeExpiredHolds();
     await this.consumeBookedAppointments();
     await this.consumeRecommendationTasks();
+    await this.consumePackageVectorSync();
     this.publisherTimer = setInterval(() => void this.publishOutboxBatch(), rabbit.outboxPollMs);
     this.publisherTimer.unref();
   }
@@ -85,6 +90,10 @@ export class RabbitMqService implements OnModuleInit, OnModuleDestroy {
     // Recommendation profile analyze queue
     await this.channel.assertQueue(topology.recommendationQueue, { durable: true });
     await this.channel.bindQueue(topology.recommendationQueue, topology.eventsExchange, topology.recommendationRoutingKey);
+
+    // Package vector sync queue
+    await this.channel.assertQueue(topology.packageVectorSyncQueue, { durable: true });
+    await this.channel.bindQueue(topology.packageVectorSyncQueue, topology.eventsExchange, topology.packageVectorSyncRoutingKey);
 
     await this.channel.prefetch(this.rabbitConfig().prefetch);
   }
@@ -189,6 +198,65 @@ export class RabbitMqService implements OnModuleInit, OnModuleDestroy {
     }, { noAck: false });
   }
 
+  private async consumePackageVectorSync(): Promise<void> {
+    await this.channel.consume(topology.packageVectorSyncQueue, async (message: any) => {
+      if (!message) return;
+      try {
+        const payload = JSON.parse(message.content.toString()) as {
+          eventId?: string;
+          packageId: string;
+          code: string;
+          name: string;
+          description: string;
+          price: number;
+          durationMin: number;
+          specialtyId: number | null;
+          specialtyName: string;
+        };
+        this.logger.log(`[RabbitMQ] Received package vector sync task: ${payload.name} (${payload.packageId})`);
+        let vec: number[] | null = null;
+        if (payload.eventId) {
+          const processed = await this.prisma.processedEvent.findUnique({ where: { eventId: payload.eventId } });
+          if (!processed) {
+            vec = await this.embeddingService.getOrComputePackageVector({
+              id: payload.packageId,
+              code: payload.code,
+              name: payload.name,
+              description: payload.description,
+              price: payload.price,
+              durationMin: payload.durationMin,
+              specialtyId: payload.specialtyId,
+              specialtyName: payload.specialtyName,
+            });
+            await this.prisma.processedEvent.create({
+              data: { eventId: payload.eventId, consumer: 'package-vector-sync' },
+            });
+          }
+        } else {
+          vec = await this.embeddingService.getOrComputePackageVector({
+            id: payload.packageId,
+            code: payload.code,
+            name: payload.name,
+            description: payload.description,
+            price: payload.price,
+            durationMin: payload.durationMin,
+            specialtyId: payload.specialtyId,
+            specialtyName: payload.specialtyName,
+          });
+        }
+        this.channel.ack(message);
+        if (vec) {
+          this.logger.log(`[RabbitMQ] Successfully synced vector for package ${payload.packageId} into Redis`);
+        } else {
+          this.logger.warn(`[RabbitMQ] Vector for package ${payload.packageId} could not be generated (Embedding API returned null)`);
+        }
+      } catch (error: any) {
+        this.logger.error(`[RabbitMQ] Failed to sync package vector: ${error?.message}`, error);
+        this.channel.nack(message, false, false);
+      }
+    }, { noAck: false });
+  }
+
   private async sendBookingConfirmationEmail(appointmentId: string): Promise<void> {
     const appt = await this.prisma.appointment.findUnique({
       where: { id: appointmentId },
@@ -216,13 +284,15 @@ export class RabbitMqService implements OnModuleInit, OnModuleDestroy {
     });
 
     if (!appt) {
-      this.logger.warn(`Appointment not found for confirmation email: ${appointmentId}`);
+      this.logger.warn(`Appointment not found for confirmation email/sms: ${appointmentId}`);
       return;
     }
 
     const email = appt.patientProfile.account?.email;
-    if (!email) {
-      this.logger.log(`No email found for patient in appointment ${appointmentId}`);
+    const phone = appt.patientProfile.phoneNumber || appt.patientProfile.account?.phoneNumber;
+
+    if (!email && !phone) {
+      this.logger.log(`No email or phone found for patient in appointment ${appointmentId}`);
       return;
     }
 
@@ -261,27 +331,55 @@ export class RabbitMqService implements OnModuleInit, OnModuleDestroy {
       this.logger.warn(`Failed to generate QR code data URL for appointment ${appointmentId}`, qrErr);
     }
 
-    await this.mailsService.sendBookingConfirmation({
-      to: email,
-      data: {
-        patientName: appt.patientProfile.fullName,
-        patientCode: appt.patientProfile.patientCode,
-        bookingCode: appt.bookingCode ?? appt.id,
-        queueNumber: appt.queueNumber,
-        appointmentDate,
-        startTime,
-        branchName: branch?.name ?? 'VitaCare Clinic',
-        branchAddress: branch?.address ?? '',
-        branchPhone: branch?.phoneNumber ?? '',
-        doctorName,
-        servicePackageName,
-        roomName: room?.name ?? null,
-        totalAmount: appt.invoice?.totalAmount ? Number(appt.invoice.totalAmount) : null,
-        qrCodeDataUrl,
-      },
-    });
+    const tasks: Promise<any>[] = [];
 
-    this.logger.log(`Booking confirmation email sent to ${email} for appointment ${appointmentId}`);
+    // Gửi Email nếu có
+    if (email) {
+      tasks.push(
+        this.mailsService.sendBookingConfirmation({
+          to: email,
+          data: {
+            patientName: appt.patientProfile.fullName,
+            patientCode: appt.patientProfile.patientCode,
+            bookingCode: appt.bookingCode ?? appt.id,
+            queueNumber: appt.queueNumber,
+            appointmentDate,
+            startTime,
+            branchName: branch?.name ?? 'VitaCare Clinic',
+            branchAddress: branch?.address ?? '',
+            branchPhone: branch?.phoneNumber ?? '',
+            doctorName,
+            servicePackageName,
+            roomName: room?.name ?? null,
+            totalAmount: appt.invoice?.totalAmount ? Number(appt.invoice.totalAmount) : null,
+            qrCodeDataUrl,
+          },
+        }).then(() => {
+          this.logger.log(`Booking confirmation email sent to ${email} for appointment ${appointmentId}`);
+        }).catch((err) => {
+          this.logger.error(`Failed to send booking email to ${email}: ${err?.message}`);
+        })
+      );
+    }
+
+    // Gửi SMS cực ngắn nếu có số điện thoại
+    if (phone) {
+      tasks.push(
+        this.smsService.sendBookingConfirmation({
+          to: phone,
+          patientName: appt.patientProfile.fullName,
+          bookingCode: appt.bookingCode ?? appt.id,
+          appointmentDate,
+          startTime,
+          branchName: branch?.name ?? 'VitaCare',
+          branchPhone: branch?.phoneNumber ?? undefined,
+        }).catch((err) => {
+          this.logger.error(`Failed to send booking SMS to ${phone}: ${err?.message}`);
+        })
+      );
+    }
+
+    await Promise.allSettled(tasks);
   }
 
   private async reconcileExpiredHolds(): Promise<void> {

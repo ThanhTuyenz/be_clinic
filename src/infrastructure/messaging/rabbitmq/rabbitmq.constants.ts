@@ -13,4 +13,6 @@ export const RABBITMQ_TOPOLOGY = {
   bookedQueue: 'appointments.booked.mail',
   recommendationRoutingKey: 'recommendation.profile.analyze',
   recommendationQueue: 'recommendations.profile.analyze',
+  packageVectorSyncRoutingKey: 'package.vector.sync',
+  packageVectorSyncQueue: 'packages.vector.sync',
 } as const;
