@@ -246,8 +246,17 @@ export class AuthController {
     @Req() request: Request,
     @Res({ passthrough: true }) res: Response,
   ): Promise<void> {
+    const token =
+      request.cookies?.token ||
+      (request.headers.authorization?.startsWith('Bearer ')
+        ? request.headers.authorization.split(' ')[1]
+        : undefined);
+
+    const sessionId = (request as Request & { user?: { sessionId?: string } }).user?.sessionId;
+
     await this.authService.logout({
-      sessionId: (request as Request & { user?: { sessionId?: string } }).user!.sessionId!,
+      sessionId,
+      token,
     });
 
     const isProduction = process.env.NODE_ENV === 'production';

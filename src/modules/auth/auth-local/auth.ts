@@ -30,5 +30,5 @@ export interface IAuthService {
     refreshToken: string,
   ): Promise<Omit<LoginResponseType, 'user'>>;
 
-  logout(data: Pick<JwtRefreshPayloadType, 'sessionId'>);
+  logout(data: { sessionId?: string; token?: string }): Promise<void>;
 }

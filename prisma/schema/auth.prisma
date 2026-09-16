@@ -1,5 +1,5 @@
 // ============================================================
-// Auth: User, Session, OAuth, Token
+// Auth: User & OAuth (Session, OTP & Reset Tokens managed in Redis)
 // ============================================================
 
 model User {
@@ -15,10 +15,6 @@ model User {
   socialId                 String?                    @map("social_id") @db.VarChar(255)
   customPermissions        Json?                      @map("custom_permissions")
   hash                     String?                    @db.VarChar(255)
-  emailOtpHash             String?                    @map("email_otp_hash") @db.VarChar(255)
-  emailOtpExpiresAt        DateTime?                  @map("email_otp_expires_at") @db.Timestamptz(3)
-  emailOtpLastSentAt       DateTime?                  @map("email_otp_last_sent_at") @db.Timestamptz(3)
-  emailOtpAttempts         Int                        @default(0) @map("email_otp_attempts")
   isBlocked                Boolean                    @default(false) @map("is_blocked")
   blockedAt                DateTime?                  @map("blocked_at") @db.Timestamptz(3)
   isDeleted                Boolean                    @default(false) @map("is_deleted")
@@ -26,10 +22,7 @@ model User {
   createdAt                DateTime                   @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt                DateTime                   @updatedAt @map("updated_at") @db.Timestamptz(3)
 
-  sessions                 Session[]
   oauthAccounts            OAuthAccount[]
-  verificationTokens       AuthVerificationToken[]
-  passwordResetTokens      PasswordResetToken[]
   branchAssignments        UserBranchAssignment[]
   patientProfiles          PatientProfile[]
   doctor                   Doctor?
@@ -44,26 +37,8 @@ model User {
   voucherUsages            VoucherUsage[]
 
   @@index([role, status])
-
-
   @@index([isDeleted, createdAt])
   @@map("users")
-}
-
-model Session {
-  id               String    @id @default(uuid()) @db.Uuid
-  userId           String    @map("user_id") @db.Uuid
-  refreshTokenHash String?   @map("refresh_token_hash") @db.VarChar(255)
-  userAgent        String?   @map("user_agent")
-  ipAddress        String?   @map("ip_address") @db.VarChar(64)
-  expiresAt        DateTime? @map("expires_at") @db.Timestamptz(3)
-  createdAt        DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
-  updatedAt        DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
-  deletedAt        DateTime? @map("deleted_at") @db.Timestamptz(3)
-  user             User      @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  @@index([userId, deletedAt])
-  @@map("sessions")
 }
 
 model OAuthAccount {
@@ -78,31 +53,4 @@ model OAuthAccount {
   @@unique([provider, providerAccountId])
   @@index([userId])
   @@map("oauth_accounts")
-}
-
-model AuthVerificationToken {
-  id         String    @id @default(uuid()) @db.Uuid
-  userId     String    @map("user_id") @db.Uuid
-  tokenHash  String    @map("token_hash") @db.VarChar(255)
-  expiresAt  DateTime  @map("expires_at") @db.Timestamptz(3)
-  attempts   Int       @default(0)
-  consumedAt DateTime? @map("consumed_at") @db.Timestamptz(3)
-  createdAt  DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
-  user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  @@index([userId, expiresAt])
-  @@map("auth_verification_tokens")
-}
-
-model PasswordResetToken {
-  id         String    @id @default(uuid()) @db.Uuid
-  userId     String    @map("user_id") @db.Uuid
-  tokenHash  String    @unique @map("token_hash") @db.VarChar(255)
-  expiresAt  DateTime  @map("expires_at") @db.Timestamptz(3)
-  consumedAt DateTime? @map("consumed_at") @db.Timestamptz(3)
-  createdAt  DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
-  user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  @@index([userId, expiresAt])
-  @@map("password_reset_tokens")
 }

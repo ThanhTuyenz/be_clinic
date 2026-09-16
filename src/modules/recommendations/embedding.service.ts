@@ -134,54 +134,78 @@ export class EmbeddingService {
   }
 
   /**
-   * Lấy hoặc tạo mới vector embedding cho một gói khám (Sử dụng Redis Cache với TTL 30 ngày)
+   * Lấy hoặc tạo mới vector embedding cho một gói khám trong RediSearch Hash (Key: pkg_vss:<id>)
    */
   async getOrComputePackageVector(pkg: PackageForRetrieval): Promise<number[] | null> {
-    const redisKey = `vector:pkg:${pkg.id}`;
+    const hashKey = `pkg_vss:${pkg.id}`;
 
-    // 1. Kiểm tra Redis Cache
+    // 1. Kiểm tra Redis Hash xem đã có vector nhị phân chưa
     if (this.redis.isEnabled()) {
       try {
-        const cachedVector = await this.redis.get<number[]>(redisKey);
-        if (Array.isArray(cachedVector) && cachedVector.length > 0) {
-          return cachedVector;
+        const client = this.redis.getClient();
+        if (client) {
+          const vectorBuf = await client.hgetBuffer(hashKey, 'vector');
+          if (vectorBuf && vectorBuf.length > 0) {
+            const float32 = new Float32Array(
+              vectorBuf.buffer,
+              vectorBuf.byteOffset,
+              vectorBuf.byteLength / 4,
+            );
+            return Array.from(float32);
+          }
         }
       } catch (err: any) {
-        this.logger.warn(`Redis get failed for package vector ${pkg.id}: ${err?.message}`);
+        this.logger.warn(`Redis hgetBuffer failed for package vector ${pkg.id}: ${err?.message}`);
       }
     }
 
     // 2. Cache miss: Gọi Google text-embedding
-    this.logger.log(`[Embedding] Cache miss for package "${pkg.name}" (${pkg.code}). Generating vector via Gemini...`);
+    this.logger.log(`[Embedding] Generating vector for package "${pkg.name}" (${pkg.code}) via Gemini...`);
     const text = this.buildPackageEmbeddingText(pkg);
     const vector = await this.embedText(text);
     if (vector && this.redis.isEnabled()) {
       try {
-        await this.redis.set(redisKey, vector, this.VECTOR_TTL_SECONDS);
-        this.logger.log(`[Embedding] Cached vector for package "${pkg.name}" (${pkg.id}) into Redis (TTL 30d)`);
+        const float32 = new Float32Array(vector);
+        const vectorBuffer = Buffer.from(float32.buffer);
+        const client = this.redis.getClient();
+        if (client) {
+          await client.hset(
+            hashKey,
+            'packageId', pkg.id,
+            'code', pkg.code,
+            'name', pkg.name,
+            'specialtyName', pkg.specialtyName || 'Đa khoa',
+            'price', String(pkg.price),
+            'vector', vectorBuffer,
+          );
+          // Dọn dẹp legacy key nếu có
+          await client.del(`vector:pkg:${pkg.id}`).catch(() => {});
+          this.logger.log(`[Embedding] Saved package vector directly into RedisSearch Hash ${hashKey}`);
+        }
       } catch (err: any) {
-        this.logger.warn(`Failed to cache vector in Redis for package ${pkg.id}: ${err?.message}`);
+        this.logger.warn(`Failed to save package vector hash for ${pkg.id}: ${err?.message}`);
       }
     }
     return vector;
   }
 
   /**
-   * Xóa cache vector của gói khám trên Redis khi được cập nhật nội dung
+   * Xóa vector của gói khám trên Redis khi gói khám được cập nhật nội dung
    */
   async invalidatePackageVector(packageId: string): Promise<void> {
     if (this.redis.isEnabled()) {
       try {
-        await this.redis.delete(`vector:pkg:${packageId}`);
-        this.logger.log(`[Embedding] Invalidated Redis vector cache for package ${packageId}`);
+        await this.redis.delete(`pkg_vss:${packageId}`, `vector:pkg:${packageId}`);
+        this.logger.log(`[Embedding] Invalidated Redis vector hash for package ${packageId}`);
       } catch (err: any) {
-        this.logger.warn(`Failed to delete Redis vector cache for package ${packageId}: ${err?.message}`);
+        this.logger.warn(`Failed to delete Redis vector hash for package ${packageId}: ${err?.message}`);
       }
     }
   }
 
   /**
    * Tầng 2: Vector Retrieval - Lấy Top K gói khám có độ tương đồng ngữ nghĩa cao nhất
+   * Sử dụng duy nhất RediSearch (HNSW) trực tiếp trên RAM Redis (< 1ms).
    */
   async retrieveTopPackages(
     patientEmbeddingText: string,
@@ -193,57 +217,129 @@ export class EmbeddingService {
       return candidates.map((p) => ({ package: p, score: 1.0 }));
     }
 
-    const t0 = Date.now();
     // 1. Tạo vector cho bệnh nhân
     const patientVector = await this.embedText(patientEmbeddingText);
 
-    // 2. Nếu có patient vector: Tính Cosine Similarity
+    // 2. Truy vấn trực tiếp qua RediSearch HNSW (< 1ms)
     if (patientVector) {
-      const scoredList: ScoredPackage[] = [];
-      let cacheHits = 0;
-      let newlyGenerated = 0;
-
-      for (const pkg of candidates) {
-        const redisKey = `vector:pkg:${pkg.id}`;
-        let pkgVector: number[] | null = null;
-        if (this.redis.isEnabled()) {
-          pkgVector = await this.redis.get<number[]>(redisKey).catch(() => null);
-        }
-
-        if (pkgVector && Array.isArray(pkgVector) && pkgVector.length > 0) {
-          cacheHits++;
-        } else {
-          newlyGenerated++;
-          pkgVector = await this.getOrComputePackageVector(pkg);
-        }
-
-        if (pkgVector) {
-          const score = this.cosineSimilarity(patientVector, pkgVector);
-          scoredList.push({ package: pkg, score });
-        } else {
-          scoredList.push({ package: pkg, score: 0.1 });
-        }
+      const redisSearchResults = await this.searchWithRedisSearch(patientVector, candidates, topK);
+      if (redisSearchResults && redisSearchResults.length > 0) {
+        return redisSearchResults;
       }
-
-      // Sắp xếp giảm dần theo điểm tương đồng ngữ nghĩa
-      scoredList.sort((a, b) => b.score - a.score);
-      const topResults = scoredList.slice(0, topK);
-      const duration = Date.now() - t0;
-
-      this.logger.log(
-        `[VectorRetrieval] Scored ${candidates.length} packages in ${duration}ms (Redis Hits: ${cacheHits}, Generated: ${newlyGenerated}). Top score: ${topResults[0]?.score?.toFixed(3) ?? 0} ("${topResults[0]?.package?.name}")`,
-      );
-
-      return topResults;
     }
 
-    // 3. Fallback Heuristic Matcher khi không có mạng hoặc chưa có API key
-    this.logger.warn(`[VectorRetrieval] Patient vector failed. Falling back to keyword matcher for ${candidates.length} candidates.`);
+    // 3. Fallback Heuristic Matcher khi RediSearch chưa sẵn sàng hoặc không có mạng / API key
+    this.logger.warn(`[VectorRetrieval] RediSearch did not return results. Using keyword matcher for ${candidates.length} candidates.`);
     return this.fallbackKeywordMatcher(patientEmbeddingText, candidates, topK);
   }
 
   /**
+   * Truy vấn KNN bằng RedisSearch (HNSW) trực tiếp trên RAM Redis (< 1ms)
+   */
+  private async searchWithRedisSearch(
+    queryVector: number[],
+    candidates: PackageForRetrieval[],
+    topK: number,
+  ): Promise<ScoredPackage[] | null> {
+    if (!this.redis.isEnabled()) return null;
+
+    try {
+      const float32 = new Float32Array(queryVector);
+      const vectorBuffer = Buffer.from(float32.buffer);
+
+      const fetchK = Math.min(Math.max(topK * 2, 25), 150);
+      const query = `*=>[KNN ${fetchK} @vector $BLOB AS score]`;
+
+      const tStart = performance.now();
+      const rawResult = await this.redis.call(
+        'FT.SEARCH',
+        'idx:packages_vss',
+        query,
+        'PARAMS',
+        '2',
+        'BLOB',
+        vectorBuffer,
+        'SORTBY',
+        'score',
+        'ASC',
+        'RETURN',
+        '2',
+        'packageId',
+        'score',
+        'DIALECT',
+        '2',
+      );
+      const duration = (performance.now() - tStart).toFixed(2);
+
+      if (!Array.isArray(rawResult)) return null;
+
+      let resultsList: any[] = [];
+      for (let i = 0; i < rawResult.length; i += 2) {
+        if (rawResult[i] === 'results' && Array.isArray(rawResult[i + 1])) {
+          resultsList = rawResult[i + 1];
+          break;
+        }
+      }
+
+      if (resultsList.length === 0) {
+        for (let i = 1; i < rawResult.length; i += 2) {
+          if (Array.isArray(rawResult[i + 1])) {
+            resultsList.push(['id', rawResult[i], 'extra_attributes', rawResult[i + 1]]);
+          }
+        }
+      }
+
+      if (resultsList.length === 0) return null;
+
+      const candidateMap = new Map<string, PackageForRetrieval>();
+      for (const c of candidates) {
+        candidateMap.set(c.id, c);
+      }
+
+      const scoredList: ScoredPackage[] = [];
+
+      for (const item of resultsList) {
+        if (!Array.isArray(item)) continue;
+        let packageId = '';
+        let dist = 1.0;
+
+        for (let j = 0; j < item.length; j += 2) {
+          if (item[j] === 'extra_attributes' && Array.isArray(item[j + 1])) {
+            const attrs = item[j + 1];
+            for (let k = 0; k < attrs.length; k += 2) {
+              if (attrs[k] === 'packageId') packageId = String(attrs[k + 1]);
+              if (attrs[k] === 'score') dist = parseFloat(attrs[k + 1]) || 1.0;
+            }
+          }
+        }
+
+        if (packageId && candidateMap.has(packageId)) {
+          const pkg = candidateMap.get(packageId)!;
+          const similarityScore = Math.max(0, 1 - dist);
+          scoredList.push({
+            package: pkg,
+            score: similarityScore,
+          });
+        }
+      }
+
+      if (scoredList.length > 0) {
+        this.logger.log(
+          `[VectorRetrieval: RedisSearch HNSW] ⚡ Completed in ${duration}ms. Matched ${scoredList.length} candidate packages from Redis RAM. Top score: ${scoredList[0]?.score?.toFixed(3)} ("${scoredList[0]?.package?.name}")`,
+        );
+        return scoredList.slice(0, topK);
+      }
+
+      return null;
+    } catch (err: any) {
+      this.logger.warn(`RedisSearch query failed, falling back to keyword matcher: ${err?.message}`);
+      return null;
+    }
+  }
+
+  /**
    * Tìm kiếm gói khám bằng Ngôn ngữ tự nhiên / Triệu chứng (Semantic Natural Language Search)
+   * Sử dụng duy nhất RediSearch (HNSW) trực tiếp trên RAM.
    */
   async searchByNaturalLanguage(
     queryText: string,
@@ -253,16 +349,10 @@ export class EmbeddingService {
     const queryVector = await this.embedText(queryText);
 
     if (queryVector) {
-      const scoredList: ScoredPackage[] = [];
-      for (const pkg of packages) {
-        const pkgVector = await this.getOrComputePackageVector(pkg);
-        if (pkgVector) {
-          const score = this.cosineSimilarity(queryVector, pkgVector);
-          scoredList.push({ package: pkg, score });
-        }
+      const redisSearchResults = await this.searchWithRedisSearch(queryVector, packages, topK);
+      if (redisSearchResults && redisSearchResults.length > 0) {
+        return redisSearchResults;
       }
-      scoredList.sort((a, b) => b.score - a.score);
-      return scoredList.slice(0, topK);
     }
 
     // Fallback keyword search

@@ -31,6 +31,8 @@ import { SocialType } from '../../../common/utils/social.type';
 import { JwtRefreshPayloadType } from './strategies/types/jwt-refresh-payload.type';
 import { HistoryService } from '../../history/history.service';
 import { HISTORY_ACTIONS } from '../../history/history';
+import { RedisService } from '../../../infrastructure/cache/redis/redis.service.js';
+import { TokenBlacklistService } from '../jwt-auth-core/token-blacklist.service.js';
 
 @Injectable()
 export class AuthService implements IAuthService {
@@ -43,6 +45,8 @@ export class AuthService implements IAuthService {
     @Inject(Services.FORGOT_PASSWORD)
     private readonly forgotPasswordService: IForgotPasswordService,
     private readonly historyService: HistoryService,
+    private readonly redis: RedisService,
+    private readonly tokenBlacklistService: TokenBlacklistService,
 
     private readonly configService: ConfigService<AllConfigType>,
     private readonly jwtService: JwtService,
@@ -288,16 +292,22 @@ export class AuthService implements IAuthService {
       return;
     }
 
-    // Nếu đăng ký bằng email: gửi mã OTP qua Gmail
+    // Nếu đăng ký bằng email: gửi mã OTP qua Gmail và lưu vào Redis
     const otp = this.generateOtp();
-    const otpData = this.createOtpData(otp);
+    const otpHash = this.hashOtp(otp);
+
+    // Lưu OTP vào Redis với TTL 10 phút (600s), cooldown chống spam 60s
+    if (this.redis.isEnabled()) {
+      await this.redis.set(`auth:otp:reg:${email}`, { hash: otpHash, attempts: 0 }, 600);
+      await this.redis.set(`auth:otp:cooldown:${email}`, '1', 60);
+    }
+
     const existingUser = email ? await this.usersService.findOneUser({ email }) : null;
     if (existingUser) {
       existingUser.password = registerDto.password;
       existingUser.fullName = registerDto.fullName;
       existingUser.role = UserRole.Patient;
       existingUser.status = UserStatus.Inactive;
-      Object.assign(existingUser, otpData);
       await this.usersService.saveUser(existingUser);
     } else {
       await this.usersService.createUser({
@@ -305,7 +315,6 @@ export class AuthService implements IAuthService {
         email: email!,
         status: UserStatus.Inactive,
         role: UserRole.Patient,
-        ...otpData,
       });
     }
     await this.historyService.create({
@@ -322,40 +331,42 @@ export class AuthService implements IAuthService {
     });
   }
 
-
   async verifyRegistrationOtp(email: string, otp: string): Promise<void> {
     const user = await this.usersService.findOneUser({ email });
     if (!user || user.status === UserStatus.Active) {
-      throw new HttpException('OTP không hợp lệ', HttpStatus.BAD_REQUEST);
+      throw new HttpException('Tài khoản không hợp lệ hoặc đã được kích hoạt', HttpStatus.BAD_REQUEST);
     }
-    if (!user.emailOtpHash || !user.emailOtpExpiresAt) {
-      throw new HttpException('OTP không tồn tại', HttpStatus.BAD_REQUEST);
+
+    if (!this.redis.isEnabled()) {
+      throw new HttpException('Hệ thống xác thực tạm thời gián đoạn', HttpStatus.SERVICE_UNAVAILABLE);
     }
-    if (user.emailOtpExpiresAt.getTime() < Date.now()) {
-      throw new HttpException('OTP đã hết hạn', HttpStatus.BAD_REQUEST);
+
+    const otpKey = `auth:otp:reg:${email}`;
+    const otpData = await this.redis.get<{ hash: string; attempts: number }>(otpKey);
+
+    if (!otpData || !otpData.hash) {
+      throw new HttpException('Mã OTP không tồn tại hoặc đã hết hạn. Vui lòng gửi lại OTP mới.', HttpStatus.BAD_REQUEST);
     }
-    if ((user.emailOtpAttempts || 0) >= 5) {
+
+    if ((otpData.attempts || 0) >= 5) {
       throw new HttpException(
-        'OTP đã bị khóa do nhập sai quá nhiều lần. Vui lòng gửi lại OTP.',
+        'Mã OTP đã bị khóa do nhập sai quá nhiều lần. Vui lòng gửi lại OTP mới.',
         HttpStatus.TOO_MANY_REQUESTS,
       );
     }
 
     const suppliedHash = this.hashOtp(otp);
-    const expected = Buffer.from(user.emailOtpHash, 'hex');
+    const expected = Buffer.from(otpData.hash, 'hex');
     const supplied = Buffer.from(suppliedHash, 'hex');
     if (expected.length !== supplied.length || !timingSafeEqual(expected, supplied)) {
-      user.emailOtpAttempts = (user.emailOtpAttempts || 0) + 1;
-      await this.usersService.saveUser(user);
-      throw new HttpException('OTP không chính xác', HttpStatus.BAD_REQUEST);
+      otpData.attempts = (otpData.attempts || 0) + 1;
+      await this.redis.set(otpKey, otpData, 600);
+      throw new HttpException('Mã OTP không chính xác', HttpStatus.BAD_REQUEST);
     }
 
     user.status = UserStatus.Active;
-    user.emailOtpHash = null;
-    user.emailOtpExpiresAt = null;
-    user.emailOtpLastSentAt = null;
-    user.emailOtpAttempts = 0;
     await this.usersService.saveUser(user);
+    await this.redis.delete(otpKey);
   }
 
   async resendRegistrationOtp(email: string): Promise<void> {
@@ -366,10 +377,9 @@ export class AuthService implements IAuthService {
     if (user.status === UserStatus.Active) {
       throw new HttpException('Email đã được xác thực', HttpStatus.CONFLICT);
     }
-    if (
-      user.emailOtpLastSentAt &&
-      Date.now() - user.emailOtpLastSentAt.getTime() < 60_000
-    ) {
+
+    const cooldownKey = `auth:otp:cooldown:${email}`;
+    if (this.redis.isEnabled() && (await this.redis.exists(cooldownKey))) {
       throw new HttpException(
         'Vui lòng chờ 60 giây trước khi gửi lại OTP',
         HttpStatus.TOO_MANY_REQUESTS,
@@ -377,8 +387,13 @@ export class AuthService implements IAuthService {
     }
 
     const otp = this.generateOtp();
-    Object.assign(user, this.createOtpData(otp));
-    await this.usersService.saveUser(user);
+    const otpHash = this.hashOtp(otp);
+
+    if (this.redis.isEnabled()) {
+      await this.redis.set(`auth:otp:reg:${email}`, { hash: otpHash, attempts: 0 }, 600);
+      await this.redis.set(cooldownKey, '1', 60);
+    }
+
     await this.mailsService.confirmRegisterUser({
       to: email,
       data: { otp, user: user.fullName ?? undefined, expiresInMinutes: 10 },
@@ -561,6 +576,8 @@ export class AuthService implements IAuthService {
         id: user.id,
       },
     });
+    // Thu hồi tức thì toàn bộ token đã cấp trước đó của user này
+    await this.tokenBlacklistService.revokeUser(user.id);
     await this.usersService.saveUser(user);
     await this.forgotPasswordService.softDelete(forgotReq.id);
     await this.historyService.create({
@@ -684,10 +701,21 @@ export class AuthService implements IAuthService {
     }
   }
 
-  async logout(data: Pick<JwtRefreshPayloadType, 'sessionId'>) {
-    return this.sessionService.softDelete({
-      id: data.sessionId,
-    });
+  async logout(data: { sessionId?: string; token?: string }): Promise<void> {
+    if (data.sessionId) {
+      await this.sessionService.softDelete({
+        id: data.sessionId,
+      });
+    }
+
+    if (data.token) {
+      try {
+        const decoded = this.jwtService.decode(data.token) as { exp?: number };
+        await this.tokenBlacklistService.blacklistToken(data.token, decoded?.exp);
+      } catch (err: any) {
+        this.logger.warn(`Failed to blacklist token on logout: ${err?.message}`);
+      }
+    }
   }
 
   private async getTokensData(data: {
@@ -748,22 +776,6 @@ export class AuthService implements IAuthService {
 
   private hashOtp(otp: string): string {
     return createHash('sha256').update(otp).digest('hex');
-  }
-
-  private createOtpData(otp: string): Pick<
-    User,
-    | 'emailOtpHash'
-    | 'emailOtpExpiresAt'
-    | 'emailOtpLastSentAt'
-    | 'emailOtpAttempts'
-  > {
-    const now = new Date();
-    return {
-      emailOtpHash: this.hashOtp(otp),
-      emailOtpExpiresAt: new Date(now.getTime() + 10 * 60 * 1000),
-      emailOtpLastSentAt: now,
-      emailOtpAttempts: 0,
-    };
   }
 
   private parseDurationToMs(duration: string): number {

@@ -80,6 +80,43 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
     return result === 1;
   }
 
+  async sadd(key: string, ...members: string[]): Promise<void> {
+    if (!this.client || members.length === 0) return;
+    await this.client.sadd(key, ...members);
+  }
+
+  async srem(key: string, ...members: string[]): Promise<void> {
+    if (!this.client || members.length === 0) return;
+    await this.client.srem(key, ...members);
+  }
+
+  async smembers(key: string): Promise<string[]> {
+    if (!this.client) return [];
+    return await this.client.smembers(key);
+  }
+
+  async expire(key: string, ttlSeconds: number): Promise<void> {
+    if (!this.client) return;
+    await this.client.expire(key, ttlSeconds);
+  }
+
+  async exists(key: string): Promise<boolean> {
+    if (!this.client) return false;
+    return (await this.client.exists(key)) === 1;
+  }
+
+  getClient(): Redis | undefined {
+    return this.client;
+  }
+
+  /**
+   * Gọi trực tiếp một lệnh Redis tùy ý (hỗ trợ RediSearch FT.SEARCH, FT.CREATE, v.v.)
+   */
+  async call(command: string, ...args: (string | number | Buffer)[]): Promise<any> {
+    if (!this.client) return null;
+    return (this.client as any).call(command, ...args);
+  }
+
   private config(): RedisConfig {
     return this.configService.getOrThrow<RedisConfig>('redis');
   }

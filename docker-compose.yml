@@ -29,14 +29,15 @@ services:
       timeout: 5s
       retries: 10
   redis:
-    image: redis:7.4-alpine
+    image: redis/redis-stack-server:latest
     container_name: vitacare-redis
     restart: unless-stopped
-    command: ["redis-server", "--appendonly", "yes", "--requirepass", "vitacare_local"]
+    environment:
+      REDIS_ARGS: "--requirepass vitacare_local --appendonly yes"
     ports: ["6379:6379"]
     volumes: ["vitacare_redis_data:/data"]
     healthcheck:
-      test: ["CMD", "redis-cli", "-a", "vitacare_local", "ping"]
+      test: ["CMD-SHELL", "redis-cli -a vitacare_local ping | grep PONG"]
       interval: 5s
       timeout: 5s
       retries: 10

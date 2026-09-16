@@ -46,10 +46,6 @@ export class UsersService implements IUsersService {
         roleId: dto.roleId ?? null,
         customPermissions: dto.customPermissions as unknown as Prisma.InputJsonValue | undefined,
         hash: dto.hash ?? null,
-        emailOtpHash: (dto as any).emailOtpHash ?? null,
-        emailOtpExpiresAt: (dto as any).emailOtpExpiresAt ?? null,
-        emailOtpLastSentAt: (dto as any).emailOtpLastSentAt ?? null,
-        emailOtpAttempts: (dto as any).emailOtpAttempts ?? 0,
       },
     });
 
@@ -244,10 +240,6 @@ export class UsersService implements IUsersService {
       roleId: payload.roleId,
       customPermissions: payload.customPermissions === null ? Prisma.JsonNull : payload.customPermissions as Prisma.InputJsonValue | undefined,
       hash: payload.hash,
-      emailOtpHash: payload.emailOtpHash,
-      emailOtpExpiresAt: payload.emailOtpExpiresAt,
-      emailOtpLastSentAt: payload.emailOtpLastSentAt,
-      emailOtpAttempts: payload.emailOtpAttempts,
       isBlocked: payload.isBlocked,
       blockedAt: payload.blockedAt,
       isDeleted: payload.isDeleted,

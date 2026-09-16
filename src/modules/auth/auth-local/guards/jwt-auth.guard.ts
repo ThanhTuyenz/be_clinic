@@ -12,6 +12,7 @@ import { Request } from 'express';
 import { Services } from 'src/common/utils/constants';
 import { IS_PUBLIC_KEY } from 'src/common/decorators/public.decorator';
 import type { IUsersService } from 'src/modules/auth/users/users';
+import { TokenBlacklistService } from '../../jwt-auth-core/token-blacklist.service.js';
 
 type JwtPayload = {
   id: string;
@@ -43,6 +44,7 @@ export class JwtAuthGuard implements CanActivate {
     private readonly reflector: Reflector,
     private readonly jwtService: JwtService,
     @Inject(Services.USERS) private readonly usersService: IUsersService,
+    private readonly tokenBlacklistService: TokenBlacklistService,
   ) {}
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
@@ -71,15 +73,21 @@ export class JwtAuthGuard implements CanActivate {
     if (isPublic) {
       if (token) {
         try {
-          const decoded = this.jwtService.verify<JwtPayload>(token);
-          if (decoded?.id) {
-            request.user = {
-              id: decoded.id,
-              sessionId: decoded.sessionId || '',
-              email: decoded.email,
-              role: decoded.role,
-              userType: decoded.role,
-            };
+          const isBlacklisted = await this.tokenBlacklistService.isTokenBlacklisted(token);
+          if (!isBlacklisted) {
+            const decoded = this.jwtService.verify<JwtPayload>(token);
+            if (decoded?.id) {
+              const isRevoked = await this.tokenBlacklistService.isUserRevoked(decoded.id, decoded.iat);
+              if (!isRevoked) {
+                request.user = {
+                  id: decoded.id,
+                  sessionId: decoded.sessionId || '',
+                  email: decoded.email,
+                  role: decoded.role,
+                  userType: decoded.role,
+                };
+              }
+            }
           }
         } catch {
           // Token không hợp lệ trên public route thì bỏ qua
@@ -93,12 +101,26 @@ export class JwtAuthGuard implements CanActivate {
       throw new UnauthorizedException('Token không hợp lệ hoặc thiếu');
     }
 
+    // 1. Kiểm tra Token Blacklist (đã Logout chưa)
+    const isBlacklisted = await this.tokenBlacklistService.isTokenBlacklisted(token);
+    if (isBlacklisted) {
+      this.logger.warn('Token đã bị thu hồi (nằm trong Blacklist).');
+      throw new UnauthorizedException('Token đã bị thu hồi, vui lòng đăng nhập lại');
+    }
+
     try {
       const decoded = this.jwtService.verify<JwtPayload>(token);
 
       if (!decoded?.id) {
         this.logger.warn('Token thiếu thông tin user id.');
         throw new UnauthorizedException('Token không hợp lệ hoặc thiếu');
+      }
+
+      // 2. Kiểm tra tài khoản có bị thu hồi toàn bộ phiên (Đổi mật khẩu / Khóa tài khoản)
+      const isRevoked = await this.tokenBlacklistService.isUserRevoked(decoded.id, decoded.iat);
+      if (isRevoked) {
+        this.logger.warn(`Token của user ${decoded.id} đã bị vô hiệu do thay đổi bảo mật.`);
+        throw new UnauthorizedException('Phiên đăng nhập đã hết hiệu lực do thay đổi bảo mật');
       }
 
       const requestUser: RequestUser = {

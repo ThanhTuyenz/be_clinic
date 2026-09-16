@@ -140,7 +140,13 @@ export class SystemCatalogService {
           },
         }
       : resource === 'rooms' ? { branch: { select: { id: true, name: true, address: true } }, specialties: { where: { isActive: true }, include: { specialty: { select: { id: true, name: true } } }, orderBy: { priority: 'desc' } } } : undefined
-    return { items: await model.findMany({ where, include, orderBy: { name: 'asc' }, take: 200 }) }
+    const defaultOrderBy: any =
+      resource === 'specialties'
+        ? { id: 'asc' }
+        : resource === 'rooms'
+        ? { code: 'asc' }
+        : { name: 'asc' }
+    return { items: await model.findMany({ where, include, orderBy: defaultOrderBy, take: 200 }) }
   }
 
 

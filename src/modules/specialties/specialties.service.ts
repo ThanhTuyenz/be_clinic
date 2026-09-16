@@ -27,7 +27,7 @@ export class SpecialtiesService {
           ? { branches: { some: { branchId: effectiveBranchId, isActive: true } } }
           : {}),
       } as any,
-      orderBy: [{ name: 'asc' }],
+      orderBy: [{ id: 'asc' }],
       select: {
         id: true,
         name: true,
