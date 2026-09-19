@@ -62,6 +62,7 @@ model Specialty {
   name         String            @unique @db.VarChar(100)
   slug         String?           @unique @db.VarChar(120)
   description  String?
+  symptoms     String[]          @default([])
   iconUrl      String?           @map("icon_url") @db.VarChar(500)
   isActive     Boolean           @default(true) @map("is_active")
   sortOrder    Int               @default(0) @map("sort_order")

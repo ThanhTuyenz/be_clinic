@@ -8,6 +8,7 @@ export interface PackageForRetrieval {
   code: string;
   name: string;
   description: string;
+  symptoms?: string[];
   price: number;
   durationMin: number;
   specialtyId: number | null;
@@ -55,31 +56,20 @@ export class EmbeddingService {
   async embedText(text: string): Promise<number[] | null> {
     if (!this.aiClient || !text.trim()) return null;
 
-    const candidateModels = [
-      this.embeddingModel,
-      'gemini-embedding-001',
-      'embedding-001',
-    ];
+    try {
+      const response = await this.aiClient.models.embedContent({
+        model: this.embeddingModel,
+        contents: text.trim().slice(0, 2048),
+      });
 
-    for (const model of [...new Set(candidateModels)]) {
-      try {
-        const response = await this.aiClient.models.embedContent({
-          model,
-          contents: text.trim().slice(0, 2048),
-        });
-
-        const values =
-          (response as any)?.embedding?.values ||
-          (response as any)?.embeddings?.[0]?.values;
-        if (Array.isArray(values) && values.length > 0) {
-          return values;
-        }
-      } catch (err: any) {
-        if (err?.message?.includes('404') || err?.message?.includes('not found')) {
-          continue;
-        }
-        this.logger.warn(`Embedding generation failed with model ${model} for text "${text.slice(0, 50)}...": ${err?.message}`);
+      const values =
+        (response as any)?.embedding?.values ||
+        (response as any)?.embeddings?.[0]?.values;
+      if (Array.isArray(values) && values.length > 0) {
+        return values;
       }
+    } catch (err: any) {
+      this.logger.warn(`Embedding generation failed with model ${this.embeddingModel} for text "${text.slice(0, 50)}...": ${err?.message}`);
     }
     return null;
   }
@@ -106,10 +96,13 @@ export class EmbeddingService {
   /**
    * Tạo văn bản đại diện ngữ nghĩa y khoa của một gói khám
    */
-  buildPackageEmbeddingText(pkg: { name: string; specialtyName?: string; description?: string }): string {
+  buildPackageEmbeddingText(pkg: { name: string; specialtyName?: string; description?: string; symptoms?: string[] }): string {
     const specialty = pkg.specialtyName ? `Chuyên khoa: ${pkg.specialtyName}. ` : '';
-    const desc = pkg.description ? `Mô tả & Chỉ định: ${pkg.description.slice(0, 300)}` : '';
-    return `Gói khám: ${pkg.name}. ${specialty}${desc}`.trim();
+    const desc = pkg.description ? `Mô tả: ${pkg.description.slice(0, 500)}. ` : '';
+    const symptomsStr = Array.isArray(pkg.symptoms) && pkg.symptoms.length > 0
+      ? `Triệu chứng lâm sàng: ${pkg.symptoms.join(', ')}`
+      : '';
+    return `Gói khám: ${pkg.name}. ${specialty}${desc}${symptomsStr}`.trim();
   }
 
   /**
@@ -179,7 +172,7 @@ export class EmbeddingService {
             'vector', vectorBuffer,
           );
           // Dọn dẹp legacy key nếu có
-          await client.del(`vector:pkg:${pkg.id}`).catch(() => {});
+          await client.del(`vector:pkg:${pkg.id}`).catch(() => { });
           this.logger.log(`[Embedding] Saved package vector directly into RedisSearch Hash ${hashKey}`);
         }
       } catch (err: any) {
@@ -339,7 +332,7 @@ export class EmbeddingService {
 
   /**
    * Tìm kiếm gói khám bằng Ngôn ngữ tự nhiên / Triệu chứng (Semantic Natural Language Search)
-   * Sử dụng duy nhất RediSearch (HNSW) trực tiếp trên RAM.
+   * Sử dụng RediSearch (HNSW) Vector Similarity trực tiếp trên RAM với Google Gemini Embedding.
    */
   async searchByNaturalLanguage(
     queryText: string,
@@ -370,10 +363,11 @@ export class EmbeddingService {
     const tokens = query
       .toLowerCase()
       .split(/[\s,.-]+/)
-      .filter((t) => t.length > 2);
+      .filter((t) => t.length >= 2);
 
     const scored = candidates.map((pkg) => {
-      const targetText = `${pkg.name} ${pkg.specialtyName} ${pkg.description}`.toLowerCase();
+      const symptomsStr = (pkg.symptoms || []).join(' ');
+      const targetText = `${pkg.name} ${pkg.specialtyName} ${pkg.description} ${symptomsStr}`.toLowerCase();
       let matchCount = 0;
       for (const t of tokens) {
         if (targetText.includes(t)) matchCount++;

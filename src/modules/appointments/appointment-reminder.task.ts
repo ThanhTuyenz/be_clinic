@@ -6,13 +6,7 @@ import { HttpSmsService } from '../sms/httpsms.service.js';
 
 /**
  * Cron job tự động nhắc lịch hẹn bệnh nhân.
- *
- * Chạy mỗi giờ đúng, quét 2 mốc thời gian:
  *  - 24 giờ trước giờ khám → gửi reminder + hướng dẫn y tế
- *  -  2 giờ trước giờ khám → gửi reminder cuối
- *
- * Dùng flag `reminderSent24h` / `reminderSent2h` trên Appointment
- * để đảm bảo mỗi bệnh nhân chỉ nhận 1 lần.
  */
 @Injectable()
 export class AppointmentReminderTask {
@@ -22,16 +16,13 @@ export class AppointmentReminderTask {
     private readonly prisma: PrismaService,
     private readonly mails: MailsService,
     private readonly sms: HttpSmsService,
-  ) {}
+  ) { }
 
-  // Chạy mỗi giờ đúng (:00)
+  // Chạy mỗi giờ đúng (:00) - chỉ gửi nhắc trước 24 giờ để tối ưu chi phí SMS
   @Cron('0 * * * *')
   async handleReminders() {
-    this.logger.debug('Bắt đầu quét nhắc lịch...');
-    await Promise.allSettled([
-      this.sendReminders(24),
-      this.sendReminders(2),
-    ]);
+    this.logger.debug('Bắt đầu quét nhắc lịch 24h...');
+    await this.sendReminders(24);
   }
 
   private async sendReminders(hoursAhead: 24 | 2) {
@@ -46,7 +37,7 @@ export class AppointmentReminderTask {
     // Tìm tất cả lịch hẹn BOOKED chưa được nhắc, có giờ khám trong cửa sổ
     const appointments = await this.prisma.appointment.findMany({
       where: {
-        status: { in: ['BOOKED', 'PENDING_PAYMENT'] },
+        status: { in: ['CONFIRMED', 'CHECKED_IN'] },
         [hoursAhead === 24 ? 'reminderSent24h' : 'reminderSent2h']: false,
         scheduleSlot: {
           startTime: { gte: windowStart, lt: windowEnd },
@@ -154,14 +145,14 @@ export class AppointmentReminderTask {
   private buildMedicalNote(hoursAhead: number, doctorName: string | null, serviceName: string | null): string {
     const notes: string[] = [];
     if (hoursAhead === 24) {
-      notes.push('📋 Chuẩn bị CMND/Căn cước công dân và thẻ BHYT (nếu có).');
+      notes.push('📋 Vui lòng mang theo CCCD/mã khám bệnh (phiếu hẹn) hoặc thẻ BHYT (nếu có) để check-in nhanh tại quầy tiếp tân.');
       if (serviceName?.toLowerCase().includes('siêu âm') || serviceName?.toLowerCase().includes('xét nghiệm')) {
         notes.push('⚠️ Vui lòng nhịn ăn ít nhất 6 giờ trước khi đến khám.');
       }
-      notes.push('🕐 Đến trước giờ hẹn 15 phút để làm thủ tục.');
+      notes.push('🕐 Đến trước giờ hẹn 15 phút để làm thủ tục tiếp nhận.');
     } else {
       notes.push('⏰ Lịch khám của bạn diễn ra trong khoảng 2 giờ nữa.');
-      notes.push('📍 Vui lòng đến đúng giờ và mang theo mã QR check-in.');
+      notes.push('📍 Vui lòng đến đúng giờ và mang theo CCCD hoặc mã check-in.');
     }
     return notes.join(' ');
   }

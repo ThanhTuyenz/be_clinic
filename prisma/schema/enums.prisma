@@ -39,24 +39,18 @@ enum SlotStatus {
 }
 
 enum AppointmentStatus {
-  PENDING_PAYMENT
-  BOOKED
+  HOLD
+  CONFIRMED
   CHECKED_IN
-  IN_EXAMINATION
   COMPLETED
   CANCELLED
-  EXPIRED
   NO_SHOW
-  REFUND_REQUIRED
-  MANUAL_REVIEW
 }
 
 enum BookingOrderStatus {
-  PENDING_PAYMENT
+  UNPAID
   PAID
-  PARTIALLY_CANCELLED
   CANCELLED
-  REFUNDED
 }
 
 enum InvoiceStatus {
@@ -70,12 +64,7 @@ enum PaymentStatus {
   PENDING
   SUCCESS
   FAILED
-  EXPIRED
-  CANCELLED
-  LATE_SUCCESS
-  REFUND_REQUIRED
   REFUNDED
-  MANUAL_REVIEW
 }
 
 enum PaymentMethod {

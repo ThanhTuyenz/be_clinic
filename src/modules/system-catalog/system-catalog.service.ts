@@ -24,6 +24,7 @@ export class SystemCatalogService {
             code: pkg.code,
             name: pkg.name,
             description: pkg.description || '',
+            symptoms: (pkg as any).symptoms || [],
             price: Number(pkg.price) || 0,
             durationMin: pkg.durationMin || 30,
             specialtyId: pkg.specialtyId,
@@ -40,6 +41,7 @@ export class SystemCatalogService {
             code: pkg.code,
             name: pkg.name,
             description: pkg.description || '',
+            symptoms: (pkg as any).symptoms || [],
             price: Number(pkg.price) || 0,
             durationMin: pkg.durationMin || 30,
             specialtyId: pkg.specialtyId,
@@ -276,7 +278,13 @@ export class SystemCatalogService {
       if (!clinicId) { const clinic = await this.prisma.clinic.findFirst({ where: { isActive: true } }); if (!clinic) throw new BadRequestException('Chưa có phòng khám để gán chi nhánh'); clinicId = clinic.id }
       return { name: String(b.name).trim(), code: String(b.code || '').trim(), address: b.address || null, phoneNumber: b.phoneNumber || null, timezone: b.timezone || 'Asia/Ho_Chi_Minh', isActive: b.isActive ?? true, ...(creating ? { clinicId } : {}) }
     }
-    if (resource === 'specialties') return { name: String(b.name).trim(), description: b.description || null }
+    if (resource === 'specialties') {
+      return {
+        name: String(b.name).trim(),
+        description: b.description || null,
+        symptoms: Array.isArray(b.symptoms) ? b.symptoms.map(String).map((s: string) => s.trim().toLowerCase()).filter(Boolean) : [],
+      }
+    }
     if (resource === 'branch-specialties') {
       const branchId = String(b.branchId || ''), specialtyId = Number(b.specialtyId)
       if (!branchId || !Number.isInteger(specialtyId)) throw new BadRequestException('Vui lòng chọn cơ sở và chuyên khoa')
@@ -302,6 +310,7 @@ export class SystemCatalogService {
         name: String(b.name).trim(),
         code: generatedPkgCode,
         description: b.description || null,
+        symptoms: Array.isArray(b.symptoms) ? b.symptoms.map(String).map((s: string) => s.trim().toLowerCase()).filter(Boolean) : [],
         specialtyId: b.specialtyId ? Number(b.specialtyId) : null,
         price: Number(b.price) || 0,
         durationMin: Number(b.durationMin) || 30,
@@ -421,6 +430,7 @@ export class SystemCatalogService {
         name: String(b.name).trim(),
         code: pkgCode,
         description: b.description || null,
+        symptoms: Array.isArray(b.symptoms) ? b.symptoms.map(String).map((s: string) => s.trim().toLowerCase()).filter(Boolean) : [],
         branchBookingMethodId: bbmList[0]?.id || null,
         specialtyId: b.specialtyId ? Number(b.specialtyId) : null,
         price: Number(b.price) || 0,

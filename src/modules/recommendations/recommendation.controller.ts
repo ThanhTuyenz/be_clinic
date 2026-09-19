@@ -44,5 +44,15 @@ export class RecommendationController {
     this.logger.log(`[API POST] /patient-profile/${profileId}/refresh (Forcing AI re-analysis)...`);
     return this.recommendationService.analyzeAndCacheRecommendations(profileId, branchId);
   }
+
+  @Get('suggest-symptoms')
+  @ApiOperation({ summary: 'AI phân tích và gợi ý triệu chứng liên quan cho gói khám' })
+  async suggestSymptoms(
+    @Query('name') name: string,
+    @Query('specialty') specialty?: string,
+  ) {
+    this.logger.log(`[API GET] /suggest-symptoms?name="${name}"`);
+    return this.recommendationService.suggestSymptomsForPackage(name, specialty);
+  }
 }
 

@@ -39,3 +39,101 @@ export class CreatePatientProfileDto {
 }
 
 export class UpdatePatientProfileDto extends PartialType(CreatePatientProfileDto) {}
+
+export class PatientProfileResponseDto {
+  @ApiProperty({ description: 'ID duy nhất của hồ sơ bệnh nhân' })
+  id: string;
+
+  @ApiPropertyOptional({ description: 'Mã định danh bệnh nhân (BN26xxxxx)' })
+  patientCode?: string | null;
+
+  @ApiPropertyOptional({ description: 'ID tài khoản sở hữu' })
+  accountId?: string | null;
+
+  @ApiProperty({ description: 'Họ và tên đầy đủ' })
+  fullName: string;
+
+  @ApiProperty({ description: 'Ngày tháng năm sinh' })
+  dateOfBirth: Date | string;
+
+  @ApiPropertyOptional({ enum: GenderDto })
+  gender?: string | null;
+
+  @ApiPropertyOptional()
+  phoneNumber?: string | null;
+
+  @ApiPropertyOptional({ description: 'Số CCCD / CMND' })
+  nationalId?: string | null;
+
+  @ApiPropertyOptional({ description: 'Mã số thẻ BHYT' })
+  healthInsuranceNumber?: string | null;
+
+  @ApiPropertyOptional()
+  provinceCode?: string | null;
+
+  @ApiPropertyOptional()
+  provinceName?: string | null;
+
+  @ApiPropertyOptional()
+  districtCode?: string | null;
+
+  @ApiPropertyOptional()
+  districtName?: string | null;
+
+  @ApiPropertyOptional()
+  wardCode?: string | null;
+
+  @ApiPropertyOptional()
+  wardName?: string | null;
+
+  @ApiPropertyOptional()
+  streetAddress?: string | null;
+
+  @ApiPropertyOptional({ description: 'Địa chỉ đầy đủ đã tổng hợp' })
+  address?: string | null;
+
+  @ApiPropertyOptional()
+  ethnicity?: string | null;
+
+  @ApiPropertyOptional({ default: 'Việt Nam' })
+  nationality?: string | null;
+
+  @ApiPropertyOptional()
+  occupation?: string | null;
+
+  @ApiPropertyOptional()
+  guardianName?: string | null;
+
+  @ApiPropertyOptional()
+  guardianPhone?: string | null;
+
+  @ApiPropertyOptional()
+  guardianRelationship?: string | null;
+
+  @ApiPropertyOptional({ description: 'Tiền sử bệnh lý mạn tính' })
+  medicalHistory?: string | null;
+
+  @ApiPropertyOptional({ description: 'Tiền sử dị ứng' })
+  allergies?: string | null;
+
+  @ApiPropertyOptional()
+  bloodGroup?: string | null;
+
+  @ApiPropertyOptional()
+  height?: number | null;
+
+  @ApiPropertyOptional()
+  weight?: number | null;
+
+  @ApiProperty({ description: 'Mối quan hệ với tài khoản (SELF, CHILD, PARENT, SPOUSE, OTHER)' })
+  relationshipToAccount: string;
+
+  @ApiProperty({ description: 'Có phải hồ sơ chính hay không' })
+  isMainProfile: boolean;
+
+  @ApiProperty()
+  createdAt: Date | string;
+
+  @ApiProperty()
+  updatedAt: Date | string;
+}

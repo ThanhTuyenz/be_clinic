@@ -10,6 +10,7 @@ model ServicePackage {
   slug                  String?  @unique @db.VarChar(150)
   name                  String   @db.VarChar(150)
   description           String?  @db.Text
+  symptoms              String[] @default([])
   price                 Decimal  @db.Decimal(12, 2)
   durationMin           Int      @default(30) @map("duration_min")
   sessionType           String   @default("ALL_DAY") @map("session_type") @db.VarChar(20)

@@ -8,7 +8,7 @@ model BookingOrder {
   accountId       String             @map("account_id") @db.Uuid
   orderCode       String             @unique @map("order_code") @db.VarChar(30)
   groupType       String             @default("SINGLE") @map("group_type") @db.VarChar(20) // SINGLE | FAMILY
-  status          BookingOrderStatus @default(PENDING_PAYMENT)
+  status          BookingOrderStatus @default(UNPAID)
   totalAmount     Decimal            @map("total_amount") @db.Decimal(12, 2)
   note            String?            @db.Text
   createdAt       DateTime           @default(now()) @map("created_at") @db.Timestamptz(3)
@@ -35,7 +35,7 @@ model Appointment {
   servicePrice                 Decimal?           @map("service_price") @db.Decimal(12, 2)
   symptomsDescription          String?            @map("symptoms_description")
   bookedViaAi                  Boolean            @default(false) @map("booked_via_ai")
-  status                       AppointmentStatus  @default(PENDING_PAYMENT)
+  status                       AppointmentStatus  @default(HOLD)
   holdExpiresAt                DateTime?          @map("hold_expires_at") @db.Timestamptz(3)
   queueNumber                  Int?               @map("queue_number")
   checkedInAt                  DateTime?          @map("checked_in_at") @db.Timestamptz(3)

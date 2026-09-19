@@ -1,7 +1,11 @@
 import { BadRequestException, ConflictException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../infrastructure/database/prisma/prisma.service.js';
-import { CreatePatientProfileDto, UpdatePatientProfileDto } from './patient-profiles.dto.js';
+import {
+  CreatePatientProfileDto,
+  PatientProfileResponseDto,
+  UpdatePatientProfileDto,
+} from './patient-profiles.dto.js';
 import { RecommendationService } from '../recommendations/recommendation.service.js';
 
 @Injectable()
@@ -11,11 +15,14 @@ export class PatientProfilesService {
     private readonly recommendationService: RecommendationService,
   ) {}
 
-  list(accountId: string) {
-    return this.prisma.patientProfile.findMany({ where: { accountId }, orderBy: [{ isMainProfile: 'desc' }, { createdAt: 'asc' }] });
+  async list(accountId: string): Promise<PatientProfileResponseDto[]> {
+    return this.prisma.patientProfile.findMany({
+      where: { accountId },
+      orderBy: [{ isMainProfile: 'desc' }, { createdAt: 'asc' }],
+    });
   }
 
-  async create(accountId: string, dto: CreatePatientProfileDto) {
+  async create(accountId: string, dto: CreatePatientProfileDto): Promise<PatientProfileResponseDto> {
     const dob = new Date(`${dto.dateOfBirth}T00:00:00.000Z`);
     const ageDiffMs = Date.now() - dob.getTime();
     const age = Math.abs(new Date(ageDiffMs).getUTCFullYear() - 1970);
@@ -92,36 +99,17 @@ export class PatientProfilesService {
 
         return tx.patientProfile.create({
           data: {
+            ...dto,
             accountId,
             patientCode,
             fullName: dto.fullName.trim(),
             dateOfBirth: new Date(`${dto.dateOfBirth}T00:00:00.000Z`),
-            gender: dto.gender,
-            phoneNumber: dto.phoneNumber?.trim() || null,
             nationalId: cleanedNationalId,
             healthInsuranceNumber: cleanedHealthInsuranceNumber,
-            provinceCode: dto.provinceCode?.trim() || null,
-            provinceName: dto.provinceName?.trim() || null,
-            districtCode: dto.districtCode?.trim() || null,
-            districtName: dto.districtName?.trim() || null,
-            wardCode: dto.wardCode?.trim() || null,
-            wardName: dto.wardName?.trim() || null,
-            streetAddress: dto.streetAddress?.trim() || null,
             address: computedAddress || null,
-            ethnicity: dto.ethnicity?.trim() || null,
-            nationality: dto.nationality?.trim() || 'Việt Nam',
-            occupation: dto.occupation?.trim() || null,
-            guardianName: dto.guardianName?.trim() || null,
-            guardianPhone: dto.guardianPhone?.trim() || null,
-            guardianRelationship: dto.guardianRelationship?.trim() || null,
-            medicalHistory: dto.medicalHistory?.trim() || null,
-            allergies: dto.allergies?.trim() || null,
-            bloodGroup: dto.bloodGroup?.trim() || null,
-            height: dto.height !== undefined && dto.height !== null ? Number(dto.height) : null,
-            weight: dto.weight !== undefined && dto.weight !== null ? Number(dto.weight) : null,
             relationshipToAccount: dto.relationshipToAccount ?? (makeMain ? 'SELF' : 'OTHER'),
-            isMainProfile: makeMain
-          }
+            isMainProfile: makeMain,
+          },
         });
       });
       this.recommendationService.triggerAsyncRecommendation(created.id);
@@ -134,7 +122,7 @@ export class PatientProfilesService {
     }
   }
 
-  async update(actorId: string, id: string, dto: UpdatePatientProfileDto, isStaff = false) {
+  async update(actorId: string, id: string, dto: UpdatePatientProfileDto, isStaff = false): Promise<PatientProfileResponseDto> {
     const profile = isStaff
       ? await this.prisma.patientProfile.findUnique({ where: { id } })
       : await this.prisma.patientProfile.findFirst({ where: { id, accountId: actorId } });
@@ -188,43 +176,23 @@ export class PatientProfilesService {
     }
 
     const computedAddress = dto.address?.trim() || [
-      dto.streetAddress !== undefined ? dto.streetAddress?.trim() : profile.streetAddress,
-      dto.wardName !== undefined ? dto.wardName?.trim() : profile.wardName,
-      dto.districtName !== undefined ? dto.districtName?.trim() : profile.districtName,
-      dto.provinceName !== undefined ? dto.provinceName?.trim() : profile.provinceName,
+      dto.streetAddress !== undefined ? dto.streetAddress?.trim() || null : profile.streetAddress,
+      dto.wardName !== undefined ? dto.wardName?.trim() || null : profile.wardName,
+      dto.districtName !== undefined ? dto.districtName?.trim() || null : profile.districtName,
+      dto.provinceName !== undefined ? dto.provinceName?.trim() || null : profile.provinceName,
     ].filter(Boolean).join(', ');
 
     try {
       const updated = await this.prisma.patientProfile.update({
         where: { id },
         data: {
+          ...dto,
           patientCode: syncedPatientCode,
           ...(dto.fullName && { fullName: dto.fullName.trim() }),
           ...(dto.dateOfBirth && { dateOfBirth: new Date(`${dto.dateOfBirth}T00:00:00.000Z`) }),
-          ...(dto.gender !== undefined && { gender: dto.gender }),
-          ...(dto.phoneNumber !== undefined && { phoneNumber: dto.phoneNumber?.trim() || null }),
           ...(dto.nationalId !== undefined && { nationalId: effectiveNationalId }),
           ...(dto.healthInsuranceNumber !== undefined && { healthInsuranceNumber: effectiveHealthInsurance }),
-          ...(dto.provinceCode !== undefined && { provinceCode: dto.provinceCode?.trim() || null }),
-          ...(dto.provinceName !== undefined && { provinceName: dto.provinceName?.trim() || null }),
-          ...(dto.districtCode !== undefined && { districtCode: dto.districtCode?.trim() || null }),
-          ...(dto.districtName !== undefined && { districtName: dto.districtName?.trim() || null }),
-          ...(dto.wardCode !== undefined && { wardCode: dto.wardCode?.trim() || null }),
-          ...(dto.wardName !== undefined && { wardName: dto.wardName?.trim() || null }),
-          ...(dto.streetAddress !== undefined && { streetAddress: dto.streetAddress?.trim() || null }),
           ...(computedAddress ? { address: computedAddress } : {}),
-          ...(dto.ethnicity !== undefined && { ethnicity: dto.ethnicity?.trim() || null }),
-          ...(dto.nationality !== undefined && { nationality: dto.nationality?.trim() || null }),
-          ...(dto.occupation !== undefined && { occupation: dto.occupation?.trim() || null }),
-          ...(dto.guardianName !== undefined && { guardianName: dto.guardianName?.trim() || null }),
-          ...(dto.guardianPhone !== undefined && { guardianPhone: dto.guardianPhone?.trim() || null }),
-          ...(dto.guardianRelationship !== undefined && { guardianRelationship: dto.guardianRelationship?.trim() || null }),
-          ...(dto.medicalHistory !== undefined && { medicalHistory: dto.medicalHistory?.trim() || null }),
-          ...(dto.allergies !== undefined && { allergies: dto.allergies?.trim() || null }),
-          ...(dto.bloodGroup !== undefined && { bloodGroup: dto.bloodGroup?.trim() || null }),
-          ...(dto.height !== undefined && { height: dto.height !== null ? Number(dto.height) : null }),
-          ...(dto.weight !== undefined && { weight: dto.weight !== null ? Number(dto.weight) : null }),
-          ...(dto.relationshipToAccount !== undefined && { relationshipToAccount: dto.relationshipToAccount }),
         },
       });
       await this.recommendationService.invalidateCache(id);
@@ -386,34 +354,7 @@ export class PatientProfilesService {
         surgicalHistory: null,
         familyHistory: null,
         notes: null,
-        profile: {
-          id: profile.id,
-          patientCode: profile.patientCode,
-          fullName: profile.fullName,
-          dateOfBirth: profile.dateOfBirth,
-          gender: profile.gender,
-          phoneNumber: profile.phoneNumber,
-          nationalId: profile.nationalId,
-          healthInsuranceNumber: profile.healthInsuranceNumber,
-          address: profile.address,
-          provinceName: profile.provinceName,
-          districtName: profile.districtName,
-          wardName: profile.wardName,
-          streetAddress: profile.streetAddress,
-          ethnicity: profile.ethnicity,
-          nationality: profile.nationality,
-          occupation: profile.occupation,
-          guardianName: profile.guardianName,
-          guardianPhone: profile.guardianPhone,
-          guardianRelationship: profile.guardianRelationship,
-          relationshipToAccount: profile.relationshipToAccount,
-          isMainProfile: profile.isMainProfile,
-          medicalHistory: profile.medicalHistory,
-          allergies: profile.allergies,
-          bloodGroup: profile.bloodGroup,
-          height: profile.height,
-          weight: profile.weight,
-        },
+        profile: { ...profile },
         visits,
       },
     };

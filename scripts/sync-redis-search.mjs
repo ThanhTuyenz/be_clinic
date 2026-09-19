@@ -42,23 +42,17 @@ const VECTOR_DIM = 3072; // Gemini Embedding default output dimension (3072 floa
 const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 async function embedText(text) {
-  const models = [embeddingModel, 'gemini-embedding-001', 'embedding-001'];
-  for (const model of [...new Set(models)]) {
-    try {
-      const response = await ai.models.embedContent({
-        model,
-        contents: text.trim().slice(0, 2048),
-      });
-      const values = response?.embedding?.values || response?.embeddings?.[0]?.values;
-      if (Array.isArray(values) && values.length > 0) {
-        return values;
-      }
-    } catch (err) {
-      if (err?.message?.includes('404') || err?.message?.includes('not found')) {
-        continue;
-      }
-      throw err;
+  try {
+    const response = await ai.models.embedContent({
+      model: embeddingModel,
+      contents: text.trim().slice(0, 2048),
+    });
+    const values = response?.embedding?.values || response?.embeddings?.[0]?.values;
+    if (Array.isArray(values) && values.length > 0) {
+      return values;
     }
+  } catch (err) {
+    console.warn(`Embedding generation failed with model ${embeddingModel}: ${err?.message}`);
   }
   return null;
 }
@@ -68,13 +62,13 @@ async function ensureRedisSearchIndex() {
     const modules = await redis.call('MODULE', 'LIST');
     const hasSearch = Array.isArray(modules) && modules.some((m) => Array.isArray(m) && m.includes('search'));
     if (!hasSearch) {
-      console.warn('⚠️ Module RediSearch không tồn tại trong Redis instance này.');
+      console.warn('Module RediSearch không tồn tại trong Redis instance này.');
       return false;
     }
 
     try {
       await redis.call('FT.INFO', INDEX_NAME);
-      console.log(`✅ Index RediSearch "${INDEX_NAME}" đã tồn tại.`);
+      console.log(`Index RediSearch "${INDEX_NAME}" đã tồn tại.`);
       return true;
     } catch (err) {
       // Nếu index chưa có, tạo mới
@@ -95,29 +89,29 @@ async function ensureRedisSearchIndex() {
         'DIM', String(VECTOR_DIM),
         'DISTANCE_METRIC', 'COSINE'
       );
-      console.log(`✅ Đã tạo thành công Index RediSearch HNSW "${INDEX_NAME}" (Prefix: ${fullPrefix}, Dim: ${VECTOR_DIM})!`);
+      console.log(`Đã tạo thành công Index RediSearch HNSW "${INDEX_NAME}" (Prefix: ${fullPrefix}, Dim: ${VECTOR_DIM})!`);
       return true;
     }
   } catch (err) {
-    console.error(`❌ Lỗi khởi tạo index RediSearch: ${err.message}`);
+    console.error(`Lỗi khởi tạo index RediSearch: ${err.message}`);
     return false;
   }
 }
 
 async function main() {
-  console.log('🚀 Bắt đầu tiến trình kiểm tra & nạp Vector vào RedisSearch (HNSW)...\n');
+  console.log(' Bắt đầu tiến trình kiểm tra & nạp Vector vào RedisSearch (HNSW)...\n');
 
   try {
     await redis.connect();
-    console.log('✅ Đã kết nối Redis thành công.');
+    console.log(' Đã kết nối Redis thành công.');
   } catch (err) {
-    console.error('❌ Không thể kết nối Redis:', err.message);
+    console.error(' Không thể kết nối Redis:', err.message);
     process.exit(1);
   }
 
   const searchReady = await ensureRedisSearchIndex();
   if (!searchReady) {
-    console.error('❌ Không thể cấu hình RediSearch. Dừng tiến trình.');
+    console.error('Không thể cấu hình RediSearch. Dừng tiến trình.');
     await redis.quit();
     process.exit(1);
   }
@@ -147,7 +141,7 @@ async function main() {
     if (existingBuf && existingBuf.length === VECTOR_DIM * 4) {
       cachedCount++;
       // Xóa dọn dẹp legacy key nếu còn sót
-      await redis.del(legacyRedisKey).catch(() => {});
+      await redis.del(legacyRedisKey).catch(() => { });
       process.stdout.write(`⚡ [${i + 1}/${packages.length}] Đã có sẵn trong HNSW Hash: "${pkg.name}"\n`);
       continue;
     }
@@ -166,8 +160,11 @@ async function main() {
     // 3. Nếu chưa có vector, gọi sinh mới qua Gemini
     if (!vector) {
       const specialty = pkg.specialty?.name ? `Chuyên khoa: ${pkg.specialty.name}. ` : '';
-      const desc = pkg.description ? `Mô tả & Chỉ định: ${pkg.description.slice(0, 300)}` : '';
-      const text = `Gói khám: ${pkg.name}. ${specialty}${desc}`.trim();
+      const desc = pkg.description ? `Mô tả: ${pkg.description.slice(0, 500)}. ` : '';
+      const symptomsStr = Array.isArray(pkg.symptoms) && pkg.symptoms.length > 0
+        ? `Triệu chứng lâm sàng: ${pkg.symptoms.join(', ')}`
+        : '';
+      const text = `Gói khám: ${pkg.name}. ${specialty}${desc}${symptomsStr}`.trim();
 
       try {
         vector = await embedText(text);
@@ -196,7 +193,7 @@ async function main() {
       );
 
       // Xóa bỏ legacy key để giải phóng RAM Redis
-      await redis.del(legacyRedisKey).catch(() => {});
+      await redis.del(legacyRedisKey).catch(() => { });
 
       syncedCount++;
       process.stdout.write(`✅ [${i + 1}/${packages.length}] HNSW Indexed: "${pkg.name}" (${pkg.code})\n`);

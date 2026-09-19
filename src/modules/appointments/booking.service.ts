@@ -12,7 +12,7 @@ import { RescheduleAppointmentDto } from './dtos/reschedule-appointment.dto.js';
 import { RealtimeGateway } from '../../infrastructure/realtime/realtime.gateway.js';
 
 const ACTIVE_APPOINTMENT_STATUSES: AppointmentStatus[] = [
-  'PENDING_PAYMENT', 'BOOKED', 'CHECKED_IN',
+  'HOLD', 'CONFIRMED', 'CHECKED_IN',
 ];
 
 export const BOOKING_SERVICE_FEE = 10_000;
@@ -130,7 +130,7 @@ export class BookingService {
           }
           const totalAmount = Math.max(0, subtotal + serviceFee - discountAmount);
 
-          const appointment = await tx.appointment.create({ data: { patientProfileId: profile.id, branchId: doctorSlot.schedule.branchId, scheduleSlotId: doctorSlot.id, servicePrice: price, symptomsDescription: dto.symptomsDescription, bookedViaAi: dto.bookedViaAi ?? false, holdExpiresAt: expiresAt, statusHistories: { create: { toStatus: 'PENDING_PAYMENT', actorId: accountId } } } });
+          const appointment = await tx.appointment.create({ data: { patientProfileId: profile.id, branchId: doctorSlot.schedule.branchId, scheduleSlotId: doctorSlot.id, servicePrice: price, symptomsDescription: dto.symptomsDescription, bookedViaAi: dto.bookedViaAi ?? false, holdExpiresAt: expiresAt, statusHistories: { create: { toStatus: 'HOLD', actorId: accountId } } } });
 
           const invoiceItems = [
             { description: `Khám với ${doctorSlot.schedule.doctor.fullName}`, quantity: 1, unitPrice: price, amount: price },
@@ -265,7 +265,7 @@ export class BookingService {
             symptomsDescription: dto.symptomsDescription,
             bookedViaAi: dto.bookedViaAi ?? false,
             holdExpiresAt: expiresAt,
-            statusHistories: { create: { toStatus: 'PENDING_PAYMENT', actorId: accountId } },
+            statusHistories: { create: { toStatus: 'HOLD', actorId: accountId } },
           },
         });
 
@@ -341,8 +341,8 @@ export class BookingService {
       const appointment = await tx.appointment.findUnique({ where: { id: appointmentId } });
       if (!appointment) return false;
       const changed = await tx.appointment.updateMany({
-        where: { id: appointmentId, status: 'PENDING_PAYMENT', holdExpiresAt: { lte: new Date() } },
-        data: { status: 'EXPIRED' },
+        where: { id: appointmentId, status: 'HOLD', holdExpiresAt: { lte: new Date() } },
+        data: { status: 'CANCELLED' },
       });
       if (changed.count !== 1) return false;
       if (appointment.scheduleSlotId) {
@@ -352,8 +352,8 @@ export class BookingService {
           WHERE "id" = ${appointment.scheduleSlotId}::uuid
         `;
       }
-      await tx.paymentTransaction.updateMany({ where: { invoice: { appointmentId }, status: 'PENDING' }, data: { status: 'EXPIRED' } });
-      await tx.appointmentStatusHistory.create({ data: { appointmentId, fromStatus: 'PENDING_PAYMENT', toStatus: 'EXPIRED', reason: 'PAYMENT_HOLD_TIMEOUT' } });
+      await tx.paymentTransaction.updateMany({ where: { invoice: { appointmentId }, status: 'PENDING' }, data: { status: 'FAILED' } });
+      await tx.appointmentStatusHistory.create({ data: { appointmentId, fromStatus: 'HOLD', toStatus: 'CANCELLED', reason: 'PAYMENT_HOLD_TIMEOUT' } });
       return true;
     }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
   }
@@ -380,7 +380,7 @@ export class BookingService {
         },
       });
       if (!payment) throw new NotFoundException('Không tìm thấy giao dịch');
-      if (payment.providerTransactionId === dto.providerTransactionId && ['SUCCESS', 'LATE_SUCCESS', 'REFUND_REQUIRED', 'MANUAL_REVIEW'].includes(payment.status)) {
+      if (payment.providerTransactionId === dto.providerTransactionId && ['SUCCESS', 'REFUNDED', 'CANCELLED'].includes(payment.status)) {
         return {
           status: payment.status,
           appointmentStatus: payment.invoice.appointment?.status ?? (payment.invoice.bookingOrder?.status as any),
@@ -411,16 +411,16 @@ export class BookingService {
 
       const appointment = payment.invoice.appointment;
       if (appointment) {
-        if (appointment.status === 'PENDING_PAYMENT' && appointment.holdExpiresAt && appointment.holdExpiresAt > new Date()) {
+        if (appointment.status === 'HOLD' && appointment.holdExpiresAt && appointment.holdExpiresAt > new Date()) {
           return this.confirmPaid(tx, payment.id, payment.invoiceId, appointment.id, provider, dto, false);
         }
-        if (appointment.status === 'EXPIRED') {
-          const doctorReserved = appointment.scheduleSlotId ? await tx.$executeRaw`UPDATE "doctor_schedule_slots" SET "occupied_count" = "occupied_count" + 1, "updated_at" = NOW() WHERE "id" = ${appointment.scheduleSlotId}::uuid AND "occupied_count" < "capacity" AND "is_active" = TRUE` : 0;
+        // Late payment: appointment was CANCELLED due to timeout, but user paid anyway
+        if (appointment.status === 'CANCELLED' && appointment.holdExpiresAt && appointment.holdExpiresAt <= new Date()) {
+           const doctorReserved = appointment.scheduleSlotId ? await tx.$executeRaw`UPDATE "doctor_schedule_slots" SET "occupied_count" = "occupied_count" + 1, "updated_at" = NOW() WHERE "id" = ${appointment.scheduleSlotId}::uuid AND "occupied_count" < "capacity" AND "is_active" = TRUE` : 0;
           if (doctorReserved === 1) return this.confirmPaid(tx, payment.id, payment.invoiceId, appointment.id, provider, dto, true);
-          await tx.paymentTransaction.update({ where: { id: payment.id }, data: { provider, providerTransactionId: dto.providerTransactionId, status: 'REFUND_REQUIRED', paidAt: new Date(), rawPayload: dto.payload as Prisma.InputJsonValue } });
-          await tx.appointment.update({ where: { id: appointment.id }, data: { status: 'REFUND_REQUIRED', statusHistories: { create: { fromStatus: 'EXPIRED', toStatus: 'REFUND_REQUIRED', reason: 'LATE_SUCCESS_SLOT_FULL' } } } });
+          await tx.paymentTransaction.update({ where: { id: payment.id }, data: { provider, providerTransactionId: dto.providerTransactionId, status: 'REFUNDED', paidAt: new Date(), rawPayload: dto.payload as Prisma.InputJsonValue } });
           await tx.outboxEvent.create({ data: { aggregateType: 'PaymentTransaction', aggregateId: payment.id, eventType: 'payment.refund.required', payload: { paymentId: payment.id, appointmentId: appointment.id, reason: 'LATE_SUCCESS_SLOT_FULL' } } });
-          return { status: PaymentStatus.REFUND_REQUIRED, appointmentStatus: AppointmentStatus.REFUND_REQUIRED };
+          return { status: PaymentStatus.REFUNDED, appointmentStatus: AppointmentStatus.CANCELLED };
         }
         return { status: payment.status, appointmentStatus: appointment.status };
       }
@@ -724,7 +724,7 @@ export class BookingService {
       },
     });
     if (!row) throw new NotFoundException('Không tìm thấy lịch hẹn');
-    if (!['BOOKED', 'CHECKED_IN'].includes(row.status)) throw new ConflictException('Lịch hẹn chưa sẵn sàng check-in');
+    if (!['CONFIRMED', 'CHECKED_IN'].includes(row.status)) throw new ConflictException('Lịch hẹn chưa sẵn sàng check-in');
     const doctorSlot = row.scheduleSlot;
     const room = doctorSlot?.schedule.room;
     const branch = doctorSlot?.schedule.branch ?? row.branch;
@@ -768,7 +768,7 @@ export class BookingService {
         phoneNumber: row.patientProfile.phoneNumber || null,
       },
       totalAmount: Number(row.invoice?.totalAmount ?? row.servicePrice ?? 0),
-      paymentStatus: row.invoice?.payments[0]?.status ?? (['BOOKED', 'CHECKED_IN'].includes(row.status) ? 'PAID' : null),
+      paymentStatus: row.invoice?.payments[0]?.status ?? (['CONFIRMED', 'CHECKED_IN'].includes(row.status) ? 'PAID' : null),
     };
   }
 
@@ -796,7 +796,7 @@ export class BookingService {
     if (!isOwner) throw new ForbiddenException('Bạn không có quyền hủy lịch hẹn này');
 
     // Chỉ cho phép hủy khi đang ở trạng thái BOOKED hoặc PENDING_PAYMENT
-    if (!['BOOKED', 'PENDING_PAYMENT'].includes(appointment.status)) {
+    if (!['CONFIRMED', 'HOLD'].includes(appointment.status)) {
       throw new BadRequestException(`Không thể hủy lịch hẹn đang ở trạng thái «${appointment.status}»`);
     }
 
@@ -848,7 +848,7 @@ export class BookingService {
         await tx.paymentTransaction.update({
           where: { id: latestPayment.id },
           data: {
-            status: 'REFUND_REQUIRED',
+            status: 'REFUNDED',
           },
         });
 
@@ -961,7 +961,7 @@ export class BookingService {
     if (!isOwner) throw new ForbiddenException('Bạn không có quyền đổi lịch hẹn này');
 
     // 2. Chỉ cho phép đổi khi đang ở trạng thái BOOKED
-    if (appointment.status !== 'BOOKED') {
+    if (appointment.status !== 'CONFIRMED') {
       throw new BadRequestException(`Không thể đổi lịch hẹn đang ở trạng thái «${appointment.status}». Chỉ áp dụng cho lịch đã xác nhận.`);
     }
 
@@ -1081,8 +1081,8 @@ export class BookingService {
           updatedAt: new Date(),
           statusHistories: {
             create: {
-              fromStatus: 'BOOKED',
-              toStatus: 'BOOKED',
+              fromStatus: 'CONFIRMED',
+              toStatus: 'CONFIRMED',
               actorId: accountId,
               reason: `RESCHEDULED: Đổi từ slot [${oldSlot?.startTime?.toISOString().slice(11, 16)} ${oldWorkDate?.toISOString().slice(0, 10)}] sang [${newTimeStr} ${newDateStr}]. Lý do: ${dto.reason?.trim() || 'Người bệnh yêu cầu đổi lịch'}`,
             },
@@ -1263,7 +1263,7 @@ export class BookingService {
       }
 
       const alreadyCheckedIn = qr.appointment.status === 'CHECKED_IN';
-      if (!alreadyCheckedIn && qr.appointment.status !== 'BOOKED') throw new ConflictException('APPOINTMENT_NOT_CHECKIN_READY');
+      if (!alreadyCheckedIn && qr.appointment.status !== 'CONFIRMED') throw new ConflictException('APPOINTMENT_NOT_CHECKIN_READY');
       const assignedDoctorSlotId = qr.appointment.scheduleSlotId;
       if (alreadyCheckedIn) {
         return this.checkInResult(qr.appointment, channel);
@@ -1285,7 +1285,7 @@ export class BookingService {
           queueNumber: finalQueueNumber,
           checkedInAt: new Date(),
           checkedInById: actorId,
-          statusHistories: { create: { fromStatus: 'BOOKED', toStatus: 'CHECKED_IN', actorId, reason: `CHECK_IN_${channel}` } },
+          statusHistories: { create: { fromStatus: 'CONFIRMED', toStatus: 'CHECKED_IN', actorId, reason: `CHECK_IN_${channel}` } },
         },
         include: { patientProfile: true, servicePackage: true, scheduleSlot: { include: { schedule: { include: { doctor: { include: { user: true } }, room: true, branch: true } } } } },
       });
@@ -1358,7 +1358,7 @@ export class BookingService {
     let appt = await this.prisma.appointment.findFirst({
       where: {
         patientProfile: { nationalId },
-        status: { in: ['BOOKED', 'CHECKED_IN'] },
+        status: { in: ['CONFIRMED', 'CHECKED_IN'] },
         scheduleSlot: {
           schedule: {
             workDate: { gte: startOfDay, lte: endOfDay },
@@ -1389,7 +1389,7 @@ export class BookingService {
       appt = await this.prisma.appointment.findFirst({
         where: {
           patientProfile: { nationalId },
-          status: 'BOOKED',
+          status: 'CONFIRMED',
         },
         include: {
           patientProfile: true,
@@ -1446,7 +1446,7 @@ export class BookingService {
           checkedInById: actorId,
           statusHistories: {
             create: {
-              fromStatus: 'BOOKED',
+              fromStatus: 'CONFIRMED',
               toStatus: 'CHECKED_IN',
               actorId,
               reason: 'CHECK_IN_NATIONAL_ID',
@@ -1685,7 +1685,7 @@ export class BookingService {
               data: {
                 ...appt,
                 bookingOrderId: bookingOrder.id,
-                statusHistories: { create: { toStatus: 'PENDING_PAYMENT', actorId: accountId } },
+                statusHistories: { create: { toStatus: 'HOLD', actorId: accountId } },
               },
             }),
           ),
@@ -1912,16 +1912,16 @@ export class BookingService {
       );
     }
 
-    await tx.paymentTransaction.update({ where: { id: paymentId }, data: { provider, providerTransactionId: dto.providerTransactionId, status: late ? 'LATE_SUCCESS' : 'SUCCESS', paidAt: new Date(), rawPayload: dto.payload as Prisma.InputJsonValue } });
+    await tx.paymentTransaction.update({ where: { id: paymentId }, data: { provider, providerTransactionId: dto.providerTransactionId, status: 'SUCCESS', paidAt: new Date(), rawPayload: dto.payload as Prisma.InputJsonValue } });
     await tx.invoice.update({ where: { id: invoiceId }, data: { status: 'PAID', paidAt: new Date() } });
     const appointment = await tx.appointment.update({
       where: { id: appointmentId },
       data: {
-        status: 'BOOKED',
+        status: 'CONFIRMED',
         bookingCode,
         queueNumber: assignedQueueNumber,
         holdExpiresAt: null,
-        statusHistories: { create: { fromStatus: late ? 'EXPIRED' : 'PENDING_PAYMENT', toStatus: 'BOOKED', reason: late ? 'LATE_SUCCESS_CAPACITY_REACQUIRED' : 'PAYMENT_SUCCESS' } },
+        statusHistories: { create: { fromStatus: late ? 'CANCELLED' : 'HOLD', toStatus: 'CONFIRMED', reason: late ? 'LATE_SUCCESS_CAPACITY_REACQUIRED' : 'PAYMENT_SUCCESS' } },
       },
       include: {
         patientProfile: true,
@@ -1971,13 +1971,13 @@ export class BookingService {
         appointmentDate: appointment.scheduleSlot?.schedule?.workDate?.toISOString().slice(0, 10),
         startTime: appointment.scheduleSlot?.startTime?.toISOString().slice(11, 16),
         endTime: appointment.scheduleSlot?.endTime?.toISOString().slice(11, 16),
-        status: 'BOOKED',
+        status: 'CONFIRMED',
       });
     } catch {
       // Ignore socket emit error
     }
 
-    return { status: late ? PaymentStatus.LATE_SUCCESS : PaymentStatus.SUCCESS, appointmentStatus: appointment.status, bookingCode, queueNumber: assignedQueueNumber, qrToken: rawToken };
+    return { status: PaymentStatus.SUCCESS, appointmentStatus: appointment.status, bookingCode, queueNumber: assignedQueueNumber, qrToken: rawToken };
   }
 
   private async confirmPaidBatch(
@@ -2029,14 +2029,14 @@ export class BookingService {
       const updated = await tx.appointment.update({
         where: { id: appt.id },
         data: {
-          status: 'BOOKED',
+          status: 'CONFIRMED',
           bookingCode,
           queueNumber: assignedQueueNumber,
           holdExpiresAt: null,
           statusHistories: {
             create: {
-              fromStatus: 'PENDING_PAYMENT',
-              toStatus: 'BOOKED',
+              fromStatus: 'HOLD',
+              toStatus: 'CONFIRMED',
               reason: 'PAYMENT_SUCCESS_BATCH',
             },
           },
@@ -2115,7 +2115,7 @@ export class BookingService {
           appointmentDate: updated.scheduleSlot?.schedule?.workDate?.toISOString().slice(0, 10),
           startTime: updated.scheduleSlot?.startTime?.toISOString().slice(11, 16),
           endTime: updated.scheduleSlot?.endTime?.toISOString().slice(11, 16),
-          status: 'BOOKED',
+          status: 'CONFIRMED',
         });
       } catch {
         // Ignore socket emit error
@@ -2130,9 +2130,14 @@ export class BookingService {
 
     return {
       status: PaymentStatus.SUCCESS,
-      appointmentStatus: 'BOOKED',
+      appointmentStatus: 'CONFIRMED',
       bookingOrderId,
       appointments: confirmedAppointments,
     };
   }
 }
+
+
+
+
+

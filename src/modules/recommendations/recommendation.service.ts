@@ -33,13 +33,12 @@ export class RecommendationService {
   }
 
   /**
-   * Lấy danh sách gói khám khuyến nghị cho một hồ sơ bệnh nhân.
-   * Ưu tiên đọc từ Redis Cache (< 5ms). Nếu cache miss, tự động phân tích và lưu cache.
+   * get ds gói khám phù hợp (cache -> fail -> phân tích lại ).
    */
   async getRecommendations(profileId: string, branchId?: string): Promise<ProfileRecommendationResponseDto> {
     const t0 = Date.now();
     const cacheKey = this.buildCacheKey(profileId);
-    
+
     // 1. Kiểm tra Redis
     try {
       if (this.redis.isEnabled()) {
@@ -47,7 +46,7 @@ export class RecommendationService {
         if (cached && Array.isArray(cached.packages) && cached.packages.length > 0) {
           const latency = Date.now() - t0;
           this.logger.log(
-            `[Recommendation] ⚡ [CACHE HIT] Found recommendations for profile "${profileId}" in Redis [key: ${cacheKey}] (${cached.packages.length} packages, ${latency}ms)`,
+            `[Recommendation] [CACHE HIT] Found recommendations for profile "${profileId}" in Redis [key: ${cacheKey}] (${cached.packages.length} packages, ${latency}ms)`,
           );
           return { ...cached, source: 'REDIS_CACHE' };
         }
@@ -56,8 +55,8 @@ export class RecommendationService {
       this.logger.warn(`Redis get failed for key ${cacheKey}: ${err?.message}`);
     }
 
-    // 2. Cache miss -> Phân tích và lưu cache
-    this.logger.log(`[Recommendation] 🔄 [CACHE MISS] No valid cache for profile "${profileId}". Starting full pipeline...`);
+    // 2. Cache miss -> analyst lại 
+    this.logger.log(`[Recommendation CACHE MISS] No valid cache for profile "${profileId}". Starting full pipeline...`);
     return this.analyzeAndCacheRecommendations(profileId, branchId);
   }
 
@@ -65,25 +64,27 @@ export class RecommendationService {
    * Kích hoạt xử lý ngầm (Non-blocking / Background qua RabbitMQ Outbox).
    * Dùng khi tạo hoặc sửa hồ sơ bệnh nhân, không làm chậm response của user.
    */
-  triggerAsyncRecommendation(profileId: string, branchId?: string): void {
-    void this.enqueueRecommendationTask(profileId, branchId);
+  triggerAsyncRecommendation(profileId: string): void {
+    void this.enqueueRecommendationTask(profileId);
   }
 
-  private async enqueueRecommendationTask(profileId: string, branchId?: string): Promise<void> {
+  private async enqueueRecommendationTask(profileId: string): Promise<void> {
     try {
       await this.prisma.outboxEvent.create({
         data: {
           aggregateType: 'PatientProfile',
           aggregateId: profileId,
           eventType: 'recommendation.profile.analyze',
-          payload: { profileId, branchId: branchId || null },
+          payload: { profileId },
         },
       });
       this.logger.log(`Enqueued recommendation task [recommendation.profile.analyze] for profile ${profileId}`);
     } catch (err: any) {
+
+      // không chạy luông bacground job
       this.logger.warn(`Failed to create outbox event for profile ${profileId}, falling back to setImmediate: ${err?.message}`);
       setImmediate(() => {
-        this.analyzeAndCacheRecommendations(profileId, branchId).catch((fallbackErr) => {
+        this.analyzeAndCacheRecommendations(profileId).catch((fallbackErr) => {
           this.logger.error(`Fallback recommendation analysis failed for profile ${profileId}: ${fallbackErr?.message}`);
         });
       });
@@ -115,7 +116,7 @@ export class RecommendationService {
     branchId?: string,
   ): Promise<ProfileRecommendationResponseDto> {
     const t0 = Date.now();
-    this.logger.log(`==================== 🚀 [RECOMMENDATION PIPELINE START] Profile: ${profileId} ====================`);
+    this.logger.log(`==================== [RECOMMENDATION PIPELINE START] Profile: ${profileId} ====================`);
 
     // 1. Lấy thông tin hồ sơ bệnh nhân (chỉ select các trường lâm sàng cần thiết)
     const profile = await this.prisma.patientProfile.findUnique({
@@ -154,14 +155,6 @@ export class RecommendationService {
     const allergies = (profile.allergies || '').trim();
     const gender = (profile.gender || 'OTHER').toString().toUpperCase();
 
-    // STAGE 1 LOG
-    this.logger.log(
-      `[STAGE 1/6: CLINICAL DATA] 👤 "${profile.fullName}" | Age: ${age} | Gender: ${gender} | BMI: ${bmi ?? 'N/A'}`,
-    );
-    this.logger.log(
-      `[STAGE 1/6: CLINICAL DATA] 🩺 Medical History: "${medicalHistory || 'Không ghi nhận'}" | Allergies: "${allergies || 'Không ghi nhận'}"`,
-    );
-
     // 3. Lấy danh sách gói khám đang hoạt động (tối ưu select và lọc theo cơ sở nếu có)
     const allActivePackages = await this.prisma.servicePackage.findMany({
       where: {
@@ -174,6 +167,7 @@ export class RecommendationService {
         slug: true,
         name: true,
         description: true,
+        symptoms: true,
         price: true,
         durationMin: true,
         specialtyId: true,
@@ -181,10 +175,6 @@ export class RecommendationService {
       },
       orderBy: { price: 'asc' },
     });
-
-    this.logger.log(
-      `[STAGE 1/6: CLINICAL DATA] 📦 Active packages in DB: ${allActivePackages.length} packages${branchId ? ` (Branch: ${branchId})` : ''}`,
-    );
 
     if (allActivePackages.length === 0) {
       return {
@@ -196,13 +186,11 @@ export class RecommendationService {
       };
     }
 
-    // 4. KIỂM TRA LỊCH SỬ THĂM KHÁM (Deterministic Rule cho Gói Tái Khám)
-    // - Không cần dùng AI: Nếu bệnh nhân đã hoàn tất (COMPLETED) khám chuyên khoa X trước đó,
-    //   tự động kích hoạt chính xác gói "Tái khám [Chuyên khoa X]" đưa lên vị trí ưu tiên #1.
+    // 4. Kiểm tra ls tái khái ưu tiên hiển thị
     const pastAppointments = await this.prisma.appointment.findMany({
       where: {
         patientProfileId: profileId,
-        status: { in: ['COMPLETED', 'BOOKED', 'CHECKED_IN'] },
+        status: { in: ['COMPLETED', 'CONFIRMED', 'CHECKED_IN'] },
       },
       select: {
         id: true,
@@ -358,6 +346,7 @@ export class RecommendationService {
         name: p.name,
         code: p.code,
         description: p.description || '',
+        symptoms: p.symptoms || [],
         price: Number(p.price),
         specialtyName: p.specialty?.name || 'Đa khoa',
         specialtyId: p.specialtyId,
@@ -513,14 +502,14 @@ THÔNG TIN BỆNH NHÂN:
 
 DANH MỤC GÓI KHÁM TẦM SOÁT THỰC TẾ ĐANG HOẠT ĐỘNG (toàn bộ danh sách):
 ${JSON.stringify(
-  context.candidates.map((c) => ({
-    id: c.id,
-    name: c.name,
-    specialty: c.specialtyName,
-    price: c.price,
-    description: (c.description || '').slice(0, 120),
-  }))
-)}
+      context.candidates.map((c) => ({
+        id: c.id,
+        name: c.name,
+        specialty: c.specialtyName,
+        price: c.price,
+        description: (c.description || '').slice(0, 120),
+      }))
+    )}
 
 QUY TẮC Y KHOA BẮT BUỘC:
 1. Đa chuyên khoa (Comorbidities): Nếu bệnh nhân có nhiều bệnh nền (ví dụ vừa huyết áp, vừa tiểu đường, vừa đau khớp), hãy chọn các gói thuộc các chuyên khoa khác nhau để giải quyết toàn diện.
@@ -824,49 +813,173 @@ QUY TẮC Y KHOA BẮT BUỘC:
       similarityScore: number;
       description: string;
     }>;
+    doctors: Array<{
+      id: string;
+      fullName: string;
+      academicRank: string;
+      specialties: string[];
+      experienceYears: number;
+      avatarUrl?: string | null;
+      ratingAverage: number;
+    }>;
+    branches: Array<{
+      id: string;
+      code: string;
+      name: string;
+      address: string;
+      phoneNumber?: string;
+    }>;
   }> {
     if (!query || !query.trim()) {
-      return { query: '', total: 0, packages: [] };
+      return { query: '', total: 0, packages: [], doctors: [], branches: [] };
     }
 
-    const packages = await this.prisma.servicePackage.findMany({
-      where: {
-        isActive: true,
-        ...(branchId ? { branchBookingMethod: { branchId, isEnabled: true } } : {}),
-      },
-      include: {
-        specialty: { select: { id: true, name: true } },
-      },
-      orderBy: { price: 'asc' },
-    });
+    const q = query.trim();
 
-    const mapped: PackageForRetrieval[] = packages.map((p) => ({
-      id: p.id,
-      code: p.code,
-      name: p.name,
-      description: p.description || '',
-      price: Number(p.price),
-      durationMin: p.durationMin,
-      specialtyId: p.specialtyId,
-      specialtyName: p.specialty?.name || 'Đa khoa',
+    // Chạy song song: 1. Gói khám (Vector Retrieval), 2. Bác sĩ (Direct DB), 3. Cơ sở y tế (Direct DB)
+    const [packageResults, matchedDoctors, matchedBranches] = await Promise.all([
+      (async () => {
+        const packages = await this.prisma.servicePackage.findMany({
+          where: {
+            isActive: true,
+            ...(branchId ? { branchBookingMethod: { branchId, isEnabled: true } } : {}),
+          },
+          include: {
+            specialty: { select: { id: true, name: true } },
+          },
+          orderBy: { price: 'asc' },
+        });
+
+        const mapped: PackageForRetrieval[] = packages.map((p) => ({
+          id: p.id,
+          code: p.code,
+          name: p.name,
+          description: p.description || '',
+          symptoms: p.symptoms || [],
+          price: Number(p.price),
+          durationMin: p.durationMin,
+          specialtyId: p.specialtyId,
+          specialtyName: p.specialty?.name || 'Đa khoa',
+        }));
+
+        const results = await this.embeddingService.searchByNaturalLanguage(q, mapped, 6);
+        return results.map((r) => ({
+          id: r.package.id,
+          code: r.package.code,
+          name: r.package.name,
+          price: r.package.price,
+          durationMin: r.package.durationMin,
+          specialtyName: r.package.specialtyName,
+          similarityScore: Math.round(r.score * 100) / 100,
+          description: r.package.description,
+        }));
+      })(),
+
+      // Truy vấn trực tiếp PostgreSQL tìm Bác sĩ theo Tên, Học vị hoặc Chuyên khoa
+      this.prisma.doctor.findMany({
+        where: {
+          isActive: true,
+          OR: [
+            { user: { fullName: { contains: q, mode: 'insensitive' } } },
+            { academicRank: { contains: q, mode: 'insensitive' } },
+            { specialties: { some: { specialty: { name: { contains: q, mode: 'insensitive' } } } } },
+          ],
+        },
+        take: 4,
+        include: {
+          user: { select: { id: true, fullName: true, phoneNumber: true, email: true } },
+          specialties: { include: { specialty: { select: { id: true, name: true } } } },
+        },
+      }),
+
+      // Truy vấn trực tiếp PostgreSQL tìm Chi nhánh theo Tên hoặc Địa chỉ
+      this.prisma.branch.findMany({
+        where: {
+          isActive: true,
+          OR: [
+            { name: { contains: q, mode: 'insensitive' } },
+            { address: { contains: q, mode: 'insensitive' } },
+          ],
+        },
+        take: 3,
+        select: {
+          id: true,
+          code: true,
+          name: true,
+          address: true,
+          phoneNumber: true,
+        },
+      }),
+    ]);
+
+    const formattedDoctors = matchedDoctors.map((doc) => ({
+      id: doc.id,
+      fullName: doc.user?.fullName || 'Bác sĩ',
+      academicRank: doc.academicRank || 'Bác sĩ',
+      specialties: doc.specialties.map((s) => s.specialty?.name).filter(Boolean) as string[],
+      experienceYears: doc.experienceYears || 0,
+      avatarUrl: doc.avatarUrl || null,
+      ratingAverage: doc.ratingAverage || 5.0,
     }));
 
-    const results = await this.embeddingService.searchByNaturalLanguage(query.trim(), mapped, 8);
+    const formattedBranches = matchedBranches.map((b) => ({
+      id: b.id,
+      code: b.code,
+      name: b.name,
+      address: b.address || '',
+      phoneNumber: b.phoneNumber || '',
+    }));
 
     return {
-      query: query.trim(),
-      total: results.length,
-      packages: results.map((r) => ({
-        id: r.package.id,
-        code: r.package.code,
-        name: r.package.name,
-        price: r.package.price,
-        durationMin: r.package.durationMin,
-        specialtyName: r.package.specialtyName,
-        similarityScore: Math.round(r.score * 100) / 100,
-        description: r.package.description,
-      })),
+      query: q,
+      total: packageResults.length + formattedDoctors.length + formattedBranches.length,
+      packages: packageResults,
+      doctors: formattedDoctors,
+      branches: formattedBranches,
     };
+  }
+
+  /**
+   * AI tự động phân tích tên gói / chuyên khoa để gợi ý danh sách triệu chứng liên quan
+   */
+  async suggestSymptomsForPackage(name: string, specialtyName?: string): Promise<{ symptoms: string[] }> {
+    if (!name?.trim()) return { symptoms: [] };
+
+    if (this.aiClient) {
+      try {
+        const prompt = `Bạn là trợ lý y khoa AI của phòng khám VitaCare.
+Hãy phân tích dịch vụ / gói khám sau:
+- Tên dịch vụ: "${name.trim()}"
+- Chuyên khoa: "${specialtyName?.trim() || 'Đa khoa'}"
+
+Hãy liệt kê 10-15 triệu chứng lâm sàng phổ biến nhất mà người bệnh thường gặp khi cần đăng ký khám gói này.
+Bao gồm cả thuật ngữ y học và ngôn ngữ đời sống, khẩu ngữ dân gian thường dùng của người dân Việt Nam (ví dụ: mắc ói, buồn nôn, đau dạ dày, tức ngực, lừ đừ, nhức đầu, chóng mặt, hoa mắt,...).
+Chỉ trả về duy nhất 1 JSON array các chuỗi string ngắn gọn, không có giải thích hay markdown code block:
+["triệu chứng 1", "triệu chứng 2", ...]`;
+
+        const response = await this.aiClient.models.generateContent({
+          model: this.modelName || 'gemini-2.5-flash',
+          contents: prompt,
+        });
+
+        let rawText = response.text?.trim() || '[]';
+        if (rawText.startsWith('```')) {
+          rawText = rawText.replace(/^```json/i, '').replace(/^```/, '').replace(/```$/, '').trim();
+        }
+
+        const parsed = JSON.parse(rawText);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          const cleanSymptoms = parsed
+            .map((s: any) => String(s).trim().toLowerCase())
+            .filter((s: string) => s.length > 1 && s.length < 50);
+          return { symptoms: [...new Set(cleanSymptoms)] };
+        }
+      } catch (err: any) {
+        this.logger.warn(`Failed to generate AI symptoms for "${name}": ${err?.message}`);
+      }
+    }
+
+    return { symptoms: [] };
   }
 
   private buildCacheKey(profileId: string): string {

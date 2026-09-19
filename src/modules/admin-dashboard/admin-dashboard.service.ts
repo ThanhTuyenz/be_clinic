@@ -7,10 +7,8 @@ type StatusCounts = {
   confirmed: number
   examined: number
   cancelled: number
-  booked: number
+  hold: number
   checkedIn: number
-  inExamination: number
-  pendingPayment: number
 }
 
 @Injectable()
@@ -46,22 +44,20 @@ export class AdminDashboardService {
       _count: { _all: true },
     })
     const count = (status: string) => rows.find((row) => row.status === status)?._count._all || 0
-    const pendingPayment = count('PENDING_PAYMENT')
-    const booked = count('BOOKED')
+    const hold = count('HOLD')
+    const confirmed = count('CONFIRMED')
     const checkedIn = count('CHECKED_IN')
-    const inExamination = count('IN_EXAMINATION')
     const examined = count('COMPLETED')
     const cancelled = count('CANCELLED')
+    const noShow = count('NO_SHOW')
     return {
-      total: pendingPayment + booked + checkedIn + inExamination + examined + cancelled,
-      pending: pendingPayment + booked,
-      confirmed: checkedIn + inExamination,
+      total: hold + confirmed + checkedIn + examined + cancelled + noShow,
+      pending: hold,
+      confirmed: confirmed + checkedIn,
       examined,
       cancelled,
-      booked,
+      hold,
       checkedIn,
-      inExamination,
-      pendingPayment,
     }
   }
 
@@ -127,7 +123,7 @@ export class AdminDashboardService {
       if (room) {
         const current = roomMap.get(room.id) || { room: room.name || room.code, total: 0, pending: 0, confirmed: 0 }
         current.total += 1
-        if (['PENDING_PAYMENT', 'BOOKED'].includes(appointment.status)) current.pending += 1
+        if (['HOLD', 'CONFIRMED'].includes(appointment.status)) current.pending += 1
         if (['CHECKED_IN'].includes(appointment.status)) current.confirmed += 1
         roomMap.set(room.id, current)
       }
@@ -146,8 +142,8 @@ export class AdminDashboardService {
       { total: 0, count: 0, cash: 0, transfer: 0 },
     )
 
-    const unpaidPending = (todayRows as any[]).filter((row) => row.status === 'PENDING_PAYMENT' && row.invoice?.status !== 'PAID').length
-    const bookedWaitingCheckIn = (todayRows as any[]).filter((row) => row.status === 'BOOKED').length
+    const unpaidPending = (todayRows as any[]).filter((row) => row.status === 'HOLD' && row.invoice?.status !== 'PAID').length
+    const bookedWaitingCheckIn = (todayRows as any[]).filter((row) => row.status === 'CONFIRMED').length
     return {
       today: this.dateKey(todayStart),
       week: { from: this.dateKey(weekStart), to: this.dateKey(new Date(weekEnd.getTime() - 1)) },

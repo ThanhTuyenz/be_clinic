@@ -106,8 +106,8 @@ export class MomoService {
 
     const holdExpiresAt = firstAppointment.holdExpiresAt;
     if (
-      (appointment && appointment.status !== 'PENDING_PAYMENT') ||
-      (bookingOrder && (bookingOrder as any).status !== 'PENDING_PAYMENT') ||
+      (appointment && appointment.status !== 'HOLD') ||
+      (bookingOrder && (bookingOrder as any).status !== 'UNPAID') ||
       !holdExpiresAt ||
       holdExpiresAt <= new Date()
     ) {

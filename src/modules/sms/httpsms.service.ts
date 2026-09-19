@@ -102,23 +102,23 @@ export class HttpSmsService implements ISmsService {
   }
 
   /**
-   * Gửi SMS Xác nhận Đặt Lịch Khám Thành Công (Cực ngắn <= 120 ký tự)
+   * Gửi SMS Xác nhận Đặt Lịch Khám Thành Công (Cực ngắn <= 130 ký tự, 1 SMS)
    */
   async sendBookingConfirmation(sms: BookingConfirmationSms): Promise<boolean> {
     const branchAscii = this.toAscii(sms.branchName).replace(/^Phong kham\s*/i, 'PK ');
     const phonePart = sms.branchPhone ? ` LH:${sms.branchPhone}` : '';
-    const content = `[VitaCare] Dat lich TC! Ma:${sms.bookingCode}, Gio:${sms.startTime} ngay ${sms.appointmentDate}, ${branchAscii}. Den truoc 15p.${phonePart}`;
+    const content = `[VitaCare] Dat lich TC! Ma:${sms.bookingCode}, Gio:${sms.startTime} ngay ${sms.appointmentDate}, ${branchAscii}. Mang CCCD/ma hen check-in. Den truoc 15p.${phonePart}`;
 
     return this.sendSms(sms.to, content);
   }
 
   /**
-   * Gửi SMS Nhắc Lịch Hẹn (24h hoặc 2h trước khám - Cực ngắn <= 110 ký tự)
+   * Gửi SMS Nhắc Lịch Hẹn (24h trước khám - Cực ngắn <= 130 ký tự, 1 SMS)
    */
   async sendAppointmentReminder(sms: AppointmentReminderSms): Promise<boolean> {
-    const label = sms.hoursAhead === 24 ? 'ngay mai' : 'sau 2h';
+    const label = sms.hoursAhead === 24 ? 'ngay mai' : `sau ${sms.hoursAhead}h`;
     const branchAscii = this.toAscii(sms.branchName).replace(/^Phong kham\s*/i, 'PK ');
-    const content = `[VitaCare] Nhac lich ${label}: Ma:${sms.bookingCode}, Gio:${sms.startTime} ngay ${sms.appointmentDate} tai ${branchAscii}. Vui long den dung gio!`;
+    const content = `[VitaCare] Nhac lich ${label}: Ma:${sms.bookingCode}, Gio:${sms.startTime} ngay ${sms.appointmentDate} tai ${branchAscii}. Vui long mang CCCD hoac ma hen de check-in!`;
 
     return this.sendSms(sms.to, content);
   }

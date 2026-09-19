@@ -23,8 +23,8 @@ export class StaffAppointmentsService {
   }
 
   private statusForClient(status: string) {
-    if (status === 'PENDING_PAYMENT') return 'pending'
-    if (['BOOKED', 'CHECKED_IN', 'IN_EXAMINATION'].includes(status)) return 'confirmed'
+    if (status === 'HOLD') return 'pending'
+    if (['CONFIRMED', 'CHECKED_IN'].includes(status)) return 'confirmed'
     if (status === 'COMPLETED') return 'examined'
     if (status === 'CANCELLED') return 'cancelled'
     return status.toLowerCase()
@@ -161,12 +161,12 @@ export class StaffAppointmentsService {
     if (!user || (user.role !== 'ADMIN' && user.role !== 'DOCTOR')) throw new ForbiddenException('Không có quyền xem lịch bác sĩ')
     const requestedStatus = String(query.status || '').trim().toUpperCase()
     const statusAliases: Record<string, string> = {
-      PENDING: 'PENDING_PAYMENT',
-      CONFIRMED: 'BOOKED',
+      PENDING: 'HOLD',
+      confirmed: 'CONFIRMED',
       EXAMINED: 'COMPLETED',
     }
     const status = statusAliases[requestedStatus] || requestedStatus
-    const allowedStatuses = ['PENDING_PAYMENT', 'BOOKED', 'CHECKED_IN', 'IN_EXAMINATION', 'COMPLETED', 'CANCELLED', 'NO_SHOW']
+    const allowedStatuses = ['HOLD', 'CONFIRMED', 'CHECKED_IN', 'COMPLETED', 'CANCELLED', 'NO_SHOW']
     if (status && status !== 'ALL' && !allowedStatuses.includes(status)) {
       throw new BadRequestException('Trạng thái lọc không hợp lệ')
     }
@@ -196,7 +196,7 @@ export class StaffAppointmentsService {
     if (!['ADMIN', 'BRANCH_MANAGER', 'RECEPTIONIST', 'CASHIER'].includes(role)) throw new ForbiddenException('Không có quyền xem danh sách tiếp nhận')
     const start = query.from ? new Date(`${query.from}T00:00:00`) : undefined
     const end = query.to ? new Date(`${query.to}T23:59:59`) : undefined
-    const statusMap: Record<string, any> = { pending: 'PENDING_PAYMENT', confirmed: { in: ['BOOKED', 'CHECKED_IN', 'IN_EXAMINATION'] }, cancelled: 'CANCELLED', examined: 'COMPLETED' }
+    const statusMap: Record<string, any> = { pending: 'HOLD', confirmed: { in: ['CONFIRMED', 'CHECKED_IN'] }, cancelled: 'CANCELLED', examined: 'COMPLETED' }
     const term = String(query.q || '').trim()
     const rows = await this.prisma.appointment.findMany({
       where: {
@@ -267,17 +267,28 @@ export class StaffAppointmentsService {
     await this.roleOf(userId)
     const page = Math.max(Number(query.page) || 1, 1)
     const pageSize = Math.min(Math.max(Number(query.pageSize) || 10, 1), 100)
-    const where: any = {
-      ...(query.patientCode ? { OR: [{ patientCode: { contains: query.patientCode, mode: 'insensitive' } }, { nationalId: { contains: query.patientCode, mode: 'insensitive' } }, { id: query.patientCode }] } : {}),
-      ...(query.name ? { fullName: { contains: query.name, mode: 'insensitive' } } : {}),
-      ...(query.phone ? { account: { phoneNumber: { contains: query.phone } } } : {}),
-      ...(query.account ? { account: { email: { contains: query.account, mode: 'insensitive' } } } : {}),
-    }
+    const q = String(query.q || '').trim()
+    const where: any = q
+      ? {
+          OR: [
+            { patientCode: { contains: q, mode: 'insensitive' } },
+            { nationalId: { contains: q, mode: 'insensitive' } },
+            { fullName: { contains: q, mode: 'insensitive' } },
+            { phoneNumber: { contains: q } },
+            { account: { phoneNumber: { contains: q } } },
+          ],
+        }
+      : {
+          ...(query.patientCode ? { OR: [{ patientCode: { contains: query.patientCode, mode: 'insensitive' } }, { nationalId: { contains: query.patientCode, mode: 'insensitive' } }, { id: query.patientCode }] } : {}),
+          ...(query.name ? { fullName: { contains: query.name, mode: 'insensitive' } } : {}),
+          ...(query.phone ? { OR: [{ phoneNumber: { contains: query.phone } }, { account: { phoneNumber: { contains: query.phone } } }] } : {}),
+          ...(query.account ? { account: { email: { contains: query.account, mode: 'insensitive' } } } : {}),
+        }
     const [rows, total] = await Promise.all([
       this.prisma.patientProfile.findMany({ where, include: { account: { select: { id: true, email: true, phoneNumber: true } } }, skip: (page - 1) * pageSize, take: pageSize, orderBy: { fullName: 'asc' } }),
       this.prisma.patientProfile.count({ where }),
     ])
-    return { patients: rows.map((row) => ({ ...row, patientCode: row.patientCode || row.nationalId || row.id, phone: row.account?.phoneNumber, email: row.account?.email })), total, page, pageSize }
+    return { patients: rows.map((row) => ({ ...row, patientCode: row.patientCode || row.nationalId || row.id, phone: row.phoneNumber || row.account?.phoneNumber, email: row.account?.email })), total, page, pageSize }
   }
 
   async patientHistory(userId: string, patientId: string) {
@@ -328,11 +339,32 @@ export class StaffAppointmentsService {
     return { appointments: rows.map((row) => this.serialize(row)) }
   }
 
-  async patientByCode(userId: string, code: string) {
+  async patientByCode(userId: string, rawCode: string) {
     await this.roleOf(userId)
-    const row = await this.prisma.patientProfile.findFirst({ where: { OR: [{ patientCode: code }, { nationalId: code }, { id: code }] }, include: { account: { select: { id: true, email: true, phoneNumber: true } } } })
-    if (!row) throw new NotFoundException('Không tìm thấy bệnh nhân')
-    return { patient: { ...row, patientCode: row.patientCode || row.nationalId || row.id, phone: row.account?.phoneNumber, email: row.account?.email } }
+    const code = String(rawCode || '').trim()
+    if (!code) throw new BadRequestException('Vui lòng cung cấp mã bệnh nhân, CCCD hoặc số điện thoại')
+    const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(code)
+    const row = await this.prisma.patientProfile.findFirst({
+      where: {
+        OR: [
+          { patientCode: { equals: code, mode: 'insensitive' } },
+          { nationalId: code },
+          { phoneNumber: code },
+          { account: { phoneNumber: code } },
+          ...(isUuid ? [{ id: code }] : []),
+        ],
+      },
+      include: { account: { select: { id: true, email: true, phoneNumber: true } } },
+    })
+    if (!row) throw new NotFoundException('Không tìm thấy thông tin bệnh nhân')
+    return {
+      patient: {
+        ...row,
+        patientCode: row.patientCode || row.nationalId || row.id,
+        phone: row.phoneNumber || row.account?.phoneNumber,
+        email: row.account?.email,
+      },
+    }
   }
 
   async availability(userId: string, doctorId: string, date: string) {
@@ -364,15 +396,15 @@ export class StaffAppointmentsService {
       },
     })
     if (!current) throw new NotFoundException('Không tìm thấy lịch khám')
-    const statuses: Record<string, any> = { pending: 'PENDING_PAYMENT', confirmed: 'BOOKED', cancelled: 'CANCELLED', examined: 'COMPLETED', completed: 'COMPLETED', checked_in: 'CHECKED_IN', in_examination: 'IN_EXAMINATION' }
+    const statuses: Record<string, any> = { pending: 'HOLD', confirmed: 'CONFIRMED', cancelled: 'CANCELLED', examined: 'COMPLETED', completed: 'COMPLETED', checked_in: 'CHECKED_IN', CHECKED_IN: 'CHECKED_IN' }
     const status = statuses[String(input.status || '').toLowerCase()] || String(input.status || '').toUpperCase()
-    const allowed = ['PENDING_PAYMENT', 'BOOKED', 'CHECKED_IN', 'IN_EXAMINATION', 'COMPLETED', 'CANCELLED']
+    const allowed = ['HOLD', 'CONFIRMED', 'CHECKED_IN', 'COMPLETED', 'CANCELLED']
     if (!allowed.includes(status)) throw new BadRequestException('Trạng thái lịch khám không hợp lệ')
     if (role === 'DOCTOR') {
       if (!user.doctor?.id || user.doctor.id !== current.scheduleSlot?.schedule?.doctorId) {
         throw new ForbiddenException('Lịch khám không thuộc bác sĩ hiện tại')
       }
-      if (status !== 'IN_EXAMINATION' || current.status !== 'CHECKED_IN') {
+      if (status !== 'CHECKED_IN' || current.status !== 'CHECKED_IN') {
         throw new BadRequestException('Bác sĩ chỉ có thể bắt đầu bệnh nhân đã check-in')
       }
     }
@@ -447,7 +479,7 @@ export class StaffAppointmentsService {
         if (invoice?.payments[0]?.status === 'SUCCESS') {
           await tx.paymentTransaction.update({
             where: { id: invoice.payments[0].id },
-            data: { status: 'REFUND_REQUIRED' },
+            data: { status: 'REFUNDED' },
           });
           await tx.invoice.update({
             where: { id: invoice.id },
@@ -616,10 +648,10 @@ export class StaffAppointmentsService {
           scheduleSlotId: slot.id,
           queueNumber,
           symptomsDescription: input.note || null,
-          status: 'PENDING_PAYMENT',
+          status: 'HOLD',
         },
       })
-      await tx.appointmentStatusHistory.create({ data: { appointmentId, toStatus: 'PENDING_PAYMENT', actorId: userId, reason: 'CREATED_AT_RECEPTION' } })
+      await tx.appointmentStatusHistory.create({ data: { appointmentId, toStatus: 'HOLD', actorId: userId, reason: 'CREATED_AT_RECEPTION' } })
       await tx.invoice.create({
         data: {
           appointmentId,
@@ -725,7 +757,7 @@ export class StaffAppointmentsService {
       })
       const appointment = await tx.appointment.update({
         where: { id: appointmentId },
-        data: (invoice as any).appointment?.status === 'PENDING_PAYMENT' ? { status: 'BOOKED' } : {},
+        data: (invoice as any).appointment?.status === 'HOLD' ? { status: 'CONFIRMED' } : {},
       })
       return { appointment, payment }
     })
@@ -746,7 +778,7 @@ export class StaffAppointmentsService {
     }
     const row = await this.prisma.$transaction(async (tx) => {
       const result = await tx.appointment.updateMany({
-        where: { id: appointmentId, status: { in: ['CHECKED_IN', 'BOOKED'] } },
+        where: { id: appointmentId, status: { in: ['CHECKED_IN', 'CONFIRMED'] } },
         data: { status: 'COMPLETED' },
       })
       if (result.count !== 1) throw new BadRequestException('Lịch khám vừa được cập nhật, vui lòng tải lại')
@@ -799,7 +831,7 @@ export class StaffAppointmentsService {
 
     const affectedAppointments = await this.prisma.appointment.findMany({
       where: {
-        status: 'BOOKED',
+        status: 'CONFIRMED',
         scheduleSlot: {
           schedule: {
             doctorId,
@@ -935,3 +967,4 @@ export class StaffAppointmentsService {
     return { total: body.items.length, successCount: results.filter((r) => r.success).length, results }
   }
 }
+

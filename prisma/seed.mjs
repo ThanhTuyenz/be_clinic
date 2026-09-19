@@ -395,33 +395,28 @@ async function main() {
               startTime: time(8),
             },
           },
-          update: { status: 'OPEN', roomId: assignedRoom.id, slotDurationMin: 60, capacityPerSlot: 10 },
+          update: { status: 'OPEN', roomId: assignedRoom.id, endTime: time(16, 30), slotDurationMin: 30, capacityPerSlot: 10 },
           create: {
             doctorId: doctor.id,
             branchId: branch.id,
             roomId: assignedRoom.id,
             workDate,
             startTime: time(8),
-            endTime: time(11, 30),
-            slotDurationMin: 60,
+            endTime: time(16, 30),
+            slotDurationMin: 30,
             capacityPerSlot: 10,
             status: 'OPEN',
           },
         });
-        for (const [startHour, endHour, endMinute, capacity] of [
-          [8, 9, 0, 10],
-          [9, 10, 0, 10],
-          [10, 11, 0, 10],
-          [11, 11, 30, 10],
-        ]) {
+        for (const slot of doctorSlots()) {
           await prisma.doctorScheduleSlot.upsert({
-            where: { scheduleId_startTime: { scheduleId: schedule.id, startTime: time(startHour) } },
-            update: { endTime: time(endHour, endMinute), capacity, isActive: true },
+            where: { scheduleId_startTime: { scheduleId: schedule.id, startTime: slot.startTime } },
+            update: { endTime: slot.endTime, capacity: 10, isActive: true },
             create: {
               scheduleId: schedule.id,
-              startTime: time(startHour),
-              endTime: time(endHour, endMinute),
-              capacity,
+              startTime: slot.startTime,
+              endTime: slot.endTime,
+              capacity: 10,
             },
           });
         }
@@ -880,7 +875,7 @@ async function main() {
           scheduleSlotId: cardioSlotFuture?.id ?? null,
           servicePackageId: cardioFollowupService?.id ?? null,
           servicePrice: Number(cardioFollowupService?.price ?? 180000),
-          status: 'BOOKED',
+          status: 'CONFIRMED',
           queueNumber: null,
           checkedInAt: null,
           rescheduleCount: 0,
@@ -927,7 +922,7 @@ async function main() {
       console.log(`  ✓ Đã tạo ${appointmentSeeds.length} lịch khám mẫu cho patient@vitacare.local`);
       console.log('    - 2 COMPLETED (trigger AI gợi ý tái khám)');
       console.log('    - 2 CANCELLED (test nút Đặt lại lịch)');
-      console.log('    - 1 BOOKED  (test Đổi / Hủy lịch)');
+      console.log('    - 1 CONFIRMED (test Đổi / Hủy lịch)');
       console.log('    - 1 CHECKED_IN (test quy trình lễ tân)');
     }
   }
@@ -1036,48 +1031,11 @@ async function main() {
     });
   }
 
-  // Khởi tạo session / token test
-  await prisma.session.upsert({
-    where: { id: '10000000-0000-4000-8000-000000000001' },
-    update: { deletedAt: null, expiresAt: dateOnly(7) },
-    create: {
-      id: '10000000-0000-4000-8000-000000000001',
-      userId: patient.id,
-      refreshTokenHash: createHash('sha256').update('seed-refresh-token').digest('hex'),
-      userAgent: 'VitaCare Seed Client',
-      ipAddress: '127.0.0.1',
-      expiresAt: dateOnly(7),
-    },
-  });
-
+  // Khởi tạo tài khoản liên kết OAuth Google test
   await prisma.oAuthAccount.upsert({
     where: { provider_providerAccountId: { provider: 'GOOGLE', providerAccountId: 'seed-google-account' } },
     update: { userId: patient.id },
     create: { userId: patient.id, provider: 'GOOGLE', providerAccountId: 'seed-google-account' },
-  });
-
-  await prisma.authVerificationToken.upsert({
-    where: { id: '10000000-0000-4000-8000-000000000002' },
-    update: { consumedAt: new Date(), expiresAt: dateOnly(-1) },
-    create: {
-      id: '10000000-0000-4000-8000-000000000002',
-      userId: patient.id,
-      tokenHash: createHash('sha256').update('seed-used-otp').digest('hex'),
-      expiresAt: dateOnly(-1),
-      consumedAt: new Date(),
-    },
-  });
-
-  await prisma.passwordResetToken.upsert({
-    where: { tokenHash: createHash('sha256').update('seed-used-reset').digest('hex') },
-    update: { consumedAt: new Date(), expiresAt: dateOnly(-1) },
-    create: {
-      id: '10000000-0000-4000-8000-000000000003',
-      userId: patient.id,
-      tokenHash: createHash('sha256').update('seed-used-reset').digest('hex'),
-      expiresAt: dateOnly(-1),
-      consumedAt: new Date(),
-    },
   });
 
   console.log('----------------------------------------------------');

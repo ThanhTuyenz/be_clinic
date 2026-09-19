@@ -208,6 +208,7 @@ export class RabbitMqService implements OnModuleInit, OnModuleDestroy {
           code: string;
           name: string;
           description: string;
+          symptoms?: string[];
           price: number;
           durationMin: number;
           specialtyId: number | null;
@@ -223,6 +224,7 @@ export class RabbitMqService implements OnModuleInit, OnModuleDestroy {
               code: payload.code,
               name: payload.name,
               description: payload.description,
+              symptoms: payload.symptoms || [],
               price: payload.price,
               durationMin: payload.durationMin,
               specialtyId: payload.specialtyId,
@@ -238,6 +240,7 @@ export class RabbitMqService implements OnModuleInit, OnModuleDestroy {
             code: payload.code,
             name: payload.name,
             description: payload.description,
+            symptoms: payload.symptoms || [],
             price: payload.price,
             durationMin: payload.durationMin,
             specialtyId: payload.specialtyId,
@@ -384,7 +387,7 @@ export class RabbitMqService implements OnModuleInit, OnModuleDestroy {
 
   private async reconcileExpiredHolds(): Promise<void> {
     const stale = await this.prisma.appointment.findMany({
-      where: { status: 'PENDING_PAYMENT', holdExpiresAt: { lte: new Date() } },
+      where: { status: 'HOLD', holdExpiresAt: { lte: new Date() } },
       select: { id: true }, take: 100,
     });
     for (const appointment of stale) {
