@@ -966,5 +966,63 @@ export class StaffAppointmentsService {
 
     return { total: body.items.length, successCount: results.filter((r) => r.success).length, results }
   }
+
+  async adminReschedule(userId: string, appointmentId: string, body: { newSlotId: string; note?: string }) {
+    await this.roleOf(userId)
+    const { newSlotId, note } = body
+    if (!newSlotId) throw new BadRequestException('Vui lòng chọn khung giờ khám mới')
+    const appt = await this.prisma.appointment.findUnique({
+      where: { id: appointmentId },
+      include: { scheduleSlot: true },
+    })
+    if (!appt) throw new NotFoundException('Không tìm thấy lịch hẹn')
+
+    const newSlot = await this.prisma.doctorScheduleSlot.findUnique({
+      where: { id: newSlotId },
+      include: { schedule: { include: { doctor: { include: { user: true } }, branch: true } } },
+    })
+    if (!newSlot) throw new NotFoundException('Khung giờ khám mới không tồn tại')
+    if (newSlot.occupiedCount >= newSlot.capacity) {
+      throw new BadRequestException('Khung giờ khám mới đã hết chỗ trống')
+    }
+
+    await this.prisma.$transaction(async (tx) => {
+      if (appt.scheduleSlotId) {
+        await tx.doctorScheduleSlot.update({
+          where: { id: appt.scheduleSlotId },
+          data: { occupiedCount: { decrement: 1 } },
+        })
+      }
+      await tx.doctorScheduleSlot.update({
+        where: { id: newSlotId },
+        data: { occupiedCount: { increment: 1 } },
+      })
+      await tx.appointment.update({
+        where: { id: appointmentId },
+        data: {
+          scheduleSlotId: newSlotId,
+          branchId: newSlot.schedule.branchId,
+          rescheduleCount: { increment: 1 },
+          statusHistories: {
+            create: {
+              fromStatus: appt.status,
+              toStatus: appt.status,
+              actorId: userId,
+              reason: note || 'STAFF_ADMIN_RESCHEDULE',
+            },
+          },
+        },
+      })
+    })
+
+    return {
+      success: true,
+      appointmentId,
+      newDoctorName: newSlot.schedule.doctor?.user?.fullName,
+      newDate: newSlot.schedule.workDate.toISOString().slice(0, 10),
+      newTime: newSlot.startTime.toISOString().slice(11, 16),
+    }
+  }
 }
+
 

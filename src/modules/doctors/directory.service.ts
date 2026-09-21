@@ -71,7 +71,7 @@ export class DirectoryService {
           select: { id: true, code: true, slug: true, name: true, address: true, latitude: true, longitude: true, phoneNumber: true },
         });
     const activeBranchId = selectedBranch?.id;
-    const [navigation, featuredDoctors, specialtyPackages, healthPackages, bookingMethods, doctorCount, specialtyCount, reviewAggregate] = await Promise.all([
+    const [navigation, featuredDoctors, specialtyPackages, healthPackages, bookingMethods, doctorCount, specialtyCount] = await Promise.all([
       this.publicNavigation(),
       this.doctors(activeBranchId, undefined, undefined, undefined, true, 6),
       activeBranchId ? this.homepageSpecialtyPackages(activeBranchId) : Promise.resolve([]),
@@ -79,9 +79,8 @@ export class DirectoryService {
       activeBranchId ? this.bookingMethods(activeBranchId) : Promise.resolve([]),
       this.prisma.doctor.count({ where: { isActive: true, user: activeBranchId ? { branchAssignments: { some: { branchId: activeBranchId } } } : undefined } }),
       this.prisma.specialty.count(),
-      this.prisma.review.aggregate({ where: { isActive: true, doctor: { isActive: true } }, _avg: { rating: true }, _count: { id: true } }),
     ]);
-    return { selectedBranch, branches: navigation.branches, departments: navigation.departments, specialties: navigation.specialties, featuredDoctors: featuredDoctors.slice(0, 6), specialtyPackages: specialtyPackages.slice(0, 8), healthPackages: healthPackages.slice(0, 6), bookingMethods, stats: { doctorCount, branchCount: navigation.branches.length, specialtyCount, reviewCount: reviewAggregate._count.id, averageRating: reviewAggregate._avg.rating ?? 0 } };
+    return { selectedBranch, branches: navigation.branches, departments: navigation.departments, specialties: navigation.specialties, featuredDoctors: featuredDoctors.slice(0, 6), specialtyPackages: specialtyPackages.slice(0, 8), healthPackages: healthPackages.slice(0, 6), bookingMethods, stats: { doctorCount, branchCount: navigation.branches.length, specialtyCount, reviewCount: 0, averageRating: 5 } };
   }
 
   private async homepageSpecialtyPackages(branchId: string) {

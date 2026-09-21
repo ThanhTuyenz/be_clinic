@@ -141,7 +141,7 @@ export class SystemCatalogService {
             },
           },
         }
-      : resource === 'rooms' ? { branch: { select: { id: true, name: true, address: true } }, specialties: { where: { isActive: true }, include: { specialty: { select: { id: true, name: true } } }, orderBy: { priority: 'desc' } } } : undefined
+      : resource === 'rooms' ? { branch: { select: { id: true, name: true, address: true } } } : undefined
     const defaultOrderBy: any =
       resource === 'specialties'
         ? { id: 'asc' }
@@ -271,17 +271,67 @@ export class SystemCatalogService {
     return model.update({ where: { id: key }, data: resource === 'booking-methods' ? { isEnabled: false } : { isActive: false } })
   }
 
+  async batchBranchSpecialties(userId: string, body: { branchId: string; specialtyIds: number[] }) {
+    await this.manager(userId)
+    const { branchId, specialtyIds } = body
+    if (!branchId) throw new BadRequestException('Vui lòng chọn cơ sở')
+    const ids = Array.isArray(specialtyIds) ? specialtyIds.map(Number).filter((n) => Number.isInteger(n)) : []
+
+    await this.prisma.$transaction(async (tx) => {
+      // Deactivate those not in list
+      await tx.branchSpecialty.updateMany({
+        where: { branchId, specialtyId: { notIn: ids } },
+        data: { isActive: false },
+      })
+      // Upsert selected
+      for (const sId of ids) {
+        await tx.branchSpecialty.upsert({
+          where: { branchId_specialtyId: { branchId, specialtyId: sId } },
+          update: { isActive: true },
+          create: { branchId, specialtyId: sId, isActive: true },
+        })
+      }
+    })
+
+    return { success: true, branchId, count: ids.length }
+  }
+
+  async batchRoomSpecialties(userId: string, body: { specialtyId: number; roomIds: string[] }) {
+    await this.manager(userId)
+    const specialtyId = Number(body.specialtyId)
+    if (!Number.isInteger(specialtyId)) throw new BadRequestException('Vui lòng chọn chuyên khoa')
+    const roomIds = Array.isArray(body.roomIds) ? body.roomIds.map(String).filter(Boolean) : []
+
+    await this.prisma.$transaction(async (tx) => {
+      // Deactivate unselected rooms for this specialty
+      await tx.clinicRoomSpecialty.updateMany({
+        where: { specialtyId, roomId: { notIn: roomIds } },
+        data: { isActive: false },
+      })
+      for (const rId of roomIds) {
+        await tx.clinicRoomSpecialty.upsert({
+          where: { roomId_specialtyId: { roomId: rId, specialtyId } },
+          update: { isActive: true },
+          create: { roomId: rId, specialtyId, isActive: true, priority: 1 },
+        })
+      }
+    })
+
+    return { success: true, specialtyId, count: roomIds.length }
+  }
+
   private async payload(resource: string, b: any, creating: boolean) {
     if (!['branch-specialties', 'room-specialties'].includes(resource) && !String(b.name || '').trim()) throw new BadRequestException('Tên không được để trống')
     if (resource === 'branches') {
       let clinicId = b.clinicId
       if (!clinicId) { const clinic = await this.prisma.clinic.findFirst({ where: { isActive: true } }); if (!clinic) throw new BadRequestException('Chưa có phòng khám để gán chi nhánh'); clinicId = clinic.id }
-      return { name: String(b.name).trim(), code: String(b.code || '').trim(), address: b.address || null, phoneNumber: b.phoneNumber || null, timezone: b.timezone || 'Asia/Ho_Chi_Minh', isActive: b.isActive ?? true, ...(creating ? { clinicId } : {}) }
+      return { name: String(b.name).trim(), code: String(b.code || '').trim(), address: b.address || null, phoneNumber: b.phoneNumber || null, imageUrl: b.imageUrl || null, timezone: b.timezone || 'Asia/Ho_Chi_Minh', isActive: b.isActive ?? true, ...(creating ? { clinicId } : {}) }
     }
     if (resource === 'specialties') {
       return {
         name: String(b.name).trim(),
         description: b.description || null,
+        iconUrl: b.iconUrl || b.imageUrl || null,
         symptoms: Array.isArray(b.symptoms) ? b.symptoms.map(String).map((s: string) => s.trim().toLowerCase()).filter(Boolean) : [],
       }
     }
@@ -309,6 +359,7 @@ export class SystemCatalogService {
       const data: any = {
         name: String(b.name).trim(),
         code: generatedPkgCode,
+        imageUrl: b.imageUrl || null,
         description: b.description || null,
         symptoms: Array.isArray(b.symptoms) ? b.symptoms.map(String).map((s: string) => s.trim().toLowerCase()).filter(Boolean) : [],
         specialtyId: b.specialtyId ? Number(b.specialtyId) : null,

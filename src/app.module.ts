@@ -34,6 +34,7 @@ import { AiAssistantModule } from './modules/ai-assistant/ai-assistant.module.js
 import { VouchersModule } from './modules/vouchers/vouchers.module.js'
 import { RecommendationModule } from './modules/recommendations/recommendation.module.js'
 import { SmsModule } from './modules/sms/sms.module.js'
+import { MediaModule } from './modules/media/media.module.js'
 
 @Module({
   imports: [
@@ -79,6 +80,7 @@ import { SmsModule } from './modules/sms/sms.module.js'
     VouchersModule,
     RecommendationModule,
     SmsModule,
+    MediaModule,
   ],
 
   controllers: [],

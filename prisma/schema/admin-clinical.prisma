@@ -9,6 +9,7 @@ model ServicePackage {
   code                  String   @unique @db.VarChar(50)
   slug                  String?  @unique @db.VarChar(150)
   name                  String   @db.VarChar(150)
+  imageUrl              String?  @map("image_url") @db.VarChar(500)
   description           String?  @db.Text
   symptoms              String[] @default([])
   price                 Decimal  @db.Decimal(12, 2)

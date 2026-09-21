@@ -46,4 +46,13 @@ export class StaffAppointmentsController {
   ) {
     return this.staffAppointments.executeSmartReschedule(request.user!.id, body)
   }
+
+  @Post(':id/reschedule')
+  adminReschedule(
+    @Req() request: Request,
+    @Param('id') id: string,
+    @Body() body: { newSlotId: string; note?: string },
+  ) {
+    return this.staffAppointments.adminReschedule(request.user!.id, id, body)
+  }
 }

@@ -101,7 +101,6 @@ model Doctor {
   specialties        DoctorSpecialty[]
   scheduleExceptions DoctorScheduleException[]
   schedules          DoctorSchedule[]
-  reviews            Review[]
   aiTriageInsights   AITriageInsight[]
 
   @@index([isFeatured, isActive])
@@ -123,24 +122,6 @@ model Receptionist {
 
   @@index([isActive])
   @@map("receptionists")
-}
-
-model Review {
-  id         String   @id @default(uuid()) @db.Uuid
-  doctorId   String   @map("doctor_id") @db.Uuid
-  reviewerId String   @map("reviewer_id") @db.Uuid
-  rating     Int
-  comment    String?  @db.Text
-  isActive   Boolean  @default(true) @map("is_active")
-  createdAt  DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
-  updatedAt  DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
-  doctor     Doctor   @relation(fields: [doctorId], references: [id], onDelete: Cascade)
-  reviewer   User     @relation(fields: [reviewerId], references: [id], onDelete: Cascade)
-
-  @@unique([doctorId, reviewerId])
-  @@index([doctorId, isActive, createdAt])
-  @@index([reviewerId])
-  @@map("reviews")
 }
 
 model DoctorSpecialty {

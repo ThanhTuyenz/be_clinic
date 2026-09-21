@@ -8,6 +8,7 @@ model User {
   password                 String?                    @map("password_hash") @db.VarChar(255)
   phoneNumber              String?                    @unique @map("phone_number") @db.VarChar(20)
   fullName                 String?                    @map("full_name") @db.VarChar(100)
+  avatarUrl                String?                    @map("avatar_url") @db.VarChar(500)
   provider                 AuthProvider               @default(EMAIL)
   status                   UserStatus                 @default(ACTIVE)
   role                     UserRole                   @default(PATIENT)
@@ -30,7 +31,6 @@ model User {
   bookingOrders            BookingOrder[]
   checkedInAppointments    Appointment[]              @relation("CheckedInBy")
   auditLogs                AuditLog[]                 @relation("AuditActor")
-  doctorReviews            Review[]                   @relation
   appointmentStatusChanges AppointmentStatusHistory[] @relation("AppointmentStatusActor")
   aiConversations          AIConversation[]
   aiBookingIntentLogs      AIBookingIntentLog[]

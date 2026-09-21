@@ -8,7 +8,12 @@ import { SystemCatalogService } from './system-catalog.service.js'
 export class SystemCatalogController {
   constructor(private readonly service:SystemCatalogService){}
   @Get(':resource') list(@Req() req:Request,@Param('resource') resource:string,@Query('q') q=''){return this.service.list(req.user!.id,resource,q)}
-  @Post('service-packages/sync-vectors') syncVectors(@Req() req:Request){return this.service.syncAllPackageVectors(req.user!.id)}
+  @Post('branch-specialties/batch') batchBranchSpecialties(@Req() req: Request, @Body() body: { branchId: string; specialtyIds: number[] }) {
+    return this.service.batchBranchSpecialties(req.user!.id, body)
+  }
+  @Post('room-specialties/batch') batchRoomSpecialties(@Req() req: Request, @Body() body: { specialtyId: number; roomIds: string[] }) {
+    return this.service.batchRoomSpecialties(req.user!.id, body)
+  }
   @Post(':resource') create(@Req() req:Request,@Param('resource') resource:string,@Body() body:any){return this.service.create(req.user!.id,resource,body)}
   @Patch(':resource/:id') update(@Req() req:Request,@Param('resource') resource:string,@Param('id') id:string,@Body() body:any){return this.service.update(req.user!.id,resource,id,body)}
   @Delete(':resource/:id') remove(@Req() req:Request,@Param('resource') resource:string,@Param('id') id:string){return this.service.remove(req.user!.id,resource,id)}
