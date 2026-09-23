@@ -1,0 +1,86 @@
+[
+  {
+    "name": "Nội tổng quát",
+    "slug": "noi-tong-quat",
+    "description": "Khám, tư vấn sức khỏe chung và tầm soát bệnh lý mạn tính người lớn.",
+    "sortOrder": 1
+  },
+  {
+    "name": "Tim mạch",
+    "slug": "tim-mach",
+    "description": "Khám và điều trị tăng huyết áp, xơ vữa động mạch, suy tim và rối loạn nhịp tim.",
+    "sortOrder": 2
+  },
+  {
+    "name": "Tiêu hóa – Gan mật",
+    "slug": "tieu-hoa-gan-mat",
+    "description": "Viêm loét dạ dày - đại tràng, trào ngược dạ dày, viêm gan B/C và sỏi mật.",
+    "sortOrder": 3
+  },
+  {
+    "name": "Hô hấp",
+    "slug": "ho-hap",
+    "description": "Viêm phế quản, hen suyễn, viêm phổi và bệnh phổi tắc nghẽn mạn tính (COPD).",
+    "sortOrder": 4
+  },
+  {
+    "name": "Nội tiết – Đái tháo đường",
+    "slug": "noi-tiet-dai-thao-duong",
+    "description": "Kiểm soát đường huyết, bệnh lý tuyến giáp và rối loạn chuyển hóa lipid.",
+    "sortOrder": 5
+  },
+  {
+    "name": "Thần kinh",
+    "slug": "than-kinh",
+    "description": "Khám đau đầu mạn tính, mất ngủ, rối loạn tiền đình và suy giảm trí nhớ.",
+    "sortOrder": 6
+  },
+  {
+    "name": "Ngoại tổng quát",
+    "slug": "ngoai-tong-quat",
+    "description": "Bệnh lý hậu môn trực tràng, thoát vị bẹn và xử lý tiểu phẫu ngoại khoa.",
+    "sortOrder": 7
+  },
+  {
+    "name": "Ngoại Chấn thương Chỉnh hình",
+    "slug": "ngoai-chan-thuong-chinh-hinh",
+    "description": "Bệnh lý cơ xương khớp, thoái hóa khớp, trật khớp và chấn thương thể thao.",
+    "sortOrder": 8
+  },
+  {
+    "name": "Nhi khoa",
+    "slug": "nhi-khoa",
+    "description": "Khám, điều trị và theo dõi sự phát triển thể chất toàn diện của trẻ nhỏ.",
+    "sortOrder": 9
+  },
+  {
+    "name": "Sản – Phụ khoa",
+    "slug": "san-phu-khoa",
+    "description": "Chăm sóc sức khỏe sinh sản phụ nữ, tầm soát phụ khoa và theo dõi thai kỳ định kỳ.",
+    "sortOrder": 10
+  },
+  {
+    "name": "Mắt",
+    "slug": "mat",
+    "description": "Đo thị lực, khám tật khúc xạ, viêm kết mạc, đục thủy tinh thể và soi đáy mắt.",
+    "sortOrder": 11
+  },
+  {
+    "name": "Tai Mũi Họng",
+    "slug": "tai-mui-hong",
+    "description": "Nội soi tai mũi họng, viêm xoang, viêm họng hạt, viêm amidan và viêm tai giữa.",
+    "sortOrder": 12
+  },
+  {
+    "name": "Răng Hàm Mặt",
+    "slug": "rang-ham-mat",
+    "description": "Khám răng tổng quát, nhổ răng, trám răng thẩm mỹ, điều trị tủy và lấy cao răng.",
+    "sortOrder": 13
+  },
+  {
+    "name": "Da liễu",
+    "slug": "da-lieu",
+    "description": "Khám, điều trị viêm da cơ địa, mụn trứng cá, nấm da và chăm sóc thẩm mỹ da liễu.",
+    "sortOrder": 14
+  }
+]

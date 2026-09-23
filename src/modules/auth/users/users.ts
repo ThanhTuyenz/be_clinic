@@ -6,6 +6,18 @@ import { IPaginationOptions } from 'src/common/utils/types/pagination-options';
 
 export type UserUpdate = Omit<Partial<User>, 'customPermissions'> & {
   customPermissions?: unknown[] | null;
+  phoneNumber?: string | null;
+  avatarUrl?: string | null;
+  branchId?: string | null;
+  specialtyId?: number | null;
+  roomId?: string | null;
+  academicRank?: string | null;
+  licenseNumber?: string | null;
+  experienceYears?: number | null;
+  consultationFee?: number | null;
+  slotDuration?: number | null;
+  isFeatured?: boolean | null;
+  biography?: string | null;
 };
 
 export type UsersPaginatedResult = {

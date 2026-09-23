@@ -72,7 +72,7 @@ export class PermissionsGuard implements CanActivate {
       return false;
     }
 
-    if (userRole === PermissionRole.ADMIN) {
+    if (userRole === PermissionRole.ADMIN || String(userRole).toUpperCase() === 'ADMIN') {
       return true;
     }
 

@@ -73,4 +73,52 @@ export class UpdateUserAdminDto {
   @IsOptional()
   @IsBoolean()
   isDeleted?: boolean;
+
+  @ApiPropertyOptional({ example: '0901234567' })
+  @IsOptional()
+  phoneNumber?: string | null;
+
+  @ApiPropertyOptional({ description: 'URL ảnh đại diện' })
+  @IsOptional()
+  avatarUrl?: string | null;
+
+  @ApiPropertyOptional({ description: 'ID cơ sở làm việc' })
+  @IsOptional()
+  branchId?: string | null;
+
+  @ApiPropertyOptional({ description: 'ID chuyên khoa chính (Bác sĩ)' })
+  @IsOptional()
+  specialtyId?: number | null;
+
+  @ApiPropertyOptional({ description: 'ID phòng khám phụ trách' })
+  @IsOptional()
+  roomId?: string | null;
+
+  @ApiPropertyOptional({ example: 'BS. CKI' })
+  @IsOptional()
+  academicRank?: string | null;
+
+  @ApiPropertyOptional({ example: 'CCHN-12345' })
+  @IsOptional()
+  licenseNumber?: string | null;
+
+  @ApiPropertyOptional({ example: 5 })
+  @IsOptional()
+  experienceYears?: number | null;
+
+  @ApiPropertyOptional({ example: 250000 })
+  @IsOptional()
+  consultationFee?: number | null;
+
+  @ApiPropertyOptional({ example: 30 })
+  @IsOptional()
+  slotDuration?: number | null;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  isFeatured?: boolean;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  biography?: string | null;
 }

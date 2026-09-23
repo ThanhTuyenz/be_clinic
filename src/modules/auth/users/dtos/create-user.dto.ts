@@ -1,5 +1,4 @@
 import { Transform } from 'class-transformer';
-
 import {
   IsEmail,
   IsEnum,
@@ -18,7 +17,7 @@ import { ApiProperty } from '@nestjs/swagger';
 import { RolePermissionDto } from '../../../roles/dtos/create-role.dto';
 
 export class CreateUserDto {
-  @ApiProperty({ example: 'vuminhduc.contact@gmail.com' })
+  @ApiProperty({ example: 'doctor@vitacare.local' })
   @Transform(lowerCaseTransformer)
   @IsNotEmpty()
   @IsEmail()
@@ -28,7 +27,7 @@ export class CreateUserDto {
   @MinLength(6)
   password?: string;
 
-  @ApiProperty({ example: 'Vu Minh Duc' })
+  @ApiProperty({ example: 'BS. Nguyễn Văn An' })
   @IsNotEmpty()
   fullName: string | null;
 
@@ -57,4 +56,52 @@ export class CreateUserDto {
   socialId?: string | null;
 
   hash?: string | null;
+
+  @ApiProperty({ example: '0901234567', required: false })
+  @IsOptional()
+  phoneNumber?: string | null;
+
+  @ApiProperty({ description: 'URL ảnh đại diện', required: false })
+  @IsOptional()
+  avatarUrl?: string | null;
+
+  @ApiProperty({ description: 'ID cơ sở làm việc', required: false })
+  @IsOptional()
+  branchId?: string | null;
+
+  @ApiProperty({ description: 'ID chuyên khoa chính (Bác sĩ)', required: false })
+  @IsOptional()
+  specialtyId?: number | null;
+
+  @ApiProperty({ description: 'ID phòng khám phụ trách', required: false })
+  @IsOptional()
+  roomId?: string | null;
+
+  @ApiProperty({ example: 'BS. CKI', required: false })
+  @IsOptional()
+  academicRank?: string | null;
+
+  @ApiProperty({ example: 'CCHN-12345', required: false })
+  @IsOptional()
+  licenseNumber?: string | null;
+
+  @ApiProperty({ example: 5, required: false })
+  @IsOptional()
+  experienceYears?: number | null;
+
+  @ApiProperty({ example: 250000, required: false })
+  @IsOptional()
+  consultationFee?: number | null;
+
+  @ApiProperty({ example: 30, required: false })
+  @IsOptional()
+  slotDuration?: number | null;
+
+  @ApiProperty({ required: false })
+  @IsOptional()
+  isFeatured?: boolean;
+
+  @ApiProperty({ required: false })
+  @IsOptional()
+  biography?: string | null;
 }

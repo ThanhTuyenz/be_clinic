@@ -1,0 +1,33 @@
+[
+  {
+    "branchCode": "VC-CENTRAL",
+    "rooms": [
+      { "code": "P100", "name": "Phòng tiếp nhận & Khám ban đầu", "specialtySlugs": ["rang-ham-mat", "san-phu-khoa", "ngoai-tong-quat", "ngoai-chan-thuong-chinh-hinh"] },
+      { "code": "P101", "name": "Phòng khám Nội 101", "specialtySlugs": ["noi-tong-quat", "noi-tiet-dai-thao-duong", "than-kinh"] },
+      { "code": "P102", "name": "Phòng khám Nhi 102", "specialtySlugs": ["nhi-khoa"] },
+      { "code": "P103", "name": "Phòng khám Tim mạch 103", "specialtySlugs": ["tim-mach"] },
+      { "code": "P104", "name": "Phòng khám Tiêu hóa 104", "specialtySlugs": ["tieu-hoa-gan-mat"] },
+      { "code": "P105", "name": "Phòng khám Hô hấp 105", "specialtySlugs": ["ho-hap"] },
+      { "code": "P106", "name": "Phòng khám Tai Mũi Họng 106", "specialtySlugs": ["tai-mui-hong"] },
+      { "code": "P107", "name": "Phòng khám Mắt 107", "specialtySlugs": ["mat"] },
+      { "code": "P108", "name": "Phòng khám Da liễu 108", "specialtySlugs": ["da-lieu"] },
+      { "code": "LAB01", "name": "Phòng xét nghiệm", "specialtySlugs": [] },
+      { "code": "XRAY01", "name": "Phòng X-quang", "specialtySlugs": [] },
+      { "code": "US01", "name": "Phòng siêu âm", "specialtySlugs": [] }
+    ]
+  },
+  {
+    "branchCode": "VC-EAST",
+    "rooms": [
+      { "code": "P200", "name": "Phòng tiếp nhận Cơ sở Đông", "specialtySlugs": [] },
+      { "code": "P201", "name": "Phòng khám Đa khoa 201", "specialtySlugs": ["noi-tong-quat", "ho-hap", "tieu-hoa-gan-mat", "noi-tiet-dai-thao-duong", "rang-ham-mat"] },
+      { "code": "P202", "name": "Phòng khám Chuyên khoa 202", "specialtySlugs": ["da-lieu", "than-kinh", "ngoai-tong-quat", "ngoai-chan-thuong-chinh-hinh"] },
+      { "code": "P203", "name": "Phòng khám Tim mạch 203", "specialtySlugs": ["tim-mach"] },
+      { "code": "P204", "name": "Phòng khám Nhi & Sản 204", "specialtySlugs": ["nhi-khoa", "san-phu-khoa"] },
+      { "code": "P205", "name": "Phòng khám Mắt & TMH 205", "specialtySlugs": ["mat", "tai-mui-hong"] },
+      { "code": "LAB02", "name": "Phòng xét nghiệm Cơ sở Đông", "specialtySlugs": [] },
+      { "code": "XRAY02", "name": "Phòng X-quang Cơ sở Đông", "specialtySlugs": [] },
+      { "code": "US02", "name": "Phòng siêu âm Cơ sở Đông", "specialtySlugs": [] }
+    ]
+  }
+]

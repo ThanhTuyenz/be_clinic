@@ -53,6 +53,7 @@ model PatientProfile {
   @@index([nationalId])
   @@index([healthInsuranceNumber])
   @@index([patientCode])
+  @@index([phoneNumber])
   @@map("patient_profiles")
 }
 

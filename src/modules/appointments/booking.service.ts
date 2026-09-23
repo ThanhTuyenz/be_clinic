@@ -558,6 +558,7 @@ export class BookingService {
         ],
       },
       orderBy: { createdAt: 'desc' },
+      take: 100,
       select: {
         id: true,
         bookingCode: true,
@@ -607,15 +608,13 @@ export class BookingService {
                     id: true,
                     user: { select: { fullName: true } },
                     specialties: {
-                      include: { specialty: { select: { name: true } } },
+                      take: 1,
+                      select: { specialty: { select: { name: true } } },
                     },
                   },
                 },
                 room: {
                   select: { id: true, code: true, name: true },
-                },
-                branch: {
-                  select: { id: true, name: true, address: true },
                 },
               },
             },
@@ -626,7 +625,7 @@ export class BookingService {
     return rows.map((row) => {
       const doctorSlot = row.scheduleSlot;
       const room = doctorSlot?.schedule.room;
-      const branch = doctorSlot?.schedule.branch ?? row.branch;
+      const branch = row.branch;
       return {
         id: row.id,
         bookingCode: row.bookingCode,

@@ -24,7 +24,8 @@ export class UsersService implements IUsersService {
 
   async createUser(dto: CreateUserDto): Promise<User> {
     const email = dto.email ? dto.email.trim().toLowerCase() : null;
-    const phoneNumber = (dto as any).phoneNumber ? String((dto as any).phoneNumber).trim() : null;
+    const phoneNumber = dto.phoneNumber ? String(dto.phoneNumber).trim() : null;
+    const avatarUrl = dto.avatarUrl ? String(dto.avatarUrl).trim() : null;
     if (!email && !phoneNumber) throw new Error('Email hoặc số điện thoại không được gửi tới server.');
     if (email && (await this.prisma.user.findUnique({ where: { email } }))) {
       throw new HttpException('Email này đã được sử dụng', HttpStatus.CONFLICT);
@@ -39,6 +40,7 @@ export class UsersService implements IUsersService {
         password: dto.password ? await hashPassword(dto.password) : null,
         fullName: dto.fullName,
         phoneNumber: phoneNumber ?? null,
+        avatarUrl: avatarUrl ?? null,
         role: this.toPrismaRole(dto.role ?? UserRole.Patient),
         status: this.toPrismaStatus(dto.status ?? UserStatus.Active),
         provider: this.toPrismaProvider(dto.provider ?? 'email'),
@@ -49,11 +51,11 @@ export class UsersService implements IUsersService {
       },
     });
 
-    if ((dto as any).branchId) {
+    if (dto.branchId) {
       await this.prisma.userBranchAssignment.upsert({
-        where: { userId_branchId: { userId: row.id, branchId: (dto as any).branchId } },
+        where: { userId_branchId: { userId: row.id, branchId: dto.branchId } },
         update: { isPrimary: true },
-        create: { userId: row.id, branchId: (dto as any).branchId, isPrimary: true },
+        create: { userId: row.id, branchId: dto.branchId, isPrimary: true },
       });
     }
 
@@ -61,35 +63,44 @@ export class UsersService implements IUsersService {
       const docRec = await this.prisma.doctor.upsert({
         where: { userId: row.id },
         update: {
-          academicRank: (dto as any).academicRank || 'BS. CKI',
-          licenseNumber: (dto as any).licenseNumber || null,
-          experienceYears: Number((dto as any).experienceYears) || 0,
-          consultationFee: Number((dto as any).consultationFee) || 0,
-          slotDuration: Number((dto as any).slotDuration) || 30,
-          isFeatured: Boolean((dto as any).isFeatured),
-          biography: (dto as any).biography || null,
+          academicRank: dto.academicRank || 'BS. CKI',
+          licenseNumber: dto.licenseNumber || null,
+          experienceYears: Number(dto.experienceYears) || 0,
+          consultationFee: Number(dto.consultationFee) || 0,
+          slotDuration: Number(dto.slotDuration) || 30,
+          isFeatured: Boolean(dto.isFeatured),
+          biography: dto.biography || null,
+          avatarUrl: avatarUrl ?? null,
         },
         create: {
           userId: row.id,
-          academicRank: (dto as any).academicRank || 'BS. CKI',
-          licenseNumber: (dto as any).licenseNumber || null,
-          experienceYears: Number((dto as any).experienceYears) || 0,
-          consultationFee: Number((dto as any).consultationFee) || 0,
-          slotDuration: Number((dto as any).slotDuration) || 30,
-          isFeatured: Boolean((dto as any).isFeatured),
-          biography: (dto as any).biography || null,
+          academicRank: dto.academicRank || 'BS. CKI',
+          licenseNumber: dto.licenseNumber || null,
+          experienceYears: Number(dto.experienceYears) || 0,
+          consultationFee: Number(dto.consultationFee) || 0,
+          slotDuration: Number(dto.slotDuration) || 30,
+          isFeatured: Boolean(dto.isFeatured),
+          biography: dto.biography || null,
+          avatarUrl: avatarUrl ?? null,
         },
       });
-      if ((dto as any).specialtyId && Number((dto as any).specialtyId)) {
+      if (dto.specialtyId && Number(dto.specialtyId)) {
         await this.prisma.doctorSpecialty.upsert({
-          where: { doctorId_specialtyId: { doctorId: docRec.id, specialtyId: Number((dto as any).specialtyId) } },
+          where: { doctorId_specialtyId: { doctorId: docRec.id, specialtyId: Number(dto.specialtyId) } },
           update: { isPrimary: true },
-          create: { doctorId: docRec.id, specialtyId: Number((dto as any).specialtyId), isPrimary: true },
+          create: { doctorId: docRec.id, specialtyId: Number(dto.specialtyId), isPrimary: true },
         });
       }
     }
 
-    return this.toEntity(row);
+    const userWithRelations = await this.prisma.user.findUnique({
+      where: { id: row.id },
+      include: {
+        doctor: { include: { specialties: { include: { specialty: true } } } },
+        branchAssignments: { include: { branch: true } },
+      },
+    });
+    return userWithRelations ? this.toEntity(userWithRelations) : this.toEntity(row);
   }
 
   async findOneUser(options: EntityCondition<User>): Promise<NullableType<User>> {
@@ -114,17 +125,30 @@ export class UsersService implements IUsersService {
       this.prisma.user.findMany({
         where,
         include: {
-          branchAssignments: { include: { branch: true } },
+          branchAssignments: {
+            select: {
+              isPrimary: true,
+              branchId: true,
+              branch: { select: { id: true, code: true, name: true } },
+            },
+          },
           doctor: {
             select: {
+              id: true,
+              userId: true,
               academicRank: true,
               licenseNumber: true,
               experienceYears: true,
               consultationFee: true,
               slotDuration: true,
               isFeatured: true,
-              biography: true,
-              specialties: { include: { specialty: true } },
+              avatarUrl: true,
+              specialties: {
+                select: {
+                  isPrimary: true,
+                  specialty: { select: { id: true, name: true, slug: true } },
+                },
+              },
             },
           },
         },
@@ -134,7 +158,7 @@ export class UsersService implements IUsersService {
       }),
       this.prisma.user.count({ where }),
     ]);
-    return { data: rows.map((row) => this.toEntity(row)), total };
+    return { data: rows.map((row) => this.toSafeEntity(row)), total };
   }
 
   async updateUser(id: string, payload: UserUpdate): Promise<User> {
@@ -149,6 +173,9 @@ export class UsersService implements IUsersService {
 
     const p = payload as any;
     if (p.branchId) {
+      await this.prisma.userBranchAssignment.deleteMany({
+        where: { userId: row.id, branchId: { not: p.branchId } },
+      });
       await this.prisma.userBranchAssignment.upsert({
         where: { userId_branchId: { userId: row.id, branchId: p.branchId } },
         update: { isPrimary: true },
@@ -156,7 +183,7 @@ export class UsersService implements IUsersService {
       });
     }
 
-    if (row.role === 'DOCTOR') {
+    if (String(row.role).toUpperCase() === 'DOCTOR') {
       const docRec = await this.prisma.doctor.upsert({
         where: { userId: row.id },
         update: {
@@ -167,6 +194,7 @@ export class UsersService implements IUsersService {
           ...(p.slotDuration !== undefined ? { slotDuration: Number(p.slotDuration) || 30 } : {}),
           ...(p.isFeatured !== undefined ? { isFeatured: Boolean(p.isFeatured) } : {}),
           ...(p.biography !== undefined ? { biography: p.biography } : {}),
+          ...(p.avatarUrl !== undefined ? { avatarUrl: p.avatarUrl || null } : {}),
         },
         create: {
           userId: row.id,
@@ -177,10 +205,14 @@ export class UsersService implements IUsersService {
           slotDuration: Number(p.slotDuration) || 30,
           isFeatured: Boolean(p.isFeatured),
           biography: p.biography || null,
+          avatarUrl: p.avatarUrl || null,
         },
       });
 
       if (p.specialtyId && Number(p.specialtyId)) {
+        await this.prisma.doctorSpecialty.deleteMany({
+          where: { doctorId: docRec.id, specialtyId: { not: Number(p.specialtyId) } },
+        });
         await this.prisma.doctorSpecialty.upsert({
           where: { doctorId_specialtyId: { doctorId: docRec.id, specialtyId: Number(p.specialtyId) } },
           update: { isPrimary: true },
@@ -191,7 +223,18 @@ export class UsersService implements IUsersService {
 
     await this.recordHistory(row, HISTORY_ACTIONS.USER_UPDATED, 'Cập nhật người dùng');
     this.permissionsService.invalidateCache(id);
-    return this.toEntity(row);
+    const updatedWithRelations = await this.prisma.user.findUnique({
+      where: { id: row.id },
+      include: {
+        doctor: { include: { specialties: { include: { specialty: true } } } },
+        branchAssignments: { include: { branch: true } },
+      },
+    });
+    const entity = updatedWithRelations ? this.toEntity(updatedWithRelations) : this.toEntity(row);
+    delete (entity as any).password;
+    delete (entity as any).previousPassword;
+    delete (entity as any).hash;
+    return entity;
   }
 
   async deleteUser(id: string): Promise<void> {
@@ -229,8 +272,11 @@ export class UsersService implements IUsersService {
 
   private async toUpdateData(payload: UserUpdate, existing: User): Promise<Prisma.UserUpdateInput> {
     const passwordChanged = payload.password != null && payload.password !== existing.password;
+    const p = payload as any;
     return {
       email: payload.email === undefined ? undefined : payload.email?.trim().toLowerCase(),
+      phoneNumber: p.phoneNumber !== undefined ? (p.phoneNumber ? String(p.phoneNumber).trim() : null) : undefined,
+      avatarUrl: p.avatarUrl !== undefined ? (p.avatarUrl ? String(p.avatarUrl).trim() : null) : undefined,
       password: passwordChanged ? await hashPassword(payload.password!) : undefined,
       fullName: payload.fullName,
       provider: payload.provider ? this.toPrismaProvider(payload.provider) : undefined,
@@ -255,6 +301,14 @@ export class UsersService implements IUsersService {
       customPermissions: row.customPermissions as User['customPermissions'],
       previousPassword: row.password,
     });
+  }
+
+  private toSafeEntity(row: PrismaUser): User {
+    const entity = this.toEntity(row);
+    delete (entity as any).password;
+    delete (entity as any).previousPassword;
+    delete (entity as any).hash;
+    return entity;
   }
 
   private toPrismaRole(value: UserRole | string): any { return String(value).toUpperCase(); }

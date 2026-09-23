@@ -172,6 +172,7 @@ export class DirectoryService {
         ],
       },
       orderBy: [{ price: 'asc' }, { name: 'asc' }],
+      take: 60,
       select: {
         id: true,
         code: true,
@@ -191,6 +192,7 @@ export class DirectoryService {
       const bbm = branchBookingMethods?.find((l) => !branchId || l.branchBookingMethod.branchId === branchId)?.branchBookingMethod || branchBookingMethod;
       return {
         ...service,
+        price: Number(service.price),
         branchId: bbm?.branchId,
         branchBookingMethodId: bbm?.id,
         bookingMethod: bbm?.bookingMethod,
@@ -437,6 +439,7 @@ export class DirectoryService {
       const bbm = branchBookingMethods?.find((l) => !branchId || l.branchBookingMethod.branchId === branchId)?.branchBookingMethod || branchBookingMethod;
       return {
         ...healthPackage,
+        price: Number(healthPackage.price),
         branchId: bbm?.branchId || branchId,
         branchSlug: bbm?.branch?.slug ?? null,
         branchBookingMethodId: bbm?.id,
@@ -477,6 +480,7 @@ export class DirectoryService {
         academicRank: true,
         experienceYears: true,
         biography: true,
+        avatarUrl: true,
         consultationFee: true,
         ratingAverage: true,
         ratingCount: true,
@@ -504,6 +508,7 @@ export class DirectoryService {
     return rows.map(({ user, ...doctor }) => ({
       ...doctor,
       fullName: user.fullName || 'Bác sĩ',
+      consultationFee: Number(doctor.consultationFee),
       branchAssignments: user.branchAssignments
     }));
   }

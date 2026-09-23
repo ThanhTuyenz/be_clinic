@@ -8,20 +8,30 @@ import { SkipPermissions } from '../permissions/decorators/skip-permissions.deco
 import { SchedulesService } from './schedules.service.js';
 
 @ApiTags('Schedules')
+@SkipPermissions()
 @Controller('schedules')
 export class SchedulesController {
   constructor(private readonly schedulesService: SchedulesService) {}
 
   @Get()
   @SkipPermissions()
-  @ApiOperation({ summary: 'Danh sách ca làm việc (có thể lọc theo doctorId, branchId, ngày)' })
+  @ApiOperation({ summary: 'Danh sách ca làm việc (có thể lọc theo doctorId, branchId, ngày, withSlots, availableOnly)' })
   findAll(
     @Query('doctorId') doctorId?: string,
     @Query('branchId') branchId?: string,
     @Query('startDate') startDate?: string,
     @Query('endDate') endDate?: string,
+    @Query('withSlots') withSlots?: string,
+    @Query('availableOnly') availableOnly?: string,
   ) {
-    return this.schedulesService.findAll(doctorId, branchId, startDate, endDate);
+    return this.schedulesService.findAll(
+      doctorId,
+      branchId,
+      startDate,
+      endDate,
+      withSlots === 'true',
+      availableOnly === 'true',
+    );
   }
 
   @UseGuards(JwtAuthGuard, RolesGuard)
@@ -31,6 +41,24 @@ export class SchedulesController {
   @ApiOperation({ summary: 'Tạo ca trực mới + tự động sinh slot' })
   create(@Body() body: any) {
     return this.schedulesService.create(body);
+  }
+
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('ADMIN', 'BRANCH_MANAGER')
+  @ApiBearerAuth()
+  @Post('batch')
+  @ApiOperation({ summary: 'Phân ca định kỳ / hàng loạt theo các thứ trong tuần' })
+  createBatch(@Body() body: any) {
+    return this.schedulesService.createBatch(body);
+  }
+
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('ADMIN', 'BRANCH_MANAGER')
+  @ApiBearerAuth()
+  @Post('copy-week')
+  @ApiOperation({ summary: 'Sao chép toàn bộ lịch trực từ tuần này sang tuần sau' })
+  copyWeek(@Body() body: any) {
+    return this.schedulesService.copyWeek(body);
   }
 
   @UseGuards(JwtAuthGuard, RolesGuard)

@@ -23,6 +23,7 @@ model DoctorSchedule {
   @@unique([doctorId, branchId, workDate, startTime])
   @@index([doctorId, workDate, status])
   @@index([branchId, workDate, status])
+  @@index([workDate, status])
   @@map("doctor_schedules")
 }
 

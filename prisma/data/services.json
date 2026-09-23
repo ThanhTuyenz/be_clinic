@@ -1,0 +1,38 @@
+[
+  {
+    "codeSuffix": "GENERAL-BASIC",
+    "name": "Gói khám sức khỏe tổng quát cơ bản",
+    "description": "Tầm soát sức khỏe định kỳ với xét nghiệm công thức máu, đường huyết, mỡ máu và chụp X-quang phổi.",
+    "price": 1290000
+  },
+  {
+    "codeSuffix": "CARDIO-SCREENING",
+    "name": "Gói tầm soát nguy cơ tim mạch",
+    "description": "Đánh giá các yếu tố nguy cơ tim mạch, đo điện tim ECG, siêu âm doppler tim và định lượng lipid máu.",
+    "price": 990000
+  },
+  {
+    "codeSuffix": "WOMEN-WELLNESS",
+    "name": "Gói kiểm tra sức khỏe phụ nữ toàn diện",
+    "description": "Kiểm tra sức khỏe định kỳ cho nữ, siêu âm tuyến vú, siêu âm phụ khoa và tầm soát tế bào cổ tử cung.",
+    "price": 1490000
+  },
+  {
+    "codeSuffix": "EYE-COMPREHENSIVE",
+    "name": "Gói khám Mắt toàn diện & Đo thị lực khúc xạ",
+    "description": "Kiểm tra thị lực kỹ thuật số, soi đáy mắt, đo nhãn áp và tầm soát các tật khúc xạ cận/viễn/loạn thị.",
+    "price": 350000
+  },
+  {
+    "codeSuffix": "EYE-CATARACT",
+    "name": "Gói tầm soát cườm nước & Bệnh lý võng mạc",
+    "description": "Chụp hình màu đáy mắt, đo nhãn áp không tiếp xúc và tư vấn phòng ngừa đục thủy tinh thể, glôcôm.",
+    "price": 650000
+  },
+  {
+    "codeSuffix": "ENT-ENDOSCOPY",
+    "name": "Gói nội soi tầm soát bệnh lý Tai Mũi Họng",
+    "description": "Nội soi dải tần hẹp NBI tai mũi họng, phát hiện sớm tổn thương niêm mạc xoang, vòm họng và thanh quản.",
+    "price": 450000
+  }
+]

@@ -1,0 +1,20 @@
+[
+  {
+    "code": "VC-CENTRAL",
+    "name": "VitaCare Trung tâm",
+    "slug": "vitacare-trung-tam",
+    "address": "201 Nguyễn Thị Minh Khai, Phường Bến Thành, Quận 1, TP.HCM",
+    "phoneNumber": "02839123456",
+    "latitude": 10.7769,
+    "longitude": 106.7009
+  },
+  {
+    "code": "VC-EAST",
+    "name": "VitaCare Cơ sở Đông",
+    "slug": "vitacare-co-so-dong",
+    "address": "15 Võ Văn Ngân, Phường Linh Chiểu, TP. Thủ Đức, TP.HCM",
+    "phoneNumber": "02839654321",
+    "latitude": 10.8499,
+    "longitude": 106.7719
+  }
+]

@@ -89,6 +89,12 @@ export class User extends EntityHelper {
   fullName: string | null;
 
   @Column({ type: String, nullable: true })
+  phoneNumber: string | null;
+
+  @Column({ type: String, nullable: true })
+  avatarUrl: string | null;
+
+  @Column({ type: String, nullable: true })
   roleId: string | null;
 
   @Column({ type: 'json', nullable: true })

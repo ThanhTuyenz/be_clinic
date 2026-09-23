@@ -83,6 +83,7 @@ export class SpecialtiesService {
         },
       },
       orderBy: [{ price: 'asc' }, { name: 'asc' }],
+      take: 60,
       select: {
         id: true,
         code: true,
@@ -130,6 +131,7 @@ export class SpecialtiesService {
         },
       },
       orderBy: [{ isFeatured: 'desc' }, { ratingAverage: 'desc' }, { user: { fullName: 'asc' } }],
+      take: 50,
       select: {
         id: true,
         academicRank: true,
@@ -216,6 +218,7 @@ export class SpecialtiesService {
         ...(term ? { name: { contains: term, mode: 'insensitive' } } : {}),
       },
       orderBy: { name: 'asc' },
+      take: 60,
       select: {
         id: true,
         code: true,

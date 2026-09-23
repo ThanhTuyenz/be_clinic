@@ -115,6 +115,8 @@ export class StaffAppointmentsService {
         paid: invoice.status === 'PAID',
         amount: Number(invoice.totalAmount),
         method: payment?.method?.toLowerCase(),
+        provider: payment?.provider,
+        transactionId: payment?.providerTransactionId,
         paidAt: invoice.paidAt,
       } : null,
       medicalVisit: null,
@@ -123,36 +125,83 @@ export class StaffAppointmentsService {
 
   private appointmentInclude() {
     return {
-      patientProfile: { include: { account: { select: { id: true, email: true, phoneNumber: true } } } },
-      branch: true,
+      patientProfile: {
+        select: {
+          id: true,
+          patientCode: true,
+          fullName: true,
+          phoneNumber: true,
+          nationalId: true,
+          healthInsuranceNumber: true,
+          dateOfBirth: true,
+          gender: true,
+          address: true,
+          account: { select: { id: true, email: true, phoneNumber: true } },
+        },
+      },
+      branch: { select: { id: true, code: true, name: true, address: true } },
       bookingOrder: {
-        include: {
+        select: {
           invoice: {
-            include: {
-              items: true,
-              payments: { orderBy: { createdAt: 'desc' as const }, take: 1 },
+            select: {
+              id: true,
+              totalAmount: true,
+              status: true,
+              paidAt: true,
+              payments: { orderBy: { createdAt: 'desc' as const }, take: 1, select: { method: true, provider: true, providerTransactionId: true, paidAt: true } },
             },
           },
         },
       },
       scheduleSlot: {
-        include: {
+        select: {
+          startTime: true,
+          endTime: true,
           schedule: {
-            include: {
-              room: true,
+            select: {
+              workDate: true,
+              room: { select: { id: true, code: true, name: true } },
               doctor: {
-                include: {
+                select: {
+                  id: true,
+                  academicRank: true,
                   user: { select: { id: true, fullName: true, email: true, phoneNumber: true } },
-                  specialties: { include: { specialty: true } },
+                  specialties: {
+                    select: {
+                      isPrimary: true,
+                      specialty: { select: { id: true, name: true } },
+                    },
+                  },
                 },
               },
             },
           },
         },
       },
-      servicePackage: { include: { specialty: true, branchBookingMethod: { include: { bookingMethod: true } } } },
-      invoice: { include: { items: true, payments: { orderBy: { createdAt: 'desc' as const }, take: 1 } } },
-      statusHistories: { orderBy: { createdAt: 'asc' as const }, take: 1, include: { actor: { select: { id: true, fullName: true, email: true, role: true } } } },
+      servicePackage: {
+        select: {
+          id: true,
+          code: true,
+          name: true,
+          specialtyId: true,
+          specialty: { select: { id: true, name: true } },
+          branchBookingMethod: { select: { bookingMethod: { select: { code: true, name: true } } } },
+        },
+      },
+      invoice: {
+        select: {
+          id: true,
+          totalAmount: true,
+          status: true,
+          paidAt: true,
+          payments: { orderBy: { createdAt: 'desc' as const }, take: 1, select: { method: true, provider: true, providerTransactionId: true, paidAt: true } },
+        },
+      },
+      statusHistories: {
+        orderBy: { createdAt: 'asc' as const },
+        take: 1,
+        select: { actor: { select: { id: true, fullName: true, email: true, role: true } } },
+      },
     }
   }
 
@@ -194,14 +243,40 @@ export class StaffAppointmentsService {
   async receptionAppointments(userId: string, query: Record<string, string | undefined>) {
     const role = await this.roleOf(userId)
     if (!['ADMIN', 'BRANCH_MANAGER', 'RECEPTIONIST', 'CASHIER'].includes(role)) throw new ForbiddenException('Không có quyền xem danh sách tiếp nhận')
-    const start = query.from ? new Date(`${query.from}T00:00:00`) : undefined
-    const end = query.to ? new Date(`${query.to}T23:59:59`) : undefined
+    const parseStartUtc = (s?: string) => {
+      if (!s) return undefined
+      const parts = s.split('-').map(Number)
+      if (parts.length === 3 && parts[0] && parts[1] && parts[2]) {
+        return new Date(Date.UTC(parts[0], parts[1] - 1, parts[2]))
+      }
+      const d = new Date(s)
+      return isNaN(d.getTime()) ? undefined : d
+    }
+    const parseEndUtc = (s?: string) => {
+      if (!s) return undefined
+      const parts = s.split('-').map(Number)
+      if (parts.length === 3 && parts[0] && parts[1] && parts[2]) {
+        return new Date(Date.UTC(parts[0], parts[1] - 1, parts[2] + 1))
+      }
+      const d = new Date(s)
+      return isNaN(d.getTime()) ? undefined : d
+    }
+    const start = parseStartUtc(query.from)
+    const end = parseEndUtc(query.to)
     const statusMap: Record<string, any> = { pending: 'HOLD', confirmed: { in: ['CONFIRMED', 'CHECKED_IN'] }, cancelled: 'CANCELLED', examined: 'COMPLETED' }
     const term = String(query.q || '').trim()
     const rows = await this.prisma.appointment.findMany({
       where: {
         ...(query.status && query.status !== 'all' ? { status: statusMap[query.status] || query.status.toUpperCase() } : {}),
-        ...(start || end ? { scheduleSlot: { schedule: { workDate: { ...(start ? { gte: start } : {}), ...(end ? { lte: end } : {}) } } } } : {}),
+        ...(start || end
+          ? {
+              OR: [
+                { scheduleSlot: { schedule: { workDate: { ...(start ? { gte: start } : {}), ...(end ? { lt: end } : {}) } } } },
+                { checkedInAt: { ...(start ? { gte: start } : {}), ...(end ? { lt: end } : {}) } },
+                { createdAt: { ...(start ? { gte: start } : {}), ...(end ? { lt: end } : {}) } },
+              ],
+            }
+          : {}),
         ...(term
           ? {
               OR: [
@@ -216,7 +291,7 @@ export class StaffAppointmentsService {
       },
       include: this.appointmentInclude(),
       orderBy: { createdAt: 'desc' },
-      take: 500,
+      take: Math.min(Math.max(Number(query.limit) || 200, 1), 500),
     })
     return { appointments: rows.map((row) => this.serialize(row)) }
   }
@@ -285,7 +360,25 @@ export class StaffAppointmentsService {
           ...(query.account ? { account: { email: { contains: query.account, mode: 'insensitive' } } } : {}),
         }
     const [rows, total] = await Promise.all([
-      this.prisma.patientProfile.findMany({ where, include: { account: { select: { id: true, email: true, phoneNumber: true } } }, skip: (page - 1) * pageSize, take: pageSize, orderBy: { fullName: 'asc' } }),
+      this.prisma.patientProfile.findMany({
+        where,
+        select: {
+          id: true,
+          patientCode: true,
+          fullName: true,
+          phoneNumber: true,
+          nationalId: true,
+          healthInsuranceNumber: true,
+          dateOfBirth: true,
+          gender: true,
+          address: true,
+          createdAt: true,
+          account: { select: { id: true, email: true, phoneNumber: true } },
+        },
+        skip: (page - 1) * pageSize,
+        take: pageSize,
+        orderBy: { fullName: 'asc' },
+      }),
       this.prisma.patientProfile.count({ where }),
     ])
     return { patients: rows.map((row) => ({ ...row, patientCode: row.patientCode || row.nationalId || row.id, phone: row.phoneNumber || row.account?.phoneNumber, email: row.account?.email })), total, page, pageSize }
@@ -335,6 +428,7 @@ export class StaffAppointmentsService {
       where: whereAppointment,
       include: this.appointmentInclude(),
       orderBy: { createdAt: 'desc' },
+      take: 50,
     })
     return { appointments: rows.map((row) => this.serialize(row)) }
   }
@@ -736,7 +830,8 @@ export class StaffAppointmentsService {
     if (invoice.status === 'PAID' || invoice.payments.length) throw new BadRequestException('Lịch khám đã được thanh toán')
     const amount = Number(input.amount ?? invoice.totalAmount)
     if (!Number.isFinite(amount) || amount <= 0) throw new BadRequestException('Số tiền không hợp lệ')
-    const method = String(input.method || 'cash').toLowerCase() === 'cash' ? 'CASH' : 'VIETQR'
+    const m = String(input.method || 'cash').toLowerCase()
+    const method = m === 'cash' ? 'CASH' : m === 'card' ? 'POS_CARD' : m === 'momo' ? 'ONLINE' : 'VIETQR'
     const now = new Date()
     return this.prisma.$transaction(async (tx) => {
       const payment = await tx.paymentTransaction.create({
@@ -748,7 +843,7 @@ export class StaffAppointmentsService {
           amount,
           status: 'SUCCESS',
           paidAt: now,
-          rawPayload: { note: input.note || null, recordedBy: userId },
+          rawPayload: { note: input.note || null, recordedBy: userId, channel: input.method },
         },
       })
       await tx.invoice.update({

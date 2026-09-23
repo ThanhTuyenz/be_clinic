@@ -59,7 +59,6 @@ model Appointment {
   aiBookingIntentLogs          AIBookingIntentLog[]
 
   @@index([bookingOrderId])
-
   @@index([patientProfileId, status])
   @@index([patientProfileId, createdAt])
   @@index([branchId, status, createdAt])
