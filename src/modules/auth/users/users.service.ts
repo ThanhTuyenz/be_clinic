@@ -7,11 +7,11 @@ import { PrismaService } from '../../../infrastructure/database/prisma/prisma.se
 import { CreateUserDto } from './dtos/create-user.dto.js';
 import { User, UserRole, UserStatus } from './entities/user.entity.js';
 import { FindUsersOptions, IUsersService, UsersPaginatedResult, UserUpdate } from './users.js';
-import { HistoryService } from '../../history/history.service.js';
-import { HISTORY_ACTIONS } from '../../history/history.js';
-import { IRolesService } from '../../roles/roles.js';
+import { HistoryService } from '../history/history.service.js';
+import { HISTORY_ACTIONS } from '../history/history.js';
+import { IRolesService } from '../roles/roles.js';
 import { Services } from '../../../common/utils/constants.js';
-import { PermissionsService } from '../../permissions/permissions.service.js';
+import { PermissionsService } from '../permissions/permissions.service.js';
 import { calculateEffectivePermissions } from '../../../common/constants/permissions.constant.js';
 
 @Injectable()

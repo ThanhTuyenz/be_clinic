@@ -8,9 +8,9 @@ import { PassportModule } from '@nestjs/passport';
 import { JwtStrategy } from './strategies/jwt.strategy';
 import { JwtRefreshStrategy } from './strategies/jwt-refresh.strategy';
 import { AnonymousStrategy } from './strategies/anonymous.strategy';
-import { MailsModule } from '../../mails/mails.module';
+import { MailsModule } from '../../../infrastructure/mail/mails.module.js';
 import { ForgotPasswordModule } from '../forgot-password/forgot-password.module';
-import { HistoryModule } from '../../history/history.module';
+import { HistoryModule } from '../history/history.module.js';
 
 @Module({
   imports: [

@@ -1,7 +1,7 @@
 import { Controller, Get, Query, Req } from '@nestjs/common'
 import type { Request } from 'express'
 import { ApiBearerAuth, ApiOperation, ApiQuery, ApiTags } from '@nestjs/swagger'
-import { SkipPermissions } from '../permissions/decorators/skip-permissions.decorator.js'
+import { SkipPermissions } from '../auth/permissions/decorators/skip-permissions.decorator.js'
 import { AdminDashboardService } from './admin-dashboard.service.js'
 
 @ApiTags('Admin dashboard & Analytics')

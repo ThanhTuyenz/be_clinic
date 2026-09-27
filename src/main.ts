@@ -83,6 +83,7 @@ async function bootstrap() {
         if (/^https:\/\/.*\.vercel\.app$/.test(origin)) return callback(null, true)
         if (/^https:\/\/.*\.ngrok(-free)?\.(app|dev)$/.test(origin)) return callback(null, true)
         if (/^https:\/\/.*\.ngrok\.io$/.test(origin)) return callback(null, true)
+        if (nodeEnv !== 'production' && /^http:\/\/localhost(:\d+)?$/.test(origin)) return callback(null, true)
         return callback(new Error(`CORS blocked for origin: ${origin}`), false)
       },
       credentials: true,

@@ -3,7 +3,7 @@ import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger'
 import type { Request } from 'express'
 import mongoose from 'mongoose'
 import { Public } from '../../common/decorators/public.decorator.js'
-import { SkipPermissions } from '../permissions/decorators/skip-permissions.decorator.js'
+import { SkipPermissions } from '../auth/permissions/decorators/skip-permissions.decorator.js'
 
 type ContactBody = {
   fullName?: string

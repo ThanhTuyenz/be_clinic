@@ -1,9 +1,13 @@
 import { Module } from '@nestjs/common';
-import { AppointmentsModule } from '../../../modules/appointments/appointments.module.js';
-import { MailsModule } from '../../../modules/mails/mails.module.js';
+import { BookingModule } from '../../../modules/bookings/booking.module.js';
+import { MailsModule } from '../../mail/mails.module.js';
 import { RecommendationModule } from '../../../modules/recommendations/recommendation.module.js';
-import { SmsModule } from '../../../modules/sms/sms.module.js';
+import { ZaloZnsModule } from '../../zalo-zns/zalo-zns.module.js';
 import { RabbitMqService } from './rabbitmq.service.js';
 
-@Module({ imports: [AppointmentsModule, MailsModule, RecommendationModule, SmsModule], providers: [RabbitMqService] })
+@Module({
+  imports: [BookingModule, MailsModule, RecommendationModule, ZaloZnsModule],
+  providers: [RabbitMqService],
+  exports: [RabbitMqService],
+})
 export class RabbitMqModule {}

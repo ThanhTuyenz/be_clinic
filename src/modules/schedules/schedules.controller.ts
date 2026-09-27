@@ -4,7 +4,7 @@ import { Public } from '../../common/decorators/public.decorator.js';
 import { JwtAuthGuard } from '../auth/auth-local/guards/jwt-auth.guard.js';
 import { RolesGuard } from '../../common/guards/roles.guard.js';
 import { Roles } from '../../common/decorators/roles.decorator.js';
-import { SkipPermissions } from '../permissions/decorators/skip-permissions.decorator.js';
+import { SkipPermissions } from '../auth/permissions/decorators/skip-permissions.decorator.js';
 import { SchedulesService } from './schedules.service.js';
 
 @ApiTags('Schedules')
@@ -12,6 +12,40 @@ import { SchedulesService } from './schedules.service.js';
 @Controller('schedules')
 export class SchedulesController {
   constructor(private readonly schedulesService: SchedulesService) {}
+
+  @Public()
+  @Get(['booking-methods', 'public/booking-methods'])
+  @ApiOperation({ summary: 'Hình thức đặt khám đang bật tại một chi nhánh hoặc toàn hệ thống' })
+  @ApiQuery({ name: 'branchId', required: false })
+  bookingMethods(@Query('branchId') branchId?: string) {
+    return this.schedulesService.bookingMethods(branchId);
+  }
+
+  @Public()
+  @Get(['branch-available-dates', 'public/branch-available-dates'])
+  @ApiOperation({ summary: 'Các ngày có bác sĩ nhận khám tại cơ sở' })
+  @ApiQuery({ name: 'branchId' })
+  @ApiQuery({ name: 'specialtyId', required: false, type: Number })
+  branchAvailableDates(
+    @Query('branchId') branchId: string,
+    @Query('specialtyId') specialtyId?: string,
+  ) {
+    return this.schedulesService.branchAvailableDates(branchId, specialtyId ? Number(specialtyId) : undefined);
+  }
+
+  @Public()
+  @Get(['branch-timeslots', 'public/branch-timeslots'])
+  @ApiOperation({ summary: 'Khung giờ khám theo ngày tại cơ sở kèm danh sách bác sĩ' })
+  @ApiQuery({ name: 'branchId' })
+  @ApiQuery({ name: 'date', example: '2026-09-07' })
+  @ApiQuery({ name: 'specialtyId', required: false, type: Number })
+  branchTimeslots(
+    @Query('branchId') branchId: string,
+    @Query('date') date: string,
+    @Query('specialtyId') specialtyId?: string,
+  ) {
+    return this.schedulesService.branchTimeslots(branchId, date, specialtyId ? Number(specialtyId) : undefined);
+  }
 
   @Get()
   @SkipPermissions()

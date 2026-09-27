@@ -1,37 +1,26 @@
-import { Module } from '@nestjs/common'
-import { ScheduleModule } from '@nestjs/schedule'
-import { AppointmentsController } from '../../controllers/appointments.controller.js'
-import { MailsModule } from '../mails/mails.module.js'
-import { VouchersModule } from '../vouchers/vouchers.module.js'
-import { RecommendationModule } from '../recommendations/recommendation.module.js'
-import { SmsModule } from '../sms/sms.module.js'
-import { AppointmentReminderTask } from './appointment-reminder.task.js'
-import { BookingController, CheckInController, PaymentWebhookController } from './booking.controller.js'
-import { BookingService } from './booking.service.js'
-import { PaymentWebhookSignatureService } from './payment-webhook-signature.service.js'
-import { StaffAppointmentsController } from './staff-appointments.controller.js'
-import { StaffAppointmentsService } from './staff-appointments.service.js'
+import { Module } from '@nestjs/common';
+import { MailsModule } from '../../infrastructure/mail/mails.module.js';
+import { RecommendationModule } from '../recommendations/recommendation.module.js';
+import { ZaloZnsModule } from '../../infrastructure/zalo-zns/zalo-zns.module.js';
+import { AppointmentReminderTask } from './appointment-reminder.task.js';
+import { ReceptionController } from './reception.controller.js';
+import { StaffAppointmentsController } from './staff-appointments.controller.js';
+import { StaffAppointmentsService } from './staff-appointments.service.js';
 
 @Module({
   imports: [
     MailsModule,
-    VouchersModule,
     RecommendationModule,
-    SmsModule,
+    ZaloZnsModule,
   ],
   controllers: [
-    AppointmentsController,
     StaffAppointmentsController,
-    BookingController,
-    PaymentWebhookController,
-    CheckInController,
+    ReceptionController,
   ],
   providers: [
-    BookingService,
-    PaymentWebhookSignatureService,
     StaffAppointmentsService,
     AppointmentReminderTask,
   ],
-  exports: [BookingService],
+  exports: [StaffAppointmentsService],
 })
 export class AppointmentsModule {}

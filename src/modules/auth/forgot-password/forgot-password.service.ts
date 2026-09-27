@@ -1,5 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { RedisService } from '../../../infrastructure/cache/redis/redis.service.js';
+import { RedisService } from '../../../infrastructure/redis/redis.service.js';
 import { PrismaService } from '../../../infrastructure/database/prisma/prisma.service.js';
 import { IForgotPasswordService, ForgotPasswordCreate } from './forgot-password.js';
 import { FindOptions } from '../../../common/utils/types/find-options.type.js';

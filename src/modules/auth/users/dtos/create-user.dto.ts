@@ -14,7 +14,7 @@ import { lowerCaseTransformer } from '../../../../common/utils/transformers/lowe
 import { UserRole, UserStatus } from '../entities/user.entity';
 import { AuthProvidersEnum } from '../../auth-local/enums/auth-providers.enum';
 import { ApiProperty } from '@nestjs/swagger';
-import { RolePermissionDto } from '../../../roles/dtos/create-role.dto';
+import { RolePermissionDto } from '../../roles/dtos/create-role.dto';
 
 export class CreateUserDto {
   @ApiProperty({ example: 'doctor@vitacare.local' })

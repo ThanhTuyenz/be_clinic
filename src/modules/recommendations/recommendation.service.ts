@@ -2,9 +2,9 @@ import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { GoogleGenAI, Type } from '@google/genai';
 import { PrismaService } from '../../infrastructure/database/prisma/prisma.service.js';
-import { RedisService } from '../../infrastructure/cache/redis/redis.service.js';
+import { RedisService } from '../../infrastructure/redis/redis.service.js';
 import { ProfileRecommendationResponseDto, RecommendedPackageItemDto } from './recommendation.dto.js';
-import { EmbeddingService, PackageForRetrieval } from './embedding.service.js';
+import { EmbeddingService, PackageForRetrieval } from '../../infrastructure/embedding/embedding.service.js';
 
 @Injectable()
 export class RecommendationService {

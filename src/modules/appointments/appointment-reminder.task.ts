@@ -1,12 +1,12 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { Cron } from '@nestjs/schedule';
 import { PrismaService } from '../../infrastructure/database/prisma/prisma.service.js';
-import { MailsService } from '../mails/mails.service.js';
-import { HttpSmsService } from '../sms/httpsms.service.js';
+import { MailsService } from '../../infrastructure/mail/mails.service.js';
+import { ZaloZnsService } from '../../infrastructure/zalo-zns/zalo-zns.service.js';
 
 /**
  * Cron job tự động nhắc lịch hẹn bệnh nhân.
- *  - 24 giờ trước giờ khám → gửi reminder + hướng dẫn y tế
+ *  - 24 giờ trước giờ khám → gửi reminder qua Email & Zalo ZNS + hướng dẫn y tế
  */
 @Injectable()
 export class AppointmentReminderTask {
@@ -15,7 +15,7 @@ export class AppointmentReminderTask {
   constructor(
     private readonly prisma: PrismaService,
     private readonly mails: MailsService,
-    private readonly sms: HttpSmsService,
+    private readonly zaloZns: ZaloZnsService,
   ) { }
 
   // Chạy mỗi giờ đúng (:00) - chỉ gửi nhắc trước 24 giờ để tối ưu chi phí SMS
@@ -114,17 +114,21 @@ export class AppointmentReminderTask {
 
         if (phone) {
           tasks.push(
-            this.sms.sendAppointmentReminder({
+            this.zaloZns.sendAppointmentReminder({
               to: phone,
               patientName: appt.patientProfile.fullName,
               bookingCode: appt.bookingCode ?? appt.id,
               hoursAhead,
               appointmentDate,
               startTime,
-              branchName: branch?.name ?? 'VitaCare',
+              branchName: branch?.name ?? 'VitaCare Clinic',
+              branchAddress: branch?.address ?? undefined,
               branchPhone: branch?.phoneNumber ?? undefined,
-            }).catch((smsErr) => {
-              this.logger.error(`Lỗi gửi SMS nhắc lịch cho ${phone}: ${smsErr?.message}`);
+              doctorName,
+              serviceName,
+              medicalNote: this.buildMedicalNote(hoursAhead, doctorName, serviceName),
+            }).catch((znsErr) => {
+              this.logger.error(`Lỗi gửi Zalo ZNS nhắc lịch cho ${phone}: ${znsErr?.message}`);
             })
           );
         }

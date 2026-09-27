@@ -1,10 +1,10 @@
-import { Module, forwardRef } from '@nestjs/common'
-import { AiAssistantController } from './ai-assistant.controller.js'
-import { AiAssistantService } from './ai-assistant.service.js'
-import { AppointmentsModule } from '../appointments/appointments.module.js'
+import { Module, forwardRef } from '@nestjs/common';
+import { AiAssistantController } from './ai-assistant.controller.js';
+import { AiAssistantService } from './ai-assistant.service.js';
+import { BookingModule } from '../bookings/booking.module.js';
 
 @Module({
-  imports: [forwardRef(() => AppointmentsModule)],
+  imports: [forwardRef(() => BookingModule)],
   controllers: [AiAssistantController],
   providers: [AiAssistantService],
   exports: [AiAssistantService],

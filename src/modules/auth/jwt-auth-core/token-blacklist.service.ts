@@ -1,6 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { createHash } from 'crypto';
-import { RedisService } from '../../../infrastructure/cache/redis/redis.service.js';
+import { RedisService } from '../../../infrastructure/redis/redis.service.js';
 
 @Injectable()
 export class TokenBlacklistService {

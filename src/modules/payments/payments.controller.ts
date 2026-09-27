@@ -2,7 +2,7 @@ import { Body, Controller, HttpCode, Post, Req, SetMetadata } from '@nestjs/comm
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import type { Request } from 'express';
 import { Public } from '../../common/decorators/public.decorator.js';
-import { SkipPermissions } from '../permissions/decorators/skip-permissions.decorator.js';
+import { SkipPermissions } from '../auth/permissions/decorators/skip-permissions.decorator.js';
 import { CreateMomoPaymentDto } from './dtos/create-momo-payment.dto.js';
 import { MomoIpnDto } from './dtos/momo-ipn.dto.js';
 import { MomoService } from './momo.service.js';

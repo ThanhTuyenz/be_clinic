@@ -14,7 +14,7 @@ import {
 import { lowerCaseTransformer } from 'src/common/utils/transformers/lower-case.transformer';
 
 import { UserRole, UserStatus } from '../entities/user.entity';
-import { RolePermissionDto } from '../../../roles/dtos/create-role.dto';
+import { RolePermissionDto } from '../../roles/dtos/create-role.dto';
 
 export class UpdateUserAdminDto {
   @ApiPropertyOptional()

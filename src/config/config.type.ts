@@ -68,10 +68,22 @@ export type GeminiConfig = {
 };
 
 
+export type ZaloZnsConfig = {
+  enabled: boolean;
+  isSandbox: boolean;
+  oaId?: string;
+  appId?: string;
+  appSecret?: string;
+  accessToken?: string;
+  templateBookingConfirm: string;
+  templateReminder: string;
+  endpoint: string;
+};
+
 export type HttpSmsConfig = {
   enabled: boolean;
   apiKey?: string;
-  fromNumber?: string;
+  fromNumber: string;
   isSandbox: boolean;
   endpoint: string;
 };
@@ -85,5 +97,6 @@ export type AllConfigType = {
   gemini: GeminiConfig;
   rabbitmq: RabbitMqConfig;
   redis: RedisConfig;
+  zaloZns: ZaloZnsConfig;
   httpsms: HttpSmsConfig;
 };

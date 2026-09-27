@@ -1,7 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { randomUUID } from 'crypto';
-import { RedisService } from '../../../infrastructure/cache/redis/redis.service.js';
+import { RedisService } from '../../../infrastructure/redis/redis.service.js';
 import { PrismaService } from '../../../infrastructure/database/prisma/prisma.service.js';
 import { Session } from './entities/session.entity.js';
 import { User } from '../users/entities/user.entity.js';

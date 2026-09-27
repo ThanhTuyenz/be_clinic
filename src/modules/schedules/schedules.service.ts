@@ -640,6 +640,219 @@ export class SchedulesService {
   }
 
   // ─────────────────────────────────────────────────────────────
+  // Public Branch Schedules & Booking Methods
+  // ─────────────────────────────────────────────────────────────
+  private async resolveBranchId(identifier?: string): Promise<string | undefined> {
+    if (!identifier) return undefined;
+    if (/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(identifier)) return identifier;
+    const branch = await this.prisma.branch.findFirst({
+      where: { OR: [{ slug: identifier }, { code: identifier }], isActive: true },
+      select: { id: true },
+    });
+    return branch?.id ?? identifier;
+  }
+
+  async bookingMethods(branchIdentifier?: string) {
+    if (!branchIdentifier) {
+      return this.prisma.bookingMethod.findMany({
+        where: { isActive: true },
+        orderBy: { code: 'asc' },
+        select: { id: true, code: true, name: true, description: true, route: true },
+      }).then((rows) => rows.map((bm) => ({
+        id: bm.id,
+        branchId: '',
+        isEnabled: true,
+        sortOrder: 0,
+        bookingMethodId: bm.id,
+        type: bm.code,
+        code: bm.code,
+        displayName: bm.name,
+        description: bm.description,
+        route: bm.route,
+      })));
+    }
+    const branchId = await this.resolveBranchId(branchIdentifier);
+    return this.prisma.branchBookingMethod.findMany({
+      where: { branchId, isEnabled: true },
+      orderBy: { sortOrder: 'asc' },
+      select: { id: true, branchId: true, isEnabled: true, sortOrder: true, bookingMethod: { select: { id: true, code: true, name: true, description: true, route: true } } },
+    }).then((rows) => rows.map(({ bookingMethod, ...item }) => ({ ...item, bookingMethodId: bookingMethod.id, type: bookingMethod.code, code: bookingMethod.code, displayName: bookingMethod.name, description: bookingMethod.description, route: bookingMethod.route })));
+  }
+
+  async branchAvailableDates(branchId: string, specialtyId?: number) {
+    const { minDate, maxDate } = this.getBookingAllowedDateRange();
+    const schedules = await this.prisma.doctorSchedule.findMany({
+      where: {
+        branchId,
+        status: 'OPEN',
+        workDate: { gte: minDate, lte: maxDate },
+        ...(specialtyId ? { doctor: { specialties: { some: { specialtyId } } } } : {}),
+        slots: { some: { isActive: true, slotStatus: 'AVAILABLE' } },
+      },
+      select: { workDate: true },
+      distinct: ['workDate'],
+      orderBy: { workDate: 'asc' },
+      take: 90,
+    });
+    return Array.from(new Set(schedules.map(({ workDate }) => workDate.toISOString().slice(0, 10))));
+  }
+
+  async branchTimeslots(branchId: string, date: string, specialtyId?: number) {
+    const workDate = this.parseDate(date);
+    this.validateDateWithinBookingRange(workDate);
+
+    const schedules = await this.prisma.doctorSchedule.findMany({
+      where: {
+        branchId,
+        workDate,
+        status: 'OPEN',
+        ...(specialtyId ? { doctor: { specialties: { some: { specialtyId } } } } : {}),
+        slots: { some: { isActive: true, slotStatus: 'AVAILABLE' } },
+      },
+      select: {
+        room: { select: { id: true, code: true, name: true, branch: { select: { id: true, name: true, address: true } } } },
+        doctor: {
+          select: {
+            id: true,
+            avatarUrl: true,
+            consultationFee: true,
+            academicRank: true,
+            user: { select: { fullName: true } },
+            specialties: {
+              select: {
+                specialtyId: true,
+                specialty: { select: { name: true } },
+              },
+              take: 1,
+            },
+          },
+        },
+        slots: {
+          where: { isActive: true, slotStatus: 'AVAILABLE' },
+          select: {
+            id: true,
+            startTime: true,
+            endTime: true,
+            capacity: true,
+            occupiedCount: true,
+            slotStatus: true,
+          },
+          orderBy: { startTime: 'asc' },
+        },
+      },
+    });
+
+    const result: Array<{
+      id: string;
+      doctorSlotId: string;
+      startTime: string;
+      endTime: string;
+      capacity: number;
+      occupiedCount: number;
+      remainingCapacity: number;
+      isAvailable: boolean;
+      slotStatus: string;
+      room: any;
+      doctor: {
+        id: string;
+        displayName: string;
+        avatarUrl: string;
+        consultationFee: number;
+        specialtyName: string;
+        specialtyID: string;
+        academicRank: string | null;
+      };
+    }> = [];
+
+    for (const sch of (schedules as any[])) {
+      const doc = sch.doctor;
+      const docName = doc?.user?.fullName || 'Bác sĩ';
+      const spec = doc?.specialties?.[0]?.specialty?.name || 'Đa khoa';
+      const specId = doc?.specialties?.[0]?.specialtyId ? String(doc.specialties[0].specialtyId) : '';
+
+      for (const s of (sch.slots || [])) {
+        if (s.occupiedCount >= s.capacity) continue;
+        result.push({
+          id: s.id,
+          doctorSlotId: s.id,
+          startTime: s.startTime.toISOString().slice(11, 16),
+          endTime: s.endTime.toISOString().slice(11, 16),
+          capacity: s.capacity,
+          occupiedCount: s.occupiedCount,
+          remainingCapacity: Math.max(s.capacity - s.occupiedCount, 0),
+          isAvailable: true,
+          slotStatus: s.slotStatus,
+          room: sch.room,
+          doctor: {
+            id: doc.id,
+            displayName: docName,
+            avatarUrl: doc.avatarUrl || '',
+            consultationFee: Number(doc.consultationFee || 200000),
+            specialtyName: spec,
+            specialtyID: specId,
+            academicRank: doc.academicRank || null,
+          },
+        });
+      }
+    }
+
+    return result;
+  }
+
+  private getBookingAllowedDateRange(): { minDate: Date; maxDate: Date } {
+    const nowUtc = new Date();
+    const vnOffsetMs = 7 * 60 * 60 * 1000;
+    const nowVn = new Date(nowUtc.getTime() + vnOffsetMs);
+    const currentHour = nowVn.getUTCHours();
+    const currentMinute = nowVn.getUTCMinutes();
+    const todayVnStr = nowVn.toISOString().slice(0, 10);
+    const baseDate = new Date(`${todayVnStr}T00:00:00.000Z`);
+
+    const isPastCutoff = currentHour > 16 || (currentHour === 16 && currentMinute >= 30);
+    const minDays = isPastCutoff ? 2 : 1;
+
+    const minDate = new Date(baseDate);
+    minDate.setUTCDate(minDate.getUTCDate() + minDays);
+
+    const maxDate = new Date(baseDate);
+    maxDate.setUTCDate(maxDate.getUTCDate() + 30);
+
+    return { minDate, maxDate };
+  }
+
+  private validateDateWithinBookingRange(targetDate: Date): void {
+    const nowUtc = new Date();
+    const vnOffsetMs = 7 * 60 * 60 * 1000;
+    const nowVn = new Date(nowUtc.getTime() + vnOffsetMs);
+    const currentHour = nowVn.getUTCHours();
+    const currentMinute = nowVn.getUTCMinutes();
+
+    const todayVnStr = nowVn.toISOString().slice(0, 10);
+    const baseDate = new Date(`${todayVnStr}T00:00:00.000Z`);
+    const examDateStr = targetDate.toISOString().slice(0, 10);
+    const examDateOnly = new Date(`${examDateStr}T00:00:00.000Z`);
+
+    const diffDays = Math.round((examDateOnly.getTime() - baseDate.getTime()) / (24 * 60 * 60 * 1000));
+
+    if (diffDays < 1) {
+      throw new BadRequestException(
+        'Hệ thống không nhận đặt lịch trực tuyến trong ngày. Để khám trong ngày hôm nay, quý khách vui lòng đến trực tiếp phòng khám để lấy số thứ tự tại quầy tiếp đón.',
+      );
+    }
+    if (diffDays > 30) {
+      throw new BadRequestException('Hệ thống chỉ mở đặt lịch trực tuyến trước tối đa 30 ngày.');
+    }
+    if (diffDays === 1) {
+      const isPastCutoff = currentHour > 16 || (currentHour === 16 && currentMinute >= 30);
+      if (isPastCutoff) {
+        throw new BadRequestException(
+          'Để khám vào ngày mai, quý khách vui lòng hoàn tất đặt lịch trước 16h30 hôm nay. Quý khách vui lòng chọn ngày khám khác hoặc đến lấy số trực tiếp tại quầy tiếp đón.',
+        );
+      }
+    }
+  }
+
+  // ─────────────────────────────────────────────────────────────
   // Helpers
   // ─────────────────────────────────────────────────────────────
   private parseDate(value: string): Date {

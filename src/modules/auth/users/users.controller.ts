@@ -23,7 +23,7 @@ import {
   PermissionAction,
   PermissionResource,
   PermissionResourceTarget,
-} from '../../permissions/decorators/permissions.decorator';
+} from '../permissions/decorators/permissions.decorator';
 import { Routes, Services } from 'src/common/utils/constants';
 
 import { CreateUserDto } from './dtos/create-user.dto';
@@ -31,7 +31,7 @@ import { UpdateUserAdminDto } from './dtos/update-user-admin.dto';
 import { UsersPaginationQueryDto } from './dtos/users-pagination-query.dto';
 import { AssignRoleDto } from './dtos/assign-role.dto';
 import { IUsersService } from './users';
-import { RolePermissionDto } from '../../roles/dtos/create-role.dto';
+import { RolePermissionDto } from '../roles/dtos/create-role.dto';
 
 @ApiTags('Users')
 @Controller(Routes.USERS)

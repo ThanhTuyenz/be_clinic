@@ -1,7 +1,7 @@
 import { BadRequestException, ForbiddenException, Injectable, InternalServerErrorException, NotFoundException } from '@nestjs/common'
 import { PrismaService } from '../../infrastructure/database/prisma/prisma.service.js'
-import { RedisService } from '../../infrastructure/cache/redis/redis.service.js'
-import { EmbeddingService } from '../recommendations/embedding.service.js'
+import { RedisService } from '../../infrastructure/redis/redis.service.js'
+import { EmbeddingService } from '../../infrastructure/embedding/embedding.service.js'
 
 @Injectable()
 export class SystemCatalogService {

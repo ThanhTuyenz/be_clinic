@@ -3,11 +3,11 @@ import { ConfigService } from '@nestjs/config';
 import * as amqp from 'amqplib';
 import QRCode from 'qrcode';
 import { PrismaService } from '../../database/prisma/prisma.service.js';
-import { BookingService } from '../../../modules/appointments/booking.service.js';
-import { MailsService } from '../../../modules/mails/mails.service.js';
+import { BookingService } from '../../../modules/bookings/booking.service.js';
+import { MailsService } from '../../mail/mails.service.js';
 import { RecommendationService } from '../../../modules/recommendations/recommendation.service.js';
-import { HttpSmsService } from '../../../modules/sms/httpsms.service.js';
-import { EmbeddingService } from '../../../modules/recommendations/embedding.service.js';
+import { ZaloZnsService } from '../../zalo-zns/zalo-zns.service.js';
+import { EmbeddingService } from '../../embedding/embedding.service.js';
 import { RabbitMqConfig } from '../../../config/config.type.js';
 import { RABBITMQ_TOPOLOGY as topology } from './rabbitmq.constants.js';
 
@@ -25,7 +25,7 @@ export class RabbitMqService implements OnModuleInit, OnModuleDestroy {
     private readonly bookingService: BookingService,
     private readonly mailsService: MailsService,
     private readonly recommendationService: RecommendationService,
-    private readonly smsService: HttpSmsService,
+    private readonly zaloZnsService: ZaloZnsService,
     private readonly embeddingService: EmbeddingService,
   ) {}
 
@@ -365,19 +365,22 @@ export class RabbitMqService implements OnModuleInit, OnModuleDestroy {
       );
     }
 
-    // Gửi SMS cực ngắn nếu có số điện thoại
+    // Gửi thông báo Zalo ZNS nếu có số điện thoại
     if (phone) {
       tasks.push(
-        this.smsService.sendBookingConfirmation({
+        this.zaloZnsService.sendBookingConfirmation({
           to: phone,
           patientName: appt.patientProfile.fullName,
           bookingCode: appt.bookingCode ?? appt.id,
           appointmentDate,
           startTime,
-          branchName: branch?.name ?? 'VitaCare',
+          branchName: branch?.name ?? 'VitaCare Clinic',
+          branchAddress: branch?.address ?? undefined,
           branchPhone: branch?.phoneNumber ?? undefined,
+          doctorName: doctorName ?? undefined,
+          serviceName: servicePackageName ?? undefined,
         }).catch((err) => {
-          this.logger.error(`Failed to send booking SMS to ${phone}: ${err?.message}`);
+          this.logger.error(`Failed to send booking Zalo ZNS to ${phone}: ${err?.message}`);
         })
       );
     }

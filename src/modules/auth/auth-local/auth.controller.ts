@@ -27,7 +27,7 @@ import { User } from '../users/entities/user.entity';
 import { AuthForgotPasswordDto } from './dtos/auth-forgot-password.dto';
 import { AuthResetPasswordDto } from './dtos/auth-reset-password.dto';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
-import { SkipPermissions } from '../../permissions/decorators/skip-permissions.decorator';
+import { SkipPermissions } from '../permissions/decorators/skip-permissions.decorator.js';
 import { ConfigService } from '@nestjs/config';
 import { AllConfigType } from 'src/config/config.type';
 import { ttlToMilliseconds } from '../../../config/auth.config';

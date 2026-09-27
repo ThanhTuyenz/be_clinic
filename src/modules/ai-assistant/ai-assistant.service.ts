@@ -4,7 +4,7 @@ import { randomUUID } from 'crypto'
 import type { Response } from 'express'
 import { GoogleGenAI, Type } from '@google/genai'
 import { PrismaService } from '../../infrastructure/database/prisma/prisma.service.js'
-import { BookingService } from '../appointments/booking.service.js'
+import { BookingService } from '../bookings/booking.service.js'
 import {
   AiChatMessageDto,
   AiChatResponsePayload,

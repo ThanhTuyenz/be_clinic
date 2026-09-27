@@ -9,7 +9,7 @@ import {
 import { ConfigService } from '@nestjs/config';
 import { Prisma } from '@prisma/client';
 import { createHmac, timingSafeEqual } from 'node:crypto';
-import { BookingService } from '../appointments/booking.service.js';
+import { BookingService } from '../bookings/booking.service.js';
 import { PrismaService } from '../../infrastructure/database/prisma/prisma.service.js';
 import { MomoIpnDto } from './dtos/momo-ipn.dto.js';
 import { MomoPaymentMethod } from './dtos/create-momo-payment.dto.js';

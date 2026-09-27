@@ -23,15 +23,15 @@ import { IAuthService } from './auth';
 import { AuthRegisterDto } from './dtos/auth-register.dto';
 import { randomStringGenerator } from '@nestjs/common/utils/random-string-generator.util';
 import { compareHash } from 'src/common/utils/helpers';
-import { IMailsService } from '../../mails/mails';
+import { IMailsService } from '../../../infrastructure/mail/mails.js';
 import { JwtPayloadType } from './strategies/types/jwt-payload.type';
 import { NullableType } from 'src/common/utils/types/nullable.type';
 import { IForgotPasswordService } from '../forgot-password/forgot-password';
 import { SocialType } from '../../../common/utils/social.type';
 import { JwtRefreshPayloadType } from './strategies/types/jwt-refresh-payload.type';
-import { HistoryService } from '../../history/history.service';
-import { HISTORY_ACTIONS } from '../../history/history';
-import { RedisService } from '../../../infrastructure/cache/redis/redis.service.js';
+import { HistoryService } from '../history/history.service.js';
+import { HISTORY_ACTIONS } from '../history/history.js';
+import { RedisService } from '../../../infrastructure/redis/redis.service.js';
 import { TokenBlacklistService } from '../jwt-auth-core/token-blacklist.service.js';
 
 @Injectable()

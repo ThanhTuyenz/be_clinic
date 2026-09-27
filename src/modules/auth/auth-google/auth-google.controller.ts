@@ -7,7 +7,7 @@ import { AuthProvidersEnum } from '../auth-local/enums/auth-providers.enum';
 import { ApiOperation, ApiTags } from '@nestjs/swagger';
 import { AuthGuard } from '@nestjs/passport';
 import { Public } from 'src/common/decorators/public.decorator';
-import { SkipPermissions } from '../../permissions/decorators/skip-permissions.decorator';
+import { SkipPermissions } from '../permissions/decorators/skip-permissions.decorator.js';
 import { IAuthGoogleService } from './auth-google';
 import { AuthGoogleLoginDto } from './dtos/auth-google-login.dto';
 
