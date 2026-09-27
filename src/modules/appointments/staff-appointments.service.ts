@@ -341,24 +341,23 @@ export class StaffAppointmentsService {
   async patients(userId: string, query: Record<string, string | undefined>) {
     await this.roleOf(userId)
     const page = Math.max(Number(query.page) || 1, 1)
-    const pageSize = Math.min(Math.max(Number(query.pageSize) || 10, 1), 100)
+    const pageSize = Math.min(Math.max(Number(query.pageSize) || 50, 1), 500)
     const q = String(query.q || '').trim()
-    const where: any = q
+    const searchTerm = q || String(query.patientCode || query.name || query.phone || query.account || '').trim()
+
+    const where: any = searchTerm
       ? {
           OR: [
-            { patientCode: { contains: q, mode: 'insensitive' } },
-            { nationalId: { contains: q, mode: 'insensitive' } },
-            { fullName: { contains: q, mode: 'insensitive' } },
-            { phoneNumber: { contains: q } },
-            { account: { phoneNumber: { contains: q } } },
+            { patientCode: { contains: searchTerm, mode: 'insensitive' } },
+            { nationalId: { contains: searchTerm, mode: 'insensitive' } },
+            { fullName: { contains: searchTerm, mode: 'insensitive' } },
+            { phoneNumber: { contains: searchTerm } },
+            { account: { phoneNumber: { contains: searchTerm } } },
+            { account: { email: { contains: searchTerm, mode: 'insensitive' } } },
           ],
         }
-      : {
-          ...(query.patientCode ? { OR: [{ patientCode: { contains: query.patientCode, mode: 'insensitive' } }, { nationalId: { contains: query.patientCode, mode: 'insensitive' } }, { id: query.patientCode }] } : {}),
-          ...(query.name ? { fullName: { contains: query.name, mode: 'insensitive' } } : {}),
-          ...(query.phone ? { OR: [{ phoneNumber: { contains: query.phone } }, { account: { phoneNumber: { contains: query.phone } } }] } : {}),
-          ...(query.account ? { account: { email: { contains: query.account, mode: 'insensitive' } } } : {}),
-        }
+      : {}
+
     const [rows, total] = await Promise.all([
       this.prisma.patientProfile.findMany({
         where,
@@ -381,7 +380,18 @@ export class StaffAppointmentsService {
       }),
       this.prisma.patientProfile.count({ where }),
     ])
-    return { patients: rows.map((row) => ({ ...row, patientCode: row.patientCode || row.nationalId || row.id, phone: row.phoneNumber || row.account?.phoneNumber, email: row.account?.email })), total, page, pageSize }
+
+    return {
+      patients: rows.map((row) => ({
+        ...row,
+        patientCode: row.patientCode || row.nationalId || row.id,
+        phone: row.phoneNumber || row.account?.phoneNumber || '',
+        email: row.account?.email || '',
+      })),
+      total,
+      page,
+      pageSize,
+    }
   }
 
   async patientHistory(userId: string, patientId: string) {

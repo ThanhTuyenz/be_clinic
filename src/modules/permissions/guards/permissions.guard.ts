@@ -3,7 +3,10 @@ import {
   ExecutionContext,
   Injectable,
   Logger,
+  ForbiddenException,
 } from '@nestjs/common';
+import { REQUIRE_PERMISSIONS_KEY } from '../../../common/decorators/require-permissions.decorator.js';
+import { AppPermission } from '../../../common/constants/permissions.constant.js';
 import { Reflector } from '@nestjs/core';
 import { Request as ExpressRequest } from 'express';
 import { isUUID } from 'class-validator';
@@ -81,6 +84,52 @@ export class PermissionsGuard implements CanActivate {
     if (!request.user?.id) {
       this.logger.warn('No user found in request');
       return false;
+    }
+
+    // 1. Kiểm tra quyền nguyên tử theo chuẩn RBAC mới (@RequirePermissions)
+    const requiredAppPermissions = this.reflector.getAllAndOverride<(AppPermission | string)[]>(
+      REQUIRE_PERMISSIONS_KEY,
+      [context.getHandler(), context.getClass()],
+    );
+
+    if (requiredAppPermissions && requiredAppPermissions.length > 0) {
+      if (!request.user?.id) {
+        throw new ForbiddenException('Yêu cầu đăng nhập để truy cập tài nguyên này');
+      }
+
+      if (userRole === PermissionRole.ADMIN || String(userRole).toUpperCase() === 'ADMIN') {
+        (request.user as any).effectivePermissions = Object.values(AppPermission);
+        return true;
+      }
+
+      const userPerms = await this.permissionsService.getUserPermissions(request.user.id);
+      (request.user as any).effectivePermissions = userPerms.effectivePermissions;
+
+      const hasAllPermissions = requiredAppPermissions.every((p) =>
+        userPerms.effectivePermissions.includes(String(p)),
+      );
+
+      if (!hasAllPermissions) {
+        this.logger.warn(
+          `Permission denied for user ${request.user.id}. Required: ${requiredAppPermissions.join(', ')}`,
+        );
+        throw new ForbiddenException(
+          `Bạn không có quyền thực hiện thao tác này (${requiredAppPermissions.join(', ')})`,
+        );
+      }
+
+      return true;
+    }
+
+    // 2. Kiểm tra nếu có decorator cũ @RequiresPermission
+    const legacyPermission = this.reflector.get<RequiredPermission>(
+      REQUIRED_PERMISSION,
+      context.getHandler(),
+    );
+
+    if (!legacyPermission) {
+      // Nếu không yêu cầu permission cụ thể nào -> Cho phép truy cập
+      return true;
     }
 
     const requiredPermission = this.getRequiredPermission(context);

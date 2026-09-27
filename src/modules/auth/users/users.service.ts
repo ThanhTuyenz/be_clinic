@@ -12,6 +12,7 @@ import { HISTORY_ACTIONS } from '../../history/history.js';
 import { IRolesService } from '../../roles/roles.js';
 import { Services } from '../../../common/utils/constants.js';
 import { PermissionsService } from '../../permissions/permissions.service.js';
+import { calculateEffectivePermissions } from '../../../common/constants/permissions.constant.js';
 
 @Injectable()
 export class UsersService implements IUsersService {
@@ -170,6 +171,7 @@ export class UsersService implements IUsersService {
     if (next.isBlocked === false) next.blockedAt = null;
     if (next.isDeleted === true) next.status = UserStatus.Inactive;
     const row = await this.prisma.user.update({ where: { id }, data: await this.toUpdateData(next, existing) });
+    this.permissionsService.invalidateCache(id);
 
     const p = payload as any;
     if (p.branchId) {
@@ -308,6 +310,7 @@ export class UsersService implements IUsersService {
     delete (entity as any).password;
     delete (entity as any).previousPassword;
     delete (entity as any).hash;
+    (entity as any).effectivePermissions = calculateEffectivePermissions(row.role, row.customPermissions);
     return entity;
   }
 

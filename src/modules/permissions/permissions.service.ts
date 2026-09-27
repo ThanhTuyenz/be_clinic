@@ -7,6 +7,10 @@ import { PermissionRole, mapUserRoleToPermissionRole } from './enums';
 import { generateGlobalPermissions } from './permissions.helpers';
 import { Permission } from './types/permission.type';
 import { PermissionsCacheService } from './services/permissions-cache.service';
+import {
+  calculateEffectivePermissions,
+  ROLE_DEFAULT_PERMISSIONS,
+} from '../../common/constants/permissions.constant.js';
 
 @Injectable()
 export class PermissionsService {
@@ -84,6 +88,42 @@ export class PermissionsService {
    * Invalidate cache for a specific user
    * Call this when user permissions change (role update, etc.)
    */
+  /**
+   * Lấy quyền hiệu lực của người dùng theo mô hình RBAC VitaCare
+   * Effective = (Role Base Permissions + Granted) - Revoked
+   */
+  async getUserPermissions(userId: string): Promise<{
+    role: string;
+    effectivePermissions: string[];
+    customPermissions: any;
+    basePermissions: string[];
+  }> {
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: { id: true, role: true, customPermissions: true, isBlocked: true, isDeleted: true },
+    });
+
+    if (!user || user.isDeleted || user.isBlocked) {
+      return {
+        role: 'patient',
+        effectivePermissions: [],
+        customPermissions: null,
+        basePermissions: [],
+      };
+    }
+
+    const roleNormalized = String(user.role).toLowerCase();
+    const basePermissions = (ROLE_DEFAULT_PERMISSIONS[roleNormalized] || []).map((p) => String(p));
+    const effectivePermissions = calculateEffectivePermissions(user.role, user.customPermissions);
+
+    return {
+      role: roleNormalized,
+      basePermissions,
+      customPermissions: user.customPermissions,
+      effectivePermissions,
+    };
+  }
+
   invalidateCache(userId: string): void {
     this.cacheService.invalidate(userId);
     this.logger.log(`Invalidated permission cache for user ${userId}`);

@@ -44,14 +44,10 @@ export class UpdateUserAdminDto {
   roleId?: string | null;
 
   @ApiPropertyOptional({
-    description: 'Custom permissions for user',
-    type: [RolePermissionDto],
+    description: 'Custom permissions for user ({ granted?: string[], revoked?: string[] } or array)',
   })
   @IsOptional()
-  @IsArray()
-  @ValidateNested({ each: true })
-  @Type(() => RolePermissionDto)
-  customPermissions?: RolePermissionDto[] | null;
+  customPermissions?: any;
 
   @ApiPropertyOptional({ description: 'Đặt mật khẩu mới (admin)' })
   @IsOptional()

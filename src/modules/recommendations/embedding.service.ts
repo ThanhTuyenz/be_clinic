@@ -94,7 +94,7 @@ export class EmbeddingService {
   }
 
   /**
-   * Tạo văn bản đại diện ngữ nghĩa y khoa của một gói khám
+   * emveeding cho goi kham benh
    */
   buildPackageEmbeddingText(pkg: { name: string; specialtyName?: string; description?: string; symptoms?: string[] }): string {
     const specialty = pkg.specialtyName ? `Chuyên khoa: ${pkg.specialtyName}. ` : '';
@@ -106,7 +106,7 @@ export class EmbeddingService {
   }
 
   /**
-   * Tạo văn bản đại diện ngữ nghĩa lâm sàng của hồ sơ bệnh nhân
+   * embeeding cho profile patient
    */
   buildPatientEmbeddingText(profile: {
     fullName?: string;
@@ -197,8 +197,7 @@ export class EmbeddingService {
   }
 
   /**
-   * Tầng 2: Vector Retrieval - Lấy Top K gói khám có độ tương đồng ngữ nghĩa cao nhất
-   * Sử dụng duy nhất RediSearch (HNSW) trực tiếp trên RAM Redis (< 1ms).
+  laya top k goii kham bang HNSW index cua redis search
    */
   async retrieveTopPackages(
     patientEmbeddingText: string,
@@ -227,7 +226,7 @@ export class EmbeddingService {
   }
 
   /**
-   * Truy vấn KNN bằng RedisSearch (HNSW) trực tiếp trên RAM Redis (< 1ms)
+   *  redis serch hnsw
    */
   private async searchWithRedisSearch(
     queryVector: number[],
@@ -331,8 +330,7 @@ export class EmbeddingService {
   }
 
   /**
-   * Tìm kiếm gói khám bằng Ngôn ngữ tự nhiên / Triệu chứng (Semantic Natural Language Search)
-   * Sử dụng RediSearch (HNSW) Vector Similarity trực tiếp trên RAM với Google Gemini Embedding.
+     search native langugee
    */
   async searchByNaturalLanguage(
     queryText: string,

@@ -50,6 +50,7 @@ export class AppointmentsController {
   @ApiOperation({ summary: 'Danh sách bệnh nhân cho bộ phận tiếp nhận' })
   @ApiQuery({ name: 'page', required: false, type: Number })
   @ApiQuery({ name: 'pageSize', required: false, type: Number })
+  @ApiQuery({ name: 'q', required: false, description: 'Từ khóa tìm kiếm nhanh (mã BN, CCCD, họ tên, SĐT, email)' })
   @ApiQuery({ name: 'patientCode', required: false })
   @ApiQuery({ name: 'name', required: false })
   @ApiQuery({ name: 'phone', required: false })
