@@ -18,6 +18,8 @@ export default registerAs<ZaloZnsConfig>('zaloZns', () => {
       process.env.ZALO_ZNS_TEMPLATE_BOOKING_CONFIRM || 'VC_BOOKING_CONFIRM',
     templateReminder:
       process.env.ZALO_ZNS_TEMPLATE_REMINDER || 'VC_APPOINTMENT_REMINDER',
+    templateOtp:
+      process.env.ZALO_ZNS_TEMPLATE_OTP || 'VC_OTP_VERIFICATION',
     endpoint:
       process.env.ZALO_ZNS_ENDPOINT ||
       'https://business.openapi.zalo.me/message/template',

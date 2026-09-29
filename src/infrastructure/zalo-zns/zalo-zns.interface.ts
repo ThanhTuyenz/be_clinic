@@ -27,7 +27,15 @@ export interface AppointmentReminderZnsData {
   medicalNote?: string;
 }
 
+export interface OtpZnsData {
+  to: string;
+  otp: string;
+  expiresInMinutes?: number;
+  purpose?: 'REGISTER' | 'LINK_ACCOUNT' | 'RESET_PASSWORD';
+}
+
 export interface IZaloZnsService {
   sendBookingConfirmation(data: BookingConfirmationZnsData): Promise<boolean>;
   sendAppointmentReminder(data: AppointmentReminderZnsData): Promise<boolean>;
+  sendOtp(data: OtpZnsData): Promise<boolean>;
 }

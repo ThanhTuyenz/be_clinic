@@ -54,6 +54,7 @@ export class CreateUserDto {
   status?: UserStatus;
   provider?: AuthProvidersEnum;
   socialId?: string | null;
+  zaloId?: string | null;
 
   hash?: string | null;
 

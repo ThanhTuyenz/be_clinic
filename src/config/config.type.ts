@@ -77,14 +77,7 @@ export type ZaloZnsConfig = {
   accessToken?: string;
   templateBookingConfirm: string;
   templateReminder: string;
-  endpoint: string;
-};
-
-export type HttpSmsConfig = {
-  enabled: boolean;
-  apiKey?: string;
-  fromNumber: string;
-  isSandbox: boolean;
+  templateOtp: string;
   endpoint: string;
 };
 
@@ -98,5 +91,4 @@ export type AllConfigType = {
   rabbitmq: RabbitMqConfig;
   redis: RedisConfig;
   zaloZns: ZaloZnsConfig;
-  httpsms: HttpSmsConfig;
 };

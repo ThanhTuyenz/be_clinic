@@ -4,6 +4,7 @@ import { AllConfigType, ZaloZnsConfig } from '../../config/config.type.js';
 import {
   AppointmentReminderZnsData,
   BookingConfirmationZnsData,
+  OtpZnsData,
   IZaloZnsService,
 } from './zalo-zns.interface.js';
 
@@ -20,6 +21,7 @@ export class ZaloZnsService implements IZaloZnsService {
         isSandbox: true,
         templateBookingConfirm: 'VC_BOOKING_CONFIRM',
         templateReminder: 'VC_APPOINTMENT_REMINDER',
+        templateOtp: 'VC_OTP_VERIFICATION',
         endpoint: 'https://business.openapi.zalo.me/message/template',
       };
   }
@@ -169,6 +171,34 @@ export class ZaloZnsService implements IZaloZnsService {
       this.config.templateReminder,
       templateData,
       `NHẮC LỊCH KHÁM BỆNH (${labelAhead.toUpperCase()})`,
+    );
+  }
+
+  /**
+   * Gửi mã OTP xác thực qua Zalo ZNS
+   * Sử dụng khi Đăng ký tài khoản bằng SĐT, Liên kết tài khoản Zalo, hoặc Đặt lại mật khẩu
+   */
+  async sendOtp(data: OtpZnsData): Promise<boolean> {
+    const purposeTitle =
+      data.purpose === 'LINK_ACCOUNT'
+        ? 'XÁC THỰC LIÊN KẾT TÀI KHOẢN'
+        : data.purpose === 'RESET_PASSWORD'
+          ? 'MÃ XÁC THỰC ĐẶT LẠI MẬT KHẨU'
+          : 'MÃ XÁC THỰC ĐĂNG KÝ TÀI KHOẢN';
+
+    const templateData = {
+      otp: data.otp,
+      expires_in: `${data.expiresInMinutes || 10} phút`,
+      brand_name: this.brandName,
+      purpose: purposeTitle,
+      note: 'Tuyệt đối không chia sẻ mã này cho bất kỳ ai để bảo vệ hồ sơ y tế của bạn.',
+    };
+
+    return this.sendZnsMessage(
+      data.to,
+      this.config.templateOtp,
+      templateData,
+      `ZALO ZNS OTP [${purposeTitle}]`,
     );
   }
 }

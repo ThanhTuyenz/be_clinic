@@ -13,7 +13,7 @@ import { RescheduleAppointmentDto } from './dtos/reschedule-appointment.dto.js';
 @Controller('appointments')
 @SkipPermissions()
 export class BookingController {
-  constructor(private readonly bookingService: BookingService) {}
+  constructor(private readonly bookingService: BookingService) { }
 
   @Post('checkout')
   @ApiOperation({ summary: 'Giữ chỗ 10 phút và tạo giao dịch thanh toán' })
@@ -138,7 +138,7 @@ export class BookingController {
 @Controller('check-in')
 @SkipPermissions()
 export class CheckInController {
-  constructor(private readonly bookingService: BookingService) {}
+  constructor(private readonly bookingService: BookingService) { }
 
   @Post('qr/:token')
   @ApiOperation({ summary: 'Check-in bằng QR và cấp số thứ tự atomic theo timeslot' })

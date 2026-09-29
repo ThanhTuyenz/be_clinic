@@ -18,7 +18,7 @@ export class AppointmentReminderTask {
     private readonly zaloZns: ZaloZnsService,
   ) { }
 
-  // Chạy mỗi giờ đúng (:00) - chỉ gửi nhắc trước 24 giờ để tối ưu chi phí SMS
+  // Chạy mỗi giờ đúng (:00) - quét và gửi nhắc hẹn trước 24 giờ qua Zalo ZNS & Email
   @Cron('0 * * * *')
   async handleReminders() {
     this.logger.debug('Bắt đầu quét nhắc lịch 24h...');

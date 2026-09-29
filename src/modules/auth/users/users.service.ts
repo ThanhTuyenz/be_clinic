@@ -46,6 +46,7 @@ export class UsersService implements IUsersService {
         status: this.toPrismaStatus(dto.status ?? UserStatus.Active),
         provider: this.toPrismaProvider(dto.provider ?? 'email'),
         socialId: dto.socialId ?? null,
+        zaloId: dto.zaloId ?? null,
         roleId: dto.roleId ?? null,
         customPermissions: dto.customPermissions as unknown as Prisma.InputJsonValue | undefined,
         hash: dto.hash ?? null,
@@ -266,7 +267,9 @@ export class UsersService implements IUsersService {
     return {
       id: input.id as string | undefined,
       email: typeof input.email === 'string' ? input.email.trim().toLowerCase() : undefined,
+      phoneNumber: typeof input.phoneNumber === 'string' ? input.phoneNumber.trim() : undefined,
       socialId: input.socialId as string | undefined,
+      zaloId: typeof input.zaloId === 'string' ? input.zaloId.trim() : undefined,
       provider: input.provider ? this.toPrismaProvider(String(input.provider)) : undefined,
       hash: input.hash as string | undefined,
     };
@@ -285,6 +288,7 @@ export class UsersService implements IUsersService {
       status: payload.status ? this.toPrismaStatus(payload.status) : undefined,
       role: payload.role ? this.toPrismaRole(payload.role) : undefined,
       socialId: payload.socialId,
+      zaloId: p.zaloId !== undefined ? (p.zaloId ? String(p.zaloId).trim() : null) : undefined,
       roleId: payload.roleId,
       customPermissions: payload.customPermissions === null ? Prisma.JsonNull : payload.customPermissions as Prisma.InputJsonValue | undefined,
       hash: payload.hash,

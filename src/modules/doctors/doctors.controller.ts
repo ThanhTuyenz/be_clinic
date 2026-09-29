@@ -9,7 +9,7 @@ import { DoctorsService } from './doctors.service.js';
 @Controller(['doctors', 'doctor'])
 @SkipPermissions()
 export class DoctorsController {
-  constructor(private readonly doctorsService: DoctorsService) {}
+  constructor(private readonly doctorsService: DoctorsService) { }
 
   @ApiBearerAuth('access-token')
   @Get('queue-summary')

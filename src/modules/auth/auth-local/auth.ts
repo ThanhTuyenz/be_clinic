@@ -31,4 +31,18 @@ export interface IAuthService {
   ): Promise<Omit<LoginResponseType, 'user'>>;
 
   logout(data: { sessionId?: string; token?: string }): Promise<void>;
+  checkPhoneLink(phoneNumber: string): Promise<{
+    exists: boolean;
+    isZaloAccount: boolean;
+    fullName?: string | null;
+    email?: string | null;
+  }>;
+  requestLinkOtp(phoneNumber: string): Promise<{ message: string; expiresIn: number }>;
+  confirmLinkAccount(dto: {
+    phoneNumber: string;
+    email: string;
+    password?: string;
+    fullName?: string;
+    otp: string;
+  }): Promise<LoginResponseType>;
 }

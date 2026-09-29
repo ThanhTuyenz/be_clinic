@@ -35,6 +35,11 @@ import {
   AuthResendOtpDto,
   AuthVerifyOtpDto,
 } from './dtos/auth-verify-otp.dto';
+import {
+  CheckPhoneLinkDto,
+  RequestLinkOtpDto,
+  ConfirmLinkAccountDto,
+} from './dtos/auth-link-account.dto';
 
 @ApiTags('Auth')
 @SkipPermissions() // Skip permissions check for all routes in this controller
@@ -132,6 +137,54 @@ export class AuthController {
   @ApiOperation({ summary: 'Gửi lại OTP xác thực email' })
   resendOtp(@Body() dto: AuthResendOtpDto): Promise<void> {
     return this.authService.resendRegistrationOtp(dto.email);
+  }
+
+  @Post('check-phone-link')
+  @Public()
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Kiểm tra SĐT có thuộc tài khoản Zalo để gợi ý liên kết email không' })
+  async checkPhoneLink(@Body() dto: CheckPhoneLinkDto) {
+    return this.authService.checkPhoneLink(dto.phoneNumber);
+  }
+
+  @Post('request-link-otp')
+  @Public()
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Gửi mã OTP qua Zalo ZNS để xác thực liên kết email' })
+  async requestLinkOtp(@Body() dto: RequestLinkOtpDto) {
+    return this.authService.requestLinkOtp(dto.phoneNumber);
+  }
+
+  @Post('confirm-link-account')
+  @Public()
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Xác thực OTP và liên kết email/mật khẩu vào tài khoản Zalo' })
+  async confirmLinkAccount(
+    @Body() dto: ConfirmLinkAccountDto,
+    @Res({ passthrough: true }) res: Response,
+  ): Promise<LoginResponseType> {
+    const response = await this.authService.confirmLinkAccount(dto);
+
+    const isProduction = process.env.NODE_ENV === 'production';
+    const cookieOptions: CookieOptions = {
+      httpOnly: true,
+      secure: isProduction,
+      sameSite: isProduction ? 'none' : 'lax',
+      path: '/',
+    };
+    const tokenMaxAge = this.getCookieMaxAge('auth.expires');
+    const refreshTokenMaxAge = this.getCookieMaxAge('auth.refreshExpires');
+
+    res.cookie('token', response.token, {
+      ...cookieOptions,
+      maxAge: tokenMaxAge,
+    });
+    res.cookie('refreshToken', response.refreshToken, {
+      ...cookieOptions,
+      maxAge: refreshTokenMaxAge,
+    });
+
+    return response;
   }
 
   @Post('confirm-email')

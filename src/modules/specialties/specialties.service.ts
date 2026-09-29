@@ -313,7 +313,7 @@ export class SpecialtiesService {
 
   async specialtyPackages(branchIdentifier?: string, limit?: number) {
     const branchId = await this.resolveBranchId(branchIdentifier);
-    const rows = await this.prisma.servicePackage.findMany({
+    let rows = await this.prisma.servicePackage.findMany({
       where: {
         isActive: true,
         OR: [
@@ -355,6 +355,50 @@ export class SpecialtiesService {
         branchBookingMethods: { select: { branchBookingMethod: { select: { id: true, branchId: true, branch: { select: { id: true, code: true, slug: true } } } } } },
       },
     });
+
+    if (rows.length === 0 && branchId) {
+      rows = await this.prisma.servicePackage.findMany({
+        where: {
+          isActive: true,
+          OR: [
+            {
+              branchBookingMethods: {
+                some: {
+                  branchBookingMethod: {
+                    isEnabled: true,
+                    bookingMethod: { code: 'SPECIALTY_EXAM', isActive: true },
+                  },
+                },
+              },
+            },
+            {
+              branchBookingMethod: {
+                isEnabled: true,
+                bookingMethod: { code: 'SPECIALTY_EXAM', isActive: true },
+              },
+            },
+          ],
+        },
+        orderBy: [{ specialty: { name: 'asc' } }, { price: 'asc' }],
+        ...(limit ? { take: limit } : {}),
+        select: {
+          id: true,
+          code: true,
+          slug: true,
+          name: true,
+          description: true,
+          price: true,
+          durationMin: true,
+          sessionType: true,
+          activeDaysOfWeek: true,
+          specialtyId: true,
+          specialty: { select: { id: true, name: true, slug: true } },
+          branchBookingMethod: { select: { id: true, branchId: true, branch: { select: { id: true, code: true, slug: true } } } },
+          branchBookingMethods: { select: { branchBookingMethod: { select: { id: true, branchId: true, branch: { select: { id: true, code: true, slug: true } } } } } },
+        },
+      });
+    }
+
     return rows.map(({ branchBookingMethod, branchBookingMethods, ...item }) => {
       const bbm = branchBookingMethods?.find((l) => !branchId || l.branchBookingMethod.branchId === branchId)?.branchBookingMethod || branchBookingMethod;
       return {
@@ -369,7 +413,7 @@ export class SpecialtiesService {
 
   async healthPackages(branchIdentifier?: string, limit?: number) {
     const branchId = await this.resolveBranchId(branchIdentifier);
-    const rows = await this.prisma.servicePackage.findMany({
+    let rows = await this.prisma.servicePackage.findMany({
       where: {
         isActive: true,
         OR: [
@@ -408,6 +452,47 @@ export class SpecialtiesService {
         branchBookingMethods: { select: { branchBookingMethod: { select: { id: true, branchId: true, branch: { select: { id: true, code: true, slug: true } } } } } },
       },
     });
+
+    if (rows.length === 0 && branchId) {
+      rows = await this.prisma.servicePackage.findMany({
+        where: {
+          isActive: true,
+          OR: [
+            {
+              branchBookingMethods: {
+                some: {
+                  branchBookingMethod: {
+                    isEnabled: true,
+                    bookingMethod: { code: 'HEALTH_PACKAGE', isActive: true },
+                  },
+                },
+              },
+            },
+            {
+              branchBookingMethod: {
+                isEnabled: true,
+                bookingMethod: { code: 'HEALTH_PACKAGE', isActive: true },
+              },
+            },
+          ],
+        },
+        orderBy: { name: 'asc' },
+        ...(limit ? { take: limit } : {}),
+        select: {
+          id: true,
+          code: true,
+          slug: true,
+          name: true,
+          description: true,
+          price: true,
+          sessionType: true,
+          activeDaysOfWeek: true,
+          branchBookingMethod: { select: { id: true, branchId: true, branch: { select: { id: true, code: true, slug: true } } } },
+          branchBookingMethods: { select: { branchBookingMethod: { select: { id: true, branchId: true, branch: { select: { id: true, code: true, slug: true } } } } } },
+        },
+      });
+    }
+
     return rows.map(({ branchBookingMethod, branchBookingMethods, ...healthPackage }) => {
       const bbm = branchBookingMethods?.find((l) => !branchId || l.branchBookingMethod.branchId === branchId)?.branchBookingMethod || branchBookingMethod;
       return {

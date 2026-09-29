@@ -18,6 +18,7 @@ enum UserStatus {
 enum AuthProvider {
   EMAIL  @map("email")
   GOOGLE @map("google")
+  ZALO   @map("zalo")
 }
 
 enum Gender {

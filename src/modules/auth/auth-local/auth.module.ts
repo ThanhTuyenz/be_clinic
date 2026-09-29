@@ -11,6 +11,7 @@ import { AnonymousStrategy } from './strategies/anonymous.strategy';
 import { MailsModule } from '../../../infrastructure/mail/mails.module.js';
 import { ForgotPasswordModule } from '../forgot-password/forgot-password.module';
 import { HistoryModule } from '../history/history.module.js';
+import { ZaloZnsModule } from '../../../infrastructure/zalo-zns/zalo-zns.module.js';
 
 @Module({
   imports: [
@@ -20,6 +21,7 @@ import { HistoryModule } from '../history/history.module.js';
     PassportModule,
     ForgotPasswordModule,
     HistoryModule,
+    ZaloZnsModule,
   ],
 
   controllers: [AuthController],

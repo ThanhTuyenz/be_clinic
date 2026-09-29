@@ -22,7 +22,10 @@ export class BranchesService {
   branches() {
     return this.prisma.branch.findMany({
       where: { isActive: true },
-      orderBy: { name: 'asc' },
+      orderBy: [
+        { code: 'desc' },
+        { name: 'asc' },
+      ],
       select: {
         id: true,
         code: true,

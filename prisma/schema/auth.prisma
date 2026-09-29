@@ -14,6 +14,7 @@ model User {
   role                     UserRole                   @default(PATIENT)
   roleId                   String?                    @map("role_id") @db.VarChar(100)
   socialId                 String?                    @map("social_id") @db.VarChar(255)
+  zaloId                   String?                    @unique @map("zalo_id") @db.VarChar(255)
   customPermissions        Json?                      @map("custom_permissions")
   hash                     String?                    @db.VarChar(255)
   isBlocked                Boolean                    @default(false) @map("is_blocked")

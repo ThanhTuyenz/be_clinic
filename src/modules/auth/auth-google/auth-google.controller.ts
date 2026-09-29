@@ -11,6 +11,8 @@ import { SkipPermissions } from '../permissions/decorators/skip-permissions.deco
 import { IAuthGoogleService } from './auth-google';
 import { AuthGoogleLoginDto } from './dtos/auth-google-login.dto';
 
+import { GoogleAuthGuard } from './guards/google-auth.guard.js';
+
 @ApiTags('Auth')
 @Public()
 @SkipPermissions()
@@ -23,14 +25,14 @@ export class AuthGoogleController {
   ) {}
 
   @Get('google')
-  @UseGuards(AuthGuard('google'))
+  @UseGuards(GoogleAuthGuard)
   @ApiOperation({ summary: 'Bắt đầu quá trình xác thực Google OAuth2' })
   async googleAuth() {
     // Passport redirects to Google
   }
 
   @Get('google/login')
-  @UseGuards(AuthGuard('google'))
+  @UseGuards(GoogleAuthGuard)
   @ApiOperation({ summary: 'Bắt đầu quá trình xác thực Google OAuth2 (alias login)' })
   async googleLogin() {
     // Passport redirects to Google
@@ -60,11 +62,27 @@ export class AuthGoogleController {
 
   private handleGoogleRedirect(req: any, res: Response) {
     const loginResponse = req.user;
-    const frontendDomain = this.configService.get<string>('FRONTEND_DOMAIN') || 'http://localhost:3000';
+    let targetBase = this.configService.get<string>('FRONTEND_DOMAIN') || 'http://localhost:3000';
+
+    // Đọc state từ request để biết client nào gọi tới (App ở localhost:8081 hay Web ở localhost:3000)
+    const state = req.query?.state;
+    if (state && typeof state === 'string') {
+      try {
+        const decoded = decodeURIComponent(state);
+        if (decoded.startsWith('http://') || decoded.startsWith('https://')) {
+          targetBase = decoded;
+        }
+      } catch {
+        if (state.startsWith('http://') || state.startsWith('https://')) {
+          targetBase = state;
+        }
+      }
+    }
+
     const token = loginResponse?.token || '';
     const refreshToken = loginResponse?.refreshToken || '';
 
-    const targetUrl = new URL('/auth/callback', frontendDomain);
+    const targetUrl = new URL('/auth/callback', targetBase);
     targetUrl.searchParams.set('token', token);
     if (refreshToken) {
       targetUrl.searchParams.set('refreshToken', refreshToken);

@@ -1,9 +1,12 @@
 import {
+  BadRequestException,
+  ConflictException,
   HttpException,
   HttpStatus,
   Inject,
   Injectable,
   Logger,
+  NotFoundException,
   UnauthorizedException,
 } from '@nestjs/common';
 import { IUsersService } from '../users/users';
@@ -33,6 +36,7 @@ import { HistoryService } from '../history/history.service.js';
 import { HISTORY_ACTIONS } from '../history/history.js';
 import { RedisService } from '../../../infrastructure/redis/redis.service.js';
 import { TokenBlacklistService } from '../jwt-auth-core/token-blacklist.service.js';
+import { ZaloZnsService } from '../../../infrastructure/zalo-zns/zalo-zns.service.js';
 
 @Injectable()
 export class AuthService implements IAuthService {
@@ -47,6 +51,7 @@ export class AuthService implements IAuthService {
     private readonly historyService: HistoryService,
     private readonly redis: RedisService,
     private readonly tokenBlacklistService: TokenBlacklistService,
+    private readonly zaloZnsService: ZaloZnsService,
 
     private readonly configService: ConfigService<AllConfigType>,
     private readonly jwtService: JwtService,
@@ -163,34 +168,92 @@ export class AuthService implements IAuthService {
       user,
     };
   }
+
   async validateSocialLogin(
     authProvider: AuthProvidersEnum,
     socialData: SocialType,
   ): Promise<LoginResponseType> {
-    let user: NullableType<User>;
-    const socialEmail = socialData.email?.toLowerCase();
+    let user: NullableType<User> = null;
+    const socialEmail = socialData.email?.toLowerCase().trim();
 
-    const userByEmail = await this.usersService.findOneUser({
-      email: socialEmail,
-    });
+    // 1. Kiểm tra tài khoản Zalo theo zaloId hoặc provider + socialId
+    if (authProvider === AuthProvidersEnum.zalo) {
+      user = await this.usersService.findOneUser({ zaloId: socialData.id } as any);
+    }
+    if (!user) {
+      user = await this.usersService.findOneUser({
+        socialId: socialData.id,
+        provider: authProvider,
+      });
+    }
 
-    user = await this.usersService.findOneUser({
-      socialId: socialData.id,
-      provider: authProvider,
-    });
+    // 2. Kịch bản 1A: Nếu chưa tìm thấy và có SĐT -> Tìm user đã đăng ký bằng SĐT này trước đó
+    if (!user && socialData.phoneNumber) {
+      const rawPhone = socialData.phoneNumber.trim();
+      const phoneNorm = rawPhone.startsWith('0') ? `+84${rawPhone.slice(1)}` : rawPhone;
+      const phoneRaw0 = rawPhone.startsWith('+84') ? `0${rawPhone.slice(3)}` : rawPhone;
 
-    if (user) {
-      if (socialEmail && !userByEmail) {
-        user.email = socialEmail;
+      user =
+        (await this.usersService.findOneUser({ phoneNumber: rawPhone } as any)) ||
+        (await this.usersService.findOneUser({ phoneNumber: phoneNorm } as any)) ||
+        (await this.usersService.findOneUser({ phoneNumber: phoneRaw0 } as any));
+
+      if (user) {
+        // Tự động liên kết Zalo vào tài khoản SĐT cũ
+        user.zaloId = socialData.id;
+        if (!user.avatarUrl && socialData.avatarUrl) {
+          user.avatarUrl = socialData.avatarUrl;
+        }
+        await this.usersService.saveUser(user);
+        this.logger.log(`Linked Zalo ID ${socialData.id} to existing user ${user.id} via phone ${rawPhone}`);
       }
-      await this.usersService.saveUser(user);
-    } else if (userByEmail) {
-      user = userByEmail;
+    }
+
+    // 3. Kịch bản 1B: Nếu chưa tìm thấy và có Email -> Tìm user đã đăng ký bằng Email này trước đó
+    if (!user && socialEmail) {
+      const userByEmail = await this.usersService.findOneUser({
+        email: socialEmail,
+      });
+      if (userByEmail) {
+        user = userByEmail;
+        if (authProvider === AuthProvidersEnum.zalo) {
+          user.zaloId = socialData.id;
+        }
+        if (!user.avatarUrl && socialData.avatarUrl) {
+          user.avatarUrl = socialData.avatarUrl;
+        }
+        await this.usersService.saveUser(user);
+        this.logger.log(`Linked Zalo ID ${socialData.id} to existing user ${user.id} via email ${socialEmail}`);
+      }
+    }
+
+    // 4. Nếu đã có user (từ bước 1), cập nhật email/avatar nếu thiếu
+    if (user) {
+      let changed = false;
+      if (socialEmail && !user.email) {
+        user.email = socialEmail;
+        changed = true;
+      }
+      if (authProvider === AuthProvidersEnum.zalo && !user.zaloId) {
+        user.zaloId = socialData.id;
+        changed = true;
+      }
+      if (!user.avatarUrl && socialData.avatarUrl) {
+        user.avatarUrl = socialData.avatarUrl;
+        changed = true;
+      }
+      if (changed) {
+        await this.usersService.saveUser(user);
+      }
     } else {
+      // 5. Nếu chưa từng tồn tại: Tạo user mới
       user = await this.usersService.createUser({
         email: socialEmail ?? null,
         fullName: socialData.fullName ?? null,
+        phoneNumber: socialData.phoneNumber ?? null,
+        avatarUrl: socialData.avatarUrl ?? null,
         socialId: socialData.id,
+        zaloId: authProvider === AuthProvidersEnum.zalo ? socialData.id : null,
         provider: authProvider,
         status: UserStatus.Active,
       });
@@ -236,6 +299,199 @@ export class AuthService implements IAuthService {
       sessionId: session.id,
     });
 
+    await this.historyService.create({
+      action: HISTORY_ACTIONS.USER_LOGIN_SUCCESS,
+      message: `Người dùng đăng nhập thành công qua ${authProvider}`,
+      actorId: user.id,
+      actorEmail: user.email ?? undefined,
+      targetType: 'user',
+      targetId: user.id,
+    });
+
+    return {
+      refreshToken,
+      token: jwtToken,
+      tokenExpires,
+      user,
+    };
+  }
+
+  async checkPhoneLink(phoneNumber: string): Promise<{
+    exists: boolean;
+    isZaloAccount: boolean;
+    fullName?: string | null;
+    email?: string | null;
+  }> {
+    const rawPhone = (phoneNumber || '').trim();
+    if (!rawPhone) {
+      return { exists: false, isZaloAccount: false };
+    }
+    const phoneNorm = rawPhone.startsWith('0') ? `+84${rawPhone.slice(1)}` : rawPhone;
+    const phoneRaw0 = rawPhone.startsWith('+84') ? `0${rawPhone.slice(3)}` : rawPhone;
+
+    const user =
+      (await this.usersService.findOneUser({ phoneNumber: rawPhone } as any)) ||
+      (await this.usersService.findOneUser({ phoneNumber: phoneNorm } as any)) ||
+      (await this.usersService.findOneUser({ phoneNumber: phoneRaw0 } as any));
+
+    if (!user) {
+      return { exists: false, isZaloAccount: false };
+    }
+
+    const isZalo = Boolean(user.zaloId || user.provider === AuthProvidersEnum.zalo || (user.provider as string) === 'zalo');
+
+    let maskedEmail: string | null = null;
+    if (user.email && !user.email.endsWith('@phone.vitacare.vn')) {
+      const [name, domain] = user.email.split('@');
+      maskedEmail = domain ? `${name.slice(0, 2)}***@${domain}` : user.email;
+    }
+
+    return {
+      exists: true,
+      isZaloAccount: isZalo,
+      fullName: user.fullName,
+      email: maskedEmail,
+    };
+  }
+
+  async requestLinkOtp(phoneNumber: string): Promise<{ message: string; expiresIn: number }> {
+    const rawPhone = (phoneNumber || '').trim();
+    if (!rawPhone) {
+      throw new BadRequestException('Số điện thoại không hợp lệ');
+    }
+    const phoneNorm = rawPhone.startsWith('0') ? `+84${rawPhone.slice(1)}` : rawPhone;
+    const phoneRaw0 = rawPhone.startsWith('+84') ? `0${rawPhone.slice(3)}` : rawPhone;
+
+    const user =
+      (await this.usersService.findOneUser({ phoneNumber: rawPhone } as any)) ||
+      (await this.usersService.findOneUser({ phoneNumber: phoneNorm } as any)) ||
+      (await this.usersService.findOneUser({ phoneNumber: phoneRaw0 } as any));
+
+    if (!user) {
+      throw new NotFoundException('Không tìm thấy tài khoản với số điện thoại này');
+    }
+
+    const cooldownKey = `auth:otp:cooldown:link:${rawPhone}`;
+    if (this.redis.isEnabled() && (await this.redis.exists(cooldownKey))) {
+      throw new HttpException(
+        'Vui lòng chờ 60 giây trước khi yêu cầu mã OTP mới',
+        HttpStatus.TOO_MANY_REQUESTS,
+      );
+    }
+
+    const otp = this.generateOtp();
+    const otpHash = this.hashOtp(otp);
+
+    if (this.redis.isEnabled()) {
+      await this.redis.set(`auth:otp:link:${rawPhone}`, { hash: otpHash, attempts: 0 }, 600);
+      await this.redis.set(cooldownKey, '1', 60);
+    }
+
+    // Bắn OTP xác thực liên kết qua Zalo ZNS
+    await this.zaloZnsService.sendOtp({
+      to: user.phoneNumber || rawPhone,
+      otp,
+      expiresInMinutes: 10,
+      purpose: 'LINK_ACCOUNT',
+    });
+
+    return {
+      message: 'Mã OTP xác thực liên kết tài khoản đã được gửi đến Zalo của bạn',
+      expiresIn: 600,
+    };
+  }
+
+  async confirmLinkAccount(dto: {
+    phoneNumber: string;
+    email: string;
+    password?: string;
+    fullName?: string;
+    otp: string;
+  }): Promise<LoginResponseType> {
+    const rawPhone = (dto.phoneNumber || '').trim();
+    const targetEmail = (dto.email || '').trim().toLowerCase();
+    const phoneNorm = rawPhone.startsWith('0') ? `+84${rawPhone.slice(1)}` : rawPhone;
+    const phoneRaw0 = rawPhone.startsWith('+84') ? `0${rawPhone.slice(3)}` : rawPhone;
+
+    const user =
+      (await this.usersService.findOneUser({ phoneNumber: rawPhone } as any)) ||
+      (await this.usersService.findOneUser({ phoneNumber: phoneNorm } as any)) ||
+      (await this.usersService.findOneUser({ phoneNumber: phoneRaw0 } as any));
+
+    if (!user) {
+      throw new NotFoundException('Không tìm thấy tài khoản với số điện thoại này');
+    }
+
+    if (!this.redis.isEnabled()) {
+      throw new HttpException('Hệ thống xác thực tạm thời gián đoạn', HttpStatus.SERVICE_UNAVAILABLE);
+    }
+
+    const otpKey = `auth:otp:link:${rawPhone}`;
+    const otpData = await this.redis.get<{ hash: string; attempts: number }>(otpKey);
+
+    if (!otpData || !otpData.hash) {
+      throw new BadRequestException('Mã OTP không tồn tại hoặc đã hết hạn. Vui lòng yêu cầu lại OTP.');
+    }
+
+    if ((otpData.attempts || 0) >= 5) {
+      throw new HttpException(
+        'Mã OTP đã bị khóa do nhập sai quá nhiều lần. Vui lòng yêu cầu mã mới.',
+        HttpStatus.TOO_MANY_REQUESTS,
+      );
+    }
+
+    const suppliedHash = this.hashOtp(dto.otp);
+    const expected = Buffer.from(otpData.hash, 'hex');
+    const supplied = Buffer.from(suppliedHash, 'hex');
+    if (expected.length !== supplied.length || !timingSafeEqual(expected, supplied)) {
+      otpData.attempts = (otpData.attempts || 0) + 1;
+      await this.redis.set(otpKey, otpData, 600);
+      throw new BadRequestException('Mã xác thực OTP không chính xác');
+    }
+
+    // Kiểm tra xem email mục tiêu đã có tài khoản khác sở hữu chưa
+    const existingEmailUser = await this.usersService.findOneUser({ email: targetEmail });
+    if (existingEmailUser && existingEmailUser.id !== user.id) {
+      throw new ConflictException('Email này đã được sử dụng bởi một tài khoản khác');
+    }
+
+    // Cập nhật thông tin tài khoản
+    user.email = targetEmail;
+    if (dto.password) {
+      user.password = dto.password;
+    }
+    if (dto.fullName && (!user.fullName || user.fullName.startsWith('User_'))) {
+      user.fullName = dto.fullName;
+    }
+    user.status = UserStatus.Active;
+    await this.usersService.saveUser(user);
+
+    // Xóa OTP
+    await this.redis.delete(otpKey);
+
+    // Cấp session và JWT token
+    const session = await this.sessionService.create({ user });
+    user.lastLoginAt = new Date();
+    await this.usersService.saveUser(user);
+
+    const {
+      token: jwtToken,
+      refreshToken,
+      tokenExpires,
+    } = await this.getTokensData({
+      id: user.id,
+      sessionId: session.id,
+    });
+
+    await this.historyService.create({
+      action: HISTORY_ACTIONS.USER_LOGIN_SUCCESS,
+      message: `Người dùng liên kết thành công Email ${targetEmail} với tài khoản Zalo ${rawPhone}`,
+      actorId: user.id,
+      actorEmail: targetEmail,
+      targetType: 'user',
+      targetId: user.id,
+    });
+
     return {
       refreshToken,
       token: jwtToken,
@@ -270,33 +526,62 @@ export class AuthService implements IAuthService {
       }
     }
 
-    // Nếu đăng ký bằng số điện thoại: kích hoạt luôn tài khoản để bệnh nhân đăng nhập ngay lập tức!
+    const otp = this.generateOtp();
+    const otpHash = this.hashOtp(otp);
+
+    // 1. Nếu đăng ký bằng Số điện thoại: Tạo user trạng thái INACTIVE và gửi mã OTP qua Zalo ZNS
     if (!isEmail && phoneNumber) {
       const virtualEmail = `${phoneNumber.replace(/[\s\+]/g, '')}@phone.vitacare.vn`;
-      await this.usersService.createUser({
-        fullName: registerDto.fullName,
-        password: registerDto.password,
-        email: virtualEmail,
-        phoneNumber,
-        status: UserStatus.Active,
-        role: UserRole.Patient,
-      } as any);
+      const phoneNorm = phoneNumber.startsWith('0') ? `+84${phoneNumber.slice(1)}` : phoneNumber;
+      const phoneRaw0 = phoneNumber.startsWith('+84') ? `0${phoneNumber.slice(3)}` : phoneNumber;
+
+      const existingPhoneUser =
+        (await this.usersService.findOneUser({ phoneNumber } as any)) ||
+        (await this.usersService.findOneUser({ phoneNumber: phoneNorm } as any)) ||
+        (await this.usersService.findOneUser({ phoneNumber: phoneRaw0 } as any));
+
+      if (existingPhoneUser) {
+        existingPhoneUser.password = registerDto.password;
+        existingPhoneUser.fullName = registerDto.fullName;
+        existingPhoneUser.role = UserRole.Patient;
+        existingPhoneUser.status = UserStatus.Inactive;
+        await this.usersService.saveUser(existingPhoneUser);
+      } else {
+        await this.usersService.createUser({
+          fullName: registerDto.fullName,
+          password: registerDto.password,
+          email: virtualEmail,
+          phoneNumber,
+          status: UserStatus.Inactive,
+          role: UserRole.Patient,
+        } as any);
+      }
+
+      // Lưu OTP vào Redis với key SĐT
+      if (this.redis.isEnabled()) {
+        await this.redis.set(`auth:otp:reg:${phoneNumber}`, { hash: otpHash, attempts: 0 }, 600);
+        await this.redis.set(`auth:otp:cooldown:${phoneNumber}`, '1', 60);
+      }
 
       await this.historyService.create({
         action: HISTORY_ACTIONS.USER_REGISTERED,
-        message: `Đăng ký tài khoản mới bằng số điện thoại ${phoneNumber}`,
+        message: `Đăng ký tài khoản mới qua Zalo SĐT ${phoneNumber}`,
         actorEmail: phoneNumber,
         targetType: 'user',
         targetId: phoneNumber,
       });
+
+      // Bắn mã OTP qua Zalo ZNS
+      await this.zaloZnsService.sendOtp({
+        to: phoneNumber,
+        otp,
+        expiresInMinutes: 10,
+        purpose: 'REGISTER',
+      });
       return;
     }
 
-    // Nếu đăng ký bằng email: gửi mã OTP qua Gmail và lưu vào Redis
-    const otp = this.generateOtp();
-    const otpHash = this.hashOtp(otp);
-
-    // Lưu OTP vào Redis với TTL 10 phút (600s), cooldown chống spam 60s
+    // 2. Nếu đăng ký bằng email: gửi mã OTP qua Gmail và lưu vào Redis
     if (this.redis.isEnabled()) {
       await this.redis.set(`auth:otp:reg:${email}`, { hash: otpHash, attempts: 0 }, 600);
       await this.redis.set(`auth:otp:cooldown:${email}`, '1', 60);
@@ -331,8 +616,23 @@ export class AuthService implements IAuthService {
     });
   }
 
-  async verifyRegistrationOtp(email: string, otp: string): Promise<void> {
-    const user = await this.usersService.findOneUser({ email });
+  async verifyRegistrationOtp(rawIdentifier: string, otp: string): Promise<void> {
+    const identifier = (rawIdentifier || '').trim();
+    const isEmail = identifier.includes('@');
+    let user: User | null = null;
+
+    if (isEmail) {
+      user = await this.usersService.findOneUser({ email: identifier });
+    } else {
+      const phoneNorm = identifier.startsWith('0') ? `+84${identifier.slice(1)}` : identifier;
+      const phoneRaw0 = identifier.startsWith('+84') ? `0${identifier.slice(3)}` : identifier;
+      user =
+        (await this.usersService.findOneUser({ phoneNumber: identifier } as any)) ||
+        (await this.usersService.findOneUser({ phoneNumber: phoneNorm } as any)) ||
+        (await this.usersService.findOneUser({ phoneNumber: phoneRaw0 } as any)) ||
+        (await this.usersService.findOneUser({ email: `${identifier.replace(/[\s\+]/g, '')}@phone.vitacare.vn` }));
+    }
+
     if (!user || user.status === UserStatus.Active) {
       throw new HttpException('Tài khoản không hợp lệ hoặc đã được kích hoạt', HttpStatus.BAD_REQUEST);
     }
@@ -341,7 +641,7 @@ export class AuthService implements IAuthService {
       throw new HttpException('Hệ thống xác thực tạm thời gián đoạn', HttpStatus.SERVICE_UNAVAILABLE);
     }
 
-    const otpKey = `auth:otp:reg:${email}`;
+    const otpKey = `auth:otp:reg:${identifier}`;
     const otpData = await this.redis.get<{ hash: string; attempts: number }>(otpKey);
 
     if (!otpData || !otpData.hash) {
@@ -369,16 +669,31 @@ export class AuthService implements IAuthService {
     await this.redis.delete(otpKey);
   }
 
-  async resendRegistrationOtp(email: string): Promise<void> {
-    const user = await this.usersService.findOneUser({ email });
+  async resendRegistrationOtp(rawIdentifier: string): Promise<void> {
+    const identifier = (rawIdentifier || '').trim();
+    const isEmail = identifier.includes('@');
+    let user: User | null = null;
+
+    if (isEmail) {
+      user = await this.usersService.findOneUser({ email: identifier });
+    } else {
+      const phoneNorm = identifier.startsWith('0') ? `+84${identifier.slice(1)}` : identifier;
+      const phoneRaw0 = identifier.startsWith('+84') ? `0${identifier.slice(3)}` : identifier;
+      user =
+        (await this.usersService.findOneUser({ phoneNumber: identifier } as any)) ||
+        (await this.usersService.findOneUser({ phoneNumber: phoneNorm } as any)) ||
+        (await this.usersService.findOneUser({ phoneNumber: phoneRaw0 } as any)) ||
+        (await this.usersService.findOneUser({ email: `${identifier.replace(/[\s\+]/g, '')}@phone.vitacare.vn` }));
+    }
+
     if (!user) {
       throw new HttpException('Không tìm thấy tài khoản', HttpStatus.NOT_FOUND);
     }
     if (user.status === UserStatus.Active) {
-      throw new HttpException('Email đã được xác thực', HttpStatus.CONFLICT);
+      throw new HttpException('Tài khoản đã được kích hoạt', HttpStatus.CONFLICT);
     }
 
-    const cooldownKey = `auth:otp:cooldown:${email}`;
+    const cooldownKey = `auth:otp:cooldown:${identifier}`;
     if (this.redis.isEnabled() && (await this.redis.exists(cooldownKey))) {
       throw new HttpException(
         'Vui lòng chờ 60 giây trước khi gửi lại OTP',
@@ -390,14 +705,23 @@ export class AuthService implements IAuthService {
     const otpHash = this.hashOtp(otp);
 
     if (this.redis.isEnabled()) {
-      await this.redis.set(`auth:otp:reg:${email}`, { hash: otpHash, attempts: 0 }, 600);
+      await this.redis.set(`auth:otp:reg:${identifier}`, { hash: otpHash, attempts: 0 }, 600);
       await this.redis.set(cooldownKey, '1', 60);
     }
 
-    await this.mailsService.confirmRegisterUser({
-      to: email,
-      data: { otp, user: user.fullName ?? undefined, expiresInMinutes: 10 },
-    });
+    if (isEmail) {
+      await this.mailsService.confirmRegisterUser({
+        to: identifier,
+        data: { otp, user: user.fullName ?? undefined, expiresInMinutes: 10 },
+      });
+    } else {
+      await this.zaloZnsService.sendOtp({
+        to: user.phoneNumber || identifier,
+        otp,
+        expiresInMinutes: 10,
+        purpose: 'REGISTER',
+      });
+    }
   }
 
   async status(userJwtPayload: JwtPayloadType): Promise<NullableType<User>> {

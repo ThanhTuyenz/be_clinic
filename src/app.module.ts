@@ -14,6 +14,7 @@ import zaloZnsConfig from './config/zalo-zns.config.js'
 import { AppointmentsModule } from './modules/appointments/appointments.module.js'
 import { AuthModule } from './modules/auth/auth-local/auth.module.js'
 import { AuthGoogleModule } from './modules/auth/auth-google/auth-google.module.js'
+import { AuthZaloModule } from './modules/auth/auth-zalo/auth-zalo.module.js'
 import { JwtAuthCoreModule } from './modules/auth/jwt-auth-core/jwt-auth-core.module.js'
 import { BookingModule } from './modules/bookings/booking.module.js'
 import { BranchesModule } from './modules/branches/branches.module.js'
@@ -64,6 +65,7 @@ import { MediaModule } from './infrastructure/media/media.module.js'
     JwtAuthCoreModule,
     AuthModule,
     AuthGoogleModule,
+    AuthZaloModule,
     BookingModule,
     BranchesModule,
     DoctorsModule,
