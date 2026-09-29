@@ -1,17 +1,16 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../../infrastructure/database/prisma/prisma.service.js';
+import { isUuid } from '../../common/utils/staff.utils.js';
 
 @Injectable()
 export class BranchesService {
   constructor(private readonly prisma: PrismaService) {}
 
-  private isUuid(val?: string | null): boolean {
-    return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(val || '');
-  }
+
 
   async resolveBranchId(identifier?: string): Promise<string | undefined> {
     if (!identifier) return undefined;
-    if (this.isUuid(identifier)) return identifier;
+    if (isUuid(identifier)) return identifier;
     const branch = await this.prisma.branch.findFirst({
       where: { OR: [{ slug: identifier }, { code: identifier }], isActive: true },
       select: { id: true },

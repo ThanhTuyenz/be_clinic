@@ -1,17 +1,15 @@
 import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../../infrastructure/database/prisma/prisma.service.js';
+import { isUuid, parseDate as parseDateUtil, parseDateRange } from '../../common/utils/staff.utils.js';
 
 @Injectable()
 export class DoctorsService {
   constructor(private readonly prisma: PrismaService) { }
 
-  private isUuid(val?: string | null): boolean {
-    return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(val || '');
-  }
 
   private async resolveBranchId(identifier?: string): Promise<string | undefined> {
     if (!identifier) return undefined;
-    if (this.isUuid(identifier)) return identifier;
+    if (isUuid(identifier)) return identifier;
     const branch = await this.prisma.branch.findFirst({
       where: { OR: [{ slug: identifier }, { code: identifier }], isActive: true },
       select: { id: true },
@@ -97,7 +95,7 @@ export class DoctorsService {
   }
 
   async timeslots(doctorId: string, branchId: string, date: string) {
-    const workDate = this.parseDate(date);
+    const workDate = parseDateUtil(date) ?? new Date(`${date}T00:00:00.000Z`);
     this.validateDateWithinBookingRange(workDate);
     const schedule = await this.prisma.doctorSchedule.findFirst({
       where: { doctorId, branchId, workDate, status: 'OPEN' },
@@ -191,31 +189,7 @@ export class DoctorsService {
     }
   }
 
-  private parseDate(value: string): Date {
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) throw new BadRequestException('Ngày phải có định dạng YYYY-MM-DD');
-    const date = new Date(`${value}T00:00:00.000Z`);
-    if (Number.isNaN(date.getTime())) throw new BadRequestException('Ngày không hợp lệ');
-    return date;
-  }
 
-  private parseDateRange(dateStr?: string) {
-    let year: number, month: number, date: number;
-    if (dateStr && /^\d{4}-\d{2}-\d{2}$/.test(dateStr)) {
-      const [y, m, d] = dateStr.split('-').map(Number);
-      year = y;
-      month = m - 1;
-      date = d;
-    } else {
-      const now = new Date();
-      year = now.getFullYear();
-      month = now.getMonth();
-      date = now.getDate();
-    }
-    const from = new Date(Date.UTC(year, month, date, 0, 0, 0, 0));
-    const to = new Date(Date.UTC(year, month, date + 1, 0, 0, 0, 0));
-    const dateKey = `${year}-${String(month + 1).padStart(2, '0')}-${String(date).padStart(2, '0')}`;
-    return { from, to, dateKey };
-  }
 
   async getQueueSummary(userId: string, dateStr?: string) {
     const user = await this.prisma.user.findUnique({
@@ -233,7 +207,7 @@ export class DoctorsService {
     }
 
     const doctorId = user.doctor.id;
-    const { from, to, dateKey } = this.parseDateRange(dateStr);
+    const { from, to, dateKey } = parseDateRange(dateStr);
 
     const rows = await this.prisma.appointment.groupBy({
       by: ['status'],

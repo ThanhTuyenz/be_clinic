@@ -1,5 +1,6 @@
 import { Injectable, NotFoundException } from '@nestjs/common'
 import { PrismaService } from '../../infrastructure/database/prisma/prisma.service.js'
+import { parseDate as parseDateUtil } from '../../common/utils/staff.utils.js'
 
 @Injectable()
 export class SpecialtiesService {
@@ -607,7 +608,7 @@ export class SpecialtiesService {
       ? (servicePackage as any).activeDaysOfWeek
       : [0, 1, 2, 3, 4, 5, 6];
 
-    const workDate = this.parseDate(date);
+    const workDate = parseDateUtil(date) ?? new Date(`${date}T00:00:00.000Z`);
     this.validateDateWithinBookingRange(workDate);
 
     if (!activeDays.includes(workDate.getDay())) {
@@ -751,11 +752,4 @@ export class SpecialtiesService {
     }
   }
 
-  private parseDate(value: string): Date {
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) throw new NotFoundException('Ngày phải có định dạng YYYY-MM-DD');
-    const date = new Date(`${value}T00:00:00.000Z`);
-    if (Number.isNaN(date.getTime())) throw new NotFoundException('Ngày không hợp lệ');
-    return date;
-  }
 }
-

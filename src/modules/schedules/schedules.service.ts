@@ -1,4 +1,5 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import { parseDate as parseDateUtil } from '../../common/utils/staff.utils.js';
 import { PrismaService } from '../../infrastructure/database/prisma/prisma.service.js';
 
 @Injectable()
@@ -68,7 +69,7 @@ export class SchedulesService {
    * Chỉ trả về slot status=AVAILABLE và occupiedCount < capacity.
    */
   async getAvailableSlots(doctorId: string, date: string, branchId?: string) {
-    const workDate = this.parseDate(date);
+    const workDate = parseDateUtil(date);
     const schedule = await this.prisma.doctorSchedule.findFirst({
       where: {
         doctorId,
@@ -654,22 +655,42 @@ export class SchedulesService {
 
   async bookingMethods(branchIdentifier?: string) {
     if (!branchIdentifier) {
-      return this.prisma.bookingMethod.findMany({
+      const orderMap: Record<string, number> = {
+        SPECIALTY_EXAM: 1,
+        CONSULTATION: 2,
+        ONLINE_CONSULTATION: 3,
+        FOLLOWUP_EXAM: 4,
+        FAMILY_BOOKING: 5,
+        AFTER_HOURS: 6,
+        HEALTH_PACKAGE: 7,
+      };
+
+      const rows = await this.prisma.bookingMethod.findMany({
         where: { isActive: true },
-        orderBy: { code: 'asc' },
-        select: { id: true, code: true, name: true, description: true, route: true },
-      }).then((rows) => rows.map((bm) => ({
-        id: bm.id,
-        branchId: '',
-        isEnabled: true,
-        sortOrder: 0,
-        bookingMethodId: bm.id,
-        type: bm.code,
-        code: bm.code,
-        displayName: bm.name,
-        description: bm.description,
-        route: bm.route,
-      })));
+        include: {
+          branches: {
+            where: { isEnabled: true },
+            select: { sortOrder: true },
+            take: 1,
+            orderBy: { sortOrder: 'asc' },
+          },
+        },
+      });
+
+      return rows
+        .map((bm) => ({
+          id: bm.id,
+          branchId: '',
+          isEnabled: true,
+          sortOrder: bm.branches?.[0]?.sortOrder ?? orderMap[bm.code] ?? 99,
+          bookingMethodId: bm.id,
+          type: bm.code,
+          code: bm.code,
+          displayName: bm.name,
+          description: bm.description,
+          route: bm.route,
+        }))
+        .sort((a, b) => a.sortOrder - b.sortOrder);
     }
     const branchId = await this.resolveBranchId(branchIdentifier);
     return this.prisma.branchBookingMethod.findMany({
@@ -698,7 +719,7 @@ export class SchedulesService {
   }
 
   async branchTimeslots(branchId: string, date: string, specialtyId?: number) {
-    const workDate = this.parseDate(date);
+    const workDate = parseDateUtil(date);
     this.validateDateWithinBookingRange(workDate);
 
     const schedules = await this.prisma.doctorSchedule.findMany({
@@ -854,13 +875,5 @@ export class SchedulesService {
 
   // ─────────────────────────────────────────────────────────────
   // Helpers
-  // ─────────────────────────────────────────────────────────────
-  private parseDate(value: string): Date {
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) {
-      throw new BadRequestException('Ngày phải có định dạng YYYY-MM-DD');
-    }
-    const date = new Date(`${value}T00:00:00.000Z`);
-    if (Number.isNaN(date.getTime())) throw new BadRequestException('Ngày không hợp lệ');
-    return date;
-  }
 }
+

@@ -9,7 +9,7 @@ import { SpecialtiesService } from './specialties.service.js';
 @SkipPermissions()
 @Controller()
 export class SpecialtiesController {
-  constructor(private readonly svc: SpecialtiesService) {}
+  constructor(private readonly svc: SpecialtiesService) { }
 
   /**
    * Danh sách chuyên khoa
@@ -22,6 +22,20 @@ export class SpecialtiesController {
   }
 
   /**
+   * Dịch vụ khám theo chuyên khoa
+   */
+  @Get(['specialties/services', 'public/specialty-services'])
+  @ApiOperation({ summary: 'Dịch vụ khám theo chuyên khoa, có thể lọc theo chi nhánh' })
+  @ApiQuery({ name: 'specialtyId', required: true, type: 'integer' })
+  @ApiQuery({ name: 'branchId', required: false, description: 'Lọc theo chi nhánh' })
+  getSpecialtyServicesQuery(
+    @Query('branchId') branchId: string | undefined,
+    @Query('specialtyId') specialtyId: string,
+  ) {
+    return this.svc.specialtyServices(branchId, Number(specialtyId));
+  }
+
+  /**
    * Chi tiết chuyên khoa
    */
   @Get('specialties/:id')
@@ -29,18 +43,6 @@ export class SpecialtiesController {
   @ApiParam({ name: 'id', type: 'integer' })
   getSpecialtyById(@Param('id', ParseIntPipe) id: number) {
     return this.svc.getSpecialtyById(id);
-  }
-
-  /**
-   * Dịch vụ khám theo chuyên khoa
-   */
-  @Get(['specialties/services', 'public/specialty-services'])
-  @ApiOperation({ summary: 'Dịch vụ khám theo chuyên khoa, có thể lọc theo chi nhánh' })
-  getSpecialtyServicesQuery(
-    @Query('branchId') branchId: string | undefined,
-    @Query('specialtyId') specialtyId: string,
-  ) {
-    return this.svc.specialtyServices(branchId, Number(specialtyId));
   }
 
   /**

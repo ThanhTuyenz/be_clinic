@@ -1,10 +1,11 @@
-import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common'
+﻿import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common'
 import { createHash, randomUUID } from 'node:crypto'
 import { Gender } from '@prisma/client'
 import { PrismaService } from '../../infrastructure/database/prisma/prisma.service.js'
 import { MailsService } from '../../infrastructure/mail/mails.service.js'
 import { RealtimeGateway } from '../../infrastructure/realtime/realtime.gateway.js'
 import { RecommendationService } from '../recommendations/recommendation.service.js'
+import { parseDateRange, formatTime, getStaffUser, resolveBranchId } from '../../common/utils/staff.utils.js'
 
 @Injectable()
 export class StaffAppointmentsService {
@@ -30,9 +31,7 @@ export class StaffAppointmentsService {
     return status.toLowerCase()
   }
 
-  private time(value: Date) {
-    return value.toISOString().slice(11, 16)
-  }
+
 
   private serialize(row: any) {
     const invoice = row.invoice ?? row.bookingOrder?.invoice
@@ -53,8 +52,8 @@ export class StaffAppointmentsService {
       bookingSource: createdAtClinic ? 'clinic' : 'online',
       createdByStaff: createdAtClinic ? { id: creator.id, fullName: creator.fullName, email: creator.email, role: creator.role } : null,
       appointmentDate: appointmentDate?.toISOString().slice(0, 10) ?? null,
-      startTime: doctorSlot?.startTime ? this.time(doctorSlot.startTime) : null,
-      endTime: doctorSlot?.endTime ? this.time(doctorSlot.endTime) : null,
+      startTime: doctorSlot?.startTime ? formatTime(doctorSlot.startTime) : null,
+      endTime: doctorSlot?.endTime ? formatTime(doctorSlot.endTime) : null,
       status: this.statusForClient(row.status),
       workflowStatus: row.status,
       symptoms: row.symptomsDescription || '',
@@ -479,7 +478,7 @@ export class StaffAppointmentsService {
       where: { isActive: true, occupiedCount: { lt: this.prisma.doctorScheduleSlot.fields.capacity }, schedule: { doctorId, workDate: { gte: workDate, lt: nextDate }, status: 'OPEN' } },
       orderBy: { startTime: 'asc' },
     })
-    return { freeSlots: slots.filter((slot) => slot.occupiedCount < slot.capacity).map((slot) => this.time(slot.startTime)) }
+    return { freeSlots: slots.filter((slot) => slot.occupiedCount < slot.capacity).map((slot) => formatTime(slot.startTime)) }
   }
 
   async updateStatus(userId: string, appointmentId: string, input: Record<string, any>) {
@@ -680,7 +679,7 @@ export class StaffAppointmentsService {
       where: { isActive: true, schedule: { doctorId: doctor.id, workDate: { gte: workDate, lt: nextDate }, status: 'OPEN' } },
       include: { schedule: true },
     })
-    const slot = slots.find((item) => this.time(item.startTime) === String(input.startTime || '').slice(0, 5))
+    const slot = slots.find((item) => formatTime(item.startTime) === String(input.startTime || '').slice(0, 5))
     if (!slot || slot.occupiedCount >= slot.capacity) throw new BadRequestException('Khung giờ không còn chỗ')
 
     let patientProfileId = String(input.patient?.id || input.patient?.patientId || '')
@@ -790,8 +789,8 @@ export class StaffAppointmentsService {
         branchId: row.branchId,
         branchName: row.branch?.name,
         appointmentDate: row.scheduleSlot?.schedule?.workDate?.toISOString().slice(0, 10),
-        startTime: row.scheduleSlot?.startTime ? this.time(row.scheduleSlot.startTime) : undefined,
-        endTime: row.scheduleSlot?.endTime ? this.time(row.scheduleSlot.endTime) : undefined,
+        startTime: row.scheduleSlot?.startTime ? formatTime(row.scheduleSlot.startTime) : undefined,
+        endTime: row.scheduleSlot?.endTime ? formatTime(row.scheduleSlot.endTime) : undefined,
         status: row.status,
       })
     } catch {
@@ -1129,55 +1128,12 @@ export class StaffAppointmentsService {
     }
   }
 
-  private parseDateRange(dateStr?: string) {
-    let year: number, month: number, date: number
-    if (dateStr && /^\d{4}-\d{2}-\d{2}$/.test(dateStr)) {
-      const [y, m, d] = dateStr.split('-').map(Number)
-      year = y
-      month = m - 1
-      date = d
-    } else {
-      const now = new Date()
-      year = now.getFullYear()
-      month = now.getMonth()
-      date = now.getDate()
-    }
-    const from = new Date(Date.UTC(year, month, date, 0, 0, 0, 0))
-    const to = new Date(Date.UTC(year, month, date + 1, 0, 0, 0, 0))
-    const dateKey = `${year}-${String(month + 1).padStart(2, '0')}-${String(date).padStart(2, '0')}`
-    return { from, to, dateKey }
-  }
 
-  private async getStaffUser(userId: string) {
-    const user = await this.prisma.user.findUnique({
-      where: { id: userId },
-      select: {
-        id: true,
-        role: true,
-        branchAssignments: { select: { branchId: true } },
-      },
-    })
-    if (!user || user.role === 'PATIENT') {
-      throw new ForbiddenException('Chỉ nhân viên phòng khám mới có quyền truy cập tiếp đón')
-    }
-    return user
-  }
-
-  private resolveBranchId(user: any, requestedBranchId?: string): string | undefined {
-    const branchIds = user.branchAssignments.map((b: any) => b.branchId)
-    if (user.role === 'ADMIN') {
-      return requestedBranchId && requestedBranchId !== 'all' ? requestedBranchId : undefined
-    }
-    if (requestedBranchId && requestedBranchId !== 'all' && branchIds.includes(requestedBranchId)) {
-      return requestedBranchId
-    }
-    return branchIds[0] || undefined
-  }
 
   async getReceptionSummary(userId: string, query?: { date?: string; branchId?: string }) {
-    const user = await this.getStaffUser(userId)
-    const branchId = this.resolveBranchId(user, query?.branchId)
-    const { from, to, dateKey } = this.parseDateRange(query?.date)
+    const user = await getStaffUser(this.prisma, userId)
+    const branchId = resolveBranchId(user, query?.branchId)
+    const { from, to, dateKey } = parseDateRange(query?.date)
 
     const appointmentWhere: any = {
       AND: [

@@ -1,5 +1,6 @@
-import { ForbiddenException, Injectable } from '@nestjs/common'
+import { Injectable } from '@nestjs/common'
 import { PrismaService } from '../../infrastructure/database/prisma/prisma.service.js'
+import { parseDateRange, getStaffUser, resolveBranchId } from '../../common/utils/staff.utils.js'
 
 @Injectable()
 export class ClinicRoomsService {
@@ -13,55 +14,12 @@ export class ClinicRoomsService {
     })
   }
 
-  private parseDateRange(dateStr?: string) {
-    let year: number, month: number, date: number
-    if (dateStr && /^\d{4}-\d{2}-\d{2}$/.test(dateStr)) {
-      const [y, m, d] = dateStr.split('-').map(Number)
-      year = y
-      month = m - 1
-      date = d
-    } else {
-      const now = new Date()
-      year = now.getFullYear()
-      month = now.getMonth()
-      date = now.getDate()
-    }
-    const from = new Date(Date.UTC(year, month, date, 0, 0, 0, 0))
-    const to = new Date(Date.UTC(year, month, date + 1, 0, 0, 0, 0))
-    const dateKey = `${year}-${String(month + 1).padStart(2, '0')}-${String(date).padStart(2, '0')}`
-    return { from, to, dateKey }
-  }
 
-  private async getStaffUser(userId: string) {
-    const user = await this.prisma.user.findUnique({
-      where: { id: userId },
-      select: {
-        id: true,
-        role: true,
-        branchAssignments: { select: { branchId: true } },
-      },
-    })
-    if (!user || user.role === 'PATIENT') {
-      throw new ForbiddenException('Chỉ nhân viên phòng khám mới có quyền truy cập trạng thái phòng khám')
-    }
-    return user
-  }
-
-  private resolveBranchId(user: any, requestedBranchId?: string): string | undefined {
-    const branchIds = user.branchAssignments.map((b: any) => b.branchId)
-    if (user.role === 'ADMIN') {
-      return requestedBranchId && requestedBranchId !== 'all' ? requestedBranchId : undefined
-    }
-    if (requestedBranchId && requestedBranchId !== 'all' && branchIds.includes(requestedBranchId)) {
-      return requestedBranchId
-    }
-    return branchIds[0] || undefined
-  }
 
   async getRoomsStatus(userId: string, query?: { date?: string; branchId?: string }) {
-    const user = await this.getStaffUser(userId)
-    const branchId = this.resolveBranchId(user, query?.branchId)
-    const { from, to, dateKey } = this.parseDateRange(query?.date)
+    const user = await getStaffUser(this.prisma, userId)
+    const branchId = resolveBranchId(user, query?.branchId)
+    const { from, to, dateKey } = parseDateRange(query?.date)
 
     const roomWhere: any = { isActive: true }
     if (branchId) {

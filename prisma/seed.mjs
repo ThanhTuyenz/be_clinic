@@ -147,10 +147,13 @@ async function main() {
   // 3. Khởi tạo Phương thức đặt khám
   console.log('3. Cấu hình các phương thức đặt khám...');
   const bookingMethodSeeds = [
-    ['SPECIALTY_EXAM', 'Đặt khám theo chuyên khoa', 'Chọn chuyên khoa, dịch vụ, bác sĩ và thời gian khám.', '/dat-lich?type=specialty', 1],
-    ['HEALTH_PACKAGE', 'Gói khám sức khỏe', 'Đăng ký gói khám sức khỏe tổng quát và chuyên sâu.', '/dich-vu?view=health-packages', 2],
-    ['CONSULTATION', 'Tư vấn khám bệnh', 'Tư vấn ban đầu với bác sĩ trước khi đặt lịch khám.', '/dat-lich?type=consultation', 3],
-    ['AFTER_HOURS', 'Đặt khám ngoài giờ', 'Đặt lịch khám ngoài khung giờ hành chính thuận tiện.', '/dat-lich?type=after-hours', 4],
+    ['SPECIALTY_EXAM', 'Khám Chuyên Khoa', 'Hơn 12 chuyên khoa mũi nhọn (Tim mạch, Mắt, Nhi, Da liễu...)', '/dat-lich?type=specialty', 1],
+    ['CONSULTATION', 'Khám Cùng Bác Sĩ', 'Chủ động chọn bác sĩ CKI - CKII theo học hàm và kinh nghiệm', '/dat-lich?type=doctor', 2],
+    ['ONLINE_CONSULTATION', 'Tư Vấn Online', 'Gọi video 1:1 cùng bác sĩ, đọc kết quả xét nghiệm từ xa', '/dat-lich?type=online-consultation', 3],
+    ['FOLLOWUP_EXAM', 'Tái Khám', 'Đặt lịch tái khám với bác sĩ đã điều trị để theo dõi sức khỏe định kỳ', '/dat-lich?flow=followup', 4],
+    ['FAMILY_BOOKING', 'Khám Gia Đình', 'Chăm sóc ông bà, cha mẹ và con nhỏ trên cùng một tài khoản', '/dat-lich?type=family', 5],
+    ['AFTER_HOURS', 'Khám Ngoài Giờ', '17:30 - 20:30 tiện lợi cho người bận rộn, không lo chờ đợi', '/dat-lich?type=after-hours', 6],
+    ['HEALTH_PACKAGE', 'Gói Khám Sức Khỏe', 'Đăng ký gói khám sức khỏe tổng quát và chuyên sâu.', '/dich-vu?view=health-packages', 7],
   ];
 
   const bookingMethodsMap = new Map();
