@@ -246,6 +246,120 @@ export class SpecialtiesService {
   }
 
   /**
+   * GET /public/navigation
+   */
+  async getNavigation() {
+    const [specialties, branches] = await Promise.all([
+      this.getSpecialties(),
+      this.prisma.branch.findMany({
+        where: { isActive: true },
+        orderBy: [{ code: 'desc' }, { name: 'asc' }],
+        select: {
+          id: true,
+          code: true,
+          slug: true,
+          name: true,
+          address: true,
+          phoneNumber: true,
+        },
+      }),
+    ]);
+    return {
+      departments: [],
+      specialties,
+      branches,
+    };
+  }
+
+  /**
+   * GET /public/homepage
+   */
+  async getHomepage(branchIdentifier?: string) {
+    const effectiveBranchId = await this.resolveBranchId(branchIdentifier);
+    const [specialties, branches, healthPackages, specialtyPackages, featuredDoctors] = await Promise.all([
+      this.getSpecialties(effectiveBranchId),
+      this.prisma.branch.findMany({
+        where: { isActive: true },
+        orderBy: [{ code: 'desc' }, { name: 'asc' }],
+        select: {
+          id: true,
+          code: true,
+          slug: true,
+          name: true,
+          address: true,
+          phoneNumber: true,
+          latitude: true,
+          longitude: true,
+        },
+      }),
+      this.healthPackages(effectiveBranchId),
+      this.specialtyPackages(effectiveBranchId),
+      this.prisma.doctor.findMany({
+        where: {
+          isActive: true,
+          isFeatured: true,
+          ...(effectiveBranchId
+            ? { user: { branchAssignments: { some: { branchId: effectiveBranchId } } } }
+            : {}),
+        },
+        take: 8,
+        orderBy: [{ ratingAverage: 'desc' }],
+        select: {
+          id: true,
+          academicRank: true,
+          experienceYears: true,
+          biography: true,
+          avatarUrl: true,
+          consultationFee: true,
+          ratingAverage: true,
+          ratingCount: true,
+          isFeatured: true,
+          user: { select: { fullName: true } },
+          specialties: {
+            select: {
+              isPrimary: true,
+              specialty: { select: { id: true, name: true, slug: true } },
+            },
+          },
+        },
+      }),
+    ]);
+
+    const selectedBranch = branches.find((b) => b.id === effectiveBranchId) || branches[0] || null;
+
+    return {
+      departments: [],
+      specialties,
+      branches,
+      selectedBranch,
+      featuredDoctors: featuredDoctors.map((d) => ({
+        id: d.id,
+        fullName: d.user?.fullName || '',
+        academicRank: d.academicRank,
+        experienceYears: d.experienceYears,
+        biography: d.biography,
+        consultationFee: Number(d.consultationFee) || 0,
+        avatarUrl: d.avatarUrl,
+        ratingAverage: Number(d.ratingAverage) || 5.0,
+        ratingCount: d.ratingCount,
+        isFeatured: d.isFeatured,
+        specialties: d.specialties,
+        branchAssignments: [],
+      })),
+      specialtyPackages,
+      healthPackages,
+      bookingMethods: [],
+      stats: {
+        doctorCount: featuredDoctors.length,
+        branchCount: branches.length,
+        specialtyCount: specialties.length,
+        reviewCount: 0,
+        averageRating: 5.0,
+      },
+    };
+  }
+
+  /**
    * GET /public/specialties
    */
   async specialties() {

@@ -12,6 +12,25 @@ export class SpecialtiesController {
   constructor(private readonly svc: SpecialtiesService) { }
 
   /**
+   * Menu điều hướng công khai (BFF)
+   */
+  @Get('public/navigation')
+  @ApiOperation({ summary: 'Menu điều hướng công khai (BFF)' })
+  getNavigation() {
+    return this.svc.getNavigation();
+  }
+
+  /**
+   * Tổng hợp trang chủ công khai (BFF)
+   */
+  @Get('public/homepage')
+  @ApiOperation({ summary: 'Tổng hợp trang chủ công khai (BFF)' })
+  @ApiQuery({ name: 'branchId', required: false })
+  getHomepage(@Query('branchId') branchId?: string) {
+    return this.svc.getHomepage(branchId);
+  }
+
+  /**
    * Danh sách chuyên khoa
    */
   @Get(['specialties', 'public/specialties'])
