@@ -11,6 +11,7 @@ import mailerConfig from './config/mailer.config.js'
 import rabbitMqConfig from './config/rabbitmq.config.js'
 import redisConfig from './infrastructure/redis/redis.config.js'
 import zaloZnsConfig from './config/zalo-zns.config.js'
+import httpsmsConfig from './config/httpsms.config.js'
 import { AppointmentsModule } from './modules/appointments/appointments.module.js'
 import { AuthModule } from './modules/auth/auth-local/auth.module.js'
 import { AuthGoogleModule } from './modules/auth/auth-google/auth-google.module.js'
@@ -36,6 +37,7 @@ import { AiAssistantModule } from './modules/ai-assistant/ai-assistant.module.js
 import { VouchersModule } from './modules/vouchers/vouchers.module.js'
 import { RecommendationModule } from './modules/recommendations/recommendation.module.js'
 import { ZaloZnsModule } from './infrastructure/zalo-zns/zalo-zns.module.js'
+import { HttpSmsModule } from './infrastructure/httpsms/httpsms.module.js'
 import { MediaModule } from './infrastructure/media/media.module.js'
 
 @Module({
@@ -43,7 +45,7 @@ import { MediaModule } from './infrastructure/media/media.module.js'
     ConfigModule.forRoot({
       isGlobal: true,
       cache: true,
-      load: [appConfig, authConfig, mailerConfig, googleConfig, geminiConfig, rabbitMqConfig, redisConfig, zaloZnsConfig],
+      load: [appConfig, authConfig, mailerConfig, googleConfig, geminiConfig, rabbitMqConfig, redisConfig, zaloZnsConfig, httpsmsConfig],
       envFilePath: [`.env.${process.env.NODE_ENV || 'development'}`, '.env'],
     }),
 
@@ -84,6 +86,7 @@ import { MediaModule } from './infrastructure/media/media.module.js'
     VouchersModule,
     RecommendationModule,
     ZaloZnsModule,
+    HttpSmsModule,
     MediaModule,
   ],
 

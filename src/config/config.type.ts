@@ -81,6 +81,13 @@ export type ZaloZnsConfig = {
   endpoint: string;
 };
 
+export type HttpSmsConfig = {
+  enabled: boolean;
+  apiKey?: string;
+  fromNumber: string;
+  endpoint: string;
+};
+
 export type AllConfigType = {
   app: AppConfig;
   database: DatabaseConfig;
@@ -91,4 +98,6 @@ export type AllConfigType = {
   rabbitmq: RabbitMqConfig;
   redis: RedisConfig;
   zaloZns: ZaloZnsConfig;
+  httpsms: HttpSmsConfig;
 };
+

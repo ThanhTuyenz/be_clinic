@@ -102,7 +102,7 @@ export const PERMISSION_CATALOG: PermissionItem[] = [
   {
     code: AppPermission.FINANCE_COLLECT,
     label: 'Thu viện phí & xuất hóa đơn tại quầy',
-    description: 'Thu tiền mặt / quét mã MoMo, QR chuyển khoản và in hóa đơn thanh toán viện phí.',
+    description: 'Thu tiền mặt / quét mã VietQR, thẻ POS và in hóa đơn thanh toán viện phí.',
     group: 'finance',
   },
   {

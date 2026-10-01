@@ -1,47 +1,75 @@
+# ============================================================
+# VitaCare Clinic - Docker Compose [LOCAL DEVELOPMENT]
+# Chạy các dịch vụ bổ trợ cục bộ (PostgreSQL, Redis, RabbitMQ)
+# ============================================================
+
 services:
   postgres:
     image: postgres:16-alpine
-    container_name: vitacare-postgres
+    container_name: vitacare-postgres-local
     restart: unless-stopped
     environment:
       POSTGRES_DB: vitacare
       POSTGRES_USER: vitacare
       POSTGRES_PASSWORD: vitacare_local
-    ports: ["5432:5432"]
-    volumes: ["vitacare_postgres_data:/var/lib/postgresql/data"]
+    ports:
+      - "5432:5432"
+    volumes:
+      - vitacare_postgres_local_data:/var/lib/postgresql/data
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U vitacare -d vitacare"]
       interval: 5s
       timeout: 5s
       retries: 10
-  rabbitmq:
-    image: rabbitmq:3.13-management-alpine
-    container_name: vitacare-rabbitmq
-    restart: unless-stopped
-    ports: ["5672:5672", "15672:15672"]
-    environment:
-      RABBITMQ_DEFAULT_USER: vitacare
-      RABBITMQ_DEFAULT_PASS: vitacare_local
-    volumes: ["vitacare_rabbitmq_data:/var/lib/rabbitmq"]
-    healthcheck:
-      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
-      interval: 10s
-      timeout: 5s
-      retries: 10
+    networks:
+      - vitacare-local-net
+
   redis:
     image: redis/redis-stack-server:latest
-    container_name: vitacare-redis
+    container_name: vitacare-redis-local
     restart: unless-stopped
     environment:
       REDIS_ARGS: "--requirepass vitacare_local --appendonly yes"
-    ports: ["6379:6379"]
-    volumes: ["vitacare_redis_data:/data"]
+    ports:
+      - "6379:6379"
+    volumes:
+      - vitacare_redis_local_data:/data
     healthcheck:
       test: ["CMD-SHELL", "redis-cli -a vitacare_local ping | grep PONG"]
       interval: 5s
       timeout: 5s
       retries: 10
+    networks:
+      - vitacare-local-net
+
+  rabbitmq:
+    image: rabbitmq:3.13-management-alpine
+    container_name: vitacare-rabbitmq-local
+    restart: unless-stopped
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    environment:
+      RABBITMQ_DEFAULT_USER: vitacare
+      RABBITMQ_DEFAULT_PASS: vitacare_local
+    volumes:
+      - vitacare_rabbitmq_local_data:/var/lib/rabbitmq
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    networks:
+      - vitacare-local-net
+
 volumes:
-  vitacare_postgres_data:
-  vitacare_rabbitmq_data:
-  vitacare_redis_data:
+  vitacare_postgres_local_data:
+    driver: local
+  vitacare_redis_local_data:
+    driver: local
+  vitacare_rabbitmq_local_data:
+    driver: local
+
+networks:
+  vitacare-local-net:
+    driver: bridge

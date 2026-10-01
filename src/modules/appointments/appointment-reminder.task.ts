@@ -2,11 +2,11 @@ import { Injectable, Logger } from '@nestjs/common';
 import { Cron } from '@nestjs/schedule';
 import { PrismaService } from '../../infrastructure/database/prisma/prisma.service.js';
 import { MailsService } from '../../infrastructure/mail/mails.service.js';
-import { ZaloZnsService } from '../../infrastructure/zalo-zns/zalo-zns.service.js';
+import { HttpSmsService } from '../../infrastructure/httpsms/httpsms.service.js';
 
 /**
  * Cron job tự động nhắc lịch hẹn bệnh nhân.
- *  - 24 giờ trước giờ khám → gửi reminder qua Email & Zalo ZNS + hướng dẫn y tế
+ *  - 24 giờ trước giờ khám → gửi reminder qua Email & SMS (httpSMS) + hướng dẫn y tế
  */
 @Injectable()
 export class AppointmentReminderTask {
@@ -15,7 +15,7 @@ export class AppointmentReminderTask {
   constructor(
     private readonly prisma: PrismaService,
     private readonly mails: MailsService,
-    private readonly zaloZns: ZaloZnsService,
+    private readonly httpSms: HttpSmsService,
   ) { }
 
   // Chạy mỗi giờ đúng (:00) - quét và gửi nhắc hẹn trước 24 giờ qua Zalo ZNS & Email
@@ -114,7 +114,7 @@ export class AppointmentReminderTask {
 
         if (phone) {
           tasks.push(
-            this.zaloZns.sendAppointmentReminder({
+            this.httpSms.sendAppointmentReminder({
               to: phone,
               patientName: appt.patientProfile.fullName,
               bookingCode: appt.bookingCode ?? appt.id,
@@ -127,8 +127,8 @@ export class AppointmentReminderTask {
               doctorName,
               serviceName,
               medicalNote: this.buildMedicalNote(hoursAhead, doctorName, serviceName),
-            }).catch((znsErr) => {
-              this.logger.error(`Lỗi gửi Zalo ZNS nhắc lịch cho ${phone}: ${znsErr?.message}`);
+            }).catch((smsErr) => {
+              this.logger.error(`Lỗi gửi SMS httpSMS nhắc lịch cho ${phone}: ${smsErr?.message}`);
             })
           );
         }

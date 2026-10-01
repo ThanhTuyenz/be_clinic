@@ -141,7 +141,11 @@ export class SystemCatalogService {
             },
           },
         }
-      : resource === 'rooms' ? { branch: { select: { id: true, name: true, address: true } } } : undefined
+      : resource === 'rooms'
+      ? { branch: { select: { id: true, name: true, address: true } } }
+      : resource === 'specialties'
+      ? { branches: { where: { isActive: true }, select: { branchId: true } } }
+      : undefined
     const defaultOrderBy: any =
       resource === 'specialties'
         ? { id: 'asc' }
@@ -168,6 +172,25 @@ export class SystemCatalogService {
     if (resource === 'service-packages') {
       return this.createServicePackages(body)
     }
+    if (resource === 'specialties') {
+      const data = await this.payload(resource, body, true)
+      const specialty = await this.prisma.specialty.create({ data })
+
+      const branchIds: string[] = body.applyAllBranches
+        ? (await this.prisma.branch.findMany({ where: { isActive: true }, select: { id: true } })).map((b) => b.id)
+        : Array.isArray(body.branchIds) && body.branchIds.length > 0
+        ? body.branchIds
+        : body.branchId ? [body.branchId] : []
+
+      for (const bId of branchIds) {
+        await this.prisma.branchSpecialty.upsert({
+          where: { branchId_specialtyId: { branchId: bId, specialtyId: specialty.id } },
+          update: { isActive: true },
+          create: { branchId: bId, specialtyId: specialty.id, isActive: true },
+        })
+      }
+      return specialty
+    }
     const row = await this.model(resource).create({ data: await this.payload(resource, body, true) })
     return row
   }
@@ -179,6 +202,31 @@ export class SystemCatalogService {
       const name = String(body.displayName || body.name || '').trim()
       if (name) await this.prisma.bookingMethod.update({ where: { id: existing.bookingMethodId }, data: { name, description: body.description || null, route: body.route || null, isActive: true } })
       return model.update({ where: { id: key }, data: { isEnabled: body.isEnabled ?? existing.isEnabled, sortOrder: Number(body.sortOrder) || 0 } })
+    }
+    if (resource === 'specialties') {
+      const specialtyId = Number(id)
+      const data: any = await this.payload(resource, body, false)
+      const updated = await this.prisma.specialty.update({ where: { id: specialtyId }, data })
+
+      if (body.branchIds !== undefined || body.applyAllBranches !== undefined) {
+        const branchIds: string[] = body.applyAllBranches
+          ? (await this.prisma.branch.findMany({ where: { isActive: true }, select: { id: true } })).map((b) => b.id)
+          : Array.isArray(body.branchIds)
+          ? body.branchIds
+          : []
+
+        await this.prisma.branchSpecialty.deleteMany({
+          where: { specialtyId, branchId: { notIn: branchIds } },
+        })
+        for (const bId of branchIds) {
+          await this.prisma.branchSpecialty.upsert({
+            where: { branchId_specialtyId: { branchId: bId, specialtyId } },
+            update: { isActive: true },
+            create: { branchId: bId, specialtyId, isActive: true },
+          })
+        }
+      }
+      return updated
     }
     if (resource === 'service-packages') {
       const data: any = await this.payload(resource, body, false)
@@ -325,13 +373,34 @@ export class SystemCatalogService {
     if (resource === 'branches') {
       let clinicId = b.clinicId
       if (!clinicId) { const clinic = await this.prisma.clinic.findFirst({ where: { isActive: true } }); if (!clinic) throw new BadRequestException('Chưa có phòng khám để gán chi nhánh'); clinicId = clinic.id }
-      return { name: String(b.name).trim(), code: String(b.code || '').trim(), address: b.address || null, phoneNumber: b.phoneNumber || null, imageUrl: b.imageUrl || null, timezone: b.timezone || 'Asia/Ho_Chi_Minh', isActive: b.isActive ?? true, ...(creating ? { clinicId } : {}) }
+      return {
+        name: String(b.name).trim(),
+        code: String(b.code || '').trim() || `BRC-${new Date().getFullYear()}-${Math.floor(1000 + Math.random() * 9000)}`,
+        address: b.address || null,
+        province: b.province || null,
+        district: b.district || null,
+        ward: b.ward || null,
+        latitude: b.latitude != null && b.latitude !== '' ? Number(b.latitude) : null,
+        longitude: b.longitude != null && b.longitude !== '' ? Number(b.longitude) : null,
+        phoneNumber: b.phoneNumber || null,
+        email: b.email || null,
+        imageUrl: b.imageUrl || null,
+        description: b.description || null,
+        operatingHours: b.operatingHours || null,
+        openTime: b.openTime || null,
+        closeTime: b.closeTime || null,
+        timezone: b.timezone || 'Asia/Ho_Chi_Minh',
+        isActive: b.isActive ?? true,
+        ...(creating ? { clinicId } : {}),
+      }
     }
     if (resource === 'specialties') {
       return {
         name: String(b.name).trim(),
+        slug: b.slug ? String(b.slug).trim().toLowerCase() : null,
         description: b.description || null,
         iconUrl: b.iconUrl || b.imageUrl || null,
+        isActive: b.isActive ?? true,
         symptoms: Array.isArray(b.symptoms) ? b.symptoms.map(String).map((s: string) => s.trim().toLowerCase()).filter(Boolean) : [],
       }
     }

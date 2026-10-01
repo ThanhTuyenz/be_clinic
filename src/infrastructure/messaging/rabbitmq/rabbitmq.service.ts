@@ -6,7 +6,7 @@ import { PrismaService } from '../../database/prisma/prisma.service.js';
 import { BookingService } from '../../../modules/bookings/booking.service.js';
 import { MailsService } from '../../mail/mails.service.js';
 import { RecommendationService } from '../../../modules/recommendations/recommendation.service.js';
-import { ZaloZnsService } from '../../zalo-zns/zalo-zns.service.js';
+import { HttpSmsService } from '../../httpsms/httpsms.service.js';
 import { EmbeddingService } from '../../embedding/embedding.service.js';
 import { RabbitMqConfig } from '../../../config/config.type.js';
 import { RABBITMQ_TOPOLOGY as topology } from './rabbitmq.constants.js';
@@ -25,7 +25,7 @@ export class RabbitMqService implements OnModuleInit, OnModuleDestroy {
     private readonly bookingService: BookingService,
     private readonly mailsService: MailsService,
     private readonly recommendationService: RecommendationService,
-    private readonly zaloZnsService: ZaloZnsService,
+    private readonly httpSmsService: HttpSmsService,
     private readonly embeddingService: EmbeddingService,
   ) {}
 
@@ -365,10 +365,10 @@ export class RabbitMqService implements OnModuleInit, OnModuleDestroy {
       );
     }
 
-    // Gửi thông báo Zalo ZNS nếu có số điện thoại
+    // Gửi tin nhắn SMS qua httpSMS nếu có số điện thoại
     if (phone) {
       tasks.push(
-        this.zaloZnsService.sendBookingConfirmation({
+        this.httpSmsService.sendBookingConfirmation({
           to: phone,
           patientName: appt.patientProfile.fullName,
           bookingCode: appt.bookingCode ?? appt.id,
@@ -380,7 +380,7 @@ export class RabbitMqService implements OnModuleInit, OnModuleDestroy {
           doctorName: doctorName ?? undefined,
           serviceName: servicePackageName ?? undefined,
         }).catch((err) => {
-          this.logger.error(`Failed to send booking Zalo ZNS to ${phone}: ${err?.message}`);
+          this.logger.error(`Failed to send booking SMS to ${phone}: ${err?.message}`);
         })
       );
     }

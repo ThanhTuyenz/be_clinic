@@ -52,32 +52,48 @@ export class ClinicRoomsService {
       orderBy: { code: 'asc' },
     })
 
-    const apptRows: any[] = await (this.prisma.appointment as any).groupBy({
-      by: ['clinicRoomId', 'status'],
+    const appts = await this.prisma.appointment.findMany({
       where: {
+        status: { not: 'CANCELLED' },
         scheduleSlot: {
           schedule: {
             workDate: { gte: from, lt: to },
             ...(branchId ? { branchId } : {}),
           },
         },
-      } as any,
-      _count: { _all: true },
+      },
+      select: {
+        status: true,
+        scheduleSlot: {
+          select: {
+            schedule: {
+              select: {
+                roomId: true,
+              },
+            },
+          },
+        },
+      },
     })
 
     const roomApptMap = new Map<string, { total: number; pending: number; confirmed: number; examined: number }>()
 
-    for (const row of apptRows) {
-      if (!row.clinicRoomId) continue
-      const current = roomApptMap.get(row.clinicRoomId) || { total: 0, pending: 0, confirmed: 0, examined: 0 }
-      const count = row._count._all
+    for (const appt of appts) {
+      const roomId = appt.scheduleSlot?.schedule?.roomId
+      if (!roomId) continue
 
-      current.total += count
-      if (row.status === 'HOLD') current.pending += count
-      else if (row.status === 'CONFIRMED' || row.status === 'CHECKED_IN') current.confirmed += count
-      else if (row.status === 'COMPLETED') current.examined += count
+      const current = roomApptMap.get(roomId) || { total: 0, pending: 0, confirmed: 0, examined: 0 }
+      current.total += 1
 
-      roomApptMap.set(row.clinicRoomId, current)
+      if (appt.status === 'HOLD') {
+        current.pending += 1
+      } else if (appt.status === 'CONFIRMED' || appt.status === 'CHECKED_IN') {
+        current.confirmed += 1
+      } else if (appt.status === 'COMPLETED') {
+        current.examined += 1
+      }
+
+      roomApptMap.set(roomId, current)
     }
 
     const rooms = roomsList.map((r) => {

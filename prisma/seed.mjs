@@ -679,7 +679,7 @@ async function main() {
       await prisma.paymentTransaction.create({
         data: {
           invoiceId: invoice.id,
-          provider: 'MOMO_OR_VIETQR',
+          provider: 'PAYOS',
           providerTransactionId: `TXN-${appt.bookingCode}`,
           idempotencyKey: `IDEM-${appt.bookingCode}`,
           method: 'ONLINE',

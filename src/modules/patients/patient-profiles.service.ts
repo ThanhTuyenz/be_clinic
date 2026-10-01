@@ -336,7 +336,7 @@ export class PatientProfilesService {
           payment: appt.invoice ? {
             status: appt.invoice.status,
             amount: Number(appt.invoice.totalAmount),
-            method: appt.invoice.payments?.[0]?.method || 'MoMo',
+            method: appt.invoice.payments?.[0]?.method || 'ONLINE',
           } : null,
         },
       };

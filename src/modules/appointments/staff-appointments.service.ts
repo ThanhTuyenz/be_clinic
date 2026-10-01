@@ -1,4 +1,4 @@
-﻿import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common'
+import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common'
 import { createHash, randomUUID } from 'node:crypto'
 import { Gender } from '@prisma/client'
 import { PrismaService } from '../../infrastructure/database/prisma/prisma.service.js'
@@ -840,7 +840,7 @@ export class StaffAppointmentsService {
     const amount = Number(input.amount ?? invoice.totalAmount)
     if (!Number.isFinite(amount) || amount <= 0) throw new BadRequestException('Số tiền không hợp lệ')
     const m = String(input.method || 'cash').toLowerCase()
-    const method = m === 'cash' ? 'CASH' : m === 'card' ? 'POS_CARD' : m === 'momo' ? 'ONLINE' : 'VIETQR'
+    const method = m === 'cash' ? 'CASH' : m === 'card' ? 'POS_CARD' : (m === 'payos' || m === 'online') ? 'ONLINE' : 'VIETQR'
     const now = new Date()
     return this.prisma.$transaction(async (tx) => {
       const payment = await tx.paymentTransaction.create({

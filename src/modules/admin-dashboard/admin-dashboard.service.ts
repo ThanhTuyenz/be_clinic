@@ -142,7 +142,7 @@ export class AdminDashboardService {
       const method = String(inv.payments[0]?.method || '').toUpperCase()
       if (method === 'CASH') {
         cash += amt
-      } else if (method === 'ONLINE' || method.includes('MOMO') || method === 'ATM') {
+      } else if (method === 'ONLINE' || method.includes('PAYOS') || method === 'ATM') {
         online += amt
       } else {
         transfer += amt
@@ -150,7 +150,7 @@ export class AdminDashboardService {
     }
 
     // Doanh thu quầy chỉ bao gồm các khoản thu phát sinh trực tiếp tại quầy (Tiền mặt + Chuyển khoản QR tại quầy)
-    // Tổng doanh thu toàn phòng khám (total) bao gồm cả Online/MoMo
+    // Tổng doanh thu toàn phòng khám (total) bao gồm cả Online/PayOS
     const grandTotal = cash + transfer + online
     const counterTotal = cash + transfer
     const counterCount = invoices.filter(
@@ -705,7 +705,7 @@ export class AdminDashboardService {
 
     for (const tx of paymentTxs) {
       const m = String(tx.method || '').toUpperCase()
-      if (m === 'ONLINE' || m.includes('MOMO') || m === 'ATM' || m.includes('CARD_ONLINE')) {
+      if (m === 'ONLINE' || m.includes('PAYOS') || m.includes('MOMO') || m === 'ATM' || m.includes('CARD_ONLINE')) {
         paymentMap.ONLINE = (paymentMap.ONLINE || 0) + Number(tx.amount || 0)
       } else {
         paymentMap.CASH = (paymentMap.CASH || 0) + Number(tx.amount || 0)
@@ -720,7 +720,7 @@ export class AdminDashboardService {
     const cashPct = totalPaymentAmount > 0 ? Math.max(0, 100 - onlinePct) : 0
 
     return [
-      { name: 'Trực tuyến (Cổng MoMo / Thẻ ATM)', pct: onlinePct, amount: this.formatVnd(onlineAmount) },
+      { name: 'Trực tuyến (PayOS / VietQR)', pct: onlinePct, amount: this.formatVnd(onlineAmount) },
       { name: 'Tại quầy (Tiền mặt / Trực tiếp)', pct: cashPct, amount: this.formatVnd(cashAmount) },
     ]
   }

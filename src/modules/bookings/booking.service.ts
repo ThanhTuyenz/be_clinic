@@ -914,7 +914,7 @@ export class BookingService {
             refundStatusNote: isPaid
               ? (isUrgent
                 ? 'Lịch hẹn được hủy sát giờ khám (<24h). Yêu cầu hoàn tiền đã được gửi tới Ban quản lý cơ sở để xét duyệt theo chính sách phòng khám.'
-                : 'Yêu cầu hoàn tiền 100% đã được ghi nhận. Số tiền sẽ được hoàn về tài khoản MoMo / Ngân hàng của quý khách trong 1-3 ngày làm việc.')
+                : 'Yêu cầu hoàn tiền 100% đã được ghi nhận. Số tiền sẽ được hoàn về tài khoản Ngân hàng của quý khách trong 1-3 ngày làm việc.')
               : undefined,
           },
         });

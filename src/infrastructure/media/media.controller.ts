@@ -9,8 +9,7 @@ import {
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiBody, ApiConsumes, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { FileInterceptor, FilesInterceptor } from '@nestjs/platform-express';
-import { diskStorage } from 'multer';
-import { extname, join } from 'node:path';
+import { memoryStorage } from 'multer';
 import type { Request } from 'express';
 import { SkipPermissions } from '../../modules/auth/permissions/decorators/skip-permissions.decorator.js';
 import { MediaService } from './media.service.js';
@@ -25,20 +24,7 @@ const imageFileFilter = (_req: any, file: any, callback: any) => {
   callback(null, true);
 };
 
-const storageConfig = diskStorage({
-  destination: (_req, _file, cb) => {
-    cb(null, join(process.cwd(), 'uploads'));
-  },
-  filename: (_req, file, cb) => {
-    const randomSuffix = `${Date.now()}-${Math.round(Math.random() * 1e9)}`;
-    const ext = extname(file.originalname).toLowerCase();
-    const cleanBase = file.originalname
-      .replace(/\.[^/.]+$/, '')
-      .replace(/[^a-zA-Z0-9_-]/g, '_')
-      .slice(0, 30);
-    cb(null, `${cleanBase}-${randomSuffix}${ext}`);
-  },
-});
+const storageConfig = memoryStorage();
 
 @ApiTags('Media & Uploads')
 @ApiBearerAuth('access-token')
@@ -64,15 +50,15 @@ export class MediaController {
   @UseInterceptors(
     FileInterceptor('file', {
       storage: storageConfig,
-      limits: { fileSize: 5 * 1024 * 1024 }, // 5MB
+      limits: { fileSize: 10 * 1024 * 1024 }, // 10MB
       fileFilter: imageFileFilter,
     }),
   )
-  uploadSingle(@UploadedFile() file: any, @Req() req: Request) {
+  async uploadSingle(@UploadedFile() file: any, @Req() req: Request) {
     if (!file) {
       throw new BadRequestException('Vui lòng chọn một tệp hình ảnh để tải lên');
     }
-    return this.mediaService.formatUploadResult(file, req);
+    return await this.mediaService.saveFile(file, req);
   }
 
   @Post('upload-multiple')
@@ -81,17 +67,20 @@ export class MediaController {
   @UseInterceptors(
     FilesInterceptor('files', 10, {
       storage: storageConfig,
-      limits: { fileSize: 5 * 1024 * 1024 },
+      limits: { fileSize: 10 * 1024 * 1024 },
       fileFilter: imageFileFilter,
     }),
   )
-  uploadMultiple(@UploadedFiles() files: any[], @Req() req: Request) {
+  async uploadMultiple(@UploadedFiles() files: any[], @Req() req: Request) {
     if (!files || files.length === 0) {
       throw new BadRequestException('Vui lòng chọn ít nhất một tệp hình ảnh để tải lên');
     }
+    const items = await Promise.all(
+      files.map((file) => this.mediaService.saveFile(file, req)),
+    );
     return {
       success: true,
-      items: files.map((file) => this.mediaService.formatUploadResult(file, req)),
+      items,
     };
   }
 }

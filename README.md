@@ -50,7 +50,7 @@ RABBITMQ_URL=amqp://vitacare:vitacare_local@localhost:5672
 
 Không commit `.env.development`. Repository ignore toàn bộ `.env*`, ngoại trừ `.env.example`.
 
-Nếu dùng MoMo sandbox, điền thêm các biến `MOMO_*`. `MOMO_IPN_URL` phải là URL HTTPS công khai trỏ tới `/api/v1/payments/momo/ipn`.
+Nếu dùng PayOS (VietQR), điền các biến `PAYOS_CLIENT_ID`, `PAYOS_API_KEY`, `PAYOS_CHECKSUM_KEY`. Webhook URL trỏ tới `/api/v1/payments/webhook`.
 
 ### 3. Khởi động Docker
 
