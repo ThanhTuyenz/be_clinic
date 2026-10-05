@@ -43,8 +43,12 @@ export class BookingController {
   @Post(':id/cancel')
   @ApiOperation({ summary: 'Bệnh nhân tự hủy lịch hẹn' })
   @ApiParam({ name: 'id', format: 'uuid' })
-  cancelAppointment(@Req() request: Request, @Param('id') id: string, @Body() body: { reason?: string }) {
-    return this.bookingService.cancelMyAppointment(request.user!.id, id, body?.reason);
+  cancelAppointment(
+    @Req() request: Request,
+    @Param('id') id: string,
+    @Body() body: { reason?: string; refundBank?: { bankCode?: string; bankName?: string; bankBin?: string; accountNumber?: string; accountName?: string } },
+  ) {
+    return this.bookingService.cancelMyAppointment(request.user!.id, id, body);
   }
 
   @Post(':id/reschedule')

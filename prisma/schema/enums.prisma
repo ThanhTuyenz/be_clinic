@@ -8,6 +8,8 @@ enum UserRole {
   DOCTOR         @map("doctor")
   RECEPTIONIST   @map("receptionist")
   PATIENT        @map("patient")
+  PHARMACIST     @map("pharmacist")
+  CASHIER        @map("cashier")
 }
 
 enum UserStatus {
@@ -41,17 +43,26 @@ enum SlotStatus {
 
 enum AppointmentStatus {
   HOLD
+  PENDING_PAYMENT
+  BOOKED
   CONFIRMED
   CHECKED_IN
+  IN_EXAMINATION
   COMPLETED
   CANCELLED
+  EXPIRED
   NO_SHOW
+  REFUND_REQUIRED
+  MANUAL_REVIEW
 }
 
 enum BookingOrderStatus {
   UNPAID
+  PENDING_PAYMENT
   PAID
   CANCELLED
+  PARTIALLY_CANCELLED
+  REFUNDED
 }
 
 enum InvoiceStatus {
@@ -65,7 +76,12 @@ enum PaymentStatus {
   PENDING
   SUCCESS
   FAILED
+  EXPIRED
+  CANCELLED
   REFUNDED
+  LATE_SUCCESS
+  REFUND_REQUIRED
+  MANUAL_REVIEW
 }
 
 enum PaymentMethod {
@@ -84,4 +100,13 @@ enum OutboxStatus {
 enum DiscountType {
   PERCENTAGE
   FIXED_AMOUNT
+}
+
+enum NotificationType {
+  APPOINTMENT_REMINDER
+  BOOKING_CONFIRMED
+  STATUS_CHANGED
+  MEDICAL_RESULT
+  CONTACT_REPLY
+  SYSTEM
 }

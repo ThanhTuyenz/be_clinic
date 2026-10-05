@@ -3,10 +3,13 @@ import { Cron } from '@nestjs/schedule';
 import { PrismaService } from '../../infrastructure/database/prisma/prisma.service.js';
 import { MailsService } from '../../infrastructure/mail/mails.service.js';
 import { HttpSmsService } from '../../infrastructure/httpsms/httpsms.service.js';
+import { NotificationService } from '../notifications/notification.service.js';
+import { NotificationType } from '@prisma/client';
 
 /**
  * Cron job tự động nhắc lịch hẹn bệnh nhân.
- *  - 24 giờ trước giờ khám → gửi reminder qua Email & SMS (httpSMS) + hướng dẫn y tế
+ *  - 24 giờ trước giờ khám → gửi reminder qua Email, SMS, Push App, In-App Notification
+ *  - 2 giờ trước giờ khám → gửi reminder khẩn cấp
  */
 @Injectable()
 export class AppointmentReminderTask {
@@ -16,13 +19,15 @@ export class AppointmentReminderTask {
     private readonly prisma: PrismaService,
     private readonly mails: MailsService,
     private readonly httpSms: HttpSmsService,
+    private readonly notifications: NotificationService,
   ) { }
 
-  // Chạy mỗi giờ đúng (:00) - quét và gửi nhắc hẹn trước 24 giờ qua Zalo ZNS & Email
-  @Cron('0 * * * *')
+  // Chạy mỗi 30 phút - quét và gửi nhắc hẹn trước 24 giờ và 2 giờ
+  @Cron('*/30 * * * *')
   async handleReminders() {
-    this.logger.debug('Bắt đầu quét nhắc lịch 24h...');
+    this.logger.debug('Bắt đầu quét nhắc lịch 24h & 2h...');
     await this.sendReminders(24);
+    await this.sendReminders(2);
   }
 
   private async sendReminders(hoursAhead: 24 | 2) {
@@ -46,7 +51,7 @@ export class AppointmentReminderTask {
       },
       include: {
         patientProfile: {
-          include: { account: { select: { email: true, phoneNumber: true } } },
+          include: { account: { select: { id: true, email: true, phoneNumber: true } } },
         },
         scheduleSlot: {
           include: {
@@ -70,7 +75,8 @@ export class AppointmentReminderTask {
     for (const appt of appointments) {
       const email = appt.patientProfile.account?.email;
       const phone = appt.patientProfile.phoneNumber || appt.patientProfile.account?.phoneNumber;
-      if (!email && !phone) continue;
+      const userId = appt.patientProfile.accountId || appt.patientProfile.account?.id;
+      if (!email && !phone && !userId) continue;
 
       try {
         const doctorSlot = appt.scheduleSlot;
@@ -87,6 +93,36 @@ export class AppointmentReminderTask {
         const serviceName = appt.servicePackage?.name ?? null;
 
         const tasks: Promise<any>[] = [];
+
+        // 1. Tạo Notification (Lưu DB + Socket.IO + Push Notification nổi trên Mobile App)
+        if (userId) {
+          const title =
+            hoursAhead === 24
+              ? 'Nhắc lịch khám ngày mai'
+              : 'Nhắc lịch khám sắp diễn ra (2h tới)';
+          const content = `Lịch khám ${serviceName || (doctorName ? 'cùng ' + doctorName : '')} của bạn sẽ diễn ra lúc ${startTime} ngày ${appointmentDate} tại ${branch?.name ?? 'VitaCare Clinic'}.`;
+
+          tasks.push(
+            this.notifications.createNotification({
+              userId,
+              title,
+              content,
+              type: NotificationType.APPOINTMENT_REMINDER,
+              data: {
+                appointmentId: appt.id,
+                bookingCode: appt.bookingCode ?? appt.id,
+                hoursAhead,
+                startTime,
+                appointmentDate,
+                branchName: branch?.name ?? 'VitaCare Clinic',
+                doctorName,
+                serviceName,
+              },
+            }).catch((notifErr) => {
+              this.logger.error(`Lỗi tạo notification nhắc lịch cho user ${userId}: ${notifErr?.message}`);
+            })
+          );
+        }
 
         if (email) {
           const medicalNote = this.buildMedicalNote(hoursAhead, doctorName, serviceName);

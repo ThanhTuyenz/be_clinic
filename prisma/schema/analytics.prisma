@@ -1,0 +1,50 @@
+// ============================================================
+// Analytics & Business Intelligence: Search Logs, Snapshots, AI Reports
+// ============================================================
+
+model SearchLog {
+  id         String   @id @default(uuid()) @db.Uuid
+  keyword    String   @db.VarChar(255)
+  dateKey    String   @map("date_key") @db.VarChar(10) // YYYY-MM-DD
+  count      Int      @default(1)
+  hasResults Boolean  @default(true) @map("has_results") // True: có gói khám, False: chưa có dịch vụ đáp ứng
+  createdAt  DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt  DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  @@unique([keyword, dateKey, hasResults])
+  @@index([dateKey, hasResults])
+  @@index([keyword])
+  @@map("search_logs")
+}
+
+model DailyDemandSnapshot {
+  id                    String   @id @default(uuid()) @db.Uuid
+  dateKey               String   @unique @map("date_key") @db.VarChar(10) // YYYY-MM-DD
+  branchId              String?  @map("branch_id") @db.Uuid
+  totalSearches         Int      @default(0) @map("total_searches")
+  unmatchedSearches     Int      @default(0) @map("unmatched_searches")
+  totalPackageViews     Int      @default(0) @map("total_package_views")
+  totalBookings         Int      @default(0) @map("total_bookings")
+  overallConversionRate Float    @default(0.0) @map("overall_conversion_rate")
+  topSpecialtyDemand    String?  @map("top_specialty_demand") @db.VarChar(255)
+  createdAt             DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  @@index([dateKey])
+  @@map("daily_demand_snapshots")
+}
+
+model AiExecutiveReport {
+  id                       String   @id @default(uuid()) @db.Uuid
+  timeRange                String   @map("time_range") @db.VarChar(50)
+  branchId                 String?  @map("branch_id") @db.Uuid
+  overview                 String   @db.Text
+  epidemiologicalTrends    Json     @map("epidemiological_trends")
+  conversionBottlenecks    Json     @map("conversion_bottlenecks")
+  demographicInsights      Json     @map("demographic_insights")
+  unmetDemandInsights      Json?    @map("unmet_demand_insights")
+  strategicRecommendations Json     @map("strategic_recommendations")
+  createdAt                DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  @@index([timeRange, createdAt])
+  @@map("ai_executive_reports")
+}

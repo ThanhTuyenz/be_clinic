@@ -11,6 +11,9 @@ import { PaymentWebhookDto } from '../payments/dtos/payment-webhook.dto.js';
 import { RescheduleAppointmentDto } from './dtos/reschedule-appointment.dto.js';
 import { RealtimeGateway } from '../../infrastructure/realtime/realtime.gateway.js';
 
+import { NotificationService } from '../notifications/notification.service.js';
+import { NotificationType } from '@prisma/client';
+
 const ACTIVE_APPOINTMENT_STATUSES: AppointmentStatus[] = [
   'HOLD', 'CONFIRMED', 'CHECKED_IN',
 ];
@@ -25,6 +28,7 @@ export class BookingService {
     private readonly mailsService: MailsService,
     private readonly vouchersService: VouchersService,
     private readonly realtimeGateway: RealtimeGateway,
+    private readonly notifications: NotificationService,
   ) {}
 
 
@@ -775,7 +779,14 @@ export class BookingService {
    * Bệnh nhân tự hủy lịch hẹn đã đặt.
    * Xử lý giải phóng slot, hoàn tiền (REFUND_REQUIRED), ghi nhận lịch sử và gửi email.
    */
-  async cancelMyAppointment(accountId: string, appointmentId: string, reason?: string) {
+  async cancelMyAppointment(
+    accountId: string,
+    appointmentId: string,
+    inputOrReason?: string | { reason?: string; refundBank?: { bankCode?: string; bankName?: string; bankBin?: string; accountNumber?: string; accountName?: string } },
+  ) {
+    const reason = typeof inputOrReason === 'string' ? inputOrReason : inputOrReason?.reason;
+    const refundBank = typeof inputOrReason === 'object' ? inputOrReason?.refundBank : undefined;
+
     const appointment = await this.prisma.appointment.findUnique({
       where: { id: appointmentId },
       include: {
@@ -844,10 +855,17 @@ export class BookingService {
 
       // 3. Nếu đã thanh toán trực tuyến thành công -> Tạo yêu cầu hoàn tiền
       if (isPaid && latestPayment) {
+        const rawPayload = (latestPayment.rawPayload as Record<string, any>) || {};
+        const updatedRaw = {
+          ...rawPayload,
+          ...(refundBank ? { refundBank, refundRequestedAt: new Date().toISOString() } : {}),
+        };
+
         await tx.paymentTransaction.update({
           where: { id: latestPayment.id },
           data: {
             status: 'REFUNDED',
+            rawPayload: updatedRaw as Prisma.InputJsonValue,
           },
         });
 
@@ -871,6 +889,7 @@ export class BookingService {
               amount: Number(latestPayment.amount),
               isUrgent,
               reason: reason || 'Bệnh nhân tự hủy lịch khám',
+              refundBank,
             },
           },
         });
@@ -913,8 +932,8 @@ export class BookingService {
             cancelledBy: 'PATIENT',
             refundStatusNote: isPaid
               ? (isUrgent
-                ? 'Lịch hẹn được hủy sát giờ khám (<24h). Yêu cầu hoàn tiền đã được gửi tới Ban quản lý cơ sở để xét duyệt theo chính sách phòng khám.'
-                : 'Yêu cầu hoàn tiền 100% đã được ghi nhận. Số tiền sẽ được hoàn về tài khoản Ngân hàng của quý khách trong 1-3 ngày làm việc.')
+                ? `Lịch hẹn được hủy sát giờ khám (<24h). Yêu cầu hoàn tiền đã được gửi tới Ban quản lý cơ sở để xét duyệt theo chính sách phòng khám.${refundBank?.accountNumber ? ` (Tài khoản nhận hoàn: ${refundBank.bankName || refundBank.bankCode} - STK: ${refundBank.accountNumber} - Chủ TK: ${refundBank.accountName})` : ''}`
+                : `Yêu cầu hoàn tiền 100% đã được ghi nhận. Số tiền sẽ được hoàn về tài khoản ${refundBank?.accountNumber ? `${refundBank.bankName || refundBank.bankCode} - STK: ${refundBank.accountNumber} (${refundBank.accountName})` : 'Ngân hàng của quý khách'} trong 1-3 ngày làm việc.`)
               : undefined,
           },
         });
@@ -928,7 +947,9 @@ export class BookingService {
       isUrgent,
       message: isUrgent
         ? 'Hủy lịch khám thành công. Do bạn hủy sát giờ khám (< 24 giờ), yêu cầu hoàn tiền sẽ được chuyển tới Quản lý phòng khám để xét duyệt theo chính sách.'
-        : 'Hủy lịch khám thành công. Slot khám đã được giải phóng và yêu cầu hoàn tiền 100% đã được ghi nhận.',
+        : (refundBank?.accountNumber
+          ? `Hủy lịch khám thành công. Lệnh hoàn tiền về tài khoản ${refundBank.bankName || refundBank.bankCode} - STK ${refundBank.accountNumber} đã được ghi nhận.`
+          : 'Hủy lịch khám thành công. Slot khám đã được giải phóng và yêu cầu hoàn tiền 100% đã được ghi nhận.'),
     };
   }
 
@@ -1972,6 +1993,21 @@ export class BookingService {
         endTime: appointment.scheduleSlot?.endTime?.toISOString().slice(11, 16),
         status: 'CONFIRMED',
       });
+
+      // Gửi thông báo cho tài khoản bệnh nhân
+      if (appointment.patientProfile?.accountId) {
+        this.notifications.createNotification({
+          userId: appointment.patientProfile.accountId,
+          title: 'Đặt lịch khám thành công!',
+          content: `Lịch khám #${bookingCode} đã được xác nhận. Ngày khám: ${appointment.scheduleSlot?.schedule?.workDate?.toISOString().slice(0, 10) || ''} (${appointment.scheduleSlot?.startTime?.toISOString().slice(11, 16) || ''}) tại ${appointment.branch?.name || 'VitaCare Clinic'}.`,
+          type: NotificationType.BOOKING_CONFIRMED,
+          data: {
+            appointmentId,
+            bookingCode,
+            branchName: appointment.branch?.name,
+          },
+        }).catch(() => {});
+      }
     } catch {
       // Ignore socket emit error
     }
@@ -2116,6 +2152,20 @@ export class BookingService {
           endTime: updated.scheduleSlot?.endTime?.toISOString().slice(11, 16),
           status: 'CONFIRMED',
         });
+
+        if (updated.patientProfile?.accountId) {
+          this.notifications.createNotification({
+            userId: updated.patientProfile.accountId,
+            title: 'Đặt lịch khám thành công!',
+            content: `Lịch khám #${bookingCode} đã được xác nhận. Ngày khám: ${updated.scheduleSlot?.schedule?.workDate?.toISOString().slice(0, 10) || ''} (${updated.scheduleSlot?.startTime?.toISOString().slice(11, 16) || ''}) tại ${updated.branch?.name || 'VitaCare Clinic'}.`,
+            type: NotificationType.BOOKING_CONFIRMED,
+            data: {
+              appointmentId: updated.id,
+              bookingCode,
+              branchName: updated.branch?.name,
+            },
+          }).catch(() => {});
+        }
       } catch {
         // Ignore socket emit error
       }

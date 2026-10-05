@@ -36,6 +36,8 @@ model User {
   aiConversations          AIConversation[]
   aiBookingIntentLogs      AIBookingIntentLog[]
   voucherUsages            VoucherUsage[]
+  notifications            Notification[]
+  deviceTokens             DeviceToken[]
 
   @@index([role, status])
   @@index([isDeleted, createdAt])

@@ -3,13 +3,19 @@ import { ApiOperation, ApiParam, ApiQuery, ApiTags } from '@nestjs/swagger';
 import { Public } from '../../common/decorators/public.decorator.js';
 import { SkipPermissions } from '../auth/permissions/decorators/skip-permissions.decorator.js';
 import { SpecialtiesService } from './specialties.service.js';
+import { PackagesService } from './packages.service.js';
+import { PackageSchedulesService } from './package-schedules.service.js';
 
 @ApiTags('Specialties & Services')
 @Public()
 @SkipPermissions()
 @Controller()
 export class SpecialtiesController {
-  constructor(private readonly svc: SpecialtiesService) { }
+  constructor(
+    private readonly specialtiesService: SpecialtiesService,
+    private readonly packagesService: PackagesService,
+    private readonly packageSchedulesService: PackageSchedulesService,
+  ) {}
 
   /**
    * Menu điều hướng công khai (BFF)
@@ -17,7 +23,7 @@ export class SpecialtiesController {
   @Get('public/navigation')
   @ApiOperation({ summary: 'Menu điều hướng công khai (BFF)' })
   getNavigation() {
-    return this.svc.getNavigation();
+    return this.specialtiesService.getNavigation();
   }
 
   /**
@@ -27,7 +33,7 @@ export class SpecialtiesController {
   @ApiOperation({ summary: 'Tổng hợp trang chủ công khai (BFF)' })
   @ApiQuery({ name: 'branchId', required: false })
   getHomepage(@Query('branchId') branchId?: string) {
-    return this.svc.getHomepage(branchId);
+    return this.specialtiesService.getHomepage(branchId);
   }
 
   /**
@@ -37,7 +43,7 @@ export class SpecialtiesController {
   @ApiOperation({ summary: 'Danh sách chuyên khoa' })
   @ApiQuery({ name: 'branchId', required: false, description: 'Lọc theo chi nhánh' })
   getSpecialties(@Query('branchId') branchId?: string) {
-    return this.svc.getSpecialties(branchId);
+    return this.specialtiesService.getSpecialties(branchId);
   }
 
   /**
@@ -51,7 +57,7 @@ export class SpecialtiesController {
     @Query('branchId') branchId: string | undefined,
     @Query('specialtyId') specialtyId: string,
   ) {
-    return this.svc.specialtyServices(branchId, Number(specialtyId));
+    return this.specialtiesService.specialtyServices(branchId, Number(specialtyId));
   }
 
   /**
@@ -61,7 +67,7 @@ export class SpecialtiesController {
   @ApiOperation({ summary: 'Chi tiết chuyên khoa' })
   @ApiParam({ name: 'id', type: 'integer' })
   getSpecialtyById(@Param('id', ParseIntPipe) id: number) {
-    return this.svc.getSpecialtyById(id);
+    return this.specialtiesService.getSpecialtyById(id);
   }
 
   /**
@@ -75,7 +81,7 @@ export class SpecialtiesController {
     @Param('id', ParseIntPipe) id: number,
     @Query('branchId') branchId?: string,
   ) {
-    return this.svc.getSpecialtyServices(id, branchId);
+    return this.specialtiesService.getSpecialtyServices(id, branchId);
   }
 
   /**
@@ -91,7 +97,45 @@ export class SpecialtiesController {
     @Query('branchId') branchId?: string,
     @Query('q') q?: string,
   ) {
-    return this.svc.getSpecialtyDoctors(id, branchId, q);
+    return this.specialtiesService.getSpecialtyDoctors(id, branchId, q);
+  }
+
+  /**
+   * Danh sách gói khám tổng hợp phân trang và có cache Page 1
+   */
+  @Get(['services/packages', 'public/packages'])
+  @ApiOperation({ summary: 'Danh sách gói khám tổng hợp phân trang (Offset) và cache Page 1' })
+  @ApiQuery({ name: 'page', required: false, type: Number })
+  @ApiQuery({ name: 'limit', required: false, type: Number })
+  @ApiQuery({ name: 'branchId', required: false, type: String })
+  @ApiQuery({ name: 'specialtyId', required: false, type: Number })
+  @ApiQuery({ name: 'search', required: false, type: String })
+  @ApiQuery({ name: 'minPrice', required: false, type: Number })
+  @ApiQuery({ name: 'maxPrice', required: false, type: Number })
+  @ApiQuery({ name: 'sortBy', required: false, type: String })
+  @ApiQuery({ name: 'type', required: false, enum: ['all', 'health-package', 'specialty'] })
+  getPublicPackages(
+    @Query('page') page?: number,
+    @Query('limit') limit?: number,
+    @Query('branchId') branchId?: string,
+    @Query('specialtyId') specialtyId?: number,
+    @Query('search') search?: string,
+    @Query('minPrice') minPrice?: number,
+    @Query('maxPrice') maxPrice?: number,
+    @Query('sortBy') sortBy?: string,
+    @Query('type') type?: 'all' | 'health-package' | 'specialty',
+  ) {
+    return this.packagesService.getPackages({
+      page,
+      limit,
+      branchId,
+      specialtyId,
+      search,
+      minPrice,
+      maxPrice,
+      sortBy,
+      type,
+    });
   }
 
   /**
@@ -101,7 +145,7 @@ export class SpecialtiesController {
   @ApiOperation({ summary: 'Danh sách gói khám chuyên khoa' })
   @ApiQuery({ name: 'branchId', required: false })
   getSpecialtyPackages(@Query('branchId') branchId?: string) {
-    return this.svc.specialtyPackages(branchId);
+    return this.packagesService.specialtyPackages(branchId);
   }
 
   /**
@@ -111,7 +155,7 @@ export class SpecialtiesController {
   @ApiOperation({ summary: 'Danh sách gói khám sức khỏe' })
   @ApiQuery({ name: 'branchId', required: false })
   getHealthPackages(@Query('branchId') branchId?: string) {
-    return this.svc.healthPackages(branchId);
+    return this.packagesService.healthPackages(branchId);
   }
 
   /**
@@ -123,7 +167,7 @@ export class SpecialtiesController {
     @Query('packageId') packageId: string,
     @Query('branchId') branchId?: string,
   ) {
-    return this.svc.servicePackageScheduleDates(packageId, branchId);
+    return this.packageSchedulesService.getPackageScheduleDates(packageId, branchId);
   }
 
   /**
@@ -136,17 +180,17 @@ export class SpecialtiesController {
     @Query('date') date: string,
     @Query('branchId') branchId?: string,
   ) {
-    return this.svc.servicePackageTimeslots(packageId, date, branchId);
+    return this.packageSchedulesService.getPackageTimeslots(packageId, date, branchId);
   }
 
   /**
-   * Chi tiết gói dịch vụ / gói khám
+   * Chi tiết gói dịch vụ / gói khám (hỗ trợ ID UUID, mã code hoặc slug)
    */
-  @Get('services/:id')
-  @ApiOperation({ summary: 'Chi tiết gói dịch vụ / gói khám' })
-  @ApiParam({ name: 'id', format: 'uuid' })
+  @Get(['services/:id', 'public/services/:id', 'public/packages/:id'])
+  @ApiOperation({ summary: 'Chi tiết gói dịch vụ / gói khám theo ID/Slug/Code' })
+  @ApiParam({ name: 'id', description: 'UUID, mã Code hoặc Slug của gói khám' })
   getServiceDetail(@Param('id') id: string) {
-    return this.svc.getServiceDetail(id);
+    return this.packagesService.getServiceDetail(id);
   }
 
   /**
@@ -160,6 +204,6 @@ export class SpecialtiesController {
     @Query('branchId') branchId?: string,
     @Query('q') q?: string,
   ) {
-    return this.svc.getGeneralServices(branchId, q);
+    return this.packagesService.getGeneralServices(branchId, q);
   }
 }

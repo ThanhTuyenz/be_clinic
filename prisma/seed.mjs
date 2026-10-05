@@ -353,15 +353,64 @@ async function main() {
     const methodByCode = new Map(branchMethods.map((m) => [m.bookingMethod.code, m]));
 
     // Dịch vụ chuyên khoa
+    const SPECIALTY_EXTRA_METADATA = {
+      tim_mach: {
+        symptoms: ['Tức ngực', 'Hồi hộp đánh trống ngực', 'Khó thở khi gắng sức', 'Huyết áp cao', 'Chóng mặt'],
+        notes: 'Mang theo toa thuốc và kết quả điện tim/siêu âm tim cũ (nếu có). Tránh dùng cà phê, thuốc lá, trà đậm hoặc chất kích thích trong vòng 12h trước khám.',
+        standardDesc: 'Khám lâm sàng chuyên sâu, nghe tim phổi, đo huyết áp và tầm soát các bệnh lý mạch vành, rối loạn nhịp tim, tăng huyết áp.',
+        followupDesc: 'Theo dõi diễn tiến bệnh lý tim mạch, kiểm tra chỉ số huyết áp, đánh giá phản ứng thuốc và điều chỉnh phác đồ điều trị tối ưu.',
+        adviceDesc: 'Tư vấn định hướng chẩn đoán các triệu chứng tim mạch, tư vấn lối sống và chế độ dinh dưỡng bảo vệ hệ tim mạch.',
+      },
+      tieu_hoa: {
+        symptoms: ['Đau thượng vị', 'Đầy hơi khó tiêu', 'Ợ chua trào ngược', 'Rối loạn tiêu hóa', 'Buồn nôn'],
+        notes: 'Nên nhịn ăn ít nhất 6 tiếng trước giờ khám nếu có chỉ định siêu âm ổ bụng hoặc nội soi tiêu hóa. Uống nhiều nước lọc.',
+        standardDesc: 'Thăm khám và chẩn đoán các bệnh lý dạ dày, đại tràng, gan mật tụy, viêm loét đường tiêu hóa và trào ngược dạ dày thực quản.',
+        followupDesc: 'Đánh giá mức độ hồi phục niêm mạc dạ dày/đại tràng, kiểm tra hiệu quả phác đồ diệt khuẩn HP và điều chỉnh thuốc.',
+        adviceDesc: 'Tư vấn chế độ ăn uống khoa học, hướng dẫn xử trí trào ngược và tầm soát sớm ung thư đường tiêu hóa.',
+      },
+      da_lieu: {
+        symptoms: ['Mụn viêm mụn ẩn', 'Dị ứng mẩn ngứa', 'Nổi mề đay', 'Viêm da cơ địa', 'Rụng tóc', 'Nấm da'],
+        notes: 'Không trang điểm, không bôi kem đặc trị hoặc thuốc mỡ lên vùng da cần khám trong vòng 12h để bác sĩ soi da và chẩn đoán chính xác.',
+        standardDesc: 'Khám soi da vi thể, chẩn đoán và điều trị mụn trứng cá, viêm da cơ địa, dị ứng, vảy nến và các bệnh lý ngoài da.',
+        followupDesc: 'Theo dõi diễn tiến điều trị da liễu, đánh giá mức độ đáp ứng thuốc bôi/thuốc uống và kiểm tra đơn thuốc.',
+        adviceDesc: 'Tư vấn quy trình chăm sóc da khoa học, lựa chọn dược mỹ phẩm phù hợp và phòng ngừa tái phát bệnh lý da liễu.',
+      },
+      co_xuong_khop: {
+        symptoms: ['Đau nhức khớp gối', 'Đau lưng thoái hóa', 'Cứng khớp buổi sáng', 'Tê bì tay chân', 'Đau vai gáy'],
+        notes: 'Mặc trang phục rộng rãi, thoải mái thuận tiện cho việc vận động thăm khám khớp. Mang theo phim chụp X-Quang/MRI cũ.',
+        standardDesc: 'Khám đánh giá tầm vận động khớp, chẩn đoán thoái hóa khớp, thoát vị đĩa đệm, viêm khớp dạng thấp và loãng xương.',
+        followupDesc: 'Đánh giá mức độ thuyên giảm đau nhức, kiểm tra tiến trình phục hồi sụn khớp và điều chỉnh bài tập vận động.',
+        adviceDesc: 'Tư vấn bài tập vật lý trị liệu, tư thế lao động đúng cách và dinh dưỡng bổ sung canxi, glucosamine cho khớp.',
+      },
+      nhi_khoa: {
+        symptoms: ['Sốt cao', 'Ho sổ mũi', 'Biếng ăn chậm tăng cân', 'Rối loạn tiêu hóa', 'Phát ban'],
+        notes: 'Mang theo sổ tiêm chủng và ghi chép lịch sử sốt/dị ứng thuốc của bé. Giữ ấm cho trẻ khi di chuyển.',
+        standardDesc: 'Khám tổng quát thể trạng trẻ em, chẩn đoán bệnh lý hô hấp, tiêu hóa, dinh dưỡng và tư vấn phát triển toàn diện.',
+        followupDesc: 'Đánh giá tiến trình hồi phục của trẻ sau đợt điều trị, kiểm tra cân nặng và điều chỉnh liều lượng thuốc an toàn.',
+        adviceDesc: 'Tư vấn dinh dưỡng theo từng giai đoạn phát triển, lịch tiêm ngừa vắc xin và cách chăm sóc trẻ tại nhà.',
+      },
+      tong_quat: {
+        symptoms: ['Kiểm tra sức khỏe định kỳ', 'Mệt mỏi suy nhược', 'Sụt cân không rõ nguyên nhân', 'Đau đầu mất ngủ'],
+        notes: 'Nhịn ăn sáng ít nhất 6-8 tiếng để lấy máu xét nghiệm đường huyết, mỡ máu và men gan. Không uống nước ngọt, sữa hay cà phê.',
+        standardDesc: 'Khám lâm sàng toàn diện các cơ quan nội khoa, đánh giá chỉ số sinh hiệu và tầm soát sớm các bệnh lý lối sống.',
+        followupDesc: 'Đánh giá lại các chỉ số xét nghiệm bất thường, theo dõi tiến triển sức khỏe định kỳ và tư vấn cải thiện.',
+        adviceDesc: 'Tư vấn kế hoạch chăm sóc sức khỏe chủ động, định hướng lối sống lành mạnh và lịch tầm soát định kỳ.',
+      },
+    };
+
     for (const spec of specialtiesBySlug.values()) {
       const codeSuffix = `${branch.code.replace('VC-', '')}-${String(spec.id).padStart(3, '0')}`;
+      const specMeta = SPECIALTY_EXTRA_METADATA[spec.slug] || SPECIALTY_EXTRA_METADATA.tong_quat;
+
       const specialtyServices = [
         {
           code: `CONSULT-${codeSuffix}-STANDARD`,
           name: `Khám ${spec.name} trong giờ (${branch.name})`,
           price: 220000,
           durationMin: 30,
-          description: `Khám chẩn đoán bệnh lý ${spec.name} trong giờ hành chính.`,
+          description: specMeta.standardDesc || `Khám chẩn đoán bệnh lý ${spec.name} trong giờ hành chính.`,
+          notes: specMeta.notes,
+          symptoms: specMeta.symptoms,
           methodCode: 'SPECIALTY_EXAM',
         },
         {
@@ -369,7 +418,9 @@ async function main() {
           name: `Khám ${spec.name} ngoài giờ (${branch.name})`,
           price: 270000,
           durationMin: 30,
-          description: `Khám chẩn đoán bệnh lý ${spec.name} ngoài giờ hành chính.`,
+          description: specMeta.standardDesc || `Khám chẩn đoán bệnh lý ${spec.name} ngoài giờ hành chính.`,
+          notes: specMeta.notes,
+          symptoms: specMeta.symptoms,
           methodCode: 'AFTER_HOURS',
         },
         {
@@ -377,7 +428,9 @@ async function main() {
           name: `Tái khám ${spec.name} (${branch.name})`,
           price: 180000,
           durationMin: 20,
-          description: `Theo dõi diễn tiến điều trị và kiểm tra đơn thuốc ${spec.name}.`,
+          description: specMeta.followupDesc || `Theo dõi diễn tiến điều trị và kiểm tra đơn thuốc ${spec.name}.`,
+          notes: `Bắt buộc mang theo đơn thuốc và kết quả xét nghiệm của lần khám trước để Bác sĩ đối chiếu hiệu quả điều trị. ${specMeta.notes}`,
+          symptoms: specMeta.symptoms,
           methodCode: 'SPECIALTY_EXAM',
         },
         {
@@ -385,7 +438,9 @@ async function main() {
           name: `Tư vấn ${spec.name} (${branch.name})`,
           price: 150000,
           durationMin: 20,
-          description: `Tư vấn từ xa và định hướng thăm khám chuyên khoa ${spec.name}.`,
+          description: specMeta.adviceDesc || `Tư vấn từ xa và định hướng thăm khám chuyên khoa ${spec.name}.`,
+          notes: 'Chuẩn bị sẵn các câu hỏi và tiền sử bệnh lý để trao đổi trực tiếp với Bác sĩ chuyên khoa.',
+          symptoms: specMeta.symptoms,
           methodCode: 'CONSULTATION',
         },
       ];
@@ -403,6 +458,8 @@ async function main() {
             price: service.price,
             durationMin: service.durationMin,
             description: service.description,
+            notes: service.notes,
+            symptoms: service.symptoms,
             branchBookingMethodId: branchBookingMethod.id,
             specialtyId: spec.id,
             isActive: true,
@@ -414,6 +471,8 @@ async function main() {
             price: service.price,
             durationMin: service.durationMin,
             description: service.description,
+            notes: service.notes,
+            symptoms: service.symptoms,
             branchBookingMethodId: branchBookingMethod.id,
             specialtyId: spec.id,
             isActive: true,
@@ -436,6 +495,8 @@ async function main() {
             name: fullName,
             slug,
             description: pkg.description,
+            notes: 'Nhịn ăn sáng ít nhất 6-8 tiếng để thực hiện xét nghiệm máu và siêu âm ổ bụng tổng quát. Uống nhiều nước lọc và nhịn tiểu trước khi siêu âm. Xuất trình CCCD/BHYT tại quầy tiếp đón.',
+            symptoms: ['Kiểm tra sức khỏe định kỳ', 'Tầm soát ung thư sớm', 'Đánh giá chức năng gan thận', 'Tầm soát đái tháo đường'],
             price: pkg.price,
             branchBookingMethodId: healthPackageMethod.id,
             isActive: true,
@@ -445,6 +506,8 @@ async function main() {
             name: fullName,
             slug,
             description: pkg.description,
+            notes: 'Nhịn ăn sáng ít nhất 6-8 tiếng để thực hiện xét nghiệm máu và siêu âm ổ bụng tổng quát. Uống nhiều nước lọc và nhịn tiểu trước khi siêu âm. Xuất trình CCCD/BHYT tại quầy tiếp đón.',
+            symptoms: ['Kiểm tra sức khỏe định kỳ', 'Tầm soát ung thư sớm', 'Đánh giá chức năng gan thận', 'Tầm soát đái tháo đường'],
             price: pkg.price,
             branchBookingMethodId: healthPackageMethod.id,
             isActive: true,

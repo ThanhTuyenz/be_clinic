@@ -11,4 +11,5 @@ export const REALTIME_ROOMS = {
   BRANCH: (branchId: string) => `branch:${branchId}`,
   DOCTOR: (doctorId: string) => `doctor:${doctorId}`,
   ROOM: (roomId: string) => `clinic_room:${roomId}`,
+  USER: (userId: string) => `user:${userId}`,
 } as const;

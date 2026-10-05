@@ -39,6 +39,7 @@ import { RecommendationModule } from './modules/recommendations/recommendation.m
 import { ZaloZnsModule } from './infrastructure/zalo-zns/zalo-zns.module.js'
 import { HttpSmsModule } from './infrastructure/httpsms/httpsms.module.js'
 import { MediaModule } from './infrastructure/media/media.module.js'
+import { NotificationModule } from './modules/notifications/notification.module.js'
 
 @Module({
   imports: [
@@ -88,6 +89,7 @@ import { MediaModule } from './infrastructure/media/media.module.js'
     ZaloZnsModule,
     HttpSmsModule,
     MediaModule,
+    NotificationModule,
   ],
 
   controllers: [],

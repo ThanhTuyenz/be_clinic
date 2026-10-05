@@ -71,7 +71,6 @@ export class HttpSmsService implements IHttpSmsService {
 
     const formattedTo = this.normalizePhone(to);
 
-    // Gửi thật qua API httpSMS
     try {
       const res = await fetch(this.config.endpoint, {
         method: 'POST',

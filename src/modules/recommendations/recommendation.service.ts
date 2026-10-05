@@ -3,8 +3,23 @@ import { ConfigService } from '@nestjs/config';
 import { GoogleGenAI, Type } from '@google/genai';
 import { PrismaService } from '../../infrastructure/database/prisma/prisma.service.js';
 import { RedisService } from '../../infrastructure/redis/redis.service.js';
-import { ProfileRecommendationResponseDto, RecommendedPackageItemDto } from './recommendation.dto.js';
+import {
+  ProfileRecommendationResponseDto,
+  RecommendedPackageItemDto,
+  RecommendationPriority,
+  TrackBehaviorDto,
+  TrackingActionType,
+  HomeRecommendationQueryDto,
+  HomeRecommendationResponseDto,
+} from './recommendation.dto.js';
 import { EmbeddingService, PackageForRetrieval } from '../../infrastructure/embedding/embedding.service.js';
+
+interface CandidatePoolItem {
+  pkg: any;
+  origin: 'PROFILE' | 'BEHAVIOR' | 'BOTH' | 'POPULAR';
+  behaviorSourceType?: 'SEARCH_INTENT' | 'DROP_OFF' | 'RECENT_VIEW';
+  isFollowUp?: boolean;
+}
 
 @Injectable()
 export class RecommendationService {
@@ -32,93 +47,38 @@ export class RecommendationService {
     }
   }
 
-  /**
-   * get ds gói khám phù hợp (cache -> fail -> phân tích lại ).
-   */
-  async getRecommendations(profileId: string, branchId?: string): Promise<ProfileRecommendationResponseDto> {
-    const t0 = Date.now();
-    const cacheKey = this.buildCacheKey(profileId);
-
-    // 1. Kiểm tra Redis
-    try {
-      if (this.redis.isEnabled()) {
-        const cached = await this.redis.get<ProfileRecommendationResponseDto>(cacheKey);
-        if (cached && Array.isArray(cached.packages) && cached.packages.length > 0) {
-          const latency = Date.now() - t0;
-          this.logger.log(
-            `[Recommendation] [CACHE HIT] Found recommendations for profile "${profileId}" in Redis [key: ${cacheKey}] (${cached.packages.length} packages, ${latency}ms)`,
-          );
-          return { ...cached, source: 'REDIS_CACHE' };
-        }
-      }
-    } catch (err: any) {
-      this.logger.warn(`Redis get failed for key ${cacheKey}: ${err?.message}`);
-    }
-
-    // 2. Cache miss -> analyst lại 
-    this.logger.log(`[Recommendation CACHE MISS] No valid cache for profile "${profileId}". Starting full pipeline...`);
-    return this.analyzeAndCacheRecommendations(profileId, branchId);
-  }
+  // ===================================================================================
+  // NHÁNH 1: HỒ SƠ BỆNH ÁN (Profile Tower - Vector Retrieval)
+  // ===================================================================================
 
   /**
-   * Kích hoạt xử lý ngầm (Non-blocking / Background qua RabbitMQ Outbox).
-   * Dùng khi tạo hoặc sửa hồ sơ bệnh nhân, không làm chậm response của user.
+   * Lấy danh sách gói ứng viên từ Hồ sơ bệnh nhân (Top 6 - 8 gói)
    */
-  triggerAsyncRecommendation(profileId: string): void {
-    void this.enqueueRecommendationTask(profileId);
-  }
-
-  private async enqueueRecommendationTask(profileId: string): Promise<void> {
-    try {
-      await this.prisma.outboxEvent.create({
-        data: {
-          aggregateType: 'PatientProfile',
-          aggregateId: profileId,
-          eventType: 'recommendation.profile.analyze',
-          payload: { profileId },
-        },
-      });
-      this.logger.log(`Enqueued recommendation task [recommendation.profile.analyze] for profile ${profileId}`);
-    } catch (err: any) {
-
-      // không chạy luông bacground job
-      this.logger.warn(`Failed to create outbox event for profile ${profileId}, falling back to setImmediate: ${err?.message}`);
-      setImmediate(() => {
-        this.analyzeAndCacheRecommendations(profileId).catch((fallbackErr) => {
-          this.logger.error(`Fallback recommendation analysis failed for profile ${profileId}: ${fallbackErr?.message}`);
-        });
-      });
-    }
-  }
-
-  /**
-   * Xóa cache của một hồ sơ khi bệnh nhân sửa thông tin hoặc hoàn tất lịch khám mới.
-   */
-  async invalidateCache(profileId: string): Promise<void> {
-    try {
-      if (this.redis.isEnabled()) {
-        const key = this.buildCacheKey(profileId);
-        await this.redis.delete(key);
-        // Xóa thêm legacy key nếu có
-        await this.redis.delete(`${key}:all`);
-        this.logger.log(`Invalidated recommendation cache for profile ${profileId}`);
-      }
-    } catch (err: any) {
-      this.logger.warn(`Failed to invalidate cache for profile ${profileId}: ${err?.message}`);
-    }
-  }
-
-  /**
-   * Thực hiện phân tích chuyên sâu bằng AI (hoặc Heuristic Fallback) và lưu vào Redis.
-   */
-  async analyzeAndCacheRecommendations(
-    profileId: string,
+  async getProfileCandidates(
+    profileId?: string,
     branchId?: string,
-  ): Promise<ProfileRecommendationResponseDto> {
-    const t0 = Date.now();
-    this.logger.log(`==================== [RECOMMENDATION PIPELINE START] Profile: ${profileId} ====================`);
+    preloadedPackages?: any[],
+  ): Promise<{
+    profile: any;
+    age: number;
+    gender: string;
+    bmi: number | null;
+    medicalHistory: string;
+    allergies: string;
+    candidates: Array<{ pkg: any; isFollowUp?: boolean }>;
+  }> {
+    const emptyResult = {
+      profile: null,
+      age: 30,
+      gender: 'OTHER',
+      bmi: null,
+      medicalHistory: '',
+      allergies: '',
+      candidates: [],
+    };
 
-    // 1. Lấy thông tin hồ sơ bệnh nhân (chỉ select các trường lâm sàng cần thiết)
+    if (!profileId) return emptyResult;
+
     const profile = await this.prisma.patientProfile.findUnique({
       where: { id: profileId },
       select: {
@@ -133,17 +93,8 @@ export class RecommendationService {
       },
     });
 
-    if (!profile) {
-      this.logger.warn(`[RECOMMENDATION] Profile not found: ${profileId}`);
-      return {
-        profileId,
-        updatedAt: new Date().toISOString(),
-        source: 'RULE_FALLBACK',
-        packages: [],
-      };
-    }
+    if (!profile) return emptyResult;
 
-    // 2. Tính toán các chỉ số lâm sàng
     const dob = profile.dateOfBirth ? new Date(profile.dateOfBirth) : null;
     const age = dob && !isNaN(dob.getTime())
       ? Math.abs(new Date(Date.now() - dob.getTime()).getUTCFullYear() - 1970)
@@ -155,702 +106,582 @@ export class RecommendationService {
     const allergies = (profile.allergies || '').trim();
     const gender = (profile.gender || 'OTHER').toString().toUpperCase();
 
-    // 3. Lấy danh sách gói khám đang hoạt động (tối ưu select và lọc theo cơ sở nếu có)
-    const allActivePackages = await this.prisma.servicePackage.findMany({
+    // 1. Kiểm tra lịch sử tái khám
+    const pastAppointments = await this.prisma.appointment.findMany({
+      where: {
+        patientProfileId: profileId,
+        status: 'COMPLETED',
+      },
+      include: {
+        servicePackage: { select: { id: true, name: true, code: true, specialtyId: true, specialty: { select: { id: true, name: true } } } },
+      },
+      orderBy: { createdAt: 'desc' },
+      take: 3,
+    });
+
+    const candidates: Array<{ pkg: any; isFollowUp?: boolean }> = [];
+
+    // Tái dùng danh sách gói đã load sẵn (tránh query N+1 khi gọi từ Orchestrator)
+    const allPackages = preloadedPackages ?? await this.prisma.servicePackage.findMany({
       where: {
         isActive: true,
         ...(branchId ? { branchBookingMethod: { branchId, isEnabled: true } } : {}),
       },
-      select: {
-        id: true,
-        code: true,
-        slug: true,
-        name: true,
-        description: true,
-        symptoms: true,
-        price: true,
-        durationMin: true,
-        specialtyId: true,
-        specialty: { select: { id: true, name: true, slug: true } },
-      },
+      include: { specialty: { select: { id: true, name: true, slug: true } } },
       orderBy: { price: 'asc' },
     });
 
-    if (allActivePackages.length === 0) {
+    if (pastAppointments.length > 0) {
+      const latest = pastAppointments[0];
+      const specId = latest.servicePackage?.specialtyId;
+      if (specId) {
+        const followUpPkg = allPackages.find(
+          (p) => p.specialtyId === specId && (p.code.endsWith('-FOLLOWUP') || p.name.toLowerCase().includes('tái khám')),
+        );
+        if (followUpPkg) {
+          candidates.push({ pkg: followUpPkg, isFollowUp: true });
+        }
+      }
+    }
+
+    // 2. Lọc độ tuổi & giới tính
+    const validScreening = allPackages.filter((pkg) => {
+      if (pkg.code.endsWith('-FOLLOWUP') || pkg.name.toLowerCase().includes('tái khám')) return false;
+      if (!this.isPackageAppropriateForGender(pkg.name, pkg.description || '', gender)) return false;
+      if (!this.isPackageAppropriateForAge(pkg.name, pkg.description || '', age)) return false;
+      return true;
+    });
+
+    // 3. Vector Similarity Search
+    const patientEmbeddingText = this.embeddingService.buildPatientEmbeddingText({
+      fullName: profile.fullName,
+      age,
+      gender,
+      bmi,
+      medicalHistory,
+      allergies,
+    });
+
+    const candidateObjects: PackageForRetrieval[] = validScreening.map((p) => ({
+      id: p.id,
+      name: p.name,
+      code: p.code,
+      description: p.description || '',
+      symptoms: p.symptoms || [],
+      price: Number(p.price),
+      specialtyName: p.specialty?.name || 'Đa khoa',
+      specialtyId: p.specialtyId,
+      durationMin: p.durationMin,
+    }));
+
+    const topRetrieved = await this.embeddingService.retrieveTopPackages(patientEmbeddingText, candidateObjects, 8);
+    for (const r of topRetrieved) {
+      const match = allPackages.find((p) => p.id === r.package.id);
+      if (match && !candidates.some((item) => item.pkg.id === match.id)) {
+        candidates.push({ pkg: match });
+      }
+    }
+
+    return {
+      profile,
+      age,
+      gender,
+      bmi,
+      medicalHistory,
+      allergies,
+      candidates,
+    };
+  }
+
+  // ===================================================================================
+  // NHÁNH 2: HÀNH VI TELEMETRY (Behavior Tower - Redis Score >= 6)
+  // ===================================================================================
+
+  /**
+   * Lấy danh sách gói ứng viên từ Hành vi Redis (Top 4 - 6 gói khi điểm >= 6)
+   */
+  async getBehaviorCandidates(
+    userId?: string,
+    sessionId?: string,
+    branchId?: string,
+    preloadedPackages?: any[],
+  ): Promise<{
+    topSpecialties: Array<{ specialtyId: number; specialtyName: string; score: number }>;
+    lastSearchQuery?: string;
+    dropOffPkgId?: string;
+    candidates: Array<{ pkg: any; sourceType: 'SEARCH_INTENT' | 'DROP_OFF' | 'RECENT_VIEW' }>;
+  }> {
+    const context = await this.getBehaviorTelemetryContext(userId, sessionId);
+    const candidates: Array<{ pkg: any; sourceType: 'SEARCH_INTENT' | 'DROP_OFF' | 'RECENT_VIEW' }> = [];
+
+    // Tái dùng danh sách gói đã load sẵn (tránh query N+1 khi gọi từ Orchestrator)
+    const allPackages = preloadedPackages ?? await this.prisma.servicePackage.findMany({
+      where: {
+        isActive: true,
+        ...(branchId ? { branchBookingMethod: { branchId, isEnabled: true } } : {}),
+      },
+      include: { specialty: { select: { id: true, name: true, slug: true } } },
+      orderBy: { price: 'asc' },
+    });
+
+    // 1. Ưu tiên gói bỏ dở nếu có (Drop-off Package)
+    if (context.dropOffPkgId) {
+      const dropOffMatch = allPackages.find((p) => p.id === context.dropOffPkgId);
+      if (dropOffMatch) {
+        candidates.push({ pkg: dropOffMatch, sourceType: 'DROP_OFF' });
+      }
+    }
+
+    // 2. Trích xuất gói từ chuyên khoa đạt điểm >= 6
+    const qualifiedSpecialties = context.topSpecialties.filter((s) => s.score >= 6);
+    for (const spec of qualifiedSpecialties.slice(0, 2)) {
+      const specPackages = allPackages.filter((p) => p.specialtyId === spec.specialtyId);
+      for (const p of specPackages.slice(0, 3)) {
+        if (!candidates.some((c) => c.pkg.id === p.id)) {
+          candidates.push({
+            pkg: p,
+            sourceType: context.lastSearchQuery ? 'SEARCH_INTENT' : 'RECENT_VIEW',
+          });
+        }
+      }
+    }
+
+    // 3. Nếu có lastSearchQuery -> Tìm kiếm ngữ nghĩa bổ sung
+    if (context.lastSearchQuery && candidates.length < 6) {
+      try {
+        const searchPackages: PackageForRetrieval[] = allPackages.map((p) => ({
+          id: p.id,
+          code: p.code,
+          name: p.name,
+          description: p.description || '',
+          symptoms: p.symptoms || [],
+          price: Number(p.price),
+          durationMin: p.durationMin,
+          specialtyId: p.specialtyId,
+          specialtyName: p.specialty?.name || 'Đa khoa',
+        }));
+        const searchResults = await this.embeddingService.searchByNaturalLanguage(context.lastSearchQuery, searchPackages, 3);
+        for (const sr of searchResults) {
+          const match = allPackages.find((p) => p.id === sr.package.id);
+          if (match && !candidates.some((c) => c.pkg.id === match.id)) {
+            candidates.push({ pkg: match, sourceType: 'SEARCH_INTENT' });
+          }
+        }
+      } catch (err: any) {
+        this.logger.warn(`Semantic search for behavior query failed: ${err?.message}`);
+      }
+    }
+
+    return {
+      topSpecialties: context.topSpecialties,
+      lastSearchQuery: context.lastSearchQuery,
+      dropOffPkgId: context.dropOffPkgId,
+      candidates,
+    };
+  }
+
+  // ===================================================================================
+  // HÀM ĐIỀU PHỐI CHÍNH: TỔNG HỢP 2 NHÁNH & GEMINI RE-RANKING CHO TRANG CHỦ
+  // ===================================================================================
+
+  /**
+   * Tổng hợp gói khám đề xuất cho Trang Chủ (Two-Tower Orchestrator)
+   */
+  async getHomeRecommendations(
+    query: HomeRecommendationQueryDto,
+    userId?: string,
+  ): Promise<HomeRecommendationResponseDto> {
+    const t0 = Date.now();
+    const homeCacheKey = this.buildHomeCacheKey({
+      userId,
+      sessionId: query.sessionId,
+      profileId: query.profileId,
+      branchId: query.branchId,
+    });
+
+    // 0. Cache Check (5 phút)
+    try {
+      if (this.redis.isEnabled()) {
+        const cached = await this.redis.get<HomeRecommendationResponseDto>(homeCacheKey);
+        if (cached && Array.isArray(cached.packages) && cached.packages.length > 0) {
+          return cached;
+        }
+      }
+    } catch {}
+
+    // 1. Load toàn bộ gói khám 1 LẦN DUY NHẤT, sau đó truyền vào cả 2 nhánh (tránh N+1 query)
+    const allActivePackages = await this.prisma.servicePackage.findMany({
+      where: {
+        isActive: true,
+        ...(query.branchId ? { branchBookingMethod: { branchId: query.branchId, isEnabled: true } } : {}),
+      },
+      include: { specialty: { select: { id: true, name: true, slug: true } } },
+      orderBy: { price: 'asc' },
+    });
+
+    // 2. Gọi song song 2 nhánh, truyền allActivePackages đã load sẵn
+    const [profileTower, behaviorTower] = await Promise.all([
+      this.getProfileCandidates(query.profileId, query.branchId, allActivePackages),
+      this.getBehaviorCandidates(userId, query.sessionId, query.branchId, allActivePackages),
+    ]);
+
+    // 2. Gộp & Khử trùng Candidate Pool (Top 8 - 14 gói)
+    const candidatePoolMap = new Map<string, CandidatePoolItem>();
+
+    // 2.1. Nạp từ Nhánh Hồ sơ
+    for (const item of profileTower.candidates) {
+      candidatePoolMap.set(item.pkg.id, {
+        pkg: item.pkg,
+        origin: 'PROFILE',
+        isFollowUp: item.isFollowUp,
+      });
+    }
+
+    // 2.2. Nạp từ Nhánh Hành vi
+    for (const beh of behaviorTower.candidates) {
+      if (candidatePoolMap.has(beh.pkg.id)) {
+        const existing = candidatePoolMap.get(beh.pkg.id)!;
+        existing.origin = 'BOTH';
+        existing.behaviorSourceType = beh.sourceType;
+      } else {
+        if (profileTower.profile) {
+          if (!this.isPackageAppropriateForGender(beh.pkg.name, beh.pkg.description || '', profileTower.gender)) continue;
+          if (!this.isPackageAppropriateForAge(beh.pkg.name, beh.pkg.description || '', profileTower.age)) continue;
+        }
+        candidatePoolMap.set(beh.pkg.id, {
+          pkg: beh.pkg,
+          origin: 'BEHAVIOR',
+          behaviorSourceType: beh.sourceType,
+        });
+      }
+    }
+
+    // 2.3. Bổ sung nếu chưa đủ 8 gói
+    if (candidatePoolMap.size < 8) {
+      for (const p of allActivePackages) {
+        if (!candidatePoolMap.has(p.id)) {
+          if (profileTower.profile) {
+            if (!this.isPackageAppropriateForGender(p.name, p.description || '', profileTower.gender)) continue;
+            if (!this.isPackageAppropriateForAge(p.name, p.description || '', profileTower.age)) continue;
+          }
+          candidatePoolMap.set(p.id, { pkg: p, origin: 'POPULAR' });
+          if (candidatePoolMap.size >= 12) break;
+        }
+      }
+    }
+
+    const candidatePoolArray = Array.from(candidatePoolMap.values());
+
+    // 3. Đưa Candidate Pool vào Gemini LLM Re-ranking (Chọn Top 4 - 6 gói)
+    let reRankedPackages: RecommendedPackageItemDto[] = [];
+    const hasBehaviorIntent = behaviorTower.candidates.length > 0;
+    const hasProfileIntent = !!profileTower.profile;
+
+    let detectedSource: 'HYBRID' | 'AI_PROFILE' | 'BEHAVIOR' | 'FALLBACK' = 'FALLBACK';
+    if (hasProfileIntent && hasBehaviorIntent) detectedSource = 'HYBRID';
+    else if (hasProfileIntent) detectedSource = 'AI_PROFILE';
+    else if (hasBehaviorIntent) detectedSource = 'BEHAVIOR';
+
+    // Chỉ gọi Gemini khi CÓ BỆNH ÁN hoặc CÓ HÀNH VI QUAN TÂM (tránh tốn chi phí & latency cho khách mới chưa có context)
+    if (this.aiClient && candidatePoolArray.length > 0 && (hasProfileIntent || hasBehaviorIntent)) {
+      try {
+        reRankedPackages = await this.evaluateHybridWithGemini({
+          profile: profileTower.profile
+            ? {
+                fullName: profileTower.profile.fullName,
+                age: profileTower.age,
+                gender: profileTower.gender,
+                bmi: profileTower.bmi,
+                medicalHistory: profileTower.medicalHistory,
+                allergies: profileTower.allergies,
+              }
+            : null,
+          behaviorContext: {
+            topSpecialties: behaviorTower.topSpecialties.map((s) => `${s.specialtyName} (${s.score} điểm)`).join(', ') || 'Chưa ghi nhận',
+            lastSearchQuery: behaviorTower.lastSearchQuery || 'Không có',
+            dropOffPkgName: candidatePoolArray.find((c) => c.origin === 'BEHAVIOR' && c.behaviorSourceType === 'DROP_OFF')?.pkg.name,
+          },
+          candidates: candidatePoolArray.map((c) => ({
+            id: c.pkg.id,
+            name: c.pkg.name,
+            code: c.pkg.code,
+            slug: c.pkg.slug,
+            description: c.pkg.description || '',
+            price: Number(c.pkg.price),
+            specialtyName: c.pkg.specialty?.name || 'Đa khoa',
+            specialtyId: c.pkg.specialtyId,
+            durationMin: c.pkg.durationMin,
+            origin: c.origin,
+            behaviorSourceType: c.behaviorSourceType,
+          })),
+        });
+      } catch (err: any) {
+        this.logger.warn(`Gemini Re-ranking failed (${err?.message}) -> Fallback heuristics`);
+      }
+    }
+
+    // 4. Fallback Heuristics nếu AI lỗi hoặc trường hợp khách vãng lai thuần túy
+    if (reRankedPackages.length === 0) {
+      reRankedPackages = this.evaluateHybridWithHeuristics(candidatePoolArray, profileTower.profile, profileTower.medicalHistory);
+    }
+
+    const finalResultPackages = reRankedPackages.slice(0, 6);
+
+    const finalResponse: HomeRecommendationResponseDto = {
+      profileId: query.profileId,
+      profileName: profileTower.profile?.fullName,
+      updatedAt: new Date().toISOString(),
+      source: detectedSource,
+      packages: finalResultPackages,
+    };
+
+    // 5. Lưu Cache Redis (5 - 15 phút tùy độ cá nhân hóa)
+    try {
+      if (this.redis.isEnabled() && finalResultPackages.length > 0) {
+        const ttl = detectedSource === 'FALLBACK' ? 900 : 300; // Khách vãng lai cache 15 phút, cá nhân hóa cache 5 phút
+        await this.redis.set(homeCacheKey, finalResponse, ttl);
+      }
+    } catch {}
+
+    this.logger.log(
+      `🏁 [HYBRID PIPELINE] Source: ${detectedSource} | ${finalResultPackages.length} pkgs | Time: ${Date.now() - t0}ms`,
+    );
+
+    return finalResponse;
+  }
+
+  // ===================================================================================
+  // TRANG HỒ SƠ BỆNH NHÂN (Profile Page API & Outbox)
+  // ===================================================================================
+
+  async getRecommendations(profileId: string, branchId?: string): Promise<ProfileRecommendationResponseDto> {
+    const cacheKey = this.buildCacheKey(profileId);
+    try {
+      if (this.redis.isEnabled()) {
+        const cached = await this.redis.get<ProfileRecommendationResponseDto>(cacheKey);
+        if (cached && Array.isArray(cached.packages) && cached.packages.length > 0) {
+          return { ...cached, source: 'REDIS_CACHE' };
+        }
+      }
+    } catch {}
+
+    return this.analyzeAndCacheRecommendations(profileId, branchId);
+  }
+
+  triggerAsyncRecommendation(profileId: string): void {
+    void this.enqueueRecommendationTask(profileId);
+  }
+
+  private async enqueueRecommendationTask(profileId: string): Promise<void> {
+    try {
+      await this.prisma.outboxEvent.create({
+        data: {
+          aggregateType: 'PatientProfile',
+          aggregateId: profileId,
+          eventType: 'recommendation.profile.analyze',
+          payload: { profileId },
+        },
+      });
+    } catch {
+      setImmediate(() => {
+        this.analyzeAndCacheRecommendations(profileId).catch(() => {});
+      });
+    }
+  }
+
+  async invalidateCache(profileId: string): Promise<void> {
+    try {
+      if (this.redis.isEnabled()) {
+        const key = this.buildCacheKey(profileId);
+        await this.redis.delete(key);
+        await this.redis.delete(`${key}:all`);
+      }
+    } catch {}
+  }
+
+  async analyzeAndCacheRecommendations(
+    profileId: string,
+    branchId?: string,
+  ): Promise<ProfileRecommendationResponseDto> {
+    const profileTower = await this.getProfileCandidates(profileId, branchId);
+    if (!profileTower.profile) {
       return {
         profileId,
-        profileName: profile.fullName,
         updatedAt: new Date().toISOString(),
         source: 'RULE_FALLBACK',
         packages: [],
       };
     }
 
-    // 4. Kiểm tra ls tái khái ưu tiên hiển thị
-    const pastAppointments = await this.prisma.appointment.findMany({
-      where: {
-        patientProfileId: profileId,
-        status: { in: ['COMPLETED', 'CONFIRMED', 'CHECKED_IN'] },
-      },
-      select: {
-        id: true,
-        servicePackageId: true,
-        status: true,
-        createdAt: true,
-        updatedAt: true,
-        servicePackage: {
-          select: {
-            id: true,
-            name: true,
-            code: true,
-            specialtyId: true,
-            specialty: { select: { id: true, name: true } },
-          },
-        },
-        scheduleSlot: {
-          select: {
-            schedule: {
-              select: {
-                doctor: {
-                  select: {
-                    id: true,
-                    specialties: {
-                      select: {
-                        isPrimary: true,
-                        specialtyId: true,
-                        specialty: { select: { id: true, name: true } },
-                      },
-                    },
-                  },
-                },
-              },
-            },
-          },
-        },
-      },
-      orderBy: { createdAt: 'desc' },
-      take: 5,
-    });
-
-    // Lọc các gói vừa khám trong 30 ngày để tránh spam
-    const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
-    const suppressedPackageIds = new Set<string>();
-    for (const app of pastAppointments) {
-      if (!app.servicePackageId) continue;
-      const appTime = new Date(app.createdAt).getTime();
-      if (!isNaN(appTime) && appTime >= thirtyDaysAgo.getTime()) {
-        suppressedPackageIds.add(app.servicePackageId);
-      }
-    }
-
-    // TẦNG 1: RULE TÁI KHÁM (0ms, không dùng AI, chính xác tuyệt đối)
-    const completedAppointments = pastAppointments.filter((app) => app.status === 'COMPLETED');
-    let followUpRecommendation: RecommendedPackageItemDto | null = null;
-    const usedPackageIds = new Set<string>();
-
-    this.logger.log(
-      `[STAGE 2/6: CLINICAL RULES & RECENCY] 📅 Found ${pastAppointments.length} appointments (${completedAppointments.length} COMPLETED)`,
-    );
-
-    if (completedAppointments.length > 0) {
-      const latest = completedAppointments[0];
-      const primaryDocSpecialty =
-        latest.scheduleSlot?.schedule?.doctor?.specialties?.find((s) => s.isPrimary) ||
-        latest.scheduleSlot?.schedule?.doctor?.specialties?.[0];
-
-      const specialtyId = latest.servicePackage?.specialtyId || primaryDocSpecialty?.specialtyId;
-      const specialtyName =
-        latest.servicePackage?.specialty?.name ||
-        primaryDocSpecialty?.specialty?.name ||
-        'Chuyên khoa';
-
-      const visitDate = new Date(latest.updatedAt || latest.createdAt);
-      const daysAgo = Math.max(1, Math.floor((Date.now() - visitDate.getTime()) / (24 * 60 * 60 * 1000)));
-
-      if (specialtyId) {
-        // Tìm gói tái khám tương ứng cùng chuyên khoa trong database
-        const followUpPkg = allActivePackages.find(
-          (p) =>
-            p.specialtyId === specialtyId &&
-            (p.code.endsWith('-FOLLOWUP') || p.name.toLowerCase().includes('tái khám'))
-        );
-
-        if (followUpPkg) {
-          usedPackageIds.add(followUpPkg.id);
-          followUpRecommendation = {
-            packageId: followUpPkg.id,
-            code: followUpPkg.code,
-            name: followUpPkg.name,
-            price: Number(followUpPkg.price),
-            durationMin: followUpPkg.durationMin,
-            specialtyId: followUpPkg.specialtyId,
-            specialtyName: followUpPkg.specialty?.name || specialtyName,
-            priority: 'HIGH',
-            badge: daysAgo <= 45 ? 'Tái khám theo hẹn' : 'Tái khám định kỳ',
-            clinicalReason: `Bệnh nhân đã hoàn thành đợt khám ${specialtyName} (${daysAgo} ngày trước) · Khuyến nghị tái khám để đánh giá đáp ứng điều trị và điều chỉnh phác đồ.`,
-          };
-
-          this.logger.log(
-            `[STAGE 2/6: CLINICAL RULES & RECENCY] 🎯 [FOLLOW-UP MATCH] Priority #1 -> "${followUpPkg.name}" (${followUpPkg.code}) | Visited: ${daysAgo} days ago | Badge: "${followUpRecommendation.badge}"`,
-          );
-        }
-      }
-    }
-
-    if (!followUpRecommendation) {
-      this.logger.log(`[STAGE 2/6: CLINICAL RULES & RECENCY] ℹ️ [FOLLOW-UP] None (No completed appointment eligible for follow-up)`);
-    }
-
-    if (suppressedPackageIds.size > 0) {
-      this.logger.log(
-        `[STAGE 2/6: CLINICAL RULES & RECENCY] ⏳ [SUPPRESSION] ${suppressedPackageIds.size} packages suppressed (completed within 30 days)`,
-      );
-    }
-
-    // TẦNG 1: LỌC DANH SÁCH ỨNG VIÊN BẰNG LUẬT LÂM SÀNG & METADATA (Rule & Metadata Pre-Filtering)
-    const screeningCandidates = allActivePackages.filter((pkg) => {
-      const isFollowUpPkg = pkg.code.endsWith('-FOLLOWUP') || pkg.name.toLowerCase().includes('tái khám');
-      if (isFollowUpPkg) return false;
-      if (usedPackageIds.has(pkg.id)) return false;
-      if (suppressedPackageIds.has(pkg.id)) return false;
-
-      // Lọc cứng giới tính & độ tuổi
-      if (!this.isPackageAppropriateForGender(pkg.name, pkg.description || '', gender)) return false;
-      if (!this.isPackageAppropriateForAge(pkg.name, pkg.description || '', age)) return false;
-
-      return true;
-    });
-
-    this.logger.log(
-      `[STAGE 2/6: CLINICAL RULES & RECENCY] 🔍 [PRE-FILTER] Filtered ${allActivePackages.length} -> ${screeningCandidates.length} screening candidates (excluded gender/age mismatch, follow-up & suppressed packages)`,
-    );
-
-    let aiRecommendedList: RecommendedPackageItemDto[] = [];
+    let aiList: RecommendedPackageItemDto[] = [];
     let source: 'AI_GEMINI' | 'RULE_FALLBACK' = 'RULE_FALLBACK';
 
-    if (screeningCandidates.length > 0) {
-      // TẦNG 2: SEMANTIC VECTOR RETRIEVAL (Rút gọn từ hàng trăm/nghìn gói xuống Top 15 - 20 gói ứng viên y khoa sáng giá)
-      const patientEmbeddingText = this.embeddingService.buildPatientEmbeddingText({
-        fullName: profile.fullName,
-        age,
-        gender,
-        bmi,
-        medicalHistory,
-        allergies,
-      });
+    const candidateObjects = profileTower.candidates.map((c) => ({
+      id: c.pkg.id,
+      name: c.pkg.name,
+      code: c.pkg.code,
+      slug: c.pkg.slug,
+      description: c.pkg.description || '',
+      price: Number(c.pkg.price),
+      specialtyName: c.pkg.specialty?.name || 'Đa khoa',
+      specialtyId: c.pkg.specialtyId,
+      durationMin: c.pkg.durationMin,
+      origin: 'PROFILE',
+    }));
 
-      this.logger.log(`[STAGE 3/6: VECTOR RETRIEVAL] 📝 Patient Semantic Text: "${patientEmbeddingText}"`);
-
-      const candidateObjects: PackageForRetrieval[] = screeningCandidates.map((p) => ({
-        id: p.id,
-        name: p.name,
-        code: p.code,
-        description: p.description || '',
-        symptoms: p.symptoms || [],
-        price: Number(p.price),
-        specialtyName: p.specialty?.name || 'Đa khoa',
-        specialtyId: p.specialtyId,
-        durationMin: p.durationMin,
-      }));
-
-      // Rút gọn danh sách ứng viên thông qua Vector Search (Cosine Similarity)
-      const tRetrieval = Date.now();
-      const topRetrieved = await this.embeddingService.retrieveTopPackages(
-        patientEmbeddingText,
-        candidateObjects,
-        20,
-      );
-      const topCandidates = topRetrieved.map((r) => r.package);
-
-      this.logger.log(
-        `[STAGE 3/6: VECTOR RETRIEVAL] 📊 Retrieved Top ${topCandidates.length} candidates in ${Date.now() - tRetrieval}ms. Previews:`,
-      );
-      topRetrieved.slice(0, 3).forEach((r, idx) => {
-        this.logger.log(`   #${idx + 1} [Score: ${r.score.toFixed(3)}] ${r.package.name} (${r.package.specialtyName})`);
-      });
-
-      // TẦNG 3: DEEP CLINICAL RE-RANKING VỚI GEMINI LLM (Chỉ nạp Top 15-20 gói vào prompt)
-      if (this.aiClient) {
-        try {
-          this.logger.log(
-            `[STAGE 4/6: GEMINI LLM RE-RANKING] 🤖 Prompting model "${this.modelName}" with ${topCandidates.length} candidates...`,
-          );
-          aiRecommendedList = await this.evaluateWithGemini({
-            profile: {
-              fullName: profile.fullName,
-              age,
-              gender,
-              bmi,
-              medicalHistory,
-              allergies,
-            },
-            candidates: topCandidates,
-          });
-          if (aiRecommendedList.length > 0) {
-            source = 'AI_GEMINI';
-          }
-        } catch (err: any) {
-          this.logger.warn(`[STAGE 4/6: GEMINI LLM RE-RANKING] ⚠️ Gemini evaluation failed (${err?.message}) -> Falling back to clinical rules`);
-        }
-      }
-
-      if (aiRecommendedList.length === 0) {
-        this.logger.log(`[STAGE 4/6: CLINICAL HEURISTICS] 📋 Running Expert Clinical Rules Fallback...`);
-        aiRecommendedList = this.evaluateWithClinicalHeuristics({
-          age,
-          gender,
-          bmi,
-          medicalHistory,
-          candidates: screeningCandidates.filter((p) => topCandidates.some((tc) => tc.id === p.id)),
+    if (this.aiClient && candidateObjects.length > 0) {
+      try {
+        aiList = await this.evaluateHybridWithGemini({
+          profile: {
+            fullName: profileTower.profile.fullName,
+            age: profileTower.age,
+            gender: profileTower.gender,
+            bmi: profileTower.bmi,
+            medicalHistory: profileTower.medicalHistory,
+            allergies: profileTower.allergies,
+          },
+          behaviorContext: { topSpecialties: 'Không có', lastSearchQuery: 'Không có' },
+          candidates: candidateObjects,
         });
-        this.logger.log(`[STAGE 4/6: CLINICAL HEURISTICS] Matched ${aiRecommendedList.length} packages by rules.`);
-      }
+        if (aiList.length > 0) source = 'AI_GEMINI';
+      } catch {}
     }
 
-    // TỔNG HỢP HYBRID: [Gói Tái khám từ Rule] + [Tất cả gói Tầm soát từ AI]
-    const finalList: RecommendedPackageItemDto[] = [];
-    if (followUpRecommendation) {
-      finalList.push(followUpRecommendation);
-    }
-    for (const item of aiRecommendedList) {
-      // Không giới hạn số lượng — chỉ tránh trùng lặp
-      if (!finalList.some((x) => x.packageId === item.packageId)) {
-        finalList.push(item);
-      }
-    }
-
-    this.logger.log(
-      `[STAGE 5/6: HYBRID AGGREGATION] 🔗 Merged: ${followUpRecommendation ? '1 Follow-up' : '0 Follow-up'} + ${aiRecommendedList.length} Screening = ${finalList.length} Total Packages:`,
-    );
-    finalList.forEach((pkg, idx) => {
-      this.logger.log(
-        `   #${idx + 1} [${pkg.priority}] [${pkg.badge}] ${pkg.name} (${pkg.code}) - ${pkg.price.toLocaleString('vi-VN')} đ | Lý do: ${pkg.clinicalReason}`,
+    if (aiList.length === 0) {
+      aiList = this.evaluateHybridWithHeuristics(
+        profileTower.candidates.map((c) => ({ pkg: c.pkg, origin: 'PROFILE', isFollowUp: c.isFollowUp })),
+        profileTower.profile,
+        profileTower.medicalHistory,
       );
-    });
+    }
 
     const result: ProfileRecommendationResponseDto = {
       profileId,
-      profileName: profile.fullName,
+      profileName: profileTower.profile.fullName,
       updatedAt: new Date().toISOString(),
       source,
-      packages: finalList,
+      packages: aiList,
     };
 
-    // 7. Chỉ lưu vào Redis Cache khi kết quả được phân tích thành công bởi AI_GEMINI (TTL 7 ngày)
-    // Dữ liệu Fallback tuyệt đối KHÔNG lưu cache để các lượt truy cập sau tự động thử lại với Gemini AI
-    if (source === 'AI_GEMINI') {
+    if (source === 'AI_GEMINI' && this.redis.isEnabled()) {
       try {
-        if (this.redis.isEnabled()) {
-          const cacheKey = this.buildCacheKey(profileId);
-          await this.redis.set(cacheKey, result, this.CACHE_TTL_SECONDS);
-          this.logger.log(
-            `[STAGE 6/6: CACHE & PERFORMANCE] 💾 Cached AI recommendations in Redis [key: ${cacheKey}] (TTL: 7 days / ${this.CACHE_TTL_SECONDS}s)`,
-          );
+        await this.redis.set(this.buildCacheKey(profileId), result, this.CACHE_TTL_SECONDS);
+      } catch {}
+    }
+
+    return result;
+  }
+
+  // ===================================================================================
+  // TELEMETRY & TÌM KIẾM
+  // ===================================================================================
+
+  async trackUserBehavior(dto: TrackBehaviorDto, userId?: string): Promise<{ success: boolean }> {
+    let resolvedSpecialtyId = dto.targetSpecialtyId;
+    if (!resolvedSpecialtyId && dto.targetPackageId) {
+      try {
+        const pkg = await this.prisma.servicePackage.findUnique({
+          where: { id: dto.targetPackageId },
+          select: { specialtyId: true },
+        });
+        if (pkg?.specialtyId) resolvedSpecialtyId = pkg.specialtyId;
+      } catch {}
+    }
+
+    if (!this.redis.isEnabled()) return { success: true };
+
+    const keys: string[] = [];
+    if (userId) keys.push(`rec:user_interest:${userId}`);
+    if (dto.sessionId) keys.push(`rec:guest_interest:${dto.sessionId}`);
+
+    const BEHAVIOR_TTL = 14 * 24 * 60 * 60;
+    const MAX_SCORE_CAP = 15;
+
+    for (const key of keys) {
+      try {
+        let delta = 0;
+        if (dto.actionType === TrackingActionType.SEARCH) delta = 5;
+        else if (dto.actionType === TrackingActionType.VIEW_PACKAGE) delta = 3;
+        else if (dto.actionType === TrackingActionType.DROP_OFF) delta = 8;
+
+        if (resolvedSpecialtyId && delta > 0) {
+          const field = `specialty:${resolvedSpecialtyId}`;
+          const client = this.redis.getClient();
+          if (client) {
+            // Atomic Lua Script: Đọc và cộng điểm có chặn trần MAX_SCORE_CAP tránh race condition
+            const luaScript = `
+              local current = tonumber(redis.call('HGET', KEYS[1], ARGV[1]) or '0')
+              local cap = tonumber(ARGV[3])
+              local nextVal = math.min(cap, current + tonumber(ARGV[2]))
+              redis.call('HSET', KEYS[1], ARGV[1], tostring(nextVal))
+              return nextVal
+            `;
+            await client.eval(luaScript, 1, key, field, delta.toString(), MAX_SCORE_CAP.toString());
+          } else {
+            const newScore = await this.redis.hincrby(key, field, delta);
+            if (newScore > MAX_SCORE_CAP) {
+              await this.redis.hset(key, field, MAX_SCORE_CAP.toString());
+            }
+          }
         }
-      } catch (err: any) {
-        this.logger.warn(`Failed to set Redis cache: ${err?.message}`);
-      }
-    } else {
-      this.logger.log(
-        `[STAGE 6/6: CACHE & PERFORMANCE] ⏭️ Skipped Redis cache for RULE_FALLBACK (will retry Gemini AI on next visit)`,
-      );
+
+        if (dto.searchQuery) await this.redis.hset(key, 'last_search_query', dto.searchQuery);
+        if (dto.actionType === TrackingActionType.VIEW_PACKAGE && dto.targetPackageId) {
+          await this.redis.hset(key, 'last_viewed_pkg', dto.targetPackageId);
+        }
+        if (dto.actionType === TrackingActionType.DROP_OFF && dto.targetPackageId) {
+          await this.redis.hset(key, 'drop_off_pkg', dto.targetPackageId);
+        }
+
+        await this.redis.expire(key, BEHAVIOR_TTL);
+      } catch {}
     }
 
-    const totalDuration = Date.now() - t0;
-    this.logger.log(
-      `==================== 🏁 [RECOMMENDATION COMPLETE] Profile: ${profileId} | ${finalList.length} Packages | Time: ${totalDuration}ms | Source: ${source} ====================`,
-    );
+    // Global Aggregate Telemetry for Hospital BI & Analytics
+    try {
+      const client = this.redis.getClient();
+      if (client) {
+        if (dto.searchQuery && dto.searchQuery.trim().length >= 2) {
+          await client.zincrby('rec:global:search_queries', 1, dto.searchQuery.trim().toLowerCase());
+        }
+        if (dto.actionType === TrackingActionType.VIEW_PACKAGE && dto.targetPackageId) {
+          await client.zincrby('rec:global:package_views', 1, dto.targetPackageId);
+        }
+        if (resolvedSpecialtyId) {
+          await client.zincrby('rec:global:specialty_views', 1, resolvedSpecialtyId.toString());
+        }
+      }
+    } catch {}
 
-    return result;
+    // Invalidate cached home recommendations for this user/session so new actions reflect immediately
+    try {
+      if (userId) {
+        await this.redis.deletePattern(`rec:home:u:${userId}:*`);
+      }
+      if (dto.sessionId) {
+        await this.redis.deletePattern(`rec:home:sess:${dto.sessionId}:*`);
+      }
+    } catch {}
+
+    return { success: true };
   }
 
-  /**
-   * Gọi Gemini 2.0 / 1.5 với Structured JSON Schema để chọn ra 2-4 gói khám phù hợp nhất
-   */
-  private async evaluateWithGemini(context: {
-    profile: {
-      fullName: string;
-      age: number;
-      gender: string;
-      bmi: number | null;
-      medicalHistory: string;
-      allergies: string;
-    };
-    candidates: Array<{
-      id: string;
-      name: string;
-      code: string;
-      description: string;
-      price: number;
-      specialtyName: string;
-      specialtyId: number | null;
-      durationMin: number;
-    }>;
-  }): Promise<RecommendedPackageItemDto[]> {
-    if (!this.aiClient) return [];
-
-    const prompt = `
-Bạn là Bác sĩ Trưởng khoa Khám sàng lọc ban đầu. Hãy phân tích hồ sơ bệnh nhân và đề xuất TẤT CẢ các gói khám y tế phù hợp từ danh sách gói khám thực tế được cung cấp để tầm soát và phát hiện sớm các nguy cơ sức khỏe. Không giới hạn số lượng gói — chỉ chọn những gói thực sự phù hợp với tình trạng sức khỏe của bệnh nhân.
-
-THÔNG TIN BỆNH NHÂN:
-- Họ tên: ${context.profile.fullName}
-- Tuổi: ${context.profile.age} tuổi
-- Giới tính: ${context.profile.gender}
-- Chỉ số thể trạng BMI: ${context.profile.bmi ?? 'Chưa ghi nhận'}
-- Tiền sử bệnh lý mạn tính: "${context.profile.medicalHistory || 'Không ghi nhận'}"
-- Tiền sử dị ứng: "${context.profile.allergies || 'Không ghi nhận'}"
-
-DANH MỤC GÓI KHÁM TẦM SOÁT THỰC TẾ ĐANG HOẠT ĐỘNG (toàn bộ danh sách):
-${JSON.stringify(
-      context.candidates.map((c) => ({
-        id: c.id,
-        name: c.name,
-        specialty: c.specialtyName,
-        price: c.price,
-        description: (c.description || '').slice(0, 120),
-      }))
-    )}
-
-QUY TẮC Y KHOA BẮT BUỘC:
-1. Đa chuyên khoa (Comorbidities): Nếu bệnh nhân có nhiều bệnh nền (ví dụ vừa huyết áp, vừa tiểu đường, vừa đau khớp), hãy chọn các gói thuộc các chuyên khoa khác nhau để giải quyết toàn diện.
-2. Xếp hạng ưu tiên (priority):
-   - "HIGH": Gói cấp thiết nhất tương ứng với bệnh lý chính hoặc nguy cơ cao nhất.
-   - "MEDIUM": Gói tầm soát các nguy cơ thứ hai hoặc theo độ tuổi/thể trạng.
-   - "LOW": Gói chăm sóc định kỳ bổ trợ.
-3. Huy hiệu nhãn (badge): Đặt ngắn gọn như "Khám sàng lọc ban đầu" hoặc "Tầm soát định kỳ" hoặc "Theo dõi [Tên bệnh]".
-4. Lý do lâm sàng (clinicalReason): Viết ngắn gọn 1-2 câu giải thích vì sao gói này phù hợp dựa trên tiền sử/thể trạng thực tế của bệnh nhân.
-5. Chỉ chọn các ID có thật trong danh sách được cung cấp. Không tự bịa ra gói khám mới.
-`;
-
-    const tGemini = Date.now();
-    const response = await this.aiClient.models.generateContent({
-      model: this.modelName,
-      contents: prompt,
-      config: {
-        temperature: 0.2,
-        responseMimeType: 'application/json',
-        responseSchema: {
-          type: Type.OBJECT,
-          properties: {
-            selectedPackages: {
-              type: Type.ARRAY,
-              items: {
-                type: Type.OBJECT,
-                properties: {
-                  packageId: { type: Type.STRING },
-                  priority: { type: Type.STRING },
-                  badge: { type: Type.STRING },
-                  clinicalReason: { type: Type.STRING },
-                },
-                required: ['packageId', 'priority', 'badge', 'clinicalReason'],
-              },
-            },
-          },
-          required: ['selectedPackages'],
-        },
-      },
-    });
-
-    const geminiDuration = Date.now() - tGemini;
-    const parsed = JSON.parse(response.text || '{}');
-    const selections = Array.isArray(parsed.selectedPackages) ? parsed.selectedPackages : [];
-
-    this.logger.log(
-      `[STAGE 4/6: GEMINI LLM RE-RANKING] ✨ Gemini completed in ${geminiDuration}ms. Model selected ${selections.length} packages:`,
-    );
-    selections.forEach((sel) => {
-      this.logger.log(`   • [${sel.priority}] [${sel.badge}] PkgID: ${sel.packageId} -> "${sel.clinicalReason}"`);
-    });
-
-    const result: RecommendedPackageItemDto[] = [];
-    for (const sel of selections) {
-      const match = context.candidates.find((c) => c.id === sel.packageId);
-      if (match) {
-        result.push({
-          packageId: match.id,
-          code: match.code,
-          name: match.name,
-          price: match.price,
-          durationMin: match.durationMin,
-          specialtyId: match.specialtyId,
-          specialtyName: match.specialtyName,
-          priority: ['HIGH', 'MEDIUM', 'LOW'].includes(sel.priority) ? sel.priority : 'MEDIUM',
-          badge: sel.badge || 'Khuyến nghị chuyên khoa',
-          clinicalReason: sel.clinicalReason || 'Phù hợp với thể trạng và hồ sơ bệnh nhân',
-        });
-      }
-    }
-
-    return result;
-  }
-
-  /**
-   * Bộ luật chuyên gia lâm sàng (Clinical Heuristics) chạy dự phòng khi không có AI
-   */
-  private evaluateWithClinicalHeuristics(context: {
-    age: number;
-    gender: string;
-    bmi: number | null;
-    medicalHistory: string;
-    candidates: any[];
-  }): RecommendedPackageItemDto[] {
-    const medHistory = context.medicalHistory.toLowerCase();
-    const isFemale = context.gender === 'FEMALE' || context.gender === 'NỮ';
-    const isElderly = context.age >= 55;
-    const bmiHigh = context.bmi !== null && context.bmi >= 25;
-
-    const list: RecommendedPackageItemDto[] = [];
-    const usedIds = new Set<string>();
-
-    // 1. Tim mạch / Huyết áp
-    if (
-      medHistory.includes('huyết áp') ||
-      medHistory.includes('tim mạch') ||
-      medHistory.includes('mỡ máu') ||
-      medHistory.includes('cholesterol') ||
-      medHistory.includes('đột quỵ')
-    ) {
-      const p = context.candidates.find(
-        (c) =>
-          !usedIds.has(c.id) &&
-          (c.code === 'PKG-CARDIO-SCREENING' ||
-            c.name.toLowerCase().includes('tim mạch') ||
-            c.specialty?.name.toLowerCase().includes('tim mạch'))
-      );
-      if (p) {
-        usedIds.add(p.id);
-        list.push({
-          packageId: p.id,
-          code: p.code,
-          name: p.name,
-          price: Number(p.price),
-          durationMin: p.durationMin,
-          specialtyId: p.specialtyId,
-          specialtyName: p.specialty?.name || 'Tim mạch',
-          priority: 'HIGH',
-          badge: 'Khám sàng lọc ban đầu',
-          clinicalReason: context.medicalHistory
-            ? `Tiền sử: ${context.medicalHistory} · Khuyến nghị đo điện tim ECG & siêu âm tim`
-            : 'Khuyến nghị đánh giá nguy cơ tim mạch & chức năng tuần hoàn',
-        });
-      }
-    }
-
-    // 2. Nội tiết / Tiểu đường / BMI cao
-    if (medHistory.includes('đái tháo đường') || medHistory.includes('tiểu đường') || bmiHigh) {
-      const p = context.candidates.find(
-        (c) =>
-          !usedIds.has(c.id) &&
-          (c.name.toLowerCase().includes('đường') ||
-            c.name.toLowerCase().includes('chuyển hóa') ||
-            c.code === 'PKG-GENERAL-BASIC' ||
-            c.name.toLowerCase().includes('tổng quát'))
-      );
-      if (p) {
-        usedIds.add(p.id);
-        list.push({
-          packageId: p.id,
-          code: p.code,
-          name: p.name,
-          price: Number(p.price),
-          durationMin: p.durationMin,
-          specialtyId: p.specialtyId,
-          specialtyName: p.specialty?.name || 'Nội tiết - Chuyển hóa',
-          priority: list.length === 0 ? 'HIGH' : 'MEDIUM',
-          badge: bmiHigh ? 'Theo dõi Chuyển hóa & BMI' : 'Khám sàng lọc ban đầu',
-          clinicalReason: bmiHigh
-            ? `Chỉ số BMI ${context.bmi} (thừa cân) · Khuyến nghị xét nghiệm đường huyết và mỡ máu`
-            : 'Khuyến nghị theo dõi chỉ số đường huyết định kỳ',
-        });
-      }
-    }
-
-    // 3. Nữ giới / Phụ khoa
-    if (isFemale) {
-      const p = context.candidates.find(
-        (c) =>
-          !usedIds.has(c.id) &&
-          (c.code === 'PKG-WOMEN-WELLNESS' ||
-            c.name.toLowerCase().includes('nữ') ||
-            c.specialty?.name.toLowerCase().includes('sản'))
-      );
-      if (p) {
-        usedIds.add(p.id);
-        list.push({
-          packageId: p.id,
-          code: p.code,
-          name: p.name,
-          price: Number(p.price),
-          durationMin: p.durationMin,
-          specialtyId: p.specialtyId,
-          specialtyName: p.specialty?.name || 'Sản - Phụ khoa',
-          priority: list.length === 0 ? 'HIGH' : 'MEDIUM',
-          badge: 'Chăm sóc Sức khỏe Nữ',
-          clinicalReason: 'Khuyến nghị kiểm tra định kỳ sức khỏe phụ khoa & tầm soát chuyên sâu hàng năm',
-        });
-      }
-    }
-
-    // 4. Mắt hoặc Người cao tuổi
-    if (isElderly || medHistory.includes('mắt') || medHistory.includes('thị lực')) {
-      const p = context.candidates.find(
-        (c) =>
-          !usedIds.has(c.id) &&
-          (c.code.includes('EYE') ||
-            c.name.toLowerCase().includes('mắt') ||
-            c.specialty?.name.toLowerCase().includes('mắt'))
-      );
-      if (p) {
-        usedIds.add(p.id);
-        list.push({
-          packageId: p.id,
-          code: p.code,
-          name: p.name,
-          price: Number(p.price),
-          durationMin: p.durationMin,
-          specialtyId: p.specialtyId,
-          specialtyName: p.specialty?.name || 'Mắt',
-          priority: 'LOW',
-          badge: 'Chăm sóc Thị lực',
-          clinicalReason: 'Khuyến nghị kiểm tra thị lực và tầm soát đáy mắt định kỳ',
-        });
-      }
-    }
-
-    // 5. Gói tổng quát nếu chưa đủ 2 gói
-    if (list.length < 2) {
-      const p = context.candidates.find(
-        (c) =>
-          !usedIds.has(c.id) &&
-          (c.code === 'PKG-GENERAL-BASIC' || c.name.toLowerCase().includes('tổng quát'))
-      );
-      if (p) {
-        usedIds.add(p.id);
-        list.push({
-          packageId: p.id,
-          code: p.code,
-          name: p.name,
-          price: Number(p.price),
-          durationMin: p.durationMin,
-          specialtyId: p.specialtyId,
-          specialtyName: p.specialty?.name || 'Đa khoa',
-          priority: list.length === 0 ? 'HIGH' : 'LOW',
-          badge: 'Khám Tổng Quát Định Kỳ',
-          clinicalReason: 'Khuyến nghị kiểm tra định kỳ sức khỏe toàn diện mỗi 6 đến 12 tháng',
-        });
-      }
-    }
-
-    // Nếu vẫn rỗng, lấy gói đầu tiên có sẵn
-    if (list.length === 0 && context.candidates.length > 0) {
-      const p = context.candidates[0];
-      list.push({
-        packageId: p.id,
-        code: p.code,
-        name: p.name,
-        price: Number(p.price),
-        durationMin: p.durationMin,
-        specialtyId: p.specialtyId,
-        specialtyName: p.specialty?.name || 'Đa khoa',
-        priority: 'HIGH',
-        badge: 'Khám Tổng Quát Định Kỳ',
-        clinicalReason: 'Khuyến nghị kiểm tra định kỳ sức khỏe toàn diện',
-      });
-    }
-
-    return list;
-  }
-
-  /**
-   * Kiểm tra gói khám có phù hợp với giới tính bệnh nhân không (Tránh tuyệt đối nam gợi ý phụ khoa)
-   */
-  private isPackageAppropriateForGender(name: string, description: string, gender: string): boolean {
-    const text = `${name} ${description}`.toLowerCase();
-    const g = (gender || '').toUpperCase();
-    if (g === 'MALE') {
-      const femaleKeywords = [
-        'phụ khoa', 'thai sản', 'cổ tử cung', 'buồng trứng', 'mang thai',
-        'tiền hôn nhân nữ', 'ung thư vú', 'khám thai', 'sinh sản nữ', 'nữ giới'
-      ];
-      if (femaleKeywords.some((kw) => text.includes(kw))) return false;
-    } else if (g === 'FEMALE') {
-      const maleKeywords = [
-        'nam khoa', 'tuyến tiền liệt', 'sinh sản nam', 'tiền hôn nhân nam', 'sức khỏe nam giới', 'nam giới'
-      ];
-      if (maleKeywords.some((kw) => text.includes(kw))) return false;
-    }
-    return true;
-  }
-
-  /**
-   * Kiểm tra gói khám có phù hợp với độ tuổi bệnh nhân không (Tránh nhầm Nhi khoa và Lão khoa)
-   */
-  private isPackageAppropriateForAge(name: string, description: string, age: number): boolean {
-    const text = `${name} ${description}`.toLowerCase();
-    if (age >= 18) {
-      const pediatricsKeywords = ['nhi khoa', 'sơ sinh', 'trẻ em', 'tiêm chủng trẻ em', 'tầm soát dị tật sơ sinh'];
-      if (pediatricsKeywords.some((kw) => text.includes(kw))) return false;
-    } else if (age < 16) {
-      const adultKeywords = ['lão khoa', 'tiền mãn kinh', 'mãn kinh', 'tuyến tiền liệt', 'tiền hôn nhân'];
-      if (adultKeywords.some((kw) => text.includes(kw))) return false;
-    }
-    return true;
-  }
-
-  /**
-   * Tìm kiếm gói khám bằng Ngôn ngữ tự nhiên / Triệu chứng (Semantic Natural Language Search)
-   */
-  async semanticSearchPackages(query: string, branchId?: string): Promise<{
-    query: string;
-    total: number;
-    packages: Array<{
-      id: string;
-      code: string;
-      name: string;
-      price: number;
-      durationMin: number;
-      specialtyName: string;
-      similarityScore: number;
-      description: string;
-    }>;
-    doctors: Array<{
-      id: string;
-      fullName: string;
-      academicRank: string;
-      specialties: string[];
-      experienceYears: number;
-      avatarUrl?: string | null;
-      ratingAverage: number;
-    }>;
-    branches: Array<{
-      id: string;
-      code: string;
-      name: string;
-      address: string;
-      phoneNumber?: string;
-    }>;
-  }> {
-    if (!query || !query.trim()) {
-      return { query: '', total: 0, packages: [], doctors: [], branches: [] };
-    }
-
+  async semanticSearchPackages(query: string, branchId?: string) {
+    if (!query || !query.trim()) return { query: '', total: 0, packages: [], doctors: [], branches: [] };
     const q = query.trim();
 
-    // Chạy song song: 1. Gói khám (Vector Retrieval), 2. Bác sĩ (Direct DB), 3. Cơ sở y tế (Direct DB)
-    const [packageResults, matchedDoctors, matchedBranches] = await Promise.all([
+    const [packages, matchedDoctors, matchedBranches] = await Promise.all([
       (async () => {
-        const packages = await this.prisma.servicePackage.findMany({
+        const pkgs = await this.prisma.servicePackage.findMany({
           where: {
             isActive: true,
             ...(branchId ? { branchBookingMethod: { branchId, isEnabled: true } } : {}),
           },
-          include: {
-            specialty: { select: { id: true, name: true } },
-          },
+          include: { specialty: { select: { id: true, name: true } } },
           orderBy: { price: 'asc' },
         });
 
-        const mapped: PackageForRetrieval[] = packages.map((p) => ({
+        const mapped: PackageForRetrieval[] = pkgs.map((p) => ({
           id: p.id,
           code: p.code,
           name: p.name,
@@ -875,7 +706,6 @@ QUY TẮC Y KHOA BẮT BUỘC:
         }));
       })(),
 
-      // Truy vấn trực tiếp PostgreSQL tìm Bác sĩ theo Tên, Học vị hoặc Chuyên khoa
       this.prisma.doctor.findMany({
         where: {
           isActive: true,
@@ -892,94 +722,385 @@ QUY TẮC Y KHOA BẮT BUỘC:
         },
       }),
 
-      // Truy vấn trực tiếp PostgreSQL tìm Chi nhánh theo Tên hoặc Địa chỉ
       this.prisma.branch.findMany({
         where: {
           isActive: true,
-          OR: [
-            { name: { contains: q, mode: 'insensitive' } },
-            { address: { contains: q, mode: 'insensitive' } },
-          ],
+          OR: [{ name: { contains: q, mode: 'insensitive' } }, { address: { contains: q, mode: 'insensitive' } }],
         },
         take: 3,
-        select: {
-          id: true,
-          code: true,
-          name: true,
-          address: true,
-          phoneNumber: true,
-        },
+        select: { id: true, code: true, name: true, address: true, phoneNumber: true },
       }),
     ]);
 
-    const formattedDoctors = matchedDoctors.map((doc) => ({
-      id: doc.id,
-      fullName: doc.user?.fullName || 'Bác sĩ',
-      academicRank: doc.academicRank || 'Bác sĩ',
-      specialties: doc.specialties.map((s) => s.specialty?.name).filter(Boolean) as string[],
-      experienceYears: doc.experienceYears || 0,
-      avatarUrl: doc.avatarUrl || null,
-      ratingAverage: doc.ratingAverage || 5.0,
-    }));
-
-    const formattedBranches = matchedBranches.map((b) => ({
-      id: b.id,
-      code: b.code,
-      name: b.name,
-      address: b.address || '',
-      phoneNumber: b.phoneNumber || '',
-    }));
-
-    return {
+    const finalResult = {
       query: q,
-      total: packageResults.length + formattedDoctors.length + formattedBranches.length,
-      packages: packageResults,
-      doctors: formattedDoctors,
-      branches: formattedBranches,
+      total: packages.length + matchedDoctors.length + matchedBranches.length,
+      packages,
+      doctors: matchedDoctors.map((doc) => ({
+        id: doc.id,
+        fullName: doc.user?.fullName || 'Bác sĩ',
+        academicRank: doc.academicRank || 'Bác sĩ',
+        specialties: doc.specialties.map((s) => s.specialty?.name).filter(Boolean) as string[],
+        experienceYears: doc.experienceYears || 0,
+        avatarUrl: doc.avatarUrl || null,
+        ratingAverage: doc.ratingAverage || 5.0,
+      })),
+      branches: matchedBranches,
     };
+
+    // Telemetry: Lưu từ khóa và cờ hasResults vào Redis
+    try {
+      const client = this.redis.getClient();
+      if (client && q.length >= 2) {
+        const normalizedQ = q.toLowerCase();
+        if (packages.length > 0) {
+          await client.zincrby('rec:global:search_queries', 1, normalizedQ);
+        } else {
+          await client.zincrby('rec:global:unmatched_queries', 1, normalizedQ);
+        }
+      }
+    } catch {}
+
+    return finalResult;
   }
 
-  /**
-   * AI tự động phân tích tên gói / chuyên khoa để gợi ý danh sách triệu chứng liên quan
-   */
   async suggestSymptomsForPackage(name: string, specialtyName?: string): Promise<{ symptoms: string[] }> {
     if (!name?.trim()) return { symptoms: [] };
-
     if (this.aiClient) {
       try {
         const prompt = `Bạn là trợ lý y khoa AI của phòng khám VitaCare.
-Hãy phân tích dịch vụ / gói khám sau:
-- Tên dịch vụ: "${name.trim()}"
-- Chuyên khoa: "${specialtyName?.trim() || 'Đa khoa'}"
-
-Hãy liệt kê 10-15 triệu chứng lâm sàng phổ biến nhất mà người bệnh thường gặp khi cần đăng ký khám gói này.
-Bao gồm cả thuật ngữ y học và ngôn ngữ đời sống, khẩu ngữ dân gian thường dùng của người dân Việt Nam (ví dụ: mắc ói, buồn nôn, đau dạ dày, tức ngực, lừ đừ, nhức đầu, chóng mặt, hoa mắt,...).
-Chỉ trả về duy nhất 1 JSON array các chuỗi string ngắn gọn, không có giải thích hay markdown code block:
-["triệu chứng 1", "triệu chứng 2", ...]`;
-
-        const response = await this.aiClient.models.generateContent({
+Hãy phân tích dịch vụ / gói khám: "${name.trim()}" (Chuyên khoa: "${specialtyName?.trim() || 'Đa khoa'}").
+Liệt kê 10-15 triệu chứng lâm sàng phổ biến nhất bằng JSON array các chuỗi string ngắn gọn: ["triệu chứng 1", "triệu chứng 2", ...]`;
+        const res = await this.aiClient.models.generateContent({
           model: this.modelName || 'gemini-2.5-flash',
           contents: prompt,
         });
+        let raw = res.text?.trim() || '[]';
+        if (raw.startsWith('```')) raw = raw.replace(/^```json/i, '').replace(/^```/, '').replace(/```$/, '').trim();
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed)) {
+          return { symptoms: [...new Set(parsed.map((s: any) => String(s).trim().toLowerCase()))] };
+        }
+      } catch {}
+    }
+    return { symptoms: [] };
+  }
 
-        let rawText = response.text?.trim() || '[]';
-        if (rawText.startsWith('```')) {
-          rawText = rawText.replace(/^```json/i, '').replace(/^```/, '').replace(/```$/, '').trim();
+  // ===================================================================================
+  // HELPER METHODS: GEMINI EVALUATION & HEURISTICS
+  // ===================================================================================
+
+  private async evaluateHybridWithGemini(context: {
+    profile: {
+      fullName: string;
+      age: number;
+      gender: string;
+      bmi: number | null;
+      medicalHistory: string;
+      allergies: string;
+    } | null;
+    behaviorContext: {
+      topSpecialties: string;
+      lastSearchQuery: string;
+      dropOffPkgName?: string;
+    };
+    candidates: Array<{
+      id: string;
+      name: string;
+      code: string;
+      slug?: string;
+      description: string;
+      price: number;
+      specialtyName: string;
+      specialtyId: number | null;
+      durationMin: number;
+      origin: string;
+      behaviorSourceType?: string;
+    }>;
+  }): Promise<RecommendedPackageItemDto[]> {
+    if (!this.aiClient) return [];
+
+    const prompt = `
+Bạn là Bác sĩ Trưởng Hội đồng Khám sàng lọc & Y học Dự phòng tại VitaCare Clinic.
+Hãy đánh giá hồ sơ bệnh nhân và hành vi quan tâm gần đây để Re-rank và chọn ra từ 4 đến 6 gói khám y tế tối ưu nhất từ danh sách ứng viên được cung cấp.
+
+THÔNG TIN BỆNH NHÂN:
+${context.profile ? `
+- Họ tên: ${context.profile.fullName}
+- Tuổi: ${context.profile.age} tuổi
+- Giới tính: ${context.profile.gender}
+- Chỉ số BMI: ${context.profile.bmi ?? 'Chưa ghi nhận'}
+- Tiền sử bệnh án mạn tính: "${context.profile.medicalHistory || 'Không ghi nhận'}"
+- Tiền sử dị ứng: "${context.profile.allergies || 'Không ghi nhận'}"
+` : 'Khách vãng lai (Chưa đăng nhập / Chưa chọn hồ sơ).'}
+
+NGỮ CẢNH HÀNH VI TƯƠNG TÁC TỨC THỜI:
+- Chuyên khoa có điểm quan tâm cao: ${context.behaviorContext.topSpecialties}
+- Từ khóa tìm kiếm triệu chứng gần nhất: "${context.behaviorContext.lastSearchQuery}"
+${context.behaviorContext.dropOffPkgName ? `- Gói khám từng quan tâm/bỏ dở: "${context.behaviorContext.dropOffPkgName}"` : ''}
+
+DANH SÁCH GÓI KHÁM ỨNG VIÊN (${context.candidates.length} gói):
+${JSON.stringify(
+  context.candidates.map((c) => ({
+    id: c.id,
+    name: c.name,
+    specialty: c.specialtyName,
+    price: c.price,
+    origin: c.origin,
+    behaviorSourceType: c.behaviorSourceType || 'NONE',
+    description: (c.description || '').slice(0, 100),
+  }))
+)}
+
+QUY TẮC RE-RANKING:
+1. SỐ LƯỢNG KẾT QUẢ: Chọn ra từ 4 đến 6 gói khám phù hợp nhất.
+2. NGUYÊN TẮC ĐỀ XUẤT:
+   - Nếu CÓ HỒ SƠ: Ưu tiên theo tiền sử/bệnh nền, tuổi tác và giới tính của hồ sơ.
+   - Nếu LÀ HÀNH VI/KHÁCH VÃNG LAI: Ưu tiên theo mối quan tâm chuyên khoa, từ khóa tìm kiếm và các gói vừa quan tâm gần đây.
+3. PHÂN LOẠI NGUỒN GỢI Ý (sourceType): "DROP_OFF" | "SEARCH_INTENT" | "RECENT_VIEW" | "PROFILE_AI" | "POPULAR".
+4. MỨC ĐỘ ƯU TIÊN (priority): "HIGH" | "MEDIUM" | "LOW".
+5. NHÃN (badge): Ngắn gọn 2-4 từ (Ví dụ: "Theo hồ sơ bệnh án", "Nhu cầu vừa tìm", "Quan tâm gần đây", "Tầm soát định kỳ").
+6. LÝ DO ĐỀ XUẤT (clinicalReason): Viết 1-2 câu giải thích chuyên môn y khoa sâu sắc:
+   - Khi có hồ sơ: Nêu rõ căn cứ theo độ tuổi và tiền sử bệnh của bệnh nhân.
+   - Khi theo hành vi: Giải thích dựa trên nhu cầu tìm kiếm và chuyên khoa người dùng vừa quan tâm gần đây.
+`;
+
+    const response = await this.aiClient.models.generateContent({
+      model: this.modelName,
+      contents: prompt,
+      config: {
+        temperature: 0.2,
+        responseMimeType: 'application/json',
+        responseSchema: {
+          type: Type.OBJECT,
+          properties: {
+            selectedPackages: {
+              type: Type.ARRAY,
+              items: {
+                type: Type.OBJECT,
+                properties: {
+                  packageId: { type: Type.STRING },
+                  priority: { type: Type.STRING },
+                  badge: { type: Type.STRING },
+                  clinicalReason: { type: Type.STRING },
+                  sourceType: { type: Type.STRING },
+                },
+                required: ['packageId', 'priority', 'badge', 'clinicalReason'],
+              },
+            },
+          },
+          required: ['selectedPackages'],
+        },
+      },
+    });
+
+    const parsed = JSON.parse(response.text || '{}');
+    const selections = Array.isArray(parsed.selectedPackages) ? parsed.selectedPackages : [];
+
+    const result: RecommendedPackageItemDto[] = [];
+    for (const sel of selections) {
+      const match = context.candidates.find((c) => c.id === sel.packageId);
+      if (match && !result.some((r) => r.packageId === match.id)) {
+        let finalSourceType: 'DROP_OFF' | 'SEARCH_INTENT' | 'RECENT_VIEW' | 'PROFILE_AI' | 'POPULAR' = 'PROFILE_AI';
+        if (['DROP_OFF', 'SEARCH_INTENT', 'RECENT_VIEW', 'PROFILE_AI', 'POPULAR'].includes(sel.sourceType)) {
+          finalSourceType = sel.sourceType;
+        } else if (match.behaviorSourceType) {
+          finalSourceType = match.behaviorSourceType as any;
+        } else if (match.origin === 'PROFILE') {
+          finalSourceType = 'PROFILE_AI';
+        } else {
+          finalSourceType = 'POPULAR';
         }
 
-        const parsed = JSON.parse(rawText);
-        if (Array.isArray(parsed) && parsed.length > 0) {
-          const cleanSymptoms = parsed
-            .map((s: any) => String(s).trim().toLowerCase())
-            .filter((s: string) => s.length > 1 && s.length < 50);
-          return { symptoms: [...new Set(cleanSymptoms)] };
-        }
-      } catch (err: any) {
-        this.logger.warn(`Failed to generate AI symptoms for "${name}": ${err?.message}`);
+        result.push({
+          packageId: match.id,
+          code: match.code,
+          slug: match.slug || undefined,
+          name: match.name,
+          price: match.price,
+          durationMin: match.durationMin,
+          specialtyId: match.specialtyId,
+          specialtyName: match.specialtyName,
+          priority: ['HIGH', 'MEDIUM', 'LOW'].includes(sel.priority) ? sel.priority : 'MEDIUM',
+          badge: sel.badge || (finalSourceType === 'SEARCH_INTENT' ? 'Phù hợp tìm kiếm' : 'Đề xuất chuyên khoa'),
+          clinicalReason: sel.clinicalReason || 'Phù hợp với nhu cầu tầm soát và thể trạng sức khỏe.',
+          sourceType: finalSourceType,
+        });
       }
     }
 
-    return { symptoms: [] };
+    return result;
+  }
+
+  private evaluateHybridWithHeuristics(
+    candidatePool: Array<{ pkg: any; origin: string; behaviorSourceType?: string; isFollowUp?: boolean }>,
+    profile: any,
+    medicalHistory: string,
+  ): RecommendedPackageItemDto[] {
+    const list: RecommendedPackageItemDto[] = [];
+    const usedIds = new Set<string>();
+
+    for (const item of candidatePool) {
+      if (usedIds.has(item.pkg.id)) continue;
+      usedIds.add(item.pkg.id);
+
+      let priority: RecommendationPriority = 'MEDIUM';
+      let badge = 'Đề xuất y khoa';
+      let reason = 'Gói khám tiêu biểu được hội đồng y khoa VitaCare khuyến nghị thực hiện.';
+      let sourceType: 'DROP_OFF' | 'SEARCH_INTENT' | 'RECENT_VIEW' | 'PROFILE_AI' | 'POPULAR' = 'POPULAR';
+
+      if (item.isFollowUp) {
+        priority = 'HIGH';
+        badge = 'Tái khám theo hẹn';
+        reason = 'Khuyến nghị tái khám định kỳ để đánh giá đáp ứng điều trị.';
+        sourceType = 'PROFILE_AI';
+      } else if (item.origin === 'BEHAVIOR') {
+        if (item.behaviorSourceType === 'DROP_OFF') {
+          priority = 'HIGH';
+          badge = 'Tiếp tục đăng ký';
+          reason = 'Gói khám bạn đang quan tâm đặt lịch gần đây.';
+          sourceType = 'DROP_OFF';
+        } else if (item.behaviorSourceType === 'SEARCH_INTENT') {
+          priority = 'HIGH';
+          badge = 'Phù hợp tìm kiếm';
+          reason = 'Gói khám tương ứng với triệu chứng bạn vừa tìm kiếm.';
+          sourceType = 'SEARCH_INTENT';
+        } else {
+          priority = 'MEDIUM';
+          badge = 'Quan tâm gần đây';
+          reason = 'Dựa trên mối quan tâm chuyên khoa gần đây của bạn.';
+          sourceType = 'RECENT_VIEW';
+        }
+      } else if (item.origin === 'PROFILE') {
+        priority = list.length === 0 ? 'HIGH' : 'MEDIUM';
+        badge = 'Khám sàng lọc ban đầu';
+        reason = medicalHistory
+          ? `Phù hợp tiền sử: ${medicalHistory} · Khuyến nghị tầm soát chuyên sâu.`
+          : 'Khuyến nghị tầm soát và đánh giá sức khỏe chuyên khoa định kỳ.';
+        sourceType = 'PROFILE_AI';
+      }
+
+      list.push({
+        packageId: item.pkg.id,
+        code: item.pkg.code,
+        slug: item.pkg.slug || undefined,
+        name: item.pkg.name,
+        price: Number(item.pkg.price),
+        durationMin: item.pkg.durationMin,
+        specialtyId: item.pkg.specialtyId,
+        specialtyName: item.pkg.specialty?.name || 'Đa khoa',
+        priority,
+        badge,
+        clinicalReason: reason,
+        sourceType,
+      });
+
+      if (list.length >= 6) break;
+    }
+
+    return list;
+  }
+
+  private async getBehaviorTelemetryContext(
+    userId?: string,
+    sessionId?: string,
+  ): Promise<{
+    topSpecialties: Array<{ specialtyId: number; specialtyName: string; score: number }>;
+    lastSearchQuery?: string;
+    dropOffPkgId?: string;
+  }> {
+    if (!this.redis.isEnabled() || (!userId && !sessionId)) {
+      return { topSpecialties: [] };
+    }
+
+    const keys: string[] = [];
+    if (userId) keys.push(`rec:user_interest:${userId}`);
+    if (sessionId) keys.push(`rec:guest_interest:${sessionId}`);
+
+    const specialtyScoreMap = new Map<number, number>();
+    let lastSearchQuery: string | undefined;
+    let dropOffPkgId: string | undefined;
+
+    for (const key of keys) {
+      try {
+        const hashData = (await this.redis.hgetall(key)) as Record<string, string> | null;
+        if (!hashData || typeof hashData !== 'object') continue;
+
+        for (const [field, val] of Object.entries(hashData)) {
+          if (field.startsWith('specialty:')) {
+            const specId = parseInt(field.replace('specialty:', ''), 10);
+            const score = parseInt(String(val), 10) || 0;
+            if (!isNaN(specId) && score > 0) {
+              specialtyScoreMap.set(specId, Math.max(specialtyScoreMap.get(specId) || 0, score));
+            }
+          } else if (field === 'last_search_query' && val) {
+            lastSearchQuery = String(val);
+          } else if (field === 'drop_off_pkg' && val) {
+            dropOffPkgId = String(val);
+          }
+        }
+      } catch {}
+    }
+
+    const topSpecialties: Array<{ specialtyId: number; specialtyName: string; score: number }> = [];
+    if (specialtyScoreMap.size > 0) {
+      const specIds = Array.from(specialtyScoreMap.keys());
+      const specialtiesDb = await this.prisma.specialty.findMany({
+        where: { id: { in: specIds } },
+        select: { id: true, name: true },
+      });
+
+      for (const spec of specialtiesDb) {
+        topSpecialties.push({
+          specialtyId: spec.id,
+          specialtyName: spec.name,
+          score: specialtyScoreMap.get(spec.id) || 0,
+        });
+      }
+      topSpecialties.sort((a, b) => b.score - a.score);
+    }
+
+    return { topSpecialties, lastSearchQuery, dropOffPkgId };
+  }
+
+  private isPackageAppropriateForGender(name: string, description: string, gender: string): boolean {
+    const text = `${name} ${description}`.toLowerCase();
+    const g = (gender || '').toUpperCase();
+    if (g === 'MALE') {
+      const femaleKeywords = ['phụ khoa', 'thai sản', 'cổ tử cung', 'buồng trứng', 'mang thai', 'tiền hôn nhân nữ', 'ung thư vú', 'khám thai', 'sinh sản nữ', 'nữ giới'];
+      if (femaleKeywords.some((kw) => text.includes(kw))) return false;
+    } else if (g === 'FEMALE') {
+      const maleKeywords = ['nam khoa', 'tuyến tiền liệt', 'sinh sản nam', 'tiền hôn nhân nam', 'sức khỏe nam giới', 'nam giới'];
+      if (maleKeywords.some((kw) => text.includes(kw))) return false;
+    }
+    return true;
+  }
+
+  private isPackageAppropriateForAge(name: string, description: string, age: number): boolean {
+    const text = `${name} ${description}`.toLowerCase();
+    if (age >= 18) {
+      const pediatricsKeywords = ['nhi khoa', 'sơ sinh', 'trẻ em', 'tiêm chủng trẻ em'];
+      if (pediatricsKeywords.some((kw) => text.includes(kw))) return false;
+    } else if (age < 16) {
+      const adultKeywords = ['lão khoa', 'tiền mãn kinh', 'mãn kinh', 'tuyến tiền liệt', 'tiền hôn nhân'];
+      if (adultKeywords.some((kw) => text.includes(kw))) return false;
+    }
+    return true;
+  }
+
+  private buildHomeCacheKey(params: { userId?: string; sessionId?: string; profileId?: string; branchId?: string }): string {
+    const b = params.branchId || 'all';
+    if (params.userId) {
+      const p = params.profileId || 'noprofile';
+      return `rec:home:u:${params.userId}:${p}:${b}`;
+    }
+    if (params.profileId) {
+      return `rec:home:prof:${params.profileId}:${b}`;
+    }
+    if (params.sessionId) {
+      return `rec:home:sess:${params.sessionId}:${b}`;
+    }
+    return `rec:home:generic:${b}`;
   }
 
   private buildCacheKey(profileId: string): string {

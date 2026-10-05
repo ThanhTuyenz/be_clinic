@@ -110,13 +110,14 @@ export class StaffAppointmentsService {
         })),
       } : null,
       payment: invoice ? {
-        status: invoice.status === 'PAID' ? 'paid' : 'unpaid',
+        status: invoice.status === 'PAID' ? 'paid' : (invoice.status === 'REFUNDED' ? 'refunded' : 'unpaid'),
         paid: invoice.status === 'PAID',
         amount: Number(invoice.totalAmount),
         method: payment?.method?.toLowerCase(),
         provider: payment?.provider,
         transactionId: payment?.providerTransactionId,
         paidAt: invoice.paidAt,
+        refundBank: (payment as any)?.rawPayload?.refundBank || null,
       } : null,
       medicalVisit: null,
     }
@@ -147,7 +148,7 @@ export class StaffAppointmentsService {
               totalAmount: true,
               status: true,
               paidAt: true,
-              payments: { orderBy: { createdAt: 'desc' as const }, take: 1, select: { method: true, provider: true, providerTransactionId: true, paidAt: true } },
+              payments: { orderBy: { createdAt: 'desc' as const }, take: 1, select: { method: true, provider: true, providerTransactionId: true, paidAt: true, rawPayload: true } },
             },
           },
         },
@@ -193,7 +194,7 @@ export class StaffAppointmentsService {
           totalAmount: true,
           status: true,
           paidAt: true,
-          payments: { orderBy: { createdAt: 'desc' as const }, take: 1, select: { method: true, provider: true, providerTransactionId: true, paidAt: true } },
+          payments: { orderBy: { createdAt: 'desc' as const }, take: 1, select: { method: true, provider: true, providerTransactionId: true, paidAt: true, rawPayload: true } },
         },
       },
       statusHistories: {

@@ -62,6 +62,21 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
     await this.client.del(...keys);
   }
 
+  async deletePattern(pattern: string): Promise<void> {
+    if (!this.client) return;
+    try {
+      const prefix = this.config().keyPrefix || '';
+      const fullPattern = prefix ? `${prefix}${pattern}` : pattern;
+      const keys = await this.client.keys(fullPattern);
+      if (keys.length > 0) {
+        const cleanKeys = prefix ? keys.map((k) => (k.startsWith(prefix) ? k.slice(prefix.length) : k)) : keys;
+        await this.client.del(...cleanKeys);
+      }
+    } catch (err: any) {
+      this.logger.warn(`Failed to delete keys matching pattern ${pattern}: ${err?.message}`);
+    }
+  }
+
   async acquireLock(key: string, ttlMs: number): Promise<string | null> {
     if (!this.client) return null;
     const token = randomUUID();
@@ -103,6 +118,26 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
   async exists(key: string): Promise<boolean> {
     if (!this.client) return false;
     return (await this.client.exists(key)) === 1;
+  }
+
+  async hincrby(key: string, field: string, increment: number): Promise<number> {
+    if (!this.client) return 0;
+    return await this.client.hincrby(key, field, increment);
+  }
+
+  async hset(key: string, field: string, value: string): Promise<number> {
+    if (!this.client) return 0;
+    return await this.client.hset(key, field, value);
+  }
+
+  async hget(key: string, field: string): Promise<string | null> {
+    if (!this.client) return null;
+    return await this.client.hget(key, field);
+  }
+
+  async hgetall(key: string): Promise<Record<string, string>> {
+    if (!this.client) return {};
+    return await this.client.hgetall(key);
   }
 
   getClient(): Redis | undefined {

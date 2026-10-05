@@ -38,4 +38,35 @@ export class AdminDashboardController {
   ) {
     return this.dashboard.analytics(request.user!.id, { timeFilter, branchId, startDate, endDate })
   }
+
+  @Get('demand-insights')
+  @ApiOperation({ summary: 'Thống kê nhu cầu khám bệnh, phễu chuyển đổi và phân khúc nhân khẩu học (Hospital BI)' })
+  @ApiQuery({ name: 'branchId', required: false, description: 'Lọc theo chi nhánh' })
+  @ApiQuery({ name: 'timeFilter', required: false, enum: ['today', '7days', '30days'] })
+  getDemandInsights(
+    @Req() request: Request,
+    @Query('branchId') branchId?: string,
+    @Query('timeFilter') timeFilter?: string,
+  ) {
+    return this.dashboard.getDemandMetrics(request.user!.id, { branchId, timeFilter })
+  }
+
+  @Get('ai-executive-report')
+  @ApiOperation({ summary: 'Lấy hoặc tạo Báo cáo Cố vấn Chiến lược Y tế từ AI Gemini' })
+  @ApiQuery({ name: 'branchId', required: false })
+  @ApiQuery({ name: 'timeFilter', required: false, enum: ['today', '7days', '30days'] })
+  @ApiQuery({ name: 'forceRefresh', required: false, type: Boolean })
+  getAiExecutiveReport(
+    @Req() request: Request,
+    @Query('branchId') branchId?: string,
+    @Query('timeFilter') timeFilter?: string,
+    @Query('forceRefresh') forceRefresh?: string,
+  ) {
+    return this.dashboard.generateExecutiveAiReport(request.user!.id, {
+      branchId,
+      timeFilter,
+      forceRefresh: forceRefresh === 'true' || forceRefresh === '1',
+    })
+  }
 }
+

@@ -54,6 +54,16 @@ export class SystemCatalogService {
     }
   }
 
+  private async invalidatePublicCache() {
+    if (this.redis.isEnabled()) {
+      try {
+        await this.redis.deletePattern('cache:public:*');
+      } catch (err: any) {
+        console.warn('[SystemCatalogService] Failed to invalidate public cache:', err?.message);
+      }
+    }
+  }
+
   async syncAllPackageVectors(userId: string) {
     await this.manager(userId)
     if (!this.redis.isEnabled()) {
@@ -189,9 +199,11 @@ export class SystemCatalogService {
           create: { branchId: bId, specialtyId: specialty.id, isActive: true },
         })
       }
+      void this.invalidatePublicCache()
       return specialty
     }
     const row = await this.model(resource).create({ data: await this.payload(resource, body, true) })
+    void this.invalidatePublicCache()
     return row
   }
   async update(userId: string, resource: string, id: string, body: any) {
@@ -302,21 +314,29 @@ export class SystemCatalogService {
         } catch {}
       }
       void this.syncPackageVector(updated)
+      void this.invalidatePublicCache()
       return updated
     }
     const row = await model.update({ where: { id: key }, data: await this.payload(resource, body, false) })
+    void this.invalidatePublicCache()
     return row
   }
   async remove(userId: string, resource: string, id: string) {
     await this.manager(userId); const model = this.model(resource); const key = resource === 'specialties' ? Number(id) : id
     if (!await model.findUnique({ where: { id: key } })) throw new NotFoundException('Không tìm thấy dữ liệu')
-    if (resource === 'specialties') return model.delete({ where: { id: key } })
+    if (resource === 'specialties') {
+      const res = await model.delete({ where: { id: key } })
+      void this.invalidatePublicCache()
+      return res
+    }
     if (resource === 'service-packages' && this.redis.isEnabled()) {
       try {
         await this.embeddingService.invalidatePackageVector(id)
       } catch {}
     }
-    return model.update({ where: { id: key }, data: resource === 'booking-methods' ? { isEnabled: false } : { isActive: false } })
+    const updated = await model.update({ where: { id: key }, data: resource === 'booking-methods' ? { isEnabled: false } : { isActive: false } })
+    void this.invalidatePublicCache()
+    return updated
   }
 
   async batchBranchSpecialties(userId: string, body: { branchId: string; specialtyIds: number[] }) {
@@ -589,6 +609,7 @@ export class SystemCatalogService {
 
     // Tự động sinh ngay vector embedding và lưu vào Redis
     void this.syncPackageVector(pkg)
+    void this.invalidatePublicCache()
 
     return pkg
   }

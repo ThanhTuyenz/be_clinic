@@ -1,6 +1,7 @@
 import {
   Body,
   Controller,
+  Get,
   HttpCode,
   HttpStatus,
   Logger,
@@ -65,6 +66,25 @@ export class PaymentController {
       success: true,
       data: result,
     };
+  }
+
+  @Public()
+  @Get('banks')
+  @ApiOperation({ summary: 'Lấy danh sách các ngân hàng hỗ trợ VietQR (logo, mã BIN)' })
+  async getBanks() {
+    const banks = await this.paymentService.getBanks();
+    return {
+      success: true,
+      data: banks,
+    };
+  }
+
+  @Public()
+  @Post('bank-lookup')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Tra cứu tên chủ tài khoản thụ hưởng qua Napas 247' })
+  async lookupBank(@Body() body: { bin: string; accountNumber: string }) {
+    return await this.paymentService.lookupBankAccount(body?.bin, body?.accountNumber);
   }
 
   @Public()
