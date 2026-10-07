@@ -13,6 +13,7 @@ import { Services } from 'src/common/utils/constants';
 import { IS_PUBLIC_KEY } from 'src/common/decorators/public.decorator';
 import type { IUsersService } from 'src/modules/auth/users/users';
 import { TokenBlacklistService } from '../../jwt-auth-core/token-blacklist.service.js';
+import { RedisService } from '../../../../infrastructure/redis/redis.service.js';
 
 type JwtPayload = {
   id: string;
@@ -23,7 +24,14 @@ type JwtPayload = {
   exp?: number;
 };
 
-type RequestUser = {
+type CachedUserStatus = {
+  email?: string | null;
+  role?: string | null;
+  isBlocked: boolean;
+  isDeleted: boolean;
+};
+
+export type RequestUser = {
   id: string;
   sessionId: string;
   email?: string;
@@ -45,7 +53,8 @@ export class JwtAuthGuard implements CanActivate {
     private readonly jwtService: JwtService,
     @Inject(Services.USERS) private readonly usersService: IUsersService,
     private readonly tokenBlacklistService: TokenBlacklistService,
-  ) {}
+    private readonly redis: RedisService,
+  ) { }
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
     const isPublic = this.reflector.getAllAndOverride<boolean>(IS_PUBLIC_KEY, [
@@ -54,111 +63,99 @@ export class JwtAuthGuard implements CanActivate {
     ]);
 
     const request = context.switchToHttp().getRequest<RequestWithUser>();
-
-    // Try to get token from cookie first, then Authorization header, then query parameter
-    let token: string | undefined;
-
-    if (request.cookies?.token) {
-      token = request.cookies.token;
-    } else {
-      const authHeader = request.headers.authorization;
-      if (authHeader && authHeader.startsWith('Bearer ')) {
-        token = authHeader.split(' ')[1];
-      } else if (request.query?.token && typeof request.query.token === 'string') {
-        token = request.query.token;
-      }
-    }
-
-    // Với route Public, nếu có token thì giải mã gắn vào user, nếu không có thì vẫn cho qua
-    if (isPublic) {
-      if (token) {
-        try {
-          const isBlacklisted = await this.tokenBlacklistService.isTokenBlacklisted(token);
-          if (!isBlacklisted) {
-            const decoded = this.jwtService.verify<JwtPayload>(token);
-            if (decoded?.id) {
-              const isRevoked = await this.tokenBlacklistService.isUserRevoked(decoded.id, decoded.iat);
-              if (!isRevoked) {
-                request.user = {
-                  id: decoded.id,
-                  sessionId: decoded.sessionId || '',
-                  email: decoded.email,
-                  role: decoded.role,
-                  userType: decoded.role,
-                };
-              }
-            }
-          }
-        } catch {
-          // Token không hợp lệ trên public route thì bỏ qua
-        }
-      }
-      return true;
-    }
+    const token = this.extractToken(request);
 
     if (!token) {
-      this.logger.warn('Không tìm thấy token trong cookie hoặc Authorization header.');
+      if (isPublic) return true;
       throw new UnauthorizedException('Token không hợp lệ hoặc thiếu');
     }
 
-    // 1. Kiểm tra Token Blacklist (đã Logout chưa)
+    try {
+      const user = await this.validateAndBuildUser(token);
+      request.user = user;
+      return true;
+    } catch (error) {
+      // Nếu là public route mà token lỗi/hết hạn thì vẫn cho qua bình thường
+      if (isPublic) {
+        return true;
+      }
+      // Giữ nguyên exception cụ thể (ví dụ: đã bị khóa, đã bị thu hồi)
+      if (error instanceof UnauthorizedException) {
+        throw error;
+      }
+      this.logger.error(`Lỗi xác thực token: ${(error as Error).message}`);
+      throw new UnauthorizedException('Token không hợp lệ hoặc đã hết hạn');
+    }
+  }
+
+  // 1. Tách riêng logic bóc tách token
+  private extractToken(request: Request): string | undefined {
+    if (request.cookies?.token) return request.cookies.token;
+
+    const authHeader = request.headers.authorization;
+    if (authHeader?.startsWith('Bearer ')) {
+      return authHeader.split(' ')[1];
+    }
+
+    if (typeof request.query?.token === 'string') {
+      return request.query.token;
+    }
+    return undefined;
+  }
+
+  // 2. Gom toàn bộ pipeline xác thực token & user về một chỗ
+  private async validateAndBuildUser(token: string): Promise<RequestUser> {
+    // Check blacklist token (logout)
     const isBlacklisted = await this.tokenBlacklistService.isTokenBlacklisted(token);
     if (isBlacklisted) {
-      this.logger.warn('Token đã bị thu hồi (nằm trong Blacklist).');
       throw new UnauthorizedException('Token đã bị thu hồi, vui lòng đăng nhập lại');
     }
 
-    try {
-      const decoded = this.jwtService.verify<JwtPayload>(token);
-
-      if (!decoded?.id) {
-        this.logger.warn('Token thiếu thông tin user id.');
-        throw new UnauthorizedException('Token không hợp lệ hoặc thiếu');
-      }
-
-      // 2. Kiểm tra tài khoản có bị thu hồi toàn bộ phiên (Đổi mật khẩu / Khóa tài khoản)
-      const isRevoked = await this.tokenBlacklistService.isUserRevoked(decoded.id, decoded.iat);
-      if (isRevoked) {
-        this.logger.warn(`Token của user ${decoded.id} đã bị vô hiệu do thay đổi bảo mật.`);
-        throw new UnauthorizedException('Phiên đăng nhập đã hết hiệu lực do thay đổi bảo mật');
-      }
-
-      const requestUser: RequestUser = {
-        id: decoded.id,
-        sessionId: decoded.sessionId || '',
-        email: decoded.email,
-        role: decoded.role,
-        userType: decoded.role,
-      };
-
-      if (!requestUser.email || !requestUser.role) {
-        const user = await this.usersService.findOneUser({ id: decoded.id });
-        if (!user) {
-          this.logger.warn(`Không tìm thấy user với id=${decoded.id}`);
-          throw new UnauthorizedException('Token không hợp lệ hoặc đã hết hạn');
-        }
-        if (user.isDeleted) {
-          this.logger.warn(`User đã bị xóa mềm, id=${decoded.id}`);
-          throw new UnauthorizedException('Tài khoản không tồn tại hoặc đã bị xóa');
-        }
-        if (user.isBlocked) {
-          this.logger.warn(`User đã bị khóa, id=${decoded.id}`);
-          throw new UnauthorizedException('Tài khoản đã bị khóa');
-        }
-
-        requestUser.email = user.email ?? undefined;
-        requestUser.role = user.role ?? undefined;
-        requestUser.userType = user.role ?? undefined;
-      }
-
-      requestUser.userType ||= requestUser.role;
-      request.user = requestUser;
-      return true;
-    } catch (error) {
-      if (error instanceof Error) {
-        this.logger.error(`Lỗi xác thực token: ${error.message}`);
-      }
-      throw new UnauthorizedException('Token không hợp lệ hoặc đã hết hạn');
+    // Verify chữ ký và hạn dùng JWT
+    const decoded = this.jwtService.verify<JwtPayload>(token);
+    if (!decoded?.id) {
+      throw new UnauthorizedException('Token không hợp lệ');
     }
+
+    // Check đổi mật khẩu / thu hồi toàn bộ session theo iat
+    const isRevoked = await this.tokenBlacklistService.isUserRevoked(decoded.id, decoded.iat);
+    if (isRevoked) {
+      throw new UnauthorizedException('Phiên đăng nhập đã hết hiệu lực do thay đổi bảo mật');
+    }
+
+    // Cache user status trong Redis 60s để tránh DB hit mỗi request
+    // Khi admin block/soft-delete user → gọi invalidateUserStatusCache(userId) để xóa cache ngay
+    const cacheKey = `user:status:${decoded.id}`;
+    let status = await this.redis.get<CachedUserStatus>(cacheKey);
+
+    if (!status) {
+      const user = await this.usersService.findOneUser({ id: decoded.id });
+      if (!user) {
+        throw new UnauthorizedException('Tài khoản không tồn tại hoặc đã bị xóa');
+      }
+      status = {
+        email: user.email,
+        role: user.role ?? undefined,
+        isBlocked: user.isBlocked ?? false,
+        isDeleted: user.isDeleted ?? false,
+      };
+      // Cache 60 giây — đủ ngắn để phát hiện block, đủ dài để giảm tải DB
+      await this.redis.set(cacheKey, status, 60);
+    }
+
+    if (status.isDeleted) {
+      throw new UnauthorizedException('Tài khoản không tồn tại hoặc đã bị xóa');
+    }
+    if (status.isBlocked) {
+      throw new UnauthorizedException('Tài khoản đã bị khóa');
+    }
+
+    return {
+      id: decoded.id,
+      sessionId: decoded.sessionId || '',
+      email: status.email ?? decoded.email,
+      role: status.role ?? decoded.role,
+      userType: status.role ?? decoded.role,
+    };
   }
 }

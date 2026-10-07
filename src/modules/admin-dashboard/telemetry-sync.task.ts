@@ -108,12 +108,12 @@ export class TelemetrySyncTask {
         if (!packageId || count <= 0) continue;
 
         totalViewsToday += count;
-        try {
-          await this.prisma.servicePackage.update({
+        await this.prisma.servicePackage
+          .updateMany({
             where: { id: packageId },
             data: { viewCount: count },
-          });
-        } catch {}
+          })
+          .catch(() => {});
       }
 
       // 3. Đếm số lịch đặt trong ngày từ PostgreSQL

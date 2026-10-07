@@ -58,6 +58,8 @@ export class SystemCatalogService {
     if (this.redis.isEnabled()) {
       try {
         await this.redis.deletePattern('cache:public:*');
+        await this.redis.deletePattern('rec:home:*');
+        await this.redis.deletePattern('rec:profile:*');
       } catch (err: any) {
         console.warn('[SystemCatalogService] Failed to invalidate public cache:', err?.message);
       }
@@ -212,8 +214,25 @@ export class SystemCatalogService {
     if (!existing) throw new NotFoundException('Không tìm thấy dữ liệu')
     if (resource === 'booking-methods') {
       const name = String(body.displayName || body.name || '').trim()
-      if (name) await this.prisma.bookingMethod.update({ where: { id: existing.bookingMethodId }, data: { name, description: body.description || null, route: body.route || null, isActive: true } })
-      return model.update({ where: { id: key }, data: { isEnabled: body.isEnabled ?? existing.isEnabled, sortOrder: Number(body.sortOrder) || 0 } })
+      const isEnabled = body.isEnabled !== undefined ? Boolean(body.isEnabled) : existing.isEnabled
+      const isActive = body.isActive !== undefined ? Boolean(body.isActive) : isEnabled
+      if (name || body.isActive !== undefined) {
+        await this.prisma.bookingMethod.update({
+          where: { id: existing.bookingMethodId },
+          data: {
+            ...(name ? { name } : {}),
+            description: body.description || null,
+            route: body.route || null,
+            isActive,
+          },
+        })
+      }
+      const updatedRow = await model.update({
+        where: { id: key },
+        data: { isEnabled, sortOrder: Number(body.sortOrder) || 0 },
+      })
+      void this.invalidatePublicCache()
+      return updatedRow
     }
     if (resource === 'specialties') {
       const specialtyId = Number(id)
@@ -313,7 +332,9 @@ export class SystemCatalogService {
           await this.embeddingService.invalidatePackageVector(id)
         } catch {}
       }
-      void this.syncPackageVector(updated)
+      if (updated.isActive) {
+        void this.syncPackageVector(updated)
+      }
       void this.invalidatePublicCache()
       return updated
     }

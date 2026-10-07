@@ -13,6 +13,7 @@ import { IRolesService } from '../roles/roles.js';
 import { Services } from '../../../common/utils/constants.js';
 import { PermissionsService } from '../permissions/permissions.service.js';
 import { calculateEffectivePermissions } from '../../../common/constants/permissions.constant.js';
+import { RedisService } from '../../../infrastructure/redis/redis.service.js';
 
 @Injectable()
 export class UsersService implements IUsersService {
@@ -21,6 +22,7 @@ export class UsersService implements IUsersService {
     private readonly historyService: HistoryService,
     @Inject(Services.ROLES) private readonly rolesService: IRolesService,
     private readonly permissionsService: PermissionsService,
+    private readonly redis: RedisService,
   ) {}
 
   async createUser(dto: CreateUserDto): Promise<User> {
@@ -116,6 +118,18 @@ export class UsersService implements IUsersService {
     return row ? this.toEntity(row) : null;
   }
 
+  async findByPhoneVariants(variants: string[]): Promise<User | null> {
+    if (!variants.length) return null;
+    const row = await this.prisma.user.findFirst({
+      where: { OR: variants.map((phoneNumber) => ({ phoneNumber })) },
+      include: {
+        doctor: { include: { specialties: { include: { specialty: true } } } },
+        branchAssignments: { include: { branch: true } },
+      },
+    });
+    return row ? this.toEntity(row) : null;
+  }
+
   async findUsersWithPagination(options: FindUsersOptions): Promise<UsersPaginatedResult> {
     const where: Prisma.UserWhereInput = {
       email: options.email ? { contains: options.email.trim(), mode: 'insensitive' } : undefined,
@@ -173,6 +187,10 @@ export class UsersService implements IUsersService {
     if (next.isDeleted === true) next.status = UserStatus.Inactive;
     const row = await this.prisma.user.update({ where: { id }, data: await this.toUpdateData(next, existing) });
     this.permissionsService.invalidateCache(id);
+    // Invalidate user status cache trong JwtAuthGuard khi isBlocked/isDeleted thay đổi
+    if (payload.isBlocked !== undefined || payload.isDeleted !== undefined) {
+      await this.invalidateUserStatusCache(id);
+    }
 
     const p = payload as any;
     if (p.branchId) {
@@ -245,6 +263,8 @@ export class UsersService implements IUsersService {
     if (!existing) throw new NotFoundException('Không tìm thấy người dùng');
     const row = await this.prisma.user.update({ where: { id }, data: { isDeleted: true, status: 'INACTIVE' } });
     await this.recordHistory(row, HISTORY_ACTIONS.USER_DELETED, 'Xóa người dùng');
+    // Xóa cache ngay để JwtAuthGuard phát hiện soft-delete trong request tiếp theo
+    await this.invalidateUserStatusCache(id);
   }
 
   async saveUser(user: User): Promise<User> {
@@ -324,5 +344,13 @@ export class UsersService implements IUsersService {
 
   private async recordHistory(row: PrismaUser, action: string, prefix: string): Promise<void> {
     await this.historyService.create({ action, message: `${prefix} ${row.email}`, actorId: row.id, actorEmail: row.email ?? undefined, targetType: 'user', targetId: row.id });
+  }
+
+  /**
+   * Xóa cache user:status:{id} trong Redis.
+   * Gọi khi isBlocked/isDeleted của user thay đổi để JwtAuthGuard reload ngay lập tức.
+   */
+  async invalidateUserStatusCache(userId: string): Promise<void> {
+    await this.redis.delete(`user:status:${userId}`);
   }
 }

@@ -190,49 +190,6 @@ export class PackagesService {
       }),
     ]);
 
-    // Fallback: nếu chi nhánh cụ thể chưa gán gói nhưng hệ thống chung có gói tương ứng
-    if (rows.length === 0 && effectiveBranchId && bookingMethodCode) {
-      const fallbackWhere = {
-        AND: [
-          { isActive: true },
-          ...(specialtyId ? [{ specialtyId }] : []),
-          {
-            OR: [
-              {
-                branchBookingMethods: {
-                  some: {
-                    branchBookingMethod: {
-                      isEnabled: true,
-                      bookingMethod: { code: bookingMethodCode, isActive: true },
-                    },
-                  },
-                },
-              },
-              {
-                branchBookingMethod: {
-                  isEnabled: true,
-                  bookingMethod: { code: bookingMethodCode, isActive: true },
-                },
-              },
-            ],
-          },
-        ],
-      };
-      const [fbTotal, fbRows] = await Promise.all([
-        needPagination ? this.prisma.servicePackage.count({ where: fallbackWhere }) : Promise.resolve(0),
-        this.prisma.servicePackage.findMany({
-          where: fallbackWhere,
-          orderBy,
-          skip,
-          take: limit,
-          select: packageSelect,
-        }),
-      ]);
-      if (fbRows.length > 0) {
-        total = fbTotal;
-        rows = fbRows;
-      }
-    }
 
     const formattedData = rows.map(({ branchBookingMethod, branchBookingMethods, ...item }) => {
       const bbm =
@@ -281,12 +238,25 @@ export class PackagesService {
    */
   async getServiceDetail(serviceIdentifier: string) {
     if (!serviceIdentifier) throw new NotFoundException('Thiếu định danh gói dịch vụ');
-    const isId = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(serviceIdentifier);
+    const cleanId = serviceIdentifier.trim();
+    const isId = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(cleanId);
+    const upperId = cleanId.toUpperCase();
+    const withPkgPrefix = upperId.startsWith('PKG-') ? upperId : `PKG-${upperId}`;
+    const withoutPkgPrefix = upperId.startsWith('PKG-') ? upperId.slice(4) : upperId;
 
     const pkg = await this.prisma.servicePackage.findFirst({
       where: isId
-        ? { id: serviceIdentifier, isActive: true }
-        : { OR: [{ slug: serviceIdentifier }, { code: serviceIdentifier }], isActive: true },
+        ? { id: cleanId, isActive: true }
+        : {
+            isActive: true,
+            OR: [
+              { slug: { equals: cleanId, mode: 'insensitive' } },
+              { code: { equals: cleanId, mode: 'insensitive' } },
+              { code: { equals: upperId, mode: 'insensitive' } },
+              { code: { equals: withPkgPrefix, mode: 'insensitive' } },
+              { code: { equals: withoutPkgPrefix, mode: 'insensitive' } },
+            ],
+          },
       include: {
         specialty: {
           select: {

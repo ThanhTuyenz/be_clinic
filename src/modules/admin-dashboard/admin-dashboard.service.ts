@@ -232,6 +232,11 @@ export class AdminDashboardService {
       uniquePatientsWeek,
       uniquePatientsMonth,
       slotStats,
+      weekAppointments,
+      weekInvoices,
+      weekSlots,
+      monthInvoices,
+      monthAppointments,
     ] = await Promise.all([
       this.calculateStatusCounts(todayScope),
       this.calculateStatusCounts(weekScope),
@@ -296,9 +301,79 @@ export class AdminDashboardService {
         },
         _sum: { capacity: true, occupiedCount: true },
       }),
+      // Lấy toàn bộ lịch khám thực tế trong tuần để phân tích theo ngày
+      this.prisma.appointment.findMany({
+        where: weekScope,
+        select: {
+          id: true,
+          patientProfileId: true,
+          createdAt: true,
+          servicePrice: true,
+          scheduleSlot: { select: { startTime: true } },
+          invoice: { select: { totalAmount: true, status: true } },
+        },
+      }),
+      // Lấy toàn bộ hóa đơn đã thanh toán thực tế trong tuần
+      this.prisma.invoice.findMany({
+        where: {
+          status: 'PAID',
+          OR: [
+            { paidAt: { gte: weekStart, lt: weekEnd } },
+            { paidAt: null, createdAt: { gte: weekStart, lt: weekEnd } },
+          ],
+          ...(scope.branchId ? { issuedBranchId: scope.branchId } : {}),
+        },
+        select: {
+          totalAmount: true,
+          paidAt: true,
+          createdAt: true,
+        },
+      }),
+      // Lấy slot ca trực trong tuần để đo công suất thực tế
+      this.prisma.doctorScheduleSlot.findMany({
+        where: {
+          isActive: true,
+          schedule: {
+            workDate: { gte: weekStart, lt: weekEnd },
+            status: 'OPEN',
+            ...(scope.branchId ? { branchId: scope.branchId } : {}),
+          },
+        },
+        select: {
+          capacity: true,
+          occupiedCount: true,
+          schedule: { select: { workDate: true } },
+        },
+      }),
+      // Hóa đơn trong tháng
+      this.prisma.invoice.findMany({
+        where: {
+          status: 'PAID',
+          OR: [
+            { paidAt: { gte: monthStart, lt: monthEnd } },
+            { paidAt: null, createdAt: { gte: monthStart, lt: monthEnd } },
+          ],
+          ...(scope.branchId ? { issuedBranchId: scope.branchId } : {}),
+        },
+        select: {
+          totalAmount: true,
+          paidAt: true,
+          createdAt: true,
+        },
+      }),
+      // Lịch hẹn trong tháng
+      this.prisma.appointment.findMany({
+        where: monthScope,
+        select: {
+          id: true,
+          patientProfileId: true,
+          createdAt: true,
+          scheduleSlot: { select: { startTime: true } },
+        },
+      }),
     ])
 
-    // Biểu đồ theo khung giờ hôm nay (6 khung giờ chính)
+    // 1. Biểu đồ theo khung giờ hôm nay (6 khung giờ thực tế)
     const todayChartHours = [
       { label: '07h-09h', startH: 7, endH: 9, rev: 0, count: 0 },
       { label: '09h-11h', startH: 9, endH: 11, rev: 0, count: 0 },
@@ -324,27 +399,88 @@ export class AdminDashboardService {
       count: b.count,
     }))
 
-    // Biểu đồ tuần (7 ngày)
+    // 2. Biểu đồ tuần thực tế (7 ngày T2 -> CN truy vấn chính xác từ DB)
     const weekDays = ['T2', 'T3', 'T4', 'T5', 'T6', 'T7', 'CN']
+    const runningPatientSet = new Set<string>()
+
     const weekBars = weekDays.map((label, idx) => {
-      const dayDate = new Date(weekStart)
-      dayDate.setUTCDate(weekStart.getUTCDate() + idx)
-      const dayRev = (revWeek.total / 7) * (0.8 + (idx % 4) * 0.15)
-      const dayCount = Math.round((weekCounts.total / 7) * (0.8 + (idx % 3) * 0.2))
+      const dStart = new Date(weekStart.getTime() + idx * 86400000)
+      const dEnd = new Date(weekStart.getTime() + (idx + 1) * 86400000)
+
+      // Doanh thu hóa đơn phát sinh trong ngày
+      const dayRev = weekInvoices
+        .filter((inv) => {
+          const t = new Date(inv.paidAt || inv.createdAt).getTime()
+          return t >= dStart.getTime() && t < dEnd.getTime()
+        })
+        .reduce((sum, inv) => sum + Number(inv.totalAmount || 0), 0)
+
+      // Số ca khám ghi nhận trong ngày
+      const dayAppts = weekAppointments.filter((appt) => {
+        const t = new Date(appt.scheduleSlot?.startTime || appt.createdAt).getTime()
+        return t >= dStart.getTime() && t < dEnd.getTime()
+      })
+
+      // Tích lũy bệnh nhân đã tiếp đón tới ngày hiện tại
+      dayAppts.forEach((a) => {
+        if (a.patientProfileId) runningPatientSet.add(a.patientProfileId)
+      })
+      const cumulativePatients = runningPatientSet.size
+
+      // Công suất phòng khám trong ngày
+      const daySlots = weekSlots.filter((s) => {
+        if (!s.schedule?.workDate) return false
+        const t = new Date(s.schedule.workDate).getTime()
+        return t >= dStart.getTime() && t < dEnd.getTime()
+      })
+      const dayCapSum = daySlots.reduce((sum, s) => sum + (s.capacity || 0), 0)
+      const dayOccSum = daySlots.reduce((sum, s) => sum + (s.occupiedCount || 0), 0)
+      const dayOccupancy = dayCapSum > 0 ? Math.min(100, Math.round((dayOccSum / dayCapSum) * 100)) : (dayAppts.length > 0 ? 75 : 0)
+
       return {
         label,
         rev: Number((dayRev / 1_000_000).toFixed(1)),
-        count: dayCount,
+        count: dayAppts.length,
+        patients: cumulativePatients,
+        occupancy: dayOccupancy,
       }
     })
 
-    // Biểu đồ tháng (4 tuần)
-    const monthBars = [
-      { label: 'Tuần 1', rev: Number(((revMonth.total * 0.23) / 1_000_000).toFixed(1)), count: Math.round(monthCounts.total * 0.23) },
-      { label: 'Tuần 2', rev: Number(((revMonth.total * 0.27) / 1_000_000).toFixed(1)), count: Math.round(monthCounts.total * 0.27) },
-      { label: 'Tuần 3', rev: Number(((revMonth.total * 0.24) / 1_000_000).toFixed(1)), count: Math.round(monthCounts.total * 0.24) },
-      { label: 'Tuần 4', rev: Number(((revMonth.total * 0.26) / 1_000_000).toFixed(1)), count: Math.round(monthCounts.total * 0.26) },
+    // 3. Biểu đồ tháng thực tế (4 khoảng tuần trong tháng)
+    const monthWeeks = [
+      { label: 'Tuần 1', startDay: 1, endDay: 7 },
+      { label: 'Tuần 2', startDay: 8, endDay: 14 },
+      { label: 'Tuần 3', startDay: 15, endDay: 21 },
+      { label: 'Tuần 4', startDay: 22, endDay: 31 },
     ]
+    const runningMonthPatients = new Set<string>()
+    const monthBars = monthWeeks.map((w) => {
+      const wStart = new Date(Date.UTC(year, month, w.startDay))
+      const wEnd = new Date(Date.UTC(year, month, w.endDay + 1))
+
+      const wRev = monthInvoices
+        .filter((inv) => {
+          const t = new Date(inv.paidAt || inv.createdAt).getTime()
+          return t >= wStart.getTime() && t < wEnd.getTime()
+        })
+        .reduce((sum, inv) => sum + Number(inv.totalAmount || 0), 0)
+
+      const wAppts = monthAppointments.filter((appt) => {
+        const t = new Date(appt.scheduleSlot?.startTime || appt.createdAt).getTime()
+        return t >= wStart.getTime() && t < wEnd.getTime()
+      })
+
+      wAppts.forEach((a) => {
+        if (a.patientProfileId) runningMonthPatients.add(a.patientProfileId)
+      })
+
+      return {
+        label: w.label,
+        rev: Number((wRev / 1_000_000).toFixed(1)),
+        count: wAppts.length,
+        patients: runningMonthPatients.size,
+      }
+    })
 
     // Công suất buồng khám hôm nay
     const totalCapacity = slotStats._sum.capacity || 100
@@ -1028,16 +1164,29 @@ export class AdminDashboardService {
   /**
    * Trích xuất bộ 5 chỉ số phân tích nhu cầu y tế toàn diện (Demand Metrics)
    */
-  async getDemandMetrics(userId: string, filter: { branchId?: string; timeFilter?: string }) {
+  async getDemandMetrics(
+    userId: string,
+    filter: { branchId?: string; timeFilter?: string; startDate?: string; endDate?: string },
+  ) {
     const user = await this.getStaffUser(userId)
     const branchScope = this.resolveBranchScope(user, filter.branchId)
 
     const now = new Date()
-    let startDate = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000) // Default 30 ngày
-    if (filter.timeFilter === '7days') {
-      startDate = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000)
+    let startDate: Date
+    let endDate: Date = now
+
+    if (filter.startDate && filter.endDate) {
+      startDate = new Date(`${filter.startDate}T00:00:00.000Z`)
+      endDate = new Date(`${filter.endDate}T23:59:59.999Z`)
     } else if (filter.timeFilter === 'today') {
-      startDate = new Date(now.getFullYear(), now.getMonth(), now.getDate())
+      startDate = new Date(Date.UTC(now.getFullYear(), now.getMonth(), now.getDate()))
+    } else if (filter.timeFilter === 'week' || filter.timeFilter === '7days') {
+      startDate = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000)
+    } else if (filter.timeFilter === 'quarter') {
+      startDate = new Date(now.getTime() - 90 * 24 * 60 * 60 * 1000)
+    } else {
+      // Default: 'month' / '30days'
+      startDate = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000)
     }
 
     // 1. Thu thập Top Từ khóa tìm kiếm từ Database search_logs & Redis ZSET
@@ -1102,27 +1251,6 @@ export class AdminDashboardService {
     // 1.3. Chuẩn hóa & Gom nhóm thông minh (Group có dấu + không dấu, khoảng trắng)
     topSearches = this.clusterSearchQueries(topSearches)
     unmatchedSearches = this.clusterSearchQueries(unmatchedSearches)
-
-    // Fallback baseline nếu hệ thống mới khởi tạo chưa có telemetry
-    if (topSearches.length === 0) {
-      topSearches = [
-        { query: 'khám da liễu mụn trứng cá', searchCount: 142 },
-        { query: 'tầm soát tim mạch toàn diện', searchCount: 118 },
-        { query: 'nội soi dạ dày không đau', searchCount: 96 },
-        { query: 'đau mỏi vai gáy cột sống', searchCount: 85 },
-        { query: 'khám nhi sốt ho đêm', searchCount: 78 },
-        { query: 'tầm soát ung thư sớm', searchCount: 64 },
-        { query: 'xét nghiệm máu tổng quát', searchCount: 52 },
-        { query: 'khám tai mũi họng nội soi', searchCount: 45 },
-      ]
-    }
-    if (unmatchedSearches.length === 0) {
-      unmatchedSearches = [
-        { query: 'chụp mri cộng hưởng từ toàn thân', searchCount: 48 },
-        { query: 'khám nam khoa sinh sản', searchCount: 36 },
-        { query: 'tầm soát ung thư cổ tử cung hpv', searchCount: 29 },
-      ]
-    }
 
     topSearches.sort((a, b) => b.searchCount - a.searchCount)
     unmatchedSearches.sort((a, b) => b.searchCount - a.searchCount)
@@ -1199,10 +1327,10 @@ export class AdminDashboardService {
       const liveViews = pkgViewMap.get(pkg.id) || 0
       const dbViews = pkg.viewCount || 0
       const bookings = packageBookingCountMap.get(pkg.id) || 0
-      // Đảm bảo lượt xem chuẩn xác từ DB / Redis và luôn >= bookings
-      const views = Math.max(liveViews, dbViews, bookings * 4 + 15)
+      // Lượt xem thực tế từ Redis hoặc DB, tối thiểu bằng số lượt đã đặt thực tế
+      const views = Math.max(liveViews, dbViews, bookings)
       const conversionRate = views > 0 ? +(bookings / views).toFixed(3) : 0
-      const dropOffRate = +(1 - conversionRate).toFixed(3)
+      const dropOffRate = views > 0 ? +(Math.max(0, views - bookings) / views).toFixed(3) : 0
 
       return {
         packageId: pkg.id,
@@ -1217,8 +1345,10 @@ export class AdminDashboardService {
       }
     })
 
-    // Sắp xếp: ưu tiên gói có lượt xem và bỏ dở cao lên đầu
-    packageFunnels.sort((a, b) => b.views - a.views)
+    // Sắp xếp: ưu tiên gói có lịch đặt hoặc lượt xem cao lên trước
+    packageFunnels.sort(
+      (a, b) => b.bookings - a.bookings || b.views - a.views || a.name.localeCompare(b.name, 'vi'),
+    )
 
     // 5. Phân khúc Nhân khẩu học (Demographics: Tuổi & Giới tính) theo Chuyên khoa
     // Chuyên khoa Views được tính bằng SUM(ServicePackage.views) (Single Source of Truth)
@@ -1308,7 +1438,10 @@ export class AdminDashboardService {
     const overallConversionRate = totalPackageViews > 0
       ? +((totalBookings / totalPackageViews) * 100).toFixed(1)
       : 0
-    const topSpecialtyDemand = demographicsList[0]?.specialtyName || 'Chuyên khoa Da liễu'
+    const topSpecialtyDemand =
+      demographicsList[0]?.specialtyName ||
+      packageFunnels.find((p) => p.views > 0 || p.bookings > 0)?.specialtyName ||
+      'Chưa có dữ liệu'
 
     return {
       timeRange: filter.timeFilter || '30days',
@@ -1335,10 +1468,10 @@ export class AdminDashboardService {
    */
   async generateExecutiveAiReport(
     userId: string,
-    filter: { branchId?: string; timeFilter?: string; forceRefresh?: boolean },
+    filter: { branchId?: string; timeFilter?: string; startDate?: string; endDate?: string; forceRefresh?: boolean },
   ) {
     const metrics = await this.getDemandMetrics(userId, filter)
-    const cacheKey = `analytics:ai_executive_report:${filter.branchId || 'all'}:${filter.timeFilter || '30days'}`
+    const cacheKey = `analytics:ai_executive_report:${filter.branchId || 'all'}:${filter.timeFilter || '30days'}:${filter.startDate || ''}_${filter.endDate || ''}`
 
     if (!filter.forceRefresh && this.redis.isEnabled()) {
       try {

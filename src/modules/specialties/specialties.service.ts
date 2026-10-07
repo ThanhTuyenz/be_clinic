@@ -249,7 +249,7 @@ export class SpecialtiesService {
     }
 
     const [specialties, branches, healthPackagesRes, specialtyPackagesRes, featuredDoctors] = await Promise.all([
-      this.getSpecialties(effectiveBranchId),
+      this.getSpecialties(),
       this.prisma.branch.findMany({
         where: { isActive: true },
         orderBy: [{ code: 'desc' }, { name: 'asc' }],
@@ -264,8 +264,8 @@ export class SpecialtiesService {
           longitude: true,
         },
       }),
-      this.packagesService.getPackages({ branchId: effectiveBranchId, type: 'health-package', limit: 12, needPagination: false }),
-      this.packagesService.getPackages({ branchId: effectiveBranchId, type: 'specialty', limit: 12, needPagination: false }),
+      this.packagesService.getPackages({ type: 'health-package', limit: 12, needPagination: false }),
+      this.packagesService.getPackages({ type: 'specialty', limit: 12, needPagination: false }),
       this.prisma.doctor.findMany({
         where: {
           isActive: true,

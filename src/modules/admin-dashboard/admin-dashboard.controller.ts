@@ -42,29 +42,39 @@ export class AdminDashboardController {
   @Get('demand-insights')
   @ApiOperation({ summary: 'Thống kê nhu cầu khám bệnh, phễu chuyển đổi và phân khúc nhân khẩu học (Hospital BI)' })
   @ApiQuery({ name: 'branchId', required: false, description: 'Lọc theo chi nhánh' })
-  @ApiQuery({ name: 'timeFilter', required: false, enum: ['today', '7days', '30days'] })
+  @ApiQuery({ name: 'timeFilter', required: false, enum: ['today', 'week', 'month', 'quarter', '7days', '30days'] })
+  @ApiQuery({ name: 'startDate', required: false, description: 'YYYY-MM-DD' })
+  @ApiQuery({ name: 'endDate', required: false, description: 'YYYY-MM-DD' })
   getDemandInsights(
     @Req() request: Request,
     @Query('branchId') branchId?: string,
     @Query('timeFilter') timeFilter?: string,
+    @Query('startDate') startDate?: string,
+    @Query('endDate') endDate?: string,
   ) {
-    return this.dashboard.getDemandMetrics(request.user!.id, { branchId, timeFilter })
+    return this.dashboard.getDemandMetrics(request.user!.id, { branchId, timeFilter, startDate, endDate })
   }
 
   @Get('ai-executive-report')
   @ApiOperation({ summary: 'Lấy hoặc tạo Báo cáo Cố vấn Chiến lược Y tế từ AI Gemini' })
   @ApiQuery({ name: 'branchId', required: false })
-  @ApiQuery({ name: 'timeFilter', required: false, enum: ['today', '7days', '30days'] })
+  @ApiQuery({ name: 'timeFilter', required: false, enum: ['today', 'week', 'month', 'quarter', '7days', '30days'] })
+  @ApiQuery({ name: 'startDate', required: false, description: 'YYYY-MM-DD' })
+  @ApiQuery({ name: 'endDate', required: false, description: 'YYYY-MM-DD' })
   @ApiQuery({ name: 'forceRefresh', required: false, type: Boolean })
   getAiExecutiveReport(
     @Req() request: Request,
     @Query('branchId') branchId?: string,
     @Query('timeFilter') timeFilter?: string,
+    @Query('startDate') startDate?: string,
+    @Query('endDate') endDate?: string,
     @Query('forceRefresh') forceRefresh?: string,
   ) {
     return this.dashboard.generateExecutiveAiReport(request.user!.id, {
       branchId,
       timeFilter,
+      startDate,
+      endDate,
       forceRefresh: forceRefresh === 'true' || forceRefresh === '1',
     })
   }

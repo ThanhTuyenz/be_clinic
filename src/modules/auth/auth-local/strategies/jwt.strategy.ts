@@ -7,13 +7,15 @@ import { OrNeverType } from 'src/common/utils/types/or-never.type';
 import { AllConfigType } from '../../../../config/config.type';
 import { JwtPayloadType } from './types/jwt-payload.type';
 
-import { TokenBlacklistService } from '../../jwt-auth-core/token-blacklist.service.js';
-
+/**
+ * JwtStrategy chỉ đảm nhiệm: extract token + verify chữ ký JWT.
+ * Toàn bộ security logic (blacklist, revoke, isBlocked) được xử lý tập trung tại JwtAuthGuard.
+ * Không duplicate kiểm tra tại đây để tránh 2× Redis calls mỗi request.
+ */
 @Injectable()
 export class JwtStrategy extends PassportStrategy(Strategy, 'jwt') {
   constructor(
     private configService: ConfigService<AllConfigType>,
-    private tokenBlacklistService: TokenBlacklistService,
   ) {
     super({
       jwtFromRequest: ExtractJwt.fromExtractors([
@@ -23,7 +25,7 @@ export class JwtStrategy extends PassportStrategy(Strategy, 'jwt') {
         ExtractJwt.fromAuthHeaderAsBearerToken(),
       ]),
       ignoreExpiration: false,
-      passReqToCallback: true,
+      passReqToCallback: false,
       secretOrKey:
         configService.get<string>('auth.secret', {
           infer: true,
@@ -31,31 +33,11 @@ export class JwtStrategy extends PassportStrategy(Strategy, 'jwt') {
     });
   }
 
-  public async validate(req: Request, payload: JwtPayloadType): Promise<OrNeverType<JwtPayloadType>> {
+  public async validate(payload: JwtPayloadType): Promise<OrNeverType<JwtPayloadType>> {
     if (!payload.id) {
       throw new UnauthorizedException();
     }
-
-    const token =
-      req?.cookies?.token ||
-      (req?.headers?.authorization?.startsWith('Bearer ')
-        ? req.headers.authorization.split(' ')[1]
-        : null);
-
-    if (token) {
-      const isBlacklisted = await this.tokenBlacklistService.isTokenBlacklisted(token);
-      if (isBlacklisted) {
-        throw new UnauthorizedException('Token đã bị thu hồi');
-      }
-    }
-
-    if (payload.iat) {
-      const isRevoked = await this.tokenBlacklistService.isUserRevoked(payload.id, payload.iat);
-      if (isRevoked) {
-        throw new UnauthorizedException('Phiên đăng nhập đã hết hiệu lực do thay đổi bảo mật');
-      }
-    }
-
+    // Chỉ trả về payload — JwtAuthGuard sẽ kiểm tra blacklist, revoke, isBlocked
     return payload;
   }
 }

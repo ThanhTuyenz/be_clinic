@@ -55,25 +55,35 @@ function toSlug(str) {
     .replace(/-+/g, '-');
 }
 
-function doctorSlots() {
+function createShiftSlots(startHour, startMinute, endHour, endMinute, slotMin = 30, capacity = 10) {
   const slots = [];
-  for (const [startHour, startMinute, endHour, endMinute] of [
-    [8, 0, 11, 30],
-    [13, 30, 16, 30],
-  ]) {
-    let cursor = startHour * 60 + startMinute;
-    const end = endHour * 60 + endMinute;
-    while (cursor < end) {
-      slots.push({
-        startTime: time(Math.floor(cursor / 60), cursor % 60),
-        endTime: time(Math.floor((cursor + 30) / 60), (cursor + 30) % 60),
-        capacity: 10,
-      });
-      cursor += 30;
-    }
+  let cursor = startHour * 60 + startMinute;
+  const end = endHour * 60 + endMinute;
+  while (cursor < end) {
+    slots.push({
+      startTime: time(Math.floor(cursor / 60), cursor % 60),
+      endTime: time(Math.floor((cursor + slotMin) / 60), (cursor + slotMin) % 60),
+      capacity,
+    });
+    cursor += slotMin;
   }
   return slots;
 }
+
+const SHIFT_DEFINITIONS = [
+  {
+    name: 'Sáng',
+    startTime: time(8, 0),
+    endTime: time(12, 0),
+    slots: createShiftSlots(8, 0, 12, 0, 30, 10),
+  },
+  {
+    name: 'Chiều',
+    startTime: time(13, 30),
+    endTime: time(17, 30),
+    slots: createShiftSlots(13, 30, 17, 30, 30, 10),
+  },
+];
 
 async function resetApplicationData() {
   const tables = await prisma.$queryRaw`
@@ -183,8 +193,23 @@ async function main() {
   for (const s of specialtiesData) {
     const row = await prisma.specialty.upsert({
       where: { slug: s.slug },
-      update: { name: s.name, description: s.description, sortOrder: s.sortOrder, isActive: true },
-      create: { name: s.name, slug: s.slug, description: s.description, sortOrder: s.sortOrder, isActive: true },
+      update: {
+        name: s.name,
+        description: s.description,
+        symptoms: Array.isArray(s.symptoms) ? s.symptoms : [],
+        iconUrl: s.iconUrl || null,
+        sortOrder: s.sortOrder,
+        isActive: true,
+      },
+      create: {
+        name: s.name,
+        slug: s.slug,
+        description: s.description,
+        symptoms: Array.isArray(s.symptoms) ? s.symptoms : [],
+        iconUrl: s.iconUrl || null,
+        sortOrder: s.sortOrder,
+        isActive: true,
+      },
     });
     specialtiesBySlug.set(s.slug, row);
   }
@@ -238,8 +263,25 @@ async function main() {
   for (const docData of doctorsData) {
     const user = await prisma.user.upsert({
       where: { email: docData.email },
-      update: { fullName: docData.fullName, role: 'DOCTOR', status: 'ACTIVE', isBlocked: false, isDeleted: false },
-      create: { email: docData.email, fullName: docData.fullName, role: 'DOCTOR', status: 'ACTIVE', provider: 'EMAIL', password: defaultPassword },
+      update: {
+        fullName: docData.fullName,
+        phoneNumber: docData.phoneNumber || null,
+        avatarUrl: docData.avatarUrl || null,
+        role: 'DOCTOR',
+        status: 'ACTIVE',
+        isBlocked: false,
+        isDeleted: false,
+      },
+      create: {
+        email: docData.email,
+        fullName: docData.fullName,
+        phoneNumber: docData.phoneNumber || null,
+        avatarUrl: docData.avatarUrl || null,
+        role: 'DOCTOR',
+        status: 'ACTIVE',
+        provider: 'EMAIL',
+        password: defaultPassword,
+      },
     });
     usersMap.set(docData.email, user);
 
@@ -247,16 +289,26 @@ async function main() {
       where: { userId: user.id },
       update: {
         academicRank: docData.academicRank,
+        licenseNumber: docData.licenseNumber || null,
+        experienceYears: docData.experienceYears || 0,
+        biography: docData.biography || null,
         consultationFee: docData.consultationFee,
         avatarUrl: docData.avatarUrl,
+        ratingAverage: docData.ratingAverage || 4.9,
+        ratingCount: docData.ratingCount || 100,
         isFeatured: docData.isFeatured,
         isActive: true,
       },
       create: {
         userId: user.id,
         academicRank: docData.academicRank,
+        licenseNumber: docData.licenseNumber || null,
+        experienceYears: docData.experienceYears || 0,
+        biography: docData.biography || null,
         consultationFee: docData.consultationFee,
         avatarUrl: docData.avatarUrl,
+        ratingAverage: docData.ratingAverage || 4.9,
+        ratingCount: docData.ratingCount || 100,
         isFeatured: docData.isFeatured,
         isActive: true,
       },
@@ -299,46 +351,48 @@ async function main() {
       const roomKey = `${targetBranch.code}:${targetRoomCode}`;
       const targetRoom = roomsByBranchAndCode.get(roomKey);
 
-      const schedule = await prisma.doctorSchedule.upsert({
-        where: {
-          doctorId_branchId_workDate_startTime: {
+      for (const shift of SHIFT_DEFINITIONS) {
+        const schedule = await prisma.doctorSchedule.upsert({
+          where: {
+            doctorId_branchId_workDate_startTime: {
+              doctorId: doctor.id,
+              branchId: targetBranch.id,
+              workDate,
+              startTime: shift.startTime,
+            },
+          },
+          update: {
+            roomId: targetRoom?.id ?? null,
+            endTime: shift.endTime,
+            status: 'OPEN',
+            capacityPerSlot: 10,
+            slotDurationMin: 30,
+          },
+          create: {
             doctorId: doctor.id,
             branchId: targetBranch.id,
+            roomId: targetRoom?.id ?? null,
             workDate,
-            startTime: time(8, 0),
-          },
-        },
-        update: {
-          roomId: targetRoom?.id ?? null,
-          endTime: time(16, 30),
-          status: 'OPEN',
-          capacityPerSlot: 10,
-          slotDurationMin: 30,
-        },
-        create: {
-          doctorId: doctor.id,
-          branchId: targetBranch.id,
-          roomId: targetRoom?.id ?? null,
-          workDate,
-          startTime: time(8, 0),
-          endTime: time(16, 30),
-          slotDurationMin: 30,
-          capacityPerSlot: 10,
-          status: 'OPEN',
-        },
-      });
-
-      for (const slot of doctorSlots()) {
-        await prisma.doctorScheduleSlot.upsert({
-          where: { scheduleId_startTime: { scheduleId: schedule.id, startTime: slot.startTime } },
-          update: { endTime: slot.endTime, capacity: 10, isActive: true },
-          create: {
-            scheduleId: schedule.id,
-            startTime: slot.startTime,
-            endTime: slot.endTime,
-            capacity: 10,
+            startTime: shift.startTime,
+            endTime: shift.endTime,
+            slotDurationMin: 30,
+            capacityPerSlot: 10,
+            status: 'OPEN',
           },
         });
+
+        for (const slot of shift.slots) {
+          await prisma.doctorScheduleSlot.upsert({
+            where: { scheduleId_startTime: { scheduleId: schedule.id, startTime: slot.startTime } },
+            update: { endTime: slot.endTime, capacity: 10, isActive: true },
+            create: {
+              scheduleId: schedule.id,
+              startTime: slot.startTime,
+              endTime: slot.endTime,
+              capacity: 10,
+            },
+          });
+        }
       }
     }
   }
@@ -495,8 +549,11 @@ async function main() {
             name: fullName,
             slug,
             description: pkg.description,
-            notes: 'Nhịn ăn sáng ít nhất 6-8 tiếng để thực hiện xét nghiệm máu và siêu âm ổ bụng tổng quát. Uống nhiều nước lọc và nhịn tiểu trước khi siêu âm. Xuất trình CCCD/BHYT tại quầy tiếp đón.',
-            symptoms: ['Kiểm tra sức khỏe định kỳ', 'Tầm soát ung thư sớm', 'Đánh giá chức năng gan thận', 'Tầm soát đái tháo đường'],
+            notes: pkg.notes || 'Nhịn ăn sáng ít nhất 6-8 tiếng để thực hiện xét nghiệm máu và siêu âm ổ bụng tổng quát. Uống nhiều nước lọc và nhịn tiểu trước khi siêu âm. Xuất trình CCCD/BHYT tại quầy tiếp đón.',
+            symptoms: Array.isArray(pkg.symptoms) ? pkg.symptoms : ['Kiểm tra sức khỏe định kỳ', 'Tầm soát ung thư sớm'],
+            imageUrl: pkg.imageUrl || null,
+            durationMin: pkg.durationMin || 45,
+            sessionType: pkg.sessionType || 'ALL_DAY',
             price: pkg.price,
             branchBookingMethodId: healthPackageMethod.id,
             isActive: true,
@@ -506,8 +563,11 @@ async function main() {
             name: fullName,
             slug,
             description: pkg.description,
-            notes: 'Nhịn ăn sáng ít nhất 6-8 tiếng để thực hiện xét nghiệm máu và siêu âm ổ bụng tổng quát. Uống nhiều nước lọc và nhịn tiểu trước khi siêu âm. Xuất trình CCCD/BHYT tại quầy tiếp đón.',
-            symptoms: ['Kiểm tra sức khỏe định kỳ', 'Tầm soát ung thư sớm', 'Đánh giá chức năng gan thận', 'Tầm soát đái tháo đường'],
+            notes: pkg.notes || 'Nhịn ăn sáng ít nhất 6-8 tiếng để thực hiện xét nghiệm máu và siêu âm ổ bụng tổng quát. Uống nhiều nước lọc và nhịn tiểu trước khi siêu âm. Xuất trình CCCD/BHYT tại quầy tiếp đón.',
+            symptoms: Array.isArray(pkg.symptoms) ? pkg.symptoms : ['Kiểm tra sức khỏe định kỳ', 'Tầm soát ung thư sớm'],
+            imageUrl: pkg.imageUrl || null,
+            durationMin: pkg.durationMin || 45,
+            sessionType: pkg.sessionType || 'ALL_DAY',
             price: pkg.price,
             branchBookingMethodId: healthPackageMethod.id,
             isActive: true,

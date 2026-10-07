@@ -36,10 +36,6 @@ export class TrackBehaviorDto {
   @IsNotEmpty({ message: 'sessionId không được để trống' })
   sessionId: string;
 
-  @IsString()
-  @IsOptional()
-  profileId?: string;
-
   @IsEnum(TrackingActionType, { message: 'actionType không hợp lệ' })
   actionType: TrackingActionType;
 

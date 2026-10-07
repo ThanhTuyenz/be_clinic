@@ -666,7 +666,12 @@ export class SchedulesService {
       };
 
       const rows = await this.prisma.bookingMethod.findMany({
-        where: { isActive: true },
+        where: {
+          isActive: true,
+          branches: {
+            some: { isEnabled: true },
+          },
+        },
         include: {
           branches: {
             where: { isEnabled: true },
@@ -694,7 +699,7 @@ export class SchedulesService {
     }
     const branchId = await this.resolveBranchId(branchIdentifier);
     return this.prisma.branchBookingMethod.findMany({
-      where: { branchId, isEnabled: true },
+      where: { branchId, isEnabled: true, bookingMethod: { isActive: true } },
       orderBy: { sortOrder: 'asc' },
       select: { id: true, branchId: true, isEnabled: true, sortOrder: true, bookingMethod: { select: { id: true, code: true, name: true, description: true, route: true } } },
     }).then((rows) => rows.map(({ bookingMethod, ...item }) => ({ ...item, bookingMethodId: bookingMethod.id, type: bookingMethod.code, code: bookingMethod.code, displayName: bookingMethod.name, description: bookingMethod.description, route: bookingMethod.route })));

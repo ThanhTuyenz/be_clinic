@@ -177,9 +177,12 @@ export class BookingService {
 
         const servicePackage = await tx.servicePackage.findUnique({
           where: { id: dto.servicePackageId },
-          include: { branchBookingMethod: true },
+          include: {
+            branchBookingMethod: true,
+            branchBookingMethods: { include: { branchBookingMethod: true } },
+          },
         });
-        if (!servicePackage || !servicePackage.isActive || !servicePackage.branchBookingMethod.isEnabled) {
+        if (!servicePackage || !servicePackage.isActive) {
           throw new NotFoundException('Gói dịch vụ không khả dụng');
         }
 
@@ -192,9 +195,18 @@ export class BookingService {
         }
         this.validateBookingLeadTime(doctorSlot.schedule.workDate);
 
-        if (doctorSlot.schedule.branchId !== servicePackage.branchBookingMethod.branchId) {
-          throw new ConflictException('Khung giờ khám không thuộc cơ sở của gói dịch vụ');
+        const targetBranchId = doctorSlot.schedule.branchId;
+        const validBranchBbm =
+          (servicePackage.branchBookingMethod?.branchId === targetBranchId && servicePackage.branchBookingMethod?.isEnabled)
+            ? servicePackage.branchBookingMethod
+            : servicePackage.branchBookingMethods?.find(
+                (l) => l.branchBookingMethod?.branchId === targetBranchId && l.branchBookingMethod?.isEnabled,
+              )?.branchBookingMethod;
+
+        if (!validBranchBbm) {
+          throw new ConflictException('Gói dịch vụ không được áp dụng hoặc đã bị tắt tại cơ sở này');
         }
+
         if (servicePackage.specialtyId) {
           const compatible = await tx.doctorSpecialty.count({
             where: { doctorId: doctorSlot.schedule.doctorId, specialtyId: servicePackage.specialtyId },
@@ -215,7 +227,7 @@ export class BookingService {
           const candidateSlots: any[] = await tx.$queryRaw`
             SELECT s."id" FROM "doctor_schedule_slots" s
             JOIN "doctor_schedules" sch ON s."schedule_id" = sch."id"
-            WHERE sch."branch_id" = ${servicePackage.branchBookingMethod.branchId}::uuid
+            WHERE sch."branch_id" = ${targetBranchId}::uuid
               AND sch."work_date" = ${doctorSlot.schedule.workDate}::date
               AND sch."status" = 'OPEN'
               AND s."start_time" = ${doctorSlot.startTime}::time
@@ -262,7 +274,7 @@ export class BookingService {
         const appointment = await tx.appointment.create({
           data: {
             patientProfileId: profile.id,
-            branchId: servicePackage.branchBookingMethod.branchId,
+            branchId: targetBranchId,
             scheduleSlotId: activeSlot.id,
             servicePackageId: servicePackage.id,
             servicePrice: servicePackage.price,
@@ -289,7 +301,7 @@ export class BookingService {
         const invoice = await tx.invoice.create({
           data: {
             appointmentId: appointment.id,
-            issuedBranchId: servicePackage.branchBookingMethod.branchId,
+            issuedBranchId: targetBranchId,
             subtotal: servicePackage.price,
             serviceFee: new Prisma.Decimal(serviceFee),
             discountAmount: new Prisma.Decimal(discountAmount),
@@ -1611,7 +1623,10 @@ export class BookingService {
             }
             const pkg = await tx.servicePackage.findUnique({
               where: { id: item.servicePackageId },
-              include: { branchBookingMethod: true },
+              include: {
+                branchBookingMethod: true,
+                branchBookingMethods: { include: { branchBookingMethod: true } },
+              },
             });
             if (!pkg || !pkg.isActive) {
               throw new NotFoundException(`Gói dịch vụ không khả dụng cho ${profile.fullName}`);
@@ -1623,6 +1638,18 @@ export class BookingService {
             });
             if (!doctorSlot || !doctorSlot.isActive || doctorSlot.schedule.status !== 'OPEN') {
               throw new NotFoundException(`Khung giờ khám không khả dụng cho ${profile.fullName}`);
+            }
+
+            const targetBranchId = doctorSlot.schedule.branchId;
+            const validBranchBbm =
+              (pkg.branchBookingMethod?.branchId === targetBranchId && pkg.branchBookingMethod?.isEnabled)
+                ? pkg.branchBookingMethod
+                : pkg.branchBookingMethods?.find(
+                    (l) => l.branchBookingMethod?.branchId === targetBranchId && l.branchBookingMethod?.isEnabled,
+                  )?.branchBookingMethod;
+
+            if (!validBranchBbm) {
+              throw new ConflictException(`Gói dịch vụ đã bị tắt hoặc không áp dụng tại cơ sở này (${profile.fullName})`);
             }
 
             const dup = await tx.appointment.findFirst({
@@ -1642,7 +1669,7 @@ export class BookingService {
             totalAmount = totalAmount.add(pkg.price);
             appointmentData.push({
               patientProfileId: profile.id,
-              branchId: pkg.branchBookingMethod.branchId,
+              branchId: targetBranchId,
               scheduleSlotId: doctorSlot.id,
               servicePackageId: pkg.id,
               servicePrice: pkg.price,

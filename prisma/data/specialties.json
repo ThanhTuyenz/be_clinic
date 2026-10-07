@@ -3,84 +3,112 @@
     "name": "Nội tổng quát",
     "slug": "noi-tong-quat",
     "description": "Khám, tư vấn sức khỏe chung và tầm soát bệnh lý mạn tính người lớn.",
+    "symptoms": ["Mệt mỏi suy nhược", "Sụt cân không rõ nguyên nhân", "Sốt kéo dài", "Kiểm tra sức khỏe định kỳ"],
+    "iconUrl": "https://images.unsplash.com/photo-1576091160399-112ba8d25d1d?w=120&auto=format&fit=crop&q=80",
     "sortOrder": 1
   },
   {
     "name": "Tim mạch",
     "slug": "tim-mach",
     "description": "Khám và điều trị tăng huyết áp, xơ vữa động mạch, suy tim và rối loạn nhịp tim.",
+    "symptoms": ["Đau thắt ngực", "Hồi hộp đánh trống ngực", "Khó thở khi gắng sức", "Huyết áp cao hoặc không ổn định"],
+    "iconUrl": "https://images.unsplash.com/photo-1628348068343-c6a848d2b6dd?w=120&auto=format&fit=crop&q=80",
     "sortOrder": 2
   },
   {
     "name": "Tiêu hóa – Gan mật",
     "slug": "tieu-hoa-gan-mat",
     "description": "Viêm loét dạ dày - đại tràng, trào ngược dạ dày, viêm gan B/C và sỏi mật.",
+    "symptoms": ["Đau thượng vị", "Ợ chua trào ngược", "Đầy hơi khó tiêu", "Rối loạn tiêu hóa kéo dài", "Vàng da"],
+    "iconUrl": "https://images.unsplash.com/photo-1579154204601-01588f351e67?w=120&auto=format&fit=crop&q=80",
     "sortOrder": 3
   },
   {
     "name": "Hô hấp",
     "slug": "ho-hap",
     "description": "Viêm phế quản, hen suyễn, viêm phổi và bệnh phổi tắc nghẽn mạn tính (COPD).",
+    "symptoms": ["Ho kéo dài", "Khò khè tức ngực", "Ho có đờm hoặc lẫn máu", "Hụt hơi khó thở"],
+    "iconUrl": "https://images.unsplash.com/photo-1584515979956-d9f6e5d09982?w=120&auto=format&fit=crop&q=80",
     "sortOrder": 4
   },
   {
     "name": "Nội tiết – Đái tháo đường",
     "slug": "noi-tiet-dai-thao-duong",
     "description": "Kiểm soát đường huyết, bệnh lý tuyến giáp và rối loạn chuyển hóa lipid.",
+    "symptoms": ["Khát nước nhiều", "Tiểu nhiều ban đêm", "Run tay sụt cân nhanh", "Bướu cổ phì đại"],
+    "iconUrl": "https://images.unsplash.com/photo-1576091160550-2173dba999ef?w=120&auto=format&fit=crop&q=80",
     "sortOrder": 5
   },
   {
     "name": "Thần kinh",
     "slug": "than-kinh",
     "description": "Khám đau đầu mạn tính, mất ngủ, rối loạn tiền đình và suy giảm trí nhớ.",
+    "symptoms": ["Đau nửa đầu Migraine", "Chóng mặt hoa mắt", "Mất ngủ kéo dài", "Tê bì chân tay"],
+    "iconUrl": "https://images.unsplash.com/photo-1559757175-5700dde675bc?w=120&auto=format&fit=crop&q=80",
     "sortOrder": 6
   },
   {
     "name": "Ngoại tổng quát",
     "slug": "ngoai-tong-quat",
     "description": "Bệnh lý hậu môn trực tràng, thoát vị bẹn và xử lý tiểu phẫu ngoại khoa.",
+    "symptoms": ["Khối u bướu vùng bẹn", "Đau rát hậu môn trĩ", "U mỡ bao hoạt dịch", "Vết thương hở phần mềm"],
+    "iconUrl": "https://images.unsplash.com/photo-1551076805-e1869033e561?w=120&auto=format&fit=crop&q=80",
     "sortOrder": 7
   },
   {
     "name": "Ngoại Chấn thương Chỉnh hình",
     "slug": "ngoai-chan-thuong-chinh-hinh",
     "description": "Bệnh lý cơ xương khớp, thoái hóa khớp, trật khớp và chấn thương thể thao.",
+    "symptoms": ["Đau nhức khớp gối", "Thoái hóa cột sống", "Đau mỏi vai gáy", "Căng cơ chấn thương vận động"],
+    "iconUrl": "https://images.unsplash.com/photo-1588776814546-1ffcf47267a5?w=120&auto=format&fit=crop&q=80",
     "sortOrder": 8
   },
   {
     "name": "Nhi khoa",
     "slug": "nhi-khoa",
     "description": "Khám, điều trị và theo dõi sự phát triển thể chất toàn diện của trẻ nhỏ.",
+    "symptoms": ["Sốt co giật ở trẻ", "Biếng ăn chậm tăng cân", "Ho sốt cảm cúm", "Phát ban mẩn ngứa trẻ nhỏ"],
+    "iconUrl": "https://images.unsplash.com/photo-1584515979956-d9f6e5d09982?w=120&auto=format&fit=crop&q=80",
     "sortOrder": 9
   },
   {
     "name": "Sản – Phụ khoa",
     "slug": "san-phu-khoa",
     "description": "Chăm sóc sức khỏe sinh sản phụ nữ, tầm soát phụ khoa và theo dõi thai kỳ định kỳ.",
+    "symptoms": ["Rối loạn kinh nguyệt", "Khám thai định kỳ", "Đau bụng dưới bất thường", "Viêm nhiễm phụ khoa"],
+    "iconUrl": "https://images.unsplash.com/photo-1579684385127-1ef15d508118?w=120&auto=format&fit=crop&q=80",
     "sortOrder": 10
   },
   {
     "name": "Mắt",
     "slug": "mat",
     "description": "Đo thị lực, khám tật khúc xạ, viêm kết mạc, đục thủy tinh thể và soi đáy mắt.",
+    "symptoms": ["Mắt nhìn mờ", "Đỏ mắt cộm rát", "Chảy nước mắt sống", "Khám đo kính cận loạn"],
+    "iconUrl": "https://images.unsplash.com/photo-1559839734-2b71ea197ec2?w=120&auto=format&fit=crop&q=80",
     "sortOrder": 11
   },
   {
     "name": "Tai Mũi Họng",
     "slug": "tai-mui-hong",
     "description": "Nội soi tai mũi họng, viêm xoang, viêm họng hạt, viêm amidan và viêm tai giữa.",
+    "symptoms": ["Đau rát họng nuốt vướng", "Nghẹt mũi chảy nước mũi", "Ù tai chảy dịch tai", "Khàn tiếng kéo dài"],
+    "iconUrl": "https://images.unsplash.com/photo-1622253692010-333f2da6031d?w=120&auto=format&fit=crop&q=80",
     "sortOrder": 12
   },
   {
     "name": "Răng Hàm Mặt",
     "slug": "rang-ham-mat",
     "description": "Khám răng tổng quát, nhổ răng, trám răng thẩm mỹ, điều trị tủy và lấy cao răng.",
+    "symptoms": ["Đau buốt răng sâu", "Chảy máu chân răng nướu", "Răng khôn mọc lệch", "Cần lấy cao răng làm sạch"],
+    "iconUrl": "https://images.unsplash.com/photo-1588776814546-1ffcf47267a5?w=120&auto=format&fit=crop&q=80",
     "sortOrder": 13
   },
   {
     "name": "Da liễu",
     "slug": "da-lieu",
     "description": "Khám, điều trị viêm da cơ địa, mụn trứng cá, nấm da và chăm sóc thẩm mỹ da liễu.",
+    "symptoms": ["Mụn viêm mụn bọc", "Ngứa ngáy dị ứng mề đay", "Vảy nến á sừng", "Nấm da rụng tóc"],
+    "iconUrl": "https://images.unsplash.com/photo-1519494026892-80bbd2d6fd0d?w=120&auto=format&fit=crop&q=80",
     "sortOrder": 14
   }
 ]

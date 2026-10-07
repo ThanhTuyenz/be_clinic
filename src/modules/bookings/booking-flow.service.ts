@@ -31,10 +31,41 @@ export class BookingFlowService {
     const effectiveBranchId = await this.resolveBranchId(dto.branchId);
     const parsedSpecialtyId = dto.specialtyId ? Number(dto.specialtyId) : undefined;
 
+    const methodCodeMap: Record<string, string> = {
+      specialty: 'SPECIALTY_EXAM',
+      'chuyen-khoa': 'SPECIALTY_EXAM',
+      doctor: 'CONSULTATION',
+      'bac-si': 'CONSULTATION',
+      'health-package': 'HEALTH_PACKAGE',
+      'goi-kham': 'HEALTH_PACKAGE',
+    };
+    const requiredMethodCode = methodCodeMap[rawFlow];
+
+    const branchWhere: any = {
+      isActive: true,
+      ...(requiredMethodCode
+        ? {
+            bookingMethods: {
+              some: {
+                isEnabled: true,
+                bookingMethod: { code: requiredMethodCode, isActive: true },
+              },
+            },
+          }
+        : {
+            bookingMethods: {
+              some: {
+                isEnabled: true,
+                bookingMethod: { isActive: true },
+              },
+            },
+          }),
+    };
+
     // 1. Dữ liệu dùng chung: Danh sách cơ sở, Phương thức đặt khám & Tất cả gói dịch vụ/khám sức khỏe
     const [branches, bookingMethods, allServicePackages] = await Promise.all([
       this.prisma.branch.findMany({
-        where: { isActive: true },
+        where: branchWhere,
         orderBy: [{ code: 'desc' }, { name: 'asc' }],
         select: {
           id: true,
@@ -59,7 +90,27 @@ export class BookingFlowService {
         },
       }),
       this.prisma.servicePackage.findMany({
-        where: { isActive: true },
+        where: {
+          isActive: true,
+          OR: [
+            {
+              branchBookingMethod: {
+                isEnabled: true,
+                bookingMethod: { isActive: true },
+              },
+            },
+            {
+              branchBookingMethods: {
+                some: {
+                  branchBookingMethod: {
+                    isEnabled: true,
+                    bookingMethod: { isActive: true },
+                  },
+                },
+              },
+            },
+          ],
+        },
         orderBy: [{ price: 'asc' }, { name: 'asc' }],
         select: {
           id: true,
@@ -75,16 +126,25 @@ export class BookingFlowService {
           branchBookingMethod: {
             select: {
               branchId: true,
+              isEnabled: true,
               branch: { select: { id: true, code: true, slug: true, name: true, address: true } },
-              bookingMethod: { select: { id: true, code: true, name: true } },
+              bookingMethod: { select: { id: true, code: true, name: true, isActive: true } },
             },
           },
           branchBookingMethods: {
+            where: {
+              branchBookingMethod: {
+                isEnabled: true,
+                bookingMethod: { isActive: true },
+              },
+            },
             select: {
               branchBookingMethod: {
                 select: {
                   branchId: true,
+                  isEnabled: true,
                   branch: { select: { id: true, code: true, slug: true, name: true, address: true } },
+                  bookingMethod: { select: { id: true, code: true, name: true, isActive: true } },
                 },
               },
             },
@@ -93,20 +153,35 @@ export class BookingFlowService {
       }),
     ]);
 
-    const formattedPackages = allServicePackages.map(({ branchBookingMethod, branchBookingMethods, ...pkg }) => {
-      const branchesList = [
-        ...(branchBookingMethod?.branch ? [branchBookingMethod.branch] : []),
-        ...(branchBookingMethods?.map((b) => b.branchBookingMethod?.branch).filter(Boolean) || []),
-      ];
-      return {
-        ...pkg,
-        price: Number(pkg.price),
-        branchId: branchBookingMethod?.branchId,
-        branch: branchBookingMethod?.branch,
-        branches: branchesList,
-        bookingMethod: branchBookingMethod?.bookingMethod,
-      };
-    });
+    const formattedPackages = allServicePackages
+      .map(({ branchBookingMethod, branchBookingMethods, ...pkg }) => {
+        const primaryBbm =
+          branchBookingMethod?.isEnabled && branchBookingMethod?.bookingMethod?.isActive
+            ? branchBookingMethod
+            : null;
+        const validLinks = (branchBookingMethods || [])
+          .map((b) => b.branchBookingMethod)
+          .filter((bbm) => bbm && bbm.isEnabled && bbm.bookingMethod?.isActive);
+
+        const branchesList = [
+          ...(primaryBbm?.branch ? [primaryBbm.branch] : []),
+          ...validLinks.map((l) => l.branch).filter(Boolean),
+        ];
+
+        // Deduplicate branches by id
+        const uniqueBranches = Array.from(new Map(branchesList.map((b) => [b.id, b])).values());
+        const effectiveBbm = primaryBbm || validLinks[0] || null;
+
+        return {
+          ...pkg,
+          price: Number(pkg.price),
+          branchId: effectiveBbm?.branchId,
+          branch: effectiveBbm?.branch,
+          branches: uniqueBranches,
+          bookingMethod: effectiveBbm?.bookingMethod,
+        };
+      })
+      .filter((pkg) => pkg.branches.length > 0);
 
     const specialtyPackages = formattedPackages.filter((p) => p.specialtyId !== null);
     const generalHealthPackages = formattedPackages.filter((p) => p.specialtyId === null || p.bookingMethod?.code === 'HEALTH_PACKAGE');
@@ -221,8 +296,37 @@ export class BookingFlowService {
         where: {
           isActive: true,
           ...(effectiveBranchId
-            ? { branches: { some: { branchId: effectiveBranchId, isActive: true } } }
-            : {}),
+            ? {
+                branches: {
+                  some: {
+                    branchId: effectiveBranchId,
+                    isActive: true,
+                    branch: {
+                      bookingMethods: {
+                        some: {
+                          isEnabled: true,
+                          bookingMethod: { code: 'SPECIALTY_EXAM', isActive: true },
+                        },
+                      },
+                    },
+                  },
+                },
+              }
+            : {
+                branches: {
+                  some: {
+                    isActive: true,
+                    branch: {
+                      bookingMethods: {
+                        some: {
+                          isEnabled: true,
+                          bookingMethod: { code: 'SPECIALTY_EXAM', isActive: true },
+                        },
+                      },
+                    },
+                  },
+                },
+              }),
         },
         orderBy: [{ sortOrder: 'asc' }, { id: 'asc' }],
         select: {
@@ -232,7 +336,18 @@ export class BookingFlowService {
           description: true,
           iconUrl: true,
           branches: {
-            where: { isActive: true },
+            where: {
+              isActive: true,
+              branch: {
+                isActive: true,
+                bookingMethods: {
+                  some: {
+                    isEnabled: true,
+                    bookingMethod: { code: 'SPECIALTY_EXAM', isActive: true },
+                  },
+                },
+              },
+            },
             select: {
               branch: { select: { id: true, code: true, slug: true, name: true } },
             },
@@ -240,7 +355,29 @@ export class BookingFlowService {
           _count: {
             select: {
               doctors: { where: { doctor: { isActive: true } } },
-              servicePackages: { where: { isActive: true } },
+              servicePackages: {
+                where: {
+                  isActive: true,
+                  OR: [
+                    {
+                      branchBookingMethod: {
+                        isEnabled: true,
+                        bookingMethod: { code: 'SPECIALTY_EXAM', isActive: true },
+                      },
+                    },
+                    {
+                      branchBookingMethods: {
+                        some: {
+                          branchBookingMethod: {
+                            isEnabled: true,
+                            bookingMethod: { code: 'SPECIALTY_EXAM', isActive: true },
+                          },
+                        },
+                      },
+                    },
+                  ],
+                },
+              },
             },
           },
         },

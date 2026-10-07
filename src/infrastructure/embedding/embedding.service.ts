@@ -330,53 +330,213 @@ export class EmbeddingService {
   }
 
   /**
-     search native langugee
+   * Tìm kiếm kết hợp (Hybrid Search):
+   * 1. Khớp từ khóa / triệu chứng thực tế từ Database: Tên gói (Name), Tag triệu chứng (Symptoms), Chuyên khoa (Specialty), Mô tả (Description)
+   * 2. Với từ khóa ngắn (<= 4 từ): Chỉ trả về kết quả khi có Text/Symptom Match thực tế từ DB (Không dùng vector noise)
+   * 3. Với câu văn dài (> 4 từ): Kết hợp Vector Embedding với ngưỡng tương đồng cao (>= 88%)
    */
   async searchByNaturalLanguage(
     queryText: string,
     packages: PackageForRetrieval[],
     topK = 10,
   ): Promise<ScoredPackage[]> {
-    const queryVector = await this.embedText(queryText);
+    if (!queryText || !queryText.trim() || packages.length === 0) return [];
+    const q = queryText.trim();
+    const qNorm = this.normalizeVietnamese(q);
+    const tokens = qNorm.split(/\s+/).filter((t) => t.length >= 2);
+    const isShortQuery = tokens.length <= 4;
 
-    if (queryVector) {
-      const redisSearchResults = await this.searchWithRedisSearch(queryVector, packages, topK);
-      if (redisSearchResults && redisSearchResults.length > 0) {
-        return redisSearchResults;
+    // 1. Tính điểm Text / Keyword / Tag matching dựa trên 100% dữ liệu Database
+    const textScoreMap = new Map<string, number>();
+
+    for (const pkg of packages) {
+      const nameRaw = pkg.name || '';
+      const nameNorm = this.normalizeVietnamese(nameRaw);
+      const specRaw = pkg.specialtyName || '';
+      const specNorm = this.normalizeVietnamese(specRaw);
+      const symptomsList = (pkg.symptoms || [])
+        .map((s) => ({
+          raw: (s || '').trim(),
+          norm: this.normalizeVietnamese(s || ''),
+        }))
+        .filter((s) => s.norm.length >= 2);
+      const descRaw = pkg.description || '';
+      const descNorm = this.normalizeVietnamese(descRaw);
+
+      let maxScore = 0;
+
+      // 1.1. Khớp Tên gói khám (Trọng số cao nhất)
+      const nameScore = this.matchTextScore(q, qNorm, nameRaw, nameNorm);
+      if (nameScore > 0) {
+        maxScore = Math.max(maxScore, nameScore * 1.3);
+      }
+
+      // 1.2. Khớp Tag / Triệu chứng lâm sàng thực tế từ Database
+      for (const sym of symptomsList) {
+        const symScore = this.matchTextScore(q, qNorm, sym.raw, sym.norm);
+        if (symScore > 0) {
+          maxScore = Math.max(maxScore, symScore * 1.2);
+        }
+      }
+
+      // 1.3. Khớp Chuyên khoa
+      const specScore = this.matchTextScore(q, qNorm, specRaw, specNorm);
+      if (specScore > 0) {
+        maxScore = Math.max(maxScore, specScore * 1.0);
+      }
+
+      // 1.4. Khớp Mô tả chi tiết
+      const descScore = this.matchTextScore(q, qNorm, descRaw, descNorm);
+      if (descScore > 0) {
+        maxScore = Math.max(maxScore, descScore * 0.7);
+      }
+
+      if (maxScore > 0) {
+        textScoreMap.set(pkg.id, maxScore);
       }
     }
 
-    // Fallback keyword search
-    return this.fallbackKeywordMatcher(queryText, packages, topK);
+    // 2. Tìm kiếm Vector Ngữ nghĩa (RediSearch / Cosine Similarity)
+    const vectorScoreMap = new Map<string, number>();
+    try {
+      const queryVector = await this.embedText(q);
+      if (queryVector) {
+        const redisSearchResults = await this.searchWithRedisSearch(queryVector, packages, packages.length);
+        if (redisSearchResults && redisSearchResults.length > 0) {
+          for (const item of redisSearchResults) {
+            if (item.score >= 0.70) {
+              vectorScoreMap.set(item.package.id, item.score);
+            }
+          }
+        }
+      }
+    } catch {}
+
+    // 3. Kết hợp điểm số & Lọc kết quả (Hybrid Scoring & Thresholding)
+    const scoredList: ScoredPackage[] = [];
+
+    for (const pkg of packages) {
+      const textScore = textScoreMap.get(pkg.id) || 0;
+      const vectorScore = vectorScoreMap.get(pkg.id) || 0;
+
+      // Điều kiện hợp lệ: Phải có Text match thực tế (textScore > 0) HOẶC Vector ngữ nghĩa cao (>= 0.82)
+      if (textScore <= 0 && vectorScore < 0.82) continue;
+
+      const finalScore = Number((textScore * 1.5 + vectorScore * 1.2).toFixed(3));
+
+      scoredList.push({
+        package: pkg,
+        score: finalScore,
+      });
+    }
+
+    // Sắp xếp điểm từ cao xuống thấp
+    scoredList.sort((a, b) => b.score - a.score);
+
+    return scoredList.slice(0, topK);
   }
 
   /**
-   * Fallback tìm kiếm theo từ khóa / token y khoa nội bộ
+   * So khớp văn bản hỗ trợ cả tiếng Việt có dấu, không dấu và các gốc từ triệu chứng y khoa
    */
+  private matchTextScore(
+    queryRaw: string,
+    queryNorm: string,
+    targetRaw: string,
+    targetNorm: string,
+  ): number {
+    if (!queryRaw || !targetRaw) return 0;
+
+    const qRaw = queryRaw.toLowerCase().trim();
+    const qNorm = queryNorm.toLowerCase().trim();
+    const tRaw = targetRaw.toLowerCase().trim();
+    const tNorm = targetNorm.toLowerCase().trim();
+
+    if (!qNorm || !tNorm) return 0;
+
+    // 1. Khớp chính xác 100%
+    if (tRaw === qRaw || tNorm === qNorm) {
+      return 5.0;
+    }
+
+    // 2. Chứa nguyên cụm từ tìm kiếm
+    if (tRaw.includes(qRaw)) {
+      return 4.0; // Có dấu khớp nguyên cụm
+    }
+    if (tNorm.includes(qNorm)) {
+      return 3.5; // Không dấu khớp nguyên cụm
+    }
+
+    // 3. Nếu query dài chứa trọn vẹn target (target là cụm từ y khoa >= 4 ký tự)
+    if (tRaw.length >= 4 && qRaw.includes(tRaw)) {
+      return 3.5;
+    }
+    if (tNorm.length >= 4 && qNorm.includes(tNorm)) {
+      return 3.0;
+    }
+
+    // 4. Độ tương đồng Token Overlap (Dynamic Jaccard Token Matching)
+    const hasDiacritics = /[àáạảãâầấậẩẫăằắặẳẵèéẹẻẽêềếệểễìíịỉĩòóọỏõôồốộổỗơờớợởỡùúụủũưừứựửữỳýỵỷỹđ]/i.test(qRaw);
+    const qTokens = (hasDiacritics ? qRaw : qNorm).split(/[\s,.-]+/).filter((t) => t.length >= 2);
+    const tTokens = (hasDiacritics ? tRaw : tNorm).split(/[\s,.-]+/).filter((t) => t.length >= 2);
+
+    if (qTokens.length === 0 || tTokens.length === 0) return 0;
+
+    const targetTokensCopy = [...tTokens];
+    let matchedCount = 0;
+
+    for (const qTok of qTokens) {
+      const foundIdx = targetTokensCopy.findIndex((tTok) => tTok.startsWith(qTok) || tTok === qTok);
+      if (foundIdx !== -1) {
+        matchedCount++;
+        targetTokensCopy.splice(foundIdx, 1);
+      }
+    }
+
+    const ratio = matchedCount / qTokens.length;
+
+    // Tỷ lệ khớp từ: Nếu khớp từ 50% số từ trở lên (ví dụ: gõ 2 từ khớp 1 từ, 3 từ khớp 2 từ)
+    if (ratio >= 0.5) {
+      return Number((ratio * 3.0).toFixed(2));
+    }
+
+    // Trường hợp tìm kiếm 1 từ đơn (ví dụ: gõ "ho", "xoang", "sốt", "mắt", "răng")
+    if (qTokens.length === 1 && matchedCount === 1) {
+      return 2.5;
+    }
+
+    return 0;
+  }
+
   private fallbackKeywordMatcher(
     query: string,
     candidates: PackageForRetrieval[],
     topK: number,
   ): ScoredPackage[] {
-    const tokens = query
-      .toLowerCase()
-      .split(/[\s,.-]+/)
-      .filter((t) => t.length >= 2);
-
+    const qNorm = this.normalizeVietnamese(query);
     const scored = candidates.map((pkg) => {
-      const symptomsStr = (pkg.symptoms || []).join(' ');
-      const targetText = `${pkg.name} ${pkg.specialtyName} ${pkg.description} ${symptomsStr}`.toLowerCase();
-      let matchCount = 0;
-      for (const t of tokens) {
-        if (targetText.includes(t)) matchCount++;
-      }
-      return {
-        package: pkg,
-        score: matchCount / Math.max(1, tokens.length),
-      };
+      const nameNorm = this.normalizeVietnamese(pkg.name || '');
+      const descNorm = this.normalizeVietnamese(pkg.description || '');
+      const specNorm = this.normalizeVietnamese(pkg.specialtyName || '');
+      const symNorm = (pkg.symptoms || []).map((s) => this.normalizeVietnamese(s)).join(' ');
+      const targetText = `${nameNorm} ${specNorm} ${descNorm} ${symNorm}`;
+
+      const score = this.matchTextScore(query, qNorm, `${pkg.name} ${pkg.specialtyName}`, targetText);
+      return { package: pkg, score };
     });
 
     scored.sort((a, b) => b.score - a.score);
     return scored.slice(0, topK);
+  }
+
+  private normalizeVietnamese(str: string): string {
+    if (!str) return '';
+    return str
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .replace(/đ/g, 'd')
+      .replace(/Đ/g, 'D')
+      .toLowerCase()
+      .trim();
   }
 }

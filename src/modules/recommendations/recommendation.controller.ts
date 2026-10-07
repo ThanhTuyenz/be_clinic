@@ -40,15 +40,7 @@ export class RecommendationController {
     return this.recommendationService.trackUserBehavior(dto, userId);
   }
 
-  @Get('patient-profile/:profileId')
-  @ApiOperation({ summary: 'Lấy danh sách gói khám đề xuất cá nhân hóa cho hồ sơ bệnh nhân (Cache Redis 0ms)' })
-  async getProfileRecommendations(
-    @Param('profileId') profileId: string,
-    @Query('branchId') branchId?: string,
-  ): Promise<ProfileRecommendationResponseDto> {
-    this.logger.log(`[API GET] /patient-profile/${profileId}${branchId ? ` (branchId: ${branchId})` : ''}`);
-    return this.recommendationService.getRecommendations(profileId, branchId);
-  }
+
 
   @Get('semantic-search')
   @ApiOperation({ summary: 'Tìm kiếm gói khám bằng ngôn ngữ tự nhiên / triệu chứng y khoa' })

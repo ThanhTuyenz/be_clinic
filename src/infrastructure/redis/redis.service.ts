@@ -120,6 +120,14 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
     return (await this.client.exists(key)) === 1;
   }
 
+  /**
+   * Trả về số giây còn lại (TTL) của một key. Trả về -1 nếu key không có TTL, -2 nếu key không tồn tại.
+   */
+  async getTtl(key: string): Promise<number> {
+    if (!this.client) return -2;
+    return await this.client.ttl(key);
+  }
+
   async hincrby(key: string, field: string, increment: number): Promise<number> {
     if (!this.client) return 0;
     return await this.client.hincrby(key, field, increment);

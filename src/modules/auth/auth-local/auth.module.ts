@@ -12,6 +12,9 @@ import { MailsModule } from '../../../infrastructure/mail/mails.module.js';
 import { ForgotPasswordModule } from '../forgot-password/forgot-password.module';
 import { HistoryModule } from '../history/history.module.js';
 import { ZaloZnsModule } from '../../../infrastructure/zalo-zns/zalo-zns.module.js';
+import { AuthOtpService } from './services/auth-otp.service.js';
+import { AuthTokenService } from './services/auth-token.service.js';
+import { AccountLinkingService } from './services/account-linking.service.js';
 
 @Module({
   imports: [
@@ -29,6 +32,10 @@ import { ZaloZnsModule } from '../../../infrastructure/zalo-zns/zalo-zns.module.
     JwtRefreshStrategy,
     JwtStrategy,
     AnonymousStrategy,
+    // Sub-services
+    AuthOtpService,
+    AuthTokenService,
+    AccountLinkingService,
     {
       provide: Services.AUTH,
       useClass: AuthService,
