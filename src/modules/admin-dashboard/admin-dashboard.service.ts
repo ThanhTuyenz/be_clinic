@@ -193,9 +193,8 @@ export class AdminDashboardService {
     }
   }
 
-  // ─────────────────────────────────────────────────────────────
-  // 1. TỔNG QUAN VẬN HÀNH (GET /stats/dashboard)
-  // ─────────────────────────────────────────────────────────────
+
+  // overview
   async overview(userId: string, query?: { branchId?: string; timeFilter?: string }) {
     const user = await this.getStaffUser(userId)
     const scope = this.resolveBranchScope(user, query?.branchId)
@@ -576,9 +575,7 @@ export class AdminDashboardService {
     }
   }
 
-  // ─────────────────────────────────────────────────────────────
   // 2. BÁO CÁO & PHÂN TÍCH CHUYÊN SÂU (GET /stats/analytics)
-  // ─────────────────────────────────────────────────────────────
   async analytics(
     userId: string,
     query: { timeFilter?: string; branchId?: string; startDate?: string; endDate?: string },
@@ -707,8 +704,8 @@ export class AdminDashboardService {
     const revenueGrowth = prevRevNum > 0
       ? `${diffPct >= 0 ? '+' : ''}${diffPct.toFixed(1)}% so với kỳ trước`
       : totalRevNum > 0
-      ? '+100% so với kỳ trước'
-      : '0% so với kỳ trước'
+        ? '+100% so với kỳ trước'
+        : '0% so với kỳ trước'
 
     const daysCount = Math.max(1, Math.round((toDate.getTime() - fromDate.getTime()) / (1000 * 3600 * 24)))
     const dailyAvgNum = Math.round(totalRevNum / daysCount)
@@ -1216,7 +1213,7 @@ export class AdminDashboardService {
           unmatchedSearches.push({ query, searchCount })
         }
       }
-    } catch {}
+    } catch { }
 
     // 1.2. Đọc bổ sung từ Redis ZSET thời gian thực
     try {
@@ -1246,7 +1243,7 @@ export class AdminDashboardService {
           }
         }
       }
-    } catch {}
+    } catch { }
 
     // 1.3. Chuẩn hóa & Gom nhóm thông minh (Group có dấu + không dấu, khoảng trắng)
     topSearches = this.clusterSearchQueries(topSearches)
@@ -1265,7 +1262,7 @@ export class AdminDashboardService {
           pkgViewMap.set(rawViews[i], parseInt(rawViews[i + 1], 10) || 0)
         }
       }
-    } catch {}
+    } catch { }
 
     // 3. Truy vấn Lịch hẹn & Hồ sơ bệnh nhân từ PostgreSQL trong khoảng thời gian
     const appointments = await this.prisma.appointment.findMany({
@@ -1433,10 +1430,12 @@ export class AdminDashboardService {
     // 7. Tổng hợp các KPIs đầu não
     const totalSearches = topSearches.reduce((acc, s) => acc + s.searchCount, 0)
     const unmatchedCount = unmatchedSearches.reduce((acc, s) => acc + s.searchCount, 0)
-    const totalPackageViews = packageFunnels.reduce((acc, p) => acc + p.views, 0)
+    const packageBookingsCount = appointments.filter((a) => !!a.servicePackageId).length
     const totalBookings = appointments.length
+    const rawPackageViews = packageFunnels.reduce((acc, p) => acc + p.views, 0)
+    const totalPackageViews = Math.max(packageBookingsCount, rawPackageViews)
     const overallConversionRate = totalPackageViews > 0
-      ? +((totalBookings / totalPackageViews) * 100).toFixed(1)
+      ? +Math.min(100, (packageBookingsCount / totalPackageViews) * 100).toFixed(1)
       : 0
     const topSpecialtyDemand =
       demographicsList[0]?.specialtyName ||
@@ -1479,7 +1478,7 @@ export class AdminDashboardService {
         if (cached && cached.overview) {
           return { ...cached, metrics, fromCache: true }
         }
-      } catch {}
+      } catch { }
     }
 
     if (!this.aiClient) {

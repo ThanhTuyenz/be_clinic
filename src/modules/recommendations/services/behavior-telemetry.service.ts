@@ -117,6 +117,7 @@ export class BehaviorTelemetryService {
       pipeline.zincrby('rec:global:popular_specialties', 1, specialtyId.toString());
     }
     if (dto.targetPackageId) {
+      pipeline.zincrby('rec:global:package_views', 1, dto.targetPackageId);
       pipeline.zincrby('rec:global:popular_packages', 1, dto.targetPackageId);
     }
     if (dto.actionType === TrackingActionType.SEARCH && dto.searchQuery?.trim()) {
@@ -127,34 +128,47 @@ export class BehaviorTelemetryService {
   }
 
   /**
-   * Ghi log thống kê tìm kiếm vào cơ sở dữ liệu PostgreSQL
+   * Ghi log thống kê tìm kiếm và cập nhật lượt xem gói vào cơ sở dữ liệu PostgreSQL
    */
   private async persistDatabaseAnalytics(dto: TrackBehaviorDto): Promise<void> {
-    if (dto.actionType !== TrackingActionType.SEARCH || !dto.searchQuery?.trim()) return;
+    // 1. Cập nhật lượt xem gói khám
+    if (dto.actionType === TrackingActionType.VIEW_PACKAGE && dto.targetPackageId) {
+      try {
+        await this.prisma.servicePackage.update({
+          where: { id: dto.targetPackageId },
+          data: { viewCount: { increment: 1 } },
+        });
+      } catch (err: any) {
+        this.logger.debug(`[Telemetry] Failed to increment package viewCount: ${err?.message}`);
+      }
+    }
 
-    try {
-      const keyword = dto.searchQuery.trim().toLowerCase();
-      if (keyword.length >= 2) {
-        const dateKey = new Date().toISOString().slice(0, 10);
-        await this.prisma.searchLog.upsert({
-          where: {
-            keyword_dateKey_hasResults: {
+    // 2. Ghi log tìm kiếm
+    if (dto.actionType === TrackingActionType.SEARCH && dto.searchQuery?.trim()) {
+      try {
+        const keyword = dto.searchQuery.trim().toLowerCase();
+        if (keyword.length >= 2) {
+          const dateKey = new Date().toISOString().slice(0, 10);
+          await this.prisma.searchLog.upsert({
+            where: {
+              keyword_dateKey_hasResults: {
+                keyword,
+                dateKey,
+                hasResults: true,
+              },
+            },
+            update: { count: { increment: 1 } },
+            create: {
               keyword,
               dateKey,
+              count: 1,
               hasResults: true,
             },
-          },
-          update: { count: { increment: 1 } },
-          create: {
-            keyword,
-            dateKey,
-            count: 1,
-            hasResults: true,
-          },
-        });
+          });
+        }
+      } catch (err: any) {
+        this.logger.debug(`[Telemetry] Failed to persist DB search log: ${err?.message}`);
       }
-    } catch (err: any) {
-      this.logger.debug(`[Telemetry] Failed to persist DB analytics: ${err?.message}`);
     }
   }
 

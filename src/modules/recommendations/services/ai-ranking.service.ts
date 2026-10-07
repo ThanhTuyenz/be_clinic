@@ -29,7 +29,6 @@ export class AiRankingService {
     return !!this.aiClient;
   }
 
-  // rerank
   async evaluateHybridWithGemini(context: {
     profile: {
       fullName: string;
@@ -63,7 +62,6 @@ export class AiRankingService {
     try {
       const prompt = this.buildHybridPrompt(context);
 
-      // Gọi Gemini có Timeout bảo vệ (Không bao giờ để user chờ quá 4s)
       const generatePromise = this.aiClient.models.generateContent({
         model: this.modelName,
         contents: prompt,
@@ -100,7 +98,6 @@ export class AiRankingService {
       const response = await Promise.race([generatePromise, timeoutPromise]);
       const selections = this.safeParseSelections(response.text);
 
-      // Tra cứu O(1) qua Map
       const candidateMap = new Map(context.candidates.map((c) => [c.id, c]));
       const addedIds = new Set<string>();
       const result: RecommendedPackageItemDto[] = [];
@@ -135,7 +132,6 @@ export class AiRankingService {
     }
   }
 
-  // Tách riêng phần tạo Prompt
   private buildHybridPrompt(context: {
     profile: {
       fullName: string;
@@ -166,7 +162,7 @@ export class AiRankingService {
   }): string {
     return `
 Bạn là Bác sĩ Trưởng Hội đồng Khám sàng lọc & Y học Dự phòng tại VitaCare Clinic.
-Hãy đánh giá hồ sơ bệnh nhân và hành vi quan tâm gần đây để Re-rank và chọn ra từ 4 đến 6 gói khám y tế tối ưu nhất từ danh sách ứng viên được cung cấp.
+Hãy đánh giá hồ sơ bệnh nhân và hành vi quan tâm gần đây để Re-rank và chọn ra tối đa 12 gói khám y tế tối ưu nhất (cân đối tối đa 6 gói dựa trên hồ sơ bệnh án và tối đa 6 gói dựa trên hành vi/nhu cầu quan tâm gần đây) từ danh sách ứng viên được cung cấp.
 
 THÔNG TIN BỆNH NHÂN:
 ${context.profile ? `
@@ -197,20 +193,23 @@ ${JSON.stringify(
     )}
 
 QUY TẮC RE-RANKING:
-1. SỐ LƯỢNG KẾT QUẢ: Chọn ra từ 4 đến 6 gói khám phù hợp nhất.
-2. NGUYÊN TẮC ĐỀ XUẤT:
-   - Nếu CÓ HỒ SƠ: Ưu tiên theo tiền sử/bệnh nền, tuổi tác và giới tính của hồ sơ.
-   - Nếu LÀ HÀNH VI/KHÁCH VÃNG LAI: Ưu tiên theo mối quan tâm chuyên khoa, từ khóa tìm kiếm và các gói vừa quan tâm gần đây.
+1. SỐ LƯỢNG KẾT QUẢ: Chọn ra từ 6 đến 12 gói khám phù hợp nhất.
+2. CƠ CHẾ CÂN BẰNG NGUỒN (TWO-TOWER BALANCING):
+   - Nhánh Hồ sơ (origin="PROFILE" hoặc "BOTH"): Chọn tối đa 6 gói phù hợp với độ tuổi, giới tính, tiền sử bệnh án.
+   - Nhánh Hành vi (origin="BEHAVIOR"): Chọn tối đa 6 gói phù hợp với từ khóa tìm kiếm, giỏ hàng bỏ dở, chuyên khoa vừa xem.
+   - Gói bổ sung (origin="POPULAR"): Chỉ dùng để bù vào cuối nếu 2 nguồn trên chưa đủ số lượng.
 3. PHÂN LOẠI NGUỒN GỢI Ý (sourceType): "DROP_OFF" | "SEARCH_INTENT" | "RECENT_VIEW" | "PROFILE_AI" | "POPULAR".
+   - Gói thuộc Profile / Bệnh án: Gán "PROFILE_AI".
+   - Gói thuộc Hành vi: Gán "SEARCH_INTENT", "DROP_OFF", hoặc "RECENT_VIEW".
+   - Gói phổ biến bổ sung: Gán "POPULAR".
 4. MỨC ĐỘ ƯU TIÊN (priority): "HIGH" | "MEDIUM" | "LOW".
 5. NHÃN (badge): Ngắn gọn 2-4 từ (Ví dụ: "Theo hồ sơ bệnh án", "Nhu cầu vừa tìm", "Quan tâm gần đây", "Tầm soát định kỳ").
 6. LÝ DO ĐỀ XUẤT (clinicalReason): Viết 1-2 câu giải thích chuyên môn y khoa sâu sắc:
-   - Khi có hồ sơ: Nêu rõ căn cứ theo độ tuổi và tiền sử bệnh của bệnh nhân.
+   - Khi theo hồ sơ: Nêu rõ căn cứ theo độ tuổi và tiền sử bệnh của bệnh nhân.
    - Khi theo hành vi: Giải thích dựa trên nhu cầu tìm kiếm và chuyên khoa người dùng vừa quan tâm gần đây.
 `;
   }
 
-  // Parse JSON an toàn chống Markdown Block
   private safeParseSelections(rawText?: string): any[] {
     if (!rawText) return [];
     try {
@@ -229,16 +228,16 @@ QUY TẮC RE-RANKING:
     aiSourceType: string | undefined,
     candidate: any,
   ): 'DROP_OFF' | 'SEARCH_INTENT' | 'RECENT_VIEW' | 'PROFILE_AI' | 'POPULAR' {
+    if (candidate.origin === 'PROFILE' || candidate.origin === 'BOTH') return 'PROFILE_AI';
+    if (candidate.origin === 'BEHAVIOR' && candidate.behaviorSourceType) return candidate.behaviorSourceType;
+
     const validSources = ['DROP_OFF', 'SEARCH_INTENT', 'RECENT_VIEW', 'PROFILE_AI', 'POPULAR'];
     if (aiSourceType && validSources.includes(aiSourceType)) {
       return aiSourceType as any;
     }
-    if (candidate.behaviorSourceType) return candidate.behaviorSourceType;
-    if (candidate.origin === 'PROFILE') return 'PROFILE_AI';
     return 'POPULAR';
   }
 
-  // fallback
   evaluateHybridWithHeuristics(
     candidatePool: CandidatePoolItem[],
     profile: any,
@@ -247,10 +246,31 @@ QUY TẮC RE-RANKING:
     const list: RecommendedPackageItemDto[] = [];
     const usedIds = new Set<string>();
 
-    for (const item of candidatePool) {
-      if (usedIds.has(item.pkg.id)) continue;
-      usedIds.add(item.pkg.id);
+    const profileCandidates: CandidatePoolItem[] = [];
+    const behaviorCandidates: CandidatePoolItem[] = [];
+    const popularCandidates: CandidatePoolItem[] = [];
 
+    for (const item of candidatePool) {
+      if (item.isFollowUp || item.origin === 'PROFILE' || item.origin === 'BOTH') {
+        profileCandidates.push(item);
+      } else if (item.origin === 'BEHAVIOR') {
+        behaviorCandidates.push(item);
+      } else {
+        popularCandidates.push(item);
+      }
+    }
+
+    // Sắp xếp nhánh Behavior: DROP_OFF > SEARCH_INTENT > RECENT_VIEW
+    behaviorCandidates.sort((a, b) => {
+      const getBehWeight = (i: CandidatePoolItem) => {
+        if (i.behaviorSourceType === 'DROP_OFF') return 3;
+        if (i.behaviorSourceType === 'SEARCH_INTENT') return 2;
+        return 1;
+      };
+      return getBehWeight(b) - getBehWeight(a);
+    });
+
+    const buildDto = (item: CandidatePoolItem): RecommendedPackageItemDto => {
       let priority: RecommendationPriority = 'MEDIUM';
       let badge = 'Đề xuất y khoa';
       let reason = 'Gói khám tiêu biểu được hội đồng y khoa VitaCare khuyến nghị thực hiện.';
@@ -260,6 +280,20 @@ QUY TẮC RE-RANKING:
         priority = 'HIGH';
         badge = 'Tái khám theo hẹn';
         reason = 'Khuyến nghị tái khám định kỳ để đánh giá đáp ứng điều trị.';
+        sourceType = 'PROFILE_AI';
+      } else if (item.origin === 'BOTH') {
+        priority = 'HIGH';
+        badge = 'Phù hợp thể trạng';
+        reason = medicalHistory
+          ? `Phù hợp tiền sử: ${medicalHistory} và mối quan tâm chuyên khoa gần đây.`
+          : 'Khuyến nghị tầm soát dựa trên thể trạng và chuyên khoa bạn quan tâm.';
+        sourceType = 'PROFILE_AI';
+      } else if (item.origin === 'PROFILE') {
+        priority = list.length === 0 ? 'HIGH' : 'MEDIUM';
+        badge = 'Khám sàng lọc ban đầu';
+        reason = medicalHistory
+          ? `Phù hợp tiền sử: ${medicalHistory} - Khuyến nghị tầm soát chuyên sâu.`
+          : 'Khuyến nghị tầm soát và đánh giá sức khỏe chuyên khoa định kỳ.';
         sourceType = 'PROFILE_AI';
       } else if (item.origin === 'BEHAVIOR') {
         if (item.behaviorSourceType === 'DROP_OFF') {
@@ -278,16 +312,9 @@ QUY TẮC RE-RANKING:
           reason = 'Dựa trên mối quan tâm chuyên khoa gần đây của bạn.';
           sourceType = 'RECENT_VIEW';
         }
-      } else if (item.origin === 'PROFILE') {
-        priority = list.length === 0 ? 'HIGH' : 'MEDIUM';
-        badge = 'Khám sàng lọc ban đầu';
-        reason = medicalHistory
-          ? `Phù hợp tiền sử: ${medicalHistory} · Khuyến nghị tầm soát chuyên sâu.`
-          : 'Khuyến nghị tầm soát và đánh giá sức khỏe chuyên khoa định kỳ.';
-        sourceType = 'PROFILE_AI';
       }
 
-      list.push({
+      return {
         packageId: item.pkg.id,
         code: item.pkg.code,
         slug: item.pkg.slug || undefined,
@@ -300,15 +327,40 @@ QUY TẮC RE-RANKING:
         badge,
         clinicalReason: reason,
         sourceType,
-      });
+      };
+    };
 
+    // 1. Lấy tối đa 6 gói từ nhánh Hồ sơ bệnh án (PROFILE_AI)
+    for (const item of profileCandidates) {
+      if (usedIds.has(item.pkg.id)) continue;
+      usedIds.add(item.pkg.id);
+      list.push(buildDto(item));
       if (list.length >= 6) break;
+    }
+
+    // 2. Lấy tối đa 6 gói từ nhánh Hành vi quan tâm (BEHAVIOR)
+    let behaviorCount = 0;
+    for (const item of behaviorCandidates) {
+      if (usedIds.has(item.pkg.id)) continue;
+      usedIds.add(item.pkg.id);
+      list.push(buildDto(item));
+      behaviorCount++;
+      if (behaviorCount >= 6) break;
+    }
+
+    // 3. Nếu chưa đủ tổng số (ví dụ khách mới chưa đủ hành vi), bổ sung từ các gói phổ biến
+    if (list.length < 12) {
+      for (const item of popularCandidates) {
+        if (usedIds.has(item.pkg.id)) continue;
+        usedIds.add(item.pkg.id);
+        list.push(buildDto(item));
+        if (list.length >= 12) break;
+      }
     }
 
     return list;
   }
 
-  // tạo tag cho gói khám
   async suggestSymptomsForPackage(name: string, specialtyName?: string): Promise<{ symptoms: string[] }> {
     if (!name?.trim()) return { symptoms: [] };
     if (this.aiClient) {

@@ -114,6 +114,7 @@ export class SpecialtiesController {
   @ApiQuery({ name: 'maxPrice', required: false, type: Number })
   @ApiQuery({ name: 'sortBy', required: false, type: String })
   @ApiQuery({ name: 'type', required: false, enum: ['all', 'health-package', 'specialty'] })
+  @ApiQuery({ name: 'needPagination', required: false, type: Boolean })
   getPublicPackages(
     @Query('page') page?: number,
     @Query('limit') limit?: number,
@@ -124,7 +125,9 @@ export class SpecialtiesController {
     @Query('maxPrice') maxPrice?: number,
     @Query('sortBy') sortBy?: string,
     @Query('type') type?: 'all' | 'health-package' | 'specialty',
+    @Query('needPagination') needPagination?: string | boolean,
   ) {
+    const isNeedPagination = needPagination === false || needPagination === 'false' ? false : true;
     return this.packagesService.getPackages({
       page,
       limit,
@@ -135,6 +138,7 @@ export class SpecialtiesController {
       maxPrice,
       sortBy,
       type,
+      needPagination: isNeedPagination,
     });
   }
 

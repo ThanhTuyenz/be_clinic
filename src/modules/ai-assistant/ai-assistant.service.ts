@@ -28,7 +28,7 @@ export interface AgentSessionMemory {
 export class AiAssistantService {
   private readonly logger = new Logger(AiAssistantService.name)
   private aiClient: GoogleGenAI | null = null
-  private modelName: string = 'gemini-3.6-flash'
+  private modelName: string = 'gemini-2.5-flash'
   private readonly agentSessionMemories = new Map<string, AgentSessionMemory>()
   private cachedSpecialties: Array<{ id: number; name: string; slug: string | null; description?: string | null }> | null = null
   private cachedBranches: Array<{ id: string; name: string; address?: string | null; phoneNumber?: string | null }> | null = null

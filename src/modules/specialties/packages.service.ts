@@ -32,8 +32,8 @@ export class PackagesService {
   async getPackages(query: GetPackagesQueryDto) {
     const needPagination = query.needPagination !== false;
     const page = Math.max(1, Number(query.page) || 1);
-    const limit = Math.min(50, Math.max(1, Number(query.limit) || 6));
-    const skip = (page - 1) * limit;
+    const limit = query.needPagination === false ? 500 : Math.min(200, Math.max(1, Number(query.limit) || 6));
+    const skip = needPagination ? (page - 1) * limit : 0;
 
     const effectiveBranchId = await resolveBranchId(this.prisma, query.branchId);
     const specialtyId = query.specialtyId ? Number(query.specialtyId) : undefined;
@@ -149,8 +149,10 @@ export class PackagesService {
       code: true,
       slug: true,
       name: true,
+      imageUrl: true,
       description: true,
       notes: true,
+      symptoms: true,
       price: true,
       durationMin: true,
       sessionType: true,

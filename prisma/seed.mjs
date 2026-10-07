@@ -406,51 +406,141 @@ async function main() {
     });
     const methodByCode = new Map(branchMethods.map((m) => [m.bookingMethod.code, m]));
 
-    // Dịch vụ chuyên khoa
+    // Dịch vụ chuyên khoa với hình ảnh y tế chuyên sâu theo từng loại hình dịch vụ
     const SPECIALTY_EXTRA_METADATA = {
-      tim_mach: {
+      'tim-mach': {
         symptoms: ['Tức ngực', 'Hồi hộp đánh trống ngực', 'Khó thở khi gắng sức', 'Huyết áp cao', 'Chóng mặt'],
         notes: 'Mang theo toa thuốc và kết quả điện tim/siêu âm tim cũ (nếu có). Tránh dùng cà phê, thuốc lá, trà đậm hoặc chất kích thích trong vòng 12h trước khám.',
         standardDesc: 'Khám lâm sàng chuyên sâu, nghe tim phổi, đo huyết áp và tầm soát các bệnh lý mạch vành, rối loạn nhịp tim, tăng huyết áp.',
         followupDesc: 'Theo dõi diễn tiến bệnh lý tim mạch, kiểm tra chỉ số huyết áp, đánh giá phản ứng thuốc và điều chỉnh phác đồ điều trị tối ưu.',
         adviceDesc: 'Tư vấn định hướng chẩn đoán các triệu chứng tim mạch, tư vấn lối sống và chế độ dinh dưỡng bảo vệ hệ tim mạch.',
+        standardImg: 'https://images.unsplash.com/photo-1628348068343-c6a848d2b6dd?w=800&auto=format&fit=crop&q=80',
+        afterImg: 'https://images.unsplash.com/photo-1505751172876-fa1923c5c528?w=800&auto=format&fit=crop&q=80',
+        followupImg: 'https://images.unsplash.com/photo-1532938911079-1b06ac7ceec7?w=800&auto=format&fit=crop&q=80',
+        adviceImg: 'https://images.unsplash.com/photo-1576091160550-2173dba999ef?w=800&auto=format&fit=crop&q=80',
       },
-      tieu_hoa: {
+      'tieu-hoa-gan-mat': {
         symptoms: ['Đau thượng vị', 'Đầy hơi khó tiêu', 'Ợ chua trào ngược', 'Rối loạn tiêu hóa', 'Buồn nôn'],
         notes: 'Nên nhịn ăn ít nhất 6 tiếng trước giờ khám nếu có chỉ định siêu âm ổ bụng hoặc nội soi tiêu hóa. Uống nhiều nước lọc.',
         standardDesc: 'Thăm khám và chẩn đoán các bệnh lý dạ dày, đại tràng, gan mật tụy, viêm loét đường tiêu hóa và trào ngược dạ dày thực quản.',
         followupDesc: 'Đánh giá mức độ hồi phục niêm mạc dạ dày/đại tràng, kiểm tra hiệu quả phác đồ diệt khuẩn HP và điều chỉnh thuốc.',
         adviceDesc: 'Tư vấn chế độ ăn uống khoa học, hướng dẫn xử trí trào ngược và tầm soát sớm ung thư đường tiêu hóa.',
+        standardImg: 'https://images.unsplash.com/photo-1579154204601-01588f351e67?w=800&auto=format&fit=crop&q=80',
+        afterImg: 'https://images.unsplash.com/photo-1532938911079-1b06ac7ceec7?w=800&auto=format&fit=crop&q=80',
+        followupImg: 'https://images.unsplash.com/photo-1584515979956-d9f6e5d09982?w=800&auto=format&fit=crop&q=80',
+        adviceImg: 'https://images.unsplash.com/photo-1576091160550-2173dba999ef?w=800&auto=format&fit=crop&q=80',
       },
-      da_lieu: {
+      'da-lieu': {
         symptoms: ['Mụn viêm mụn ẩn', 'Dị ứng mẩn ngứa', 'Nổi mề đay', 'Viêm da cơ địa', 'Rụng tóc', 'Nấm da'],
         notes: 'Không trang điểm, không bôi kem đặc trị hoặc thuốc mỡ lên vùng da cần khám trong vòng 12h để bác sĩ soi da và chẩn đoán chính xác.',
         standardDesc: 'Khám soi da vi thể, chẩn đoán và điều trị mụn trứng cá, viêm da cơ địa, dị ứng, vảy nến và các bệnh lý ngoài da.',
         followupDesc: 'Theo dõi diễn tiến điều trị da liễu, đánh giá mức độ đáp ứng thuốc bôi/thuốc uống và kiểm tra đơn thuốc.',
         adviceDesc: 'Tư vấn quy trình chăm sóc da khoa học, lựa chọn dược mỹ phẩm phù hợp và phòng ngừa tái phát bệnh lý da liễu.',
+        standardImg: 'https://images.unsplash.com/photo-1576091160550-2173dba999ef?w=800&auto=format&fit=crop&q=80',
+        afterImg: 'https://images.unsplash.com/photo-1516549655169-df83a0774514?w=800&auto=format&fit=crop&q=80',
+        followupImg: 'https://images.unsplash.com/photo-1588776814546-1ffcf47267a5?w=800&auto=format&fit=crop&q=80',
+        adviceImg: 'https://images.unsplash.com/photo-1629909615184-74f495363b67?w=800&auto=format&fit=crop&q=80',
       },
-      co_xuong_khop: {
-        symptoms: ['Đau nhức khớp gối', 'Đau lưng thoái hóa', 'Cứng khớp buổi sáng', 'Tê bì tay chân', 'Đau vai gáy'],
-        notes: 'Mặc trang phục rộng rãi, thoải mái thuận tiện cho việc vận động thăm khám khớp. Mang theo phim chụp X-Quang/MRI cũ.',
-        standardDesc: 'Khám đánh giá tầm vận động khớp, chẩn đoán thoái hóa khớp, thoát vị đĩa đệm, viêm khớp dạng thấp và loãng xương.',
-        followupDesc: 'Đánh giá mức độ thuyên giảm đau nhức, kiểm tra tiến trình phục hồi sụn khớp và điều chỉnh bài tập vận động.',
-        adviceDesc: 'Tư vấn bài tập vật lý trị liệu, tư thế lao động đúng cách và dinh dưỡng bổ sung canxi, glucosamine cho khớp.',
+      'ho-hap': {
+        symptoms: ['Ho kéo dài', 'Khò khè tức ngực', 'Ho có đờm hoặc lẫn máu', 'Hụt hơi khó thở'],
+        notes: 'Giữ ấm cơ thể, đeo khẩu trang y tế và mang theo phim chụp X-quang/CT phổi gần nhất nếu có.',
+        standardDesc: 'Khám chẩn đoán các bệnh lý phế quản, hen suyễn, phổi tắc nghẽn mạn tính COPD và nhiễm trùng đường hô hấp.',
+        followupDesc: 'Kiểm tra chức năng hô hấp, đánh giá đáp ứng khí dung/thuốc xịt và điều chỉnh phác đồ điều trị hen/COPD.',
+        adviceDesc: 'Tư vấn phương pháp phòng ngừa viêm đường hô hấp mùa lạnh, tập thở phục hồi chức năng và cai thuốc lá.',
+        standardImg: 'https://images.unsplash.com/photo-1584515979956-d9f6e5d09982?w=800&auto=format&fit=crop&q=80',
+        afterImg: 'https://images.unsplash.com/photo-1505751172876-fa1923c5c528?w=800&auto=format&fit=crop&q=80',
+        followupImg: 'https://images.unsplash.com/photo-1579154204601-01588f351e67?w=800&auto=format&fit=crop&q=80',
+        adviceImg: 'https://images.unsplash.com/photo-1579684385127-1ef15d508118?w=800&auto=format&fit=crop&q=80',
       },
-      nhi_khoa: {
-        symptoms: ['Sốt cao', 'Ho sổ mũi', 'Biếng ăn chậm tăng cân', 'Rối loạn tiêu hóa', 'Phát ban'],
+      'mat': {
+        symptoms: ['Mắt nhìn mờ', 'Đỏ mắt cộm rát', 'Chảy nước mắt sống', 'Khám đo kính cận loạn'],
+        notes: 'Tháo kính áp tròng ít nhất 24h trước khi đo khúc xạ. Mang theo kính mắt đang sử dụng để Bác sĩ đối chiếu.',
+        standardDesc: 'Đo thị lực điện tử, soi đáy mắt, đo nhãn áp và chẩn đoán tật khúc xạ cận/viễn/loạn thị, viêm kết mạc.',
+        followupDesc: 'Kiểm tra tiến trình hồi phục sau can thiệp mắt, đo lại nhãn áp và điều chỉnh kính mắt phù hợp.',
+        adviceDesc: 'Tư vấn bảo vệ mắt khi làm việc với máy tính, chế độ nghỉ ngơi và phòng ngừa khô mắt, hội chứng thị giác màn hình.',
+        standardImg: 'https://images.unsplash.com/photo-1559839734-2b71ea197ec2?w=800&auto=format&fit=crop&q=80',
+        afterImg: 'https://images.unsplash.com/photo-1576091160399-112ba8d25d1d?w=800&auto=format&fit=crop&q=80',
+        followupImg: 'https://images.unsplash.com/photo-1579154204601-01588f351e67?w=800&auto=format&fit=crop&q=80',
+        adviceImg: 'https://images.unsplash.com/photo-1582750433449-648ed127bb54?w=800&auto=format&fit=crop&q=80',
+      },
+      'tai-mui-hong': {
+        symptoms: ['Đau rát họng nuốt vướng', 'Nghẹt mũi chảy nước mũi', 'Ù tai chảy dịch tai', 'Khàn tiếng kéo dài'],
+        notes: 'Nhịn ăn uống ít nhất 2 giờ trước khi nội soi để tránh phản xạ nôn khi đưa ống soi mềm vào vòm họng.',
+        standardDesc: 'Nội soi dải tần hẹp tai mũi họng, chẩn đoán viêm xoang, viêm họng hạt, viêm amidan, viêm tai giữa và polyp.',
+        followupDesc: 'Kiểm tra mức độ lành niêm mạc xoang, hút rửa mũi xoang/tai và đánh giá hiệu quả kháng sinh.',
+        adviceDesc: 'Tư vấn vệ sinh mũi họng hằng ngày bằng nước muối sinh lý, phòng tránh viêm xoang tái phát do thời tiết.',
+        standardImg: 'https://images.unsplash.com/photo-1622253692010-333f2da6031d?w=800&auto=format&fit=crop&q=80',
+        afterImg: 'https://images.unsplash.com/photo-1532938911079-1b06ac7ceec7?w=800&auto=format&fit=crop&q=80',
+        followupImg: 'https://images.unsplash.com/photo-1584515933487-779824d29309?w=800&auto=format&fit=crop&q=80',
+        adviceImg: 'https://images.unsplash.com/photo-1629909613654-28e377c37b09?w=800&auto=format&fit=crop&q=80',
+      },
+      'rang-ham-mat': {
+        symptoms: ['Đau buốt răng sâu', 'Chảy máu chân răng nướu', 'Răng khôn mọc lệch', 'Cần lấy cao răng làm sạch'],
+        notes: 'Ăn nhẹ trước khi đến khám nha khoa. Vệ sinh răng miệng sạch sẽ trước giờ khám.',
+        standardDesc: 'Khám kiểm tra tổng quát răng miệng, chụp X-quang răng, cạo vôi răng, trám răng sâu và điều trị tủy răng.',
+        followupDesc: 'Kiểm tra vết thương sau nhổ răng/tiểu phẫu, kiểm tra khớp cắn và theo dõi răng sứ/niềng răng.',
+        adviceDesc: 'Tư vấn phương pháp chải răng đúng cách, chỉ nha khoa, nước súc miệng và lịch chăm sóc răng định kỳ 6 tháng.',
+        standardImg: 'https://images.unsplash.com/photo-1606811841689-23dfddce3e95?w=800&auto=format&fit=crop&q=80',
+        afterImg: 'https://images.unsplash.com/photo-1588776814546-1ffcf47267a5?w=800&auto=format&fit=crop&q=80',
+        followupImg: 'https://images.unsplash.com/photo-1629909613654-28e377c37b09?w=800&auto=format&fit=crop&q=80',
+        adviceImg: 'https://images.unsplash.com/photo-1598256989800-fe5f95da9787?w=800&auto=format&fit=crop&q=80',
+      },
+      'san-phu-khoa': {
+        symptoms: ['Rối loạn kinh nguyệt', 'Khám thai định kỳ', 'Đau bụng dưới bất thường', 'Viêm nhiễm phụ khoa'],
+        notes: 'Khám phụ khoa nên thực hiện sau khi sạch kinh 3-5 ngày. Không thụt rửa âm đạo hoặc quan hệ trong 24h trước khám.',
+        standardDesc: 'Khám phụ khoa định kỳ, siêu âm tử cung phần phụ, siêu âm thai 4D, tầm soát ung thư cổ tử cung Thinprep.',
+        followupDesc: 'Kiểm tra kết quả phết tế bào cổ tử cung, theo dõi sự phát triển của thai nhi và điều chỉnh thuốc phụ khoa.',
+        adviceDesc: 'Tư vấn sức khỏe tiền hôn nhân, kế hoạch hóa gia đình, tiêm phòng thai kỳ và dinh dưỡng cho mẹ bầu.',
+        standardImg: 'https://images.unsplash.com/photo-1581594693702-fbdc51b2763b?w=800&auto=format&fit=crop&q=80',
+        afterImg: 'https://images.unsplash.com/photo-1516549655169-df83a0774514?w=800&auto=format&fit=crop&q=80',
+        followupImg: 'https://images.unsplash.com/photo-1579684385127-1ef15d508118?w=800&auto=format&fit=crop&q=80',
+        adviceImg: 'https://images.unsplash.com/photo-1629909615184-74f495363b67?w=800&auto=format&fit=crop&q=80',
+      },
+      'nhi-khoa': {
+        symptoms: ['Sốt co giật ở trẻ', 'Biếng ăn chậm tăng cân', 'Ho sốt cảm cúm', 'Phát ban mẩn ngứa trẻ nhỏ'],
         notes: 'Mang theo sổ tiêm chủng và ghi chép lịch sử sốt/dị ứng thuốc của bé. Giữ ấm cho trẻ khi di chuyển.',
         standardDesc: 'Khám tổng quát thể trạng trẻ em, chẩn đoán bệnh lý hô hấp, tiêu hóa, dinh dưỡng và tư vấn phát triển toàn diện.',
         followupDesc: 'Đánh giá tiến trình hồi phục của trẻ sau đợt điều trị, kiểm tra cân nặng và điều chỉnh liều lượng thuốc an toàn.',
         adviceDesc: 'Tư vấn dinh dưỡng theo từng giai đoạn phát triển, lịch tiêm ngừa vắc xin và cách chăm sóc trẻ tại nhà.',
+        standardImg: 'https://images.unsplash.com/photo-1631815589968-fdb09a223b1e?w=800&auto=format&fit=crop&q=80',
+        afterImg: 'https://images.unsplash.com/photo-1584515979956-d9f6e5d09982?w=800&auto=format&fit=crop&q=80',
+        followupImg: 'https://images.unsplash.com/photo-1584515933487-779824d29309?w=800&auto=format&fit=crop&q=80',
+        adviceImg: 'https://images.unsplash.com/photo-1579684385127-1ef15d508118?w=800&auto=format&fit=crop&q=80',
       },
-      tong_quat: {
+      'ngoai-chan-thuong-chinh-hinh': {
+        symptoms: ['Đau nhức khớp gối', 'Thoái hóa cột sống', 'Đau mỏi vai gáy', 'Căng cơ chấn thương vận động'],
+        notes: 'Mặc trang phục rộng rãi, thoải mái thuận tiện cho việc vận động thăm khám khớp. Mang theo phim chụp X-Quang/MRI cũ.',
+        standardDesc: 'Khám đánh giá tầm vận động khớp, chẩn đoán thoái hóa khớp, thoát vị đĩa đệm, viêm khớp dạng thấp và loãng xương.',
+        followupDesc: 'Đánh giá mức độ thuyên giảm đau nhức, kiểm tra tiến trình phục hồi sụn khớp và điều chỉnh bài tập vận động.',
+        adviceDesc: 'Tư vấn bài tập vật lý trị liệu, tư thế lao động đúng cách và dinh dưỡng bổ sung canxi, glucosamine cho khớp.',
+        standardImg: 'https://images.unsplash.com/photo-1588776814546-1ffcf47267a5?w=800&auto=format&fit=crop&q=80',
+        afterImg: 'https://images.unsplash.com/photo-1516549655169-df83a0774514?w=800&auto=format&fit=crop&q=80',
+        followupImg: 'https://images.unsplash.com/photo-1576091160399-112ba8d25d1d?w=800&auto=format&fit=crop&q=80',
+        adviceImg: 'https://images.unsplash.com/photo-1582750433449-648ed127bb54?w=800&auto=format&fit=crop&q=80',
+      },
+      'noi-tong-quat': {
         symptoms: ['Kiểm tra sức khỏe định kỳ', 'Mệt mỏi suy nhược', 'Sụt cân không rõ nguyên nhân', 'Đau đầu mất ngủ'],
         notes: 'Nhịn ăn sáng ít nhất 6-8 tiếng để lấy máu xét nghiệm đường huyết, mỡ máu và men gan. Không uống nước ngọt, sữa hay cà phê.',
         standardDesc: 'Khám lâm sàng toàn diện các cơ quan nội khoa, đánh giá chỉ số sinh hiệu và tầm soát sớm các bệnh lý lối sống.',
         followupDesc: 'Đánh giá lại các chỉ số xét nghiệm bất thường, theo dõi tiến triển sức khỏe định kỳ và tư vấn cải thiện.',
         adviceDesc: 'Tư vấn kế hoạch chăm sóc sức khỏe chủ động, định hướng lối sống lành mạnh và lịch tầm soát định kỳ.',
+        standardImg: 'https://images.unsplash.com/photo-1576091160399-112ba8d25d1d?w=800&auto=format&fit=crop&q=80',
+        afterImg: 'https://images.unsplash.com/photo-1505751172876-fa1923c5c528?w=800&auto=format&fit=crop&q=80',
+        followupImg: 'https://images.unsplash.com/photo-1582750433449-648ed127bb54?w=800&auto=format&fit=crop&q=80',
+        adviceImg: 'https://images.unsplash.com/photo-1532938911079-1b06ac7ceec7?w=800&auto=format&fit=crop&q=80',
       },
     };
+
+    // Chuẩn hóa alias slug
+    SPECIALTY_EXTRA_METADATA.tim_mach = SPECIALTY_EXTRA_METADATA['tim-mach'];
+    SPECIALTY_EXTRA_METADATA.tieu_hoa = SPECIALTY_EXTRA_METADATA['tieu-hoa-gan-mat'];
+    SPECIALTY_EXTRA_METADATA.da_lieu = SPECIALTY_EXTRA_METADATA['da-lieu'];
+    SPECIALTY_EXTRA_METADATA.ho_hap = SPECIALTY_EXTRA_METADATA['ho-hap'];
+    SPECIALTY_EXTRA_METADATA.co_xuong_khop = SPECIALTY_EXTRA_METADATA['ngoai-chan-thuong-chinh-hinh'];
+    SPECIALTY_EXTRA_METADATA.nhi_khoa = SPECIALTY_EXTRA_METADATA['nhi-khoa'];
+    SPECIALTY_EXTRA_METADATA.san_phu_khoa = SPECIALTY_EXTRA_METADATA['san-phu-khoa'];
+    SPECIALTY_EXTRA_METADATA.rang_ham_mat = SPECIALTY_EXTRA_METADATA['rang-ham-mat'];
+    SPECIALTY_EXTRA_METADATA.tong_quat = SPECIALTY_EXTRA_METADATA['noi-tong-quat'];
 
     for (const spec of specialtiesBySlug.values()) {
       const codeSuffix = `${branch.code.replace('VC-', '')}-${String(spec.id).padStart(3, '0')}`;
@@ -465,6 +555,7 @@ async function main() {
           description: specMeta.standardDesc || `Khám chẩn đoán bệnh lý ${spec.name} trong giờ hành chính.`,
           notes: specMeta.notes,
           symptoms: specMeta.symptoms,
+          imageUrl: specMeta.standardImg || spec.iconUrl || null,
           methodCode: 'SPECIALTY_EXAM',
         },
         {
@@ -475,6 +566,7 @@ async function main() {
           description: specMeta.standardDesc || `Khám chẩn đoán bệnh lý ${spec.name} ngoài giờ hành chính.`,
           notes: specMeta.notes,
           symptoms: specMeta.symptoms,
+          imageUrl: specMeta.afterImg || spec.iconUrl || null,
           methodCode: 'AFTER_HOURS',
         },
         {
@@ -485,6 +577,7 @@ async function main() {
           description: specMeta.followupDesc || `Theo dõi diễn tiến điều trị và kiểm tra đơn thuốc ${spec.name}.`,
           notes: `Bắt buộc mang theo đơn thuốc và kết quả xét nghiệm của lần khám trước để Bác sĩ đối chiếu hiệu quả điều trị. ${specMeta.notes}`,
           symptoms: specMeta.symptoms,
+          imageUrl: specMeta.followupImg || spec.iconUrl || null,
           methodCode: 'SPECIALTY_EXAM',
         },
         {
@@ -495,6 +588,7 @@ async function main() {
           description: specMeta.adviceDesc || `Tư vấn từ xa và định hướng thăm khám chuyên khoa ${spec.name}.`,
           notes: 'Chuẩn bị sẵn các câu hỏi và tiền sử bệnh lý để trao đổi trực tiếp với Bác sĩ chuyên khoa.',
           symptoms: specMeta.symptoms,
+          imageUrl: specMeta.adviceImg || spec.iconUrl || null,
           methodCode: 'CONSULTATION',
         },
       ];
@@ -514,6 +608,7 @@ async function main() {
             description: service.description,
             notes: service.notes,
             symptoms: service.symptoms,
+            imageUrl: service.imageUrl,
             branchBookingMethodId: branchBookingMethod.id,
             specialtyId: spec.id,
             isActive: true,
@@ -527,6 +622,7 @@ async function main() {
             description: service.description,
             notes: service.notes,
             symptoms: service.symptoms,
+            imageUrl: service.imageUrl,
             branchBookingMethodId: branchBookingMethod.id,
             specialtyId: spec.id,
             isActive: true,

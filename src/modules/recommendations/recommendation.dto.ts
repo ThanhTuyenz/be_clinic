@@ -72,5 +72,8 @@ export interface HomeRecommendationResponseDto {
   profileName?: string;
   updatedAt: string;
   source: 'HYBRID' | 'AI_PROFILE' | 'BEHAVIOR' | 'FALLBACK';
+  dataOrigin: 'CACHE' | 'NEW';
+  isCached: boolean;
+  fromCache: boolean;
   packages: RecommendedPackageItemDto[];
 }

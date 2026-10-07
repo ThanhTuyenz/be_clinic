@@ -41,7 +41,17 @@ export class RecommendationService {
     });
 
     const cached = await this.getCachedHomeRecommendations(homeCacheKey);
-    if (cached) return cached;
+    if (cached) {
+      this.logger.log(
+        `🟢 [REC-HOME: CACHE HIT (0ms)] Source: ${cached.source} | Profile: ${cached.profileName || 'None'} | ${cached.packages.length} pkgs | CacheKey: ${homeCacheKey}`,
+      );
+      return {
+        ...cached,
+        isCached: true,
+        fromCache: true,
+        dataOrigin: 'CACHE',
+      };
+    }
 
     const allActivePackages = await this.candidateRetrievalService.loadActivePackages(query.branchId);
 
@@ -56,7 +66,7 @@ export class RecommendationService {
       allActivePackages,
     );
 
-    const { packages, source } = await this.rankHomeCandidates(candidatePool, profileTower, behaviorTower);
+    const { packages, source, isCached, fromCache, dataOrigin } = await this.rankHomeCandidates(candidatePool, profileTower, behaviorTower);
 
     return this.cacheAndBuildHomeResponse(
       query,
@@ -65,6 +75,7 @@ export class RecommendationService {
       source,
       homeCacheKey,
       t0,
+      { isCached, fromCache, dataOrigin },
     );
   }
 
@@ -88,6 +99,9 @@ export class RecommendationService {
   ): Promise<{
     packages: RecommendedPackageItemDto[];
     source: 'HYBRID' | 'AI_PROFILE' | 'BEHAVIOR' | 'FALLBACK';
+    isCached?: boolean;
+    fromCache?: boolean;
+    dataOrigin?: 'CACHE' | 'NEW';
   }> {
     const hasBehaviorIntent = behaviorTower.candidates.length > 0;
     const hasProfileIntent = !!profileTower.profile;
@@ -97,6 +111,13 @@ export class RecommendationService {
     else if (hasProfileIntent) detectedSource = 'AI_PROFILE';
     else if (hasBehaviorIntent) detectedSource = 'BEHAVIOR';
 
+    this.logger.log(
+      `🔍 [REC-HOME: PIPELINE START]\n` +
+      `  👤 Nhánh Hồ sơ (Profile Tower): ${hasProfileIntent ? `CÓ (${profileTower.profile.fullName}, ${profileTower.age} tuổi, ${profileTower.gender}, Tiền sử: "${profileTower.medicalHistory || 'Không'}") -> ${profileTower.candidates.length} ứng viên` : 'KHÔNG (Khách vãng lai / Chưa chọn hồ sơ)'}\n` +
+      `  🎯 Nhánh Hành vi (Behavior Tower): ${hasBehaviorIntent ? `CÓ (Chuyên khoa: [${behaviorTower.topSpecialties.map((s: any) => `${s.specialtyName}:${s.score}đ`).join(', ')}], Tìm kiếm: "${behaviorTower.lastSearchQuery || 'không'}", Bỏ dở: "${behaviorTower.dropOffPkgId || 'không'}") -> ${behaviorTower.candidates.length} ứng viên` : 'KHÔNG (Chưa có điểm hành vi)'}\n` +
+      `  📦 Tổng ứng viên (Candidate Pool): ${candidatePool.length} gói | Mô hình dự kiến: ${detectedSource}`,
+    );
+
     // TỐI ƯU TẦNG CACHE HỒ SƠ 7 NGÀY:
     // Nếu chỉ xem theo Hồ sơ (không có hành vi lướt web mới), kiểm tra xem cache 7 ngày của hồ sơ đã có kết quả AI chưa
     if (hasProfileIntent && !hasBehaviorIntent && this.redis.isEnabled()) {
@@ -105,9 +126,15 @@ export class RecommendationService {
           this.candidateRetrievalService.buildCacheKey(profileTower.profile.id),
         );
         if (cachedProfileRec && Array.isArray(cachedProfileRec.packages) && cachedProfileRec.packages.length > 0) {
+          this.logger.log(
+            `⚡ [REC-HOME: FAST-PATH PROFILE CACHE HIT] Tái sử dụng kết quả AI Hồ sơ 7 ngày (${cachedProfileRec.packages.length} gói) cho ${profileTower.profile.fullName} (0ms LLM)`,
+          );
           return {
             packages: cachedProfileRec.packages.slice(0, TELEMETRY_CONFIG.HOME_FINAL_PACKAGES_LIMIT),
             source: 'AI_PROFILE',
+            isCached: true,
+            fromCache: true,
+            dataOrigin: 'CACHE',
           };
         }
       } catch (err: any) {
@@ -120,6 +147,7 @@ export class RecommendationService {
     // Chỉ gọi Gemini khi CÓ BỆNH ÁN hoặc CÓ HÀNH VI QUAN TÂM
     if (this.aiRankingService.isAiAvailable() && candidatePool.length > 0 && (hasProfileIntent || hasBehaviorIntent)) {
       try {
+        this.logger.log(`🤖 [REC-HOME: CALLING GEMINI LLM] Đang gửi ${candidatePool.length} gói ứng viên lên Gemini để re-ranking (Chế độ: ${detectedSource})...`);
         reRankedPackages = await this.aiRankingService.evaluateHybridWithGemini({
           profile: profileTower.profile
             ? {
@@ -151,6 +179,12 @@ export class RecommendationService {
           })),
         });
 
+        if (reRankedPackages.length > 0) {
+          this.logger.log(
+            `✅ [REC-HOME: GEMINI LLM THÀNH CÔNG] Đã re-rank và chọn ra ${reRankedPackages.length} gói khám tối ưu nhất từ Gemini! (Nguồn: ${detectedSource})`,
+          );
+        }
+
         // Nếu Gemini phân tích thành công cho nhánh Hồ sơ thuần (AI_PROFILE), lưu luôn vào Cache Hồ sơ 7 ngày để tái sử dụng
         if (reRankedPackages.length > 0 && hasProfileIntent && !hasBehaviorIntent && this.redis.isEnabled()) {
           const profileRecDto: ProfileRecommendationResponseDto = {
@@ -167,12 +201,13 @@ export class RecommendationService {
           ).catch(() => { });
         }
       } catch (err: any) {
-        this.logger.warn(`Gemini Re-ranking failed (${err?.message}) -> Fallback heuristics`);
+        this.logger.warn(`⚠️ [REC-HOME: GEMINI LLM THẤT BẠI] (${err?.message}) -> Chuyển sang Heuristics lâm sàng`);
       }
     }
 
     // Fallback Heuristics nếu AI không trả về kết quả
     if (reRankedPackages.length === 0) {
+      this.logger.log(`🛡️ [REC-HOME: CHẠY HEURISTICS FALLBACK] Xếp hạng theo bộ luật chuyên môn lâm sàng (Nguồn: ${detectedSource})`);
       reRankedPackages = this.aiRankingService.evaluateHybridWithHeuristics(
         candidatePool,
         profileTower.profile,
@@ -193,12 +228,16 @@ export class RecommendationService {
     source: 'HYBRID' | 'AI_PROFILE' | 'BEHAVIOR' | 'FALLBACK',
     homeCacheKey: string,
     startTime: number,
+    meta?: { isCached?: boolean; fromCache?: boolean; dataOrigin?: 'CACHE' | 'NEW' },
   ): Promise<HomeRecommendationResponseDto> {
     const finalResponse: HomeRecommendationResponseDto = {
       profileId: query.profileId,
       profileName,
       updatedAt: new Date().toISOString(),
       source,
+      dataOrigin: meta?.dataOrigin || 'NEW',
+      isCached: meta?.isCached ?? false,
+      fromCache: meta?.fromCache ?? false,
       packages,
     };
 
@@ -214,8 +253,20 @@ export class RecommendationService {
       }
     }
 
+    const packageSummary = packages
+      .map(
+        (p, idx) =>
+          `     ${idx + 1}. [${p.sourceType || 'POPULAR'}] "${p.name}" (Ưu tiên: ${p.priority}, Tag: "${p.badge}")\n` +
+          `        └─ Lý do: ${p.clinicalReason}`,
+      )
+      .join('\n');
+
     this.logger.log(
-      `🏁 [HYBRID PIPELINE] Source: ${source} | ${packages.length} pkgs | Time: ${Date.now() - startTime}ms`,
+      `🏁 [REC-HOME: HOÀN TẤT PIPELINE]\n` +
+      `  • Nguồn dữ liệu (Source): ${source}\n` +
+      `  • Số lượng gói trả về: ${packages.length} gói\n` +
+      `  • Thời gian xử lý: ${Date.now() - startTime}ms\n` +
+      `  • Chi tiết các gói gợi ý:\n${packageSummary}`,
     );
 
     return finalResponse;
