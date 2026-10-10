@@ -1,103 +1,40 @@
-import { Injectable, NotFoundException, Logger, Inject } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../../../infrastructure/database/prisma/prisma.service.js';
-import { Services } from 'src/common/utils/constants';
-import { IRolesService } from '../roles/roles';
-
-import { PermissionRole, mapUserRoleToPermissionRole } from './enums';
-import { generateGlobalPermissions } from './permissions.helpers';
-import { Permission } from './types/permission.type';
-import { PermissionsCacheService } from './services/permissions-cache.service';
+import { RedisService } from '../../../infrastructure/redis/redis.service.js';
 import {
   calculateEffectivePermissions,
   ROLE_DEFAULT_PERMISSIONS,
 } from '../../../common/constants/permissions.constant.js';
 
+export type UserPermissionsResult = {
+  role: string;
+  effectivePermissions: string[];
+  customPermissions: any;
+  basePermissions: string[];
+};
+
 @Injectable()
 export class PermissionsService {
   private readonly logger = new Logger(PermissionsService.name);
+  private readonly PERMISSION_CACHE_TTL = 300; // 5 phút
 
   constructor(
     private readonly prisma: PrismaService,
-    private readonly cacheService: PermissionsCacheService,
-    @Inject(Services.ROLES)
-    private readonly rolesService: IRolesService,
+    private readonly redis: RedisService,
   ) {}
 
-  async getMany(
-    userId: string,
-  ): Promise<{ role: PermissionRole; permissions: Permission[] }> {
-    // Check cache first
-    const cached = this.cacheService.get(userId);
-    if (cached) {
-      this.logger.debug(`Returning cached permissions for user ${userId}`);
-      return { role: cached.role, permissions: cached.permissions };
-    }
-
-    const permissions: Permission[] = [];
-
-    const user = await this.prisma.user.findUnique({ where: { id: userId } });
-
-    if (!user) {
-      this.logger.warn(`User not found: ${userId}`);
-      throw new NotFoundException('User not found');
-    }
-
-    if (user.isDeleted) {
-      this.logger.warn(`User is deleted: ${userId}`);
-      throw new NotFoundException('User has been deleted');
-    }
-
-    if (user.isBlocked) {
-      this.logger.warn(`User is blocked: ${userId}`);
-      throw new NotFoundException('User has been blocked');
-    }
-
-    const permissionRole = mapUserRoleToPermissionRole(user.role.toLowerCase() as never);
-
-    if (user.roleId) {
-      try {
-        const role = await this.rolesService.findOne(user.roleId);
-        this.logger.log(`Found role ${role.id} with ${role.permissions?.length || 0} permissions`);
-        if (role.permissions?.length) {
-          permissions.push(...(role.permissions as unknown as Permission[]));
-        }
-      } catch (error) {
-        this.logger.warn(
-          `Unable to load role ${user.roleId} for user ${userId}, falling back to global role permissions`,
-        );
-      }
-    }
-
-    if (Array.isArray(user.customPermissions) && user.customPermissions.length) {
-      this.logger.log(`Found custom permissions with length ${user.customPermissions.length}`);
-      permissions.push(...(user.customPermissions as unknown as Permission[]));
-    }
-
-    if (!permissions.length) {
-      this.logger.log(`No role or custom permissions found, using global permissions for ${permissionRole}`);
-      permissions.push(...generateGlobalPermissions(permissionRole));
-    }
-
-    // Cache the result
-    this.cacheService.set(userId, permissionRole, permissions);
-
-    return { role: permissionRole, permissions };
-  }
-
-  /**
-   * Invalidate cache for a specific user
-   * Call this when user permissions change (role update, etc.)
-   */
   /**
    * Lấy quyền hiệu lực của người dùng theo mô hình RBAC VitaCare
    * Effective = (Role Base Permissions + Granted) - Revoked
+   * Tự động cache trong Redis 5 phút để tối ưu hiệu năng
    */
-  async getUserPermissions(userId: string): Promise<{
-    role: string;
-    effectivePermissions: string[];
-    customPermissions: any;
-    basePermissions: string[];
-  }> {
+  async getUserPermissions(userId: string): Promise<UserPermissionsResult> {
+    const cacheKey = `auth:user_perms:${userId}`;
+    const cached = await this.redis.get<UserPermissionsResult>(cacheKey);
+    if (cached) {
+      return cached;
+    }
+
     const user = await this.prisma.user.findUnique({
       where: { id: userId },
       select: { id: true, role: true, customPermissions: true, isBlocked: true, isDeleted: true },
@@ -116,25 +53,36 @@ export class PermissionsService {
     const basePermissions = (ROLE_DEFAULT_PERMISSIONS[roleNormalized] || []).map((p) => String(p));
     const effectivePermissions = calculateEffectivePermissions(user.role, user.customPermissions);
 
-    return {
+    const result: UserPermissionsResult = {
       role: roleNormalized,
       basePermissions,
       customPermissions: user.customPermissions,
       effectivePermissions,
     };
-  }
 
-  invalidateCache(userId: string): void {
-    this.cacheService.invalidate(userId);
-    this.logger.log(`Invalidated permission cache for user ${userId}`);
+    if (this.redis.isEnabled()) {
+      await this.redis.set(cacheKey, result, this.PERMISSION_CACHE_TTL);
+    }
+
+    return result;
   }
 
   /**
-   * Invalidate all cached permissions
-   * Call this when global permission rules change
+   * Xóa cache quyền của một người dùng khi có thay đổi vai trò hoặc quyền tùy chỉnh
+   */
+  invalidateCache(userId: string): void {
+    if (this.redis.isEnabled()) {
+      this.redis.delete(`auth:user_perms:${userId}`).catch((err) => {
+        this.logger.warn(`Failed to invalidate permission cache for user ${userId}: ${err.message}`);
+      });
+      this.logger.log(`Invalidated permission cache for user ${userId}`);
+    }
+  }
+
+  /**
+   * Xóa toàn bộ cache quyền hệ thống
    */
   invalidateAllCache(): void {
-    this.cacheService.invalidateAll();
     this.logger.log('Invalidated all permission caches');
   }
 }

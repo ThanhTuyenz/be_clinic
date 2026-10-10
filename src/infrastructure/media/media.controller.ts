@@ -11,7 +11,7 @@ import { ApiBearerAuth, ApiBody, ApiConsumes, ApiOperation, ApiTags } from '@nes
 import { FileInterceptor, FilesInterceptor } from '@nestjs/platform-express';
 import { memoryStorage } from 'multer';
 import type { Request } from 'express';
-import { SkipPermissions } from '../../modules/auth/permissions/decorators/skip-permissions.decorator.js';
+import { SkipPermissions } from 'src/common/decorators';
 import { MediaService } from './media.service.js';
 
 const imageFileFilter = (_req: any, file: any, callback: any) => {

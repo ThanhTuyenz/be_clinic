@@ -26,8 +26,6 @@ export enum UserRole {
   Admin = 'admin',
   BranchManager = 'branch_manager',
   Doctor = 'doctor',
-  Pharmacist = 'pharmacist',
-  Cashier = 'cashier',
   Receptionist = 'receptionist',
   Patient = 'patient',
 }

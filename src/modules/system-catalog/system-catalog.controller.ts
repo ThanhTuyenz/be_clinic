@@ -1,7 +1,7 @@
 import { Body, Controller, Delete, Get, Param, Patch, Post, Query, Req } from '@nestjs/common'
 import type { Request } from 'express'
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger'
-import { SkipPermissions } from '../auth/permissions/decorators/skip-permissions.decorator.js'
+import { SkipPermissions } from 'src/common/decorators'
 import { SystemCatalogService } from './system-catalog.service.js'
 
 @ApiTags('System catalog') @ApiBearerAuth('access-token') @SkipPermissions() @Controller('admin/catalog')

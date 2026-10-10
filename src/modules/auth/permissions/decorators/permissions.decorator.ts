@@ -4,17 +4,16 @@ import { Request as ExpressRequest } from 'express';
 
 import {
   PermissionAction,
-  PermissionResource,
   PermissionResourceTarget,
   PermissionEffect,
 } from '../enums';
 
 // Re-export imported enums, so that controllers that use the decorator can
 // easily import all the required permission elements from one single import.
-export { PermissionResource, PermissionAction, PermissionResourceTarget };
+export { PermissionAction, PermissionResourceTarget };
 
 // Re-export SkipPermissions decorator for convenience
-export { SkipPermissions } from './skip-permissions.decorator';
+export { SkipPermissions } from 'src/common/decorators';
 
 export type GetResourceIdFn = (req: ExpressRequest) => string;
 
@@ -43,7 +42,6 @@ export const REQUIRED_PERMISSION = Symbol('REQUIRED_PERMISSION');
  * generation of resource target from inspection of the incoming request.
  */
 export type RequiredPermission = {
-  resourceType: PermissionResource;
   action: PermissionAction;
   resourceTarget: PermissionResourceTarget | GetResourceIdFn;
   effect: PermissionEffect.ALLOW;
@@ -60,12 +58,10 @@ export type RequiredPermission = {
  * @returns decorated action
  */
 export const RequiresPermission = (
-  resourceType: PermissionResource,
   action: PermissionAction,
   resourceTarget: PermissionResourceTarget | GetResourceIdFn,
 ): CustomDecorator<typeof REQUIRED_PERMISSION> =>
   SetMetadata(REQUIRED_PERMISSION, {
-    resourceType,
     action,
     resourceTarget,
     effect: PermissionEffect.ALLOW,

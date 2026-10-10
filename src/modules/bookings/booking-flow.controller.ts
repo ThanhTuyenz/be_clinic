@@ -1,7 +1,7 @@
 import { Controller, Get, Query } from '@nestjs/common';
 import { ApiOperation, ApiTags } from '@nestjs/swagger';
 import { Public } from '../../common/decorators/public.decorator.js';
-import { SkipPermissions } from '../auth/permissions/decorators/skip-permissions.decorator.js';
+import { SkipPermissions } from 'src/common/decorators';
 import { BookingFlowService } from './booking-flow.service.js';
 import { BookingInitDto } from './dtos/booking-init.dto.js';
 import { BookingSlotsDto } from './dtos/booking-slots.dto.js';

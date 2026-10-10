@@ -12,7 +12,7 @@ import { Request } from 'express';
 import { Services } from 'src/common/utils/constants';
 import { IS_PUBLIC_KEY } from 'src/common/decorators/public.decorator';
 import type { IUsersService } from 'src/modules/auth/users/users';
-import { TokenBlacklistService } from '../../jwt-auth-core/token-blacklist.service.js';
+import { TokenBlacklistService } from '../token-blacklist.service.js';
 import { RedisService } from '../../../../infrastructure/redis/redis.service.js';
 
 type JwtPayload = {
@@ -36,8 +36,6 @@ export type RequestUser = {
   sessionId: string;
   email?: string;
   role?: string;
-  userType?: string;
-  permissions?: string[];
 };
 
 interface RequestWithUser extends Request {
@@ -105,19 +103,19 @@ export class JwtAuthGuard implements CanActivate {
 
   // 2. Gom toàn bộ pipeline xác thực token & user về một chỗ
   private async validateAndBuildUser(token: string): Promise<RequestUser> {
-    // Check blacklist token (logout)
-    const isBlacklisted = await this.tokenBlacklistService.isTokenBlacklisted(token);
-    if (isBlacklisted) {
-      throw new UnauthorizedException('Token đã bị thu hồi, vui lòng đăng nhập lại');
-    }
-
-    // Verify chữ ký và hạn dùng JWT
+    // 1. Verify chữ ký và hạn dùng JWT trước (xử lý trên CPU, không tốn I/O network)
     const decoded = this.jwtService.verify<JwtPayload>(token);
     if (!decoded?.id) {
       throw new UnauthorizedException('Token không hợp lệ');
     }
 
-    // Check đổi mật khẩu / thu hồi toàn bộ session theo iat
+    // 2. Check blacklist token (logout)
+    const isBlacklisted = await this.tokenBlacklistService.isTokenBlacklisted(token);
+    if (isBlacklisted) {
+      throw new UnauthorizedException('Token đã bị thu hồi, vui lòng đăng nhập lại');
+    }
+
+    // 3. Check đổi mật khẩu / thu hồi toàn bộ session theo iat
     const isRevoked = await this.tokenBlacklistService.isUserRevoked(decoded.id, decoded.iat);
     if (isRevoked) {
       throw new UnauthorizedException('Phiên đăng nhập đã hết hiệu lực do thay đổi bảo mật');
@@ -155,7 +153,6 @@ export class JwtAuthGuard implements CanActivate {
       sessionId: decoded.sessionId || '',
       email: status.email ?? decoded.email,
       role: status.role ?? decoded.role,
-      userType: status.role ?? decoded.role,
     };
   }
 }

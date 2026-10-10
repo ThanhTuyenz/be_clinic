@@ -2,7 +2,7 @@ import { Body, Controller, Get, Headers, Param, Post, Query, Req, Res } from '@n
 import { ApiBearerAuth, ApiOperation, ApiParam, ApiQuery, ApiTags } from '@nestjs/swagger';
 import type { Request, Response } from 'express';
 import { Public } from '../../common/decorators/public.decorator.js';
-import { SkipPermissions } from '../auth/permissions/decorators/skip-permissions.decorator.js';
+import { SkipPermissions } from 'src/common/decorators';
 import { buildGoogleCalendarUrl, buildIcsContent } from './helpers/calendar.helper.js';
 import { BookingService } from './booking.service.js';
 import { BatchCheckoutDto, CheckoutAppointmentDto } from './dtos/checkout-appointment.dto.js';

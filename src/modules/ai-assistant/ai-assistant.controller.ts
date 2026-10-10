@@ -2,7 +2,7 @@ import { Body, Controller, HttpCode, HttpStatus, Post, Req, Res, SetMetadata } f
 import { ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger'
 import type { Request, Response } from 'express'
 import { Public } from '../../common/decorators/public.decorator.js'
-import { SkipPermissions } from '../auth/permissions/decorators/skip-permissions.decorator.js'
+import { SkipPermissions } from 'src/common/decorators'
 import { AiAssistantService } from './ai-assistant.service.js'
 import { AiChatMessageDto, AiChatResponsePayload, AiAgentChatDto, AiAgentChatResponse } from './dtos/ai-chat.dto.js'
 

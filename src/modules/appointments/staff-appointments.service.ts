@@ -242,7 +242,7 @@ export class StaffAppointmentsService {
 
   async receptionAppointments(userId: string, query: Record<string, string | undefined>) {
     const role = await this.roleOf(userId)
-    if (!['ADMIN', 'BRANCH_MANAGER', 'RECEPTIONIST', 'CASHIER'].includes(role)) throw new ForbiddenException('Không có quyền xem danh sách tiếp nhận')
+    if (!['ADMIN', 'BRANCH_MANAGER', 'RECEPTIONIST'].includes(role)) throw new ForbiddenException('Không có quyền xem danh sách tiếp nhận')
     const parseStartUtc = (s?: string) => {
       if (!s) return undefined
       const parts = s.split('-').map(Number)
@@ -829,7 +829,7 @@ export class StaffAppointmentsService {
 
   async recordPayment(userId: string, appointmentId: string, input: { method?: string; amount?: number; note?: string }) {
     const role = await this.roleOf(userId)
-    if (!['ADMIN', 'BRANCH_MANAGER', 'RECEPTIONIST', 'CASHIER'].includes(role)) {
+    if (!['ADMIN', 'BRANCH_MANAGER', 'RECEPTIONIST'].includes(role)) {
       throw new ForbiddenException('Không có quyền ghi nhận thanh toán')
     }
     const invoice = await this.prisma.invoice.findUnique({

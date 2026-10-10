@@ -66,7 +66,7 @@ export class RecommendationService {
       allActivePackages,
     );
 
-    const { packages, source, isCached, fromCache, dataOrigin } = await this.rankHomeCandidates(candidatePool, profileTower, behaviorTower);
+    const { packages, source, event, triggerEvent, triggerReason, isCached, fromCache, dataOrigin } = await this.rankHomeCandidates(candidatePool, profileTower, behaviorTower);
 
     return this.cacheAndBuildHomeResponse(
       query,
@@ -75,7 +75,7 @@ export class RecommendationService {
       source,
       homeCacheKey,
       t0,
-      { isCached, fromCache, dataOrigin },
+      { event, triggerEvent, triggerReason, isCached, fromCache, dataOrigin },
     );
   }
 
@@ -99,6 +99,9 @@ export class RecommendationService {
   ): Promise<{
     packages: RecommendedPackageItemDto[];
     source: 'HYBRID' | 'AI_PROFILE' | 'BEHAVIOR' | 'FALLBACK';
+    event: string;
+    triggerEvent: string;
+    triggerReason: string;
     isCached?: boolean;
     fromCache?: boolean;
     dataOrigin?: 'CACHE' | 'NEW';
@@ -107,14 +110,42 @@ export class RecommendationService {
     const hasProfileIntent = !!profileTower.profile;
 
     let detectedSource: 'HYBRID' | 'AI_PROFILE' | 'BEHAVIOR' | 'FALLBACK' = 'FALLBACK';
-    if (hasProfileIntent && hasBehaviorIntent) detectedSource = 'HYBRID';
-    else if (hasProfileIntent) detectedSource = 'AI_PROFILE';
-    else if (hasBehaviorIntent) detectedSource = 'BEHAVIOR';
+    let event = 'COLD_START';
+    let triggerEvent = 'DEFAULT_PACKAGES';
+    let triggerReason = 'Khởi động gợi ý mặc định hệ thống (Khách vãng lai)';
+
+    if (hasProfileIntent && hasBehaviorIntent) {
+      detectedSource = 'HYBRID';
+      event = 'CREATE_PROFILE + BEHAVIOR_SCORE';
+      triggerEvent = 'CREATE_PROFILE + BEHAVIOR_SCORE';
+      triggerReason = `Kết hợp Phân tích Hồ sơ (${profileTower.profile?.fullName}) và Điểm số tương tác hành vi (${behaviorTower.candidates.length} gói quan tâm)`;
+    } else if (hasProfileIntent) {
+      detectedSource = 'AI_PROFILE';
+      event = 'CREATE_PROFILE';
+      triggerEvent = 'CREATE_PROFILE';
+      triggerReason = `Kích hoạt từ Hồ sơ bệnh nhân (${profileTower.profile?.fullName}, ${profileTower.age} tuổi, tiền sử: ${profileTower.medicalHistory || 'Không'})`;
+    } else if (hasBehaviorIntent) {
+      detectedSource = 'BEHAVIOR';
+      if (behaviorTower.dropOffPkgId) {
+        event = 'DROP_OFF';
+        triggerEvent = 'DROP_OFF';
+        triggerReason = `Kích hoạt từ sự kiện Bỏ dở quy trình đặt khám gói ${behaviorTower.dropOffPkgName || behaviorTower.dropOffPkgId}`;
+      } else if (behaviorTower.lastSearchQuery) {
+        event = 'SEARCH_INTENT';
+        triggerEvent = 'SEARCH_INTENT';
+        triggerReason = `Kích hoạt từ Tìm kiếm triệu chứng/nhu cầu: "${behaviorTower.lastSearchQuery}"`;
+      } else {
+        event = 'BEHAVIOR_SCORE';
+        triggerEvent = 'BEHAVIOR_SCORE';
+        triggerReason = `Kích hoạt từ Điểm số tương tác (${behaviorTower.topSpecialties.map((s: any) => `${s.specialtyName}: ${s.score}đ`).join(', ')})`;
+      }
+    }
 
     this.logger.log(
       `🔍 [REC-HOME: PIPELINE START]\n` +
       `  👤 Nhánh Hồ sơ (Profile Tower): ${hasProfileIntent ? `CÓ (${profileTower.profile.fullName}, ${profileTower.age} tuổi, ${profileTower.gender}, Tiền sử: "${profileTower.medicalHistory || 'Không'}") -> ${profileTower.candidates.length} ứng viên` : 'KHÔNG (Khách vãng lai / Chưa chọn hồ sơ)'}\n` +
       `  🎯 Nhánh Hành vi (Behavior Tower): ${hasBehaviorIntent ? `CÓ (Chuyên khoa: [${behaviorTower.topSpecialties.map((s: any) => `${s.specialtyName}:${s.score}đ`).join(', ')}], Tìm kiếm: "${behaviorTower.lastSearchQuery || 'không'}", Bỏ dở: "${behaviorTower.dropOffPkgId || 'không'}") -> ${behaviorTower.candidates.length} ứng viên` : 'KHÔNG (Chưa có điểm hành vi)'}\n` +
+      `  ⚡ Sự kiện kích hoạt (Trigger Event): [${event}] ${triggerReason}\n` +
       `  📦 Tổng ứng viên (Candidate Pool): ${candidatePool.length} gói | Mô hình dự kiến: ${detectedSource}`,
     );
 
@@ -132,6 +163,9 @@ export class RecommendationService {
           return {
             packages: cachedProfileRec.packages.slice(0, TELEMETRY_CONFIG.HOME_FINAL_PACKAGES_LIMIT),
             source: 'AI_PROFILE',
+            event: cachedProfileRec.event || 'CREATE_PROFILE',
+            triggerEvent: cachedProfileRec.triggerEvent || 'CREATE_PROFILE',
+            triggerReason: cachedProfileRec.triggerReason || 'Tái sử dụng phân tích Hồ sơ từ Cache',
             isCached: true,
             fromCache: true,
             dataOrigin: 'CACHE',
@@ -192,6 +226,9 @@ export class RecommendationService {
             profileName: profileTower.profile.fullName,
             updatedAt: new Date().toISOString(),
             source: 'AI_GEMINI',
+            event,
+            triggerEvent,
+            triggerReason,
             packages: reRankedPackages,
           };
           this.redis.set(
@@ -218,6 +255,9 @@ export class RecommendationService {
     return {
       packages: reRankedPackages.slice(0, TELEMETRY_CONFIG.HOME_FINAL_PACKAGES_LIMIT),
       source: detectedSource,
+      event,
+      triggerEvent,
+      triggerReason,
     };
   }
 
@@ -228,13 +268,23 @@ export class RecommendationService {
     source: 'HYBRID' | 'AI_PROFILE' | 'BEHAVIOR' | 'FALLBACK',
     homeCacheKey: string,
     startTime: number,
-    meta?: { isCached?: boolean; fromCache?: boolean; dataOrigin?: 'CACHE' | 'NEW' },
+    meta?: {
+      event?: string;
+      triggerEvent?: string;
+      triggerReason?: string;
+      isCached?: boolean;
+      fromCache?: boolean;
+      dataOrigin?: 'CACHE' | 'NEW';
+    },
   ): Promise<HomeRecommendationResponseDto> {
     const finalResponse: HomeRecommendationResponseDto = {
       profileId: query.profileId,
       profileName,
       updatedAt: new Date().toISOString(),
       source,
+      event: meta?.event || 'CREATE_PROFILE + BEHAVIOR_SCORE',
+      triggerEvent: meta?.triggerEvent || meta?.event || 'CREATE_PROFILE + BEHAVIOR_SCORE',
+      triggerReason: meta?.triggerReason || 'Gợi ý cá nhân hóa thông minh',
       dataOrigin: meta?.dataOrigin || 'NEW',
       isCached: meta?.isCached ?? false,
       fromCache: meta?.fromCache ?? false,
@@ -371,6 +421,9 @@ export class RecommendationService {
       profileName: profileTower.profile.fullName,
       updatedAt: new Date().toISOString(),
       source,
+      event: 'CREATE_PROFILE',
+      triggerEvent: 'CREATE_PROFILE',
+      triggerReason: `Phân tích bệnh án & Hồ sơ bệnh nhân (${profileTower.profile.fullName})`,
       packages: aiList,
     };
 

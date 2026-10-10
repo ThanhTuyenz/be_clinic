@@ -1,7 +1,7 @@
 import { Body, Controller, Get, Param, Patch, Post, Req } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
 import type { Request } from 'express';
-import { SkipPermissions } from '../auth/permissions/decorators/skip-permissions.decorator.js';
+import { SkipPermissions } from 'src/common/decorators';
 import {
   CreatePatientProfileDto,
   PatientProfileResponseDto,

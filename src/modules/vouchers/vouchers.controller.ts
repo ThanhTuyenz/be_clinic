@@ -2,7 +2,7 @@ import { Body, Controller, Get, HttpCode, HttpStatus, Post, Req } from '@nestjs/
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import type { Request } from 'express';
 import { Public } from '../../common/decorators/public.decorator.js';
-import { SkipPermissions } from '../auth/permissions/decorators/skip-permissions.decorator.js';
+import { SkipPermissions } from 'src/common/decorators';
 import { ValidateVoucherDto } from './dtos/validate-voucher.dto.js';
 import { VouchersService } from './vouchers.service.js';
 

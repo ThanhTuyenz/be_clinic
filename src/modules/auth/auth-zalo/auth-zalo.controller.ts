@@ -14,7 +14,7 @@ import { IAuthService } from '../auth-local/auth';
 import { AuthProvidersEnum } from '../auth-local/enums/auth-providers.enum';
 import { ApiOperation, ApiTags } from '@nestjs/swagger';
 import { Public } from '../../../common/decorators/public.decorator';
-import { SkipPermissions } from '../permissions/decorators/skip-permissions.decorator.js';
+import { SkipPermissions } from 'src/common/decorators';
 import { IAuthZaloService } from './auth-zalo';
 import { AuthZaloLoginDto } from './dtos/auth-zalo-login.dto';
 import { ttlToMilliseconds } from '../../../config/auth.config';

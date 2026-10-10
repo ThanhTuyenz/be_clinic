@@ -2,7 +2,7 @@ import { Controller, Get, Request } from '@nestjs/common';
 import { Request as ExpressRequest } from 'express';
 import { PermissionsService } from './permissions.service.js';
 import { Routes } from 'src/common/utils/constants';
-import { SkipPermissions } from './decorators/skip-permissions.decorator.js';
+import { SkipPermissions } from 'src/common/decorators';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import {
   PERMISSION_CATALOG,

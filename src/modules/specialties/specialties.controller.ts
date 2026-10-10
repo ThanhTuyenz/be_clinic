@@ -1,7 +1,7 @@
 import { Controller, Get, Param, ParseIntPipe, Query } from '@nestjs/common';
 import { ApiOperation, ApiParam, ApiQuery, ApiTags } from '@nestjs/swagger';
 import { Public } from '../../common/decorators/public.decorator.js';
-import { SkipPermissions } from '../auth/permissions/decorators/skip-permissions.decorator.js';
+import { SkipPermissions } from 'src/common/decorators';
 import { SpecialtiesService } from './specialties.service.js';
 import { PackagesService } from './packages.service.js';
 import { PackageSchedulesService } from './package-schedules.service.js';

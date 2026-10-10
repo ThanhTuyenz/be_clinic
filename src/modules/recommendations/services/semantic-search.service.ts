@@ -228,35 +228,48 @@ export class SemanticSearchService {
    * Ghi nhận telemetry thống kê từ khóa bất đồng bộ (Non-blocking Background Task)
    */
   private async recordTelemetryAsync(query: string, hasResults: boolean): Promise<void> {
-    if (query.length < 2) return;
-    const normalizedQ = query.toLowerCase();
+    if (!query || query.trim().length < 2) return;
+    const normalizedQ = query.trim().toLowerCase();
+    const dateKey = new Date().toISOString().slice(0, 10);
 
-    // 1. Ghi nhận vào Redis Ranking ZSET
+    // 1. Ghi nhận vào Redis Ranking ZSET (theo ngày và toàn thời gian)
     if (this.redis.isEnabled()) {
-      const client = this.redis.getClient();
-      if (client) {
-        const zsetKey = hasResults ? 'rec:global:search_queries' : 'rec:global:unmatched_queries';
-        await client.zincrby(zsetKey, 1, normalizedQ);
+      try {
+        const client = this.redis.getClient();
+        if (client) {
+          const zsetKey = hasResults ? 'rec:global:search_queries' : 'rec:global:unmatched_queries';
+          const dailyZsetKey = `${zsetKey}:${dateKey}`;
+          const pipeline = client.pipeline();
+          pipeline.zincrby(dailyZsetKey, 1, normalizedQ);
+          pipeline.expire(dailyZsetKey, 172800); // 48 giờ
+          pipeline.zincrby(zsetKey, 1, normalizedQ);
+          await pipeline.exec();
+        }
+      } catch (err: any) {
+        this.logger.debug(`[SemanticSearch] Redis telemetry error: ${err?.message}`);
       }
     }
 
-    // 2. Ghi nhận vào PostgreSQL SearchLog (Upsert với Composite Key)
-    const dateKey = new Date().toISOString().slice(0, 10);
-    await this.prisma.searchLog.upsert({
-      where: {
-        keyword_dateKey_hasResults: {
+    // 2. Ghi nhận vào PostgreSQL SearchLog (Upsert với Composite Key theo dateKey)
+    try {
+      await this.prisma.searchLog.upsert({
+        where: {
+          keyword_dateKey_hasResults: {
+            keyword: normalizedQ,
+            dateKey,
+            hasResults,
+          },
+        },
+        update: { count: { increment: 1 } },
+        create: {
           keyword: normalizedQ,
           dateKey,
+          count: 1,
           hasResults,
         },
-      },
-      update: { count: { increment: 1 } },
-      create: {
-        keyword: normalizedQ,
-        dateKey,
-        count: 1,
-        hasResults,
-      },
-    }).catch(() => { });
+      });
+    } catch (err: any) {
+      this.logger.debug(`[SemanticSearch] DB search log error: ${err?.message}`);
+    }
   }
 }

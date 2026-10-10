@@ -18,29 +18,23 @@ import { Request, Response, CookieOptions } from 'express';
 import { Routes, Services } from 'src/common/utils/constants';
 import { Public } from 'src/common/decorators/public.decorator';
 import { IAuthService } from './auth';
-import { AuthEmailLoginDto } from './dtos/auth-email-login.dto';
-import { LoginResponseType } from './types/login-response.type';
-import { AuthRegisterDto } from './dtos/auth-register.dto';
-import { AuthConfirmEmailDto } from './dtos/auth-confirm-email.dto';
+import {
+  AuthEmailLoginDto,
+  AuthRegisterDto,
+  AuthConfirmEmailDto,
+  AuthForgotPasswordDto,
+  AuthResetPasswordDto,
+  AuthVerifyOtpDto,
+  AuthResendOtpDto,
+} from './dtos/index.js';
+import { LoginResponseType, JwtPayloadType } from './types/index.js';
 import { NullableType } from 'src/common/utils/types/nullable.type';
 import { User } from '../users/entities/user.entity';
-import { AuthForgotPasswordDto } from './dtos/auth-forgot-password.dto';
-import { AuthResetPasswordDto } from './dtos/auth-reset-password.dto';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
-import { SkipPermissions } from '../permissions/decorators/skip-permissions.decorator.js';
+import { SkipPermissions } from 'src/common/decorators';
 import { ConfigService } from '@nestjs/config';
 import { AllConfigType } from 'src/config/config.type';
 import { ttlToMilliseconds } from '../../../config/auth.config';
-import {
-  AuthResendOtpDto,
-  AuthVerifyOtpDto,
-} from './dtos/auth-verify-otp.dto';
-import {
-  CheckPhoneLinkDto,
-  RequestLinkOtpDto,
-  ConfirmLinkAccountDto,
-} from './dtos/auth-link-account.dto';
-import { JwtPayloadType } from './strategies/types/jwt-payload.type';
 
 type AuthenticatedRequest = Request & { user: JwtPayloadType };
 
@@ -138,35 +132,6 @@ export class AuthController {
   @ApiOperation({ summary: 'Gửi lại OTP xác thực email' })
   resendOtp(@Body() dto: AuthResendOtpDto): Promise<void> {
     return this.authService.resendRegistrationOtp(dto.email);
-  }
-
-  @Post('check-phone-link')
-  @Public()
-  @HttpCode(HttpStatus.OK)
-  @ApiOperation({ summary: 'Kiểm tra SĐT có thuộc tài khoản Zalo để gợi ý liên kết email không' })
-  async checkPhoneLink(@Body() dto: CheckPhoneLinkDto) {
-    return this.authService.checkPhoneLink(dto.phoneNumber);
-  }
-
-  @Post('request-link-otp')
-  @Public()
-  @HttpCode(HttpStatus.OK)
-  @ApiOperation({ summary: 'Gửi mã OTP qua Zalo ZNS để xác thực liên kết email' })
-  async requestLinkOtp(@Body() dto: RequestLinkOtpDto) {
-    return this.authService.requestLinkOtp(dto.phoneNumber);
-  }
-
-  @Post('confirm-link-account')
-  @Public()
-  @HttpCode(HttpStatus.OK)
-  @ApiOperation({ summary: 'Xác thực OTP và liên kết email/mật khẩu vào tài khoản Zalo' })
-  async confirmLinkAccount(
-    @Body() dto: ConfirmLinkAccountDto,
-    @Res({ passthrough: true }) res: Response,
-  ): Promise<LoginResponseType> {
-    const response = await this.authService.confirmLinkAccount(dto);
-    this.setAuthCookies(res, response.token, response.refreshToken);
-    return response;
   }
 
   @Post('confirm-email')

@@ -11,7 +11,7 @@ import {
 
 import { ApiBearerAuth, ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
 import { Public } from '../../common/decorators/public.decorator.js';
-import { SkipPermissions } from '../auth/permissions/decorators/skip-permissions.decorator.js';
+import { SkipPermissions } from 'src/common/decorators';
 import { CreatePaymentDto, PayosWebhookDto } from './dtos/payment.dto.js';
 import { PaymentService } from './payment.service.js';
 

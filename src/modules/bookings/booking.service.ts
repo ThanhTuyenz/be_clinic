@@ -1,18 +1,16 @@
 import { BadRequestException, ConflictException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { AppointmentStatus, PaymentStatus, Prisma } from '@prisma/client';
+import { AppointmentStatus, NotificationType, PaymentStatus, Prisma } from '@prisma/client';
 import { createHash, createHmac } from 'crypto';
 import { RabbitMqConfig } from '../../config/config.type.js';
 import { PrismaService } from '../../infrastructure/database/prisma/prisma.service.js';
 import { MailsService } from '../../infrastructure/mail/mails.service.js';
 import { VouchersService } from '../vouchers/vouchers.service.js';
-import { AppointmentItemDto, BatchCheckoutDto, CheckoutAppointmentDto } from './dtos/checkout-appointment.dto.js';
+import { BatchCheckoutDto, CheckoutAppointmentDto } from './dtos/checkout-appointment.dto.js';
 import { PaymentWebhookDto } from '../payments/dtos/payment-webhook.dto.js';
 import { RescheduleAppointmentDto } from './dtos/reschedule-appointment.dto.js';
 import { RealtimeGateway } from '../../infrastructure/realtime/realtime.gateway.js';
-
 import { NotificationService } from '../notifications/notification.service.js';
-import { NotificationType } from '@prisma/client';
 
 const ACTIVE_APPOINTMENT_STATUSES: AppointmentStatus[] = [
   'HOLD', 'CONFIRMED', 'CHECKED_IN',
@@ -38,12 +36,7 @@ export class BookingService {
     return createHmac('sha256', secret).update(`check-in:${appointmentId}`).digest('base64url');
   }
 
-  /**
-   * Trả về số thứ tự cố định của lịch khám.
-   */
-  private estimatedQueueNumber(row: { queueNumber: number | null }) {
-    return row.queueNumber;
-  }
+
 
   private validateBookingLeadTime(examDate: Date) {
     const nowUtc = new Date();
@@ -523,7 +516,7 @@ export class BookingService {
     const doctorSlot = row.scheduleSlot;
     const room = doctorSlot?.schedule.room;
     const branch = doctorSlot?.schedule.branch ?? row.branch;
-    const estimatedQueueNumber = this.estimatedQueueNumber(row);
+    const estimatedQueueNumber = row.queueNumber;
 
     let siblingAppts: any[] = [];
     if (row.bookingOrderId) {
@@ -754,7 +747,7 @@ export class BookingService {
       update: { tokenHash, expiresAt, usedAt: row.status === 'CHECKED_IN' ? new Date() : null },
       create: { appointmentId: row.id, tokenHash, expiresAt },
     });
-    const estimatedQueueNumber = this.estimatedQueueNumber(row);
+    const estimatedQueueNumber = row.queueNumber;
     const doc = doctorSlot?.schedule?.doctor;
     const specialtyName = doc?.specialties?.[0]?.specialty?.name || (row.servicePackage ? 'Đa khoa / Gói khám' : 'Khám chuyên khoa');
 
@@ -1937,109 +1930,33 @@ export class BookingService {
     return 1;
   }
 
-  private async confirmPaid(tx: Prisma.TransactionClient, paymentId: string, invoiceId: string, appointmentId: string, provider: string, dto: PaymentWebhookDto, late: boolean) {
-    const rawToken = this.checkInToken(appointmentId);
-    const tokenHash = createHash('sha256').update(rawToken).digest('hex');
-    const bookingCode = `VC-${appointmentId.slice(0, 8).toUpperCase()}`;
-
+  private async confirmPaid(
+    tx: Prisma.TransactionClient,
+    paymentId: string,
+    invoiceId: string,
+    appointmentId: string,
+    provider: string,
+    dto: PaymentWebhookDto,
+    late: boolean,
+  ) {
     // Cấp số thứ tự cố định chuẩn theo thứ tự khung giờ trong ngày làm việc của Bác sĩ
     const existingAppt = await tx.appointment.findUnique({
       where: { id: appointmentId },
-      include: {
-        scheduleSlot: true,
-      },
+      include: { scheduleSlot: true },
     });
 
     let assignedQueueNumber = existingAppt?.queueNumber ?? null;
     if (assignedQueueNumber == null && existingAppt) {
-      assignedQueueNumber = await this.computeQueueNumber(
-        tx,
-        appointmentId,
-        existingAppt.scheduleSlotId,
-      );
+      assignedQueueNumber = await this.computeQueueNumber(tx, appointmentId, existingAppt.scheduleSlotId);
     }
 
     await tx.paymentTransaction.update({ where: { id: paymentId }, data: { provider, providerTransactionId: dto.providerTransactionId, status: 'SUCCESS', paidAt: new Date(), rawPayload: dto.payload as Prisma.InputJsonValue } });
     await tx.invoice.update({ where: { id: invoiceId }, data: { status: 'PAID', paidAt: new Date() } });
-    const appointment = await tx.appointment.update({
-      where: { id: appointmentId },
-      data: {
-        status: 'CONFIRMED',
-        bookingCode,
-        queueNumber: assignedQueueNumber,
-        holdExpiresAt: null,
-        statusHistories: { create: { fromStatus: late ? 'CANCELLED' : 'HOLD', toStatus: 'CONFIRMED', reason: late ? 'LATE_SUCCESS_CAPACITY_REACQUIRED' : 'PAYMENT_SUCCESS' } },
-      },
-      include: {
-        patientProfile: true,
-        servicePackage: {
-          include: {
-            specialty: true,
-          },
-        },
-        branch: true,
-        scheduleSlot: {
-          include: {
-            schedule: {
-              include: {
-                doctor: {
-                  include: { user: true },
-                },
-              },
-            },
-          },
-        },
-      },
-    });
-    await tx.appointmentQrToken.upsert({ where: { appointmentId }, update: { tokenHash, expiresAt: new Date(Date.now() + 48 * 60 * 60 * 1000), usedAt: null }, create: { appointmentId, tokenHash, expiresAt: new Date(Date.now() + 48 * 60 * 60 * 1000) } });
-    await tx.outboxEvent.create({ data: { aggregateType: 'Appointment', aggregateId: appointmentId, eventType: 'appointment.booked', payload: { appointmentId, bookingCode, queueNumber: assignedQueueNumber, lateSuccess: late } } });
-    
-    // Bắn sự kiện realtime socket tới Quầy tiếp đón & Bác sĩ
-    try {
-      const isHealthPkg = Boolean(appointment.servicePackageId && !appointment.servicePackage?.specialtyId);
-      const servicePackageName = appointment.servicePackage?.name;
-      const specialtyName = appointment.servicePackage?.specialty?.name;
-      const assignedDoctor = appointment.scheduleSlot?.schedule?.doctor;
 
-      this.realtimeGateway.emitAppointmentBooked({
-        appointmentId,
-        bookingCode,
-        queueNumber: assignedQueueNumber ?? undefined,
-        patientName: appointment.patientProfile?.fullName,
-        patientPhone: appointment.patientProfile?.phoneNumber,
-        doctorId: assignedDoctor?.id,
-        doctorName: assignedDoctor?.user?.fullName,
-        specialtyName,
-        servicePackageName,
-        packageName: servicePackageName,
-        bookingType: isHealthPkg ? 'HEALTH_PACKAGE' : (appointment.servicePackageId ? 'SERVICE_PACKAGE' : 'DOCTOR'),
-        branchId: appointment.branchId,
-        branchName: appointment.branch?.name,
-        appointmentDate: appointment.scheduleSlot?.schedule?.workDate?.toISOString().slice(0, 10),
-        startTime: appointment.scheduleSlot?.startTime?.toISOString().slice(11, 16),
-        endTime: appointment.scheduleSlot?.endTime?.toISOString().slice(11, 16),
-        status: 'CONFIRMED',
-      });
+    const historyReason = late ? 'LATE_SUCCESS_CAPACITY_REACQUIRED' : 'PAYMENT_SUCCESS';
+    const { rawToken, updated: appointment } = await this.confirmSingleAppointment(tx, appointmentId, assignedQueueNumber, (late ? 'CANCELLED' : 'HOLD') as AppointmentStatus, historyReason);
 
-      // Gửi thông báo cho tài khoản bệnh nhân
-      if (appointment.patientProfile?.accountId) {
-        this.notifications.createNotification({
-          userId: appointment.patientProfile.accountId,
-          title: 'Đặt lịch khám thành công!',
-          content: `Lịch khám #${bookingCode} đã được xác nhận. Ngày khám: ${appointment.scheduleSlot?.schedule?.workDate?.toISOString().slice(0, 10) || ''} (${appointment.scheduleSlot?.startTime?.toISOString().slice(11, 16) || ''}) tại ${appointment.branch?.name || 'VitaCare Clinic'}.`,
-          type: NotificationType.BOOKING_CONFIRMED,
-          data: {
-            appointmentId,
-            bookingCode,
-            branchName: appointment.branch?.name,
-          },
-        }).catch(() => {});
-      }
-    } catch {
-      // Ignore socket emit error
-    }
-
-    return { status: PaymentStatus.SUCCESS, appointmentStatus: appointment.status, bookingCode, queueNumber: assignedQueueNumber, qrToken: rawToken };
+    return { status: PaymentStatus.SUCCESS, appointmentStatus: appointment.status, bookingCode: appointment.bookingCode!, queueNumber: assignedQueueNumber, qrToken: rawToken };
   }
 
   private async confirmPaidBatch(
@@ -2053,167 +1970,116 @@ export class BookingService {
   ) {
     await tx.paymentTransaction.update({
       where: { id: paymentId },
+      data: { provider, providerTransactionId: dto.providerTransactionId, status: 'SUCCESS', paidAt: new Date(), rawPayload: dto.payload as Prisma.InputJsonValue },
+    });
+    await tx.invoice.update({ where: { id: invoiceId }, data: { status: 'PAID', paidAt: new Date() } });
+    await (tx as any).bookingOrder.update({ where: { id: bookingOrderId }, data: { status: 'PAID' } });
+
+    const confirmedAppointments: any[] = [];
+    for (const appt of appointments) {
+      let assignedQueueNumber = appt.queueNumber ?? null;
+      if (assignedQueueNumber == null) {
+        assignedQueueNumber = await this.computeQueueNumber(tx, appt.id, appt.scheduleSlotId);
+      }
+
+      const { updated } = await this.confirmSingleAppointment(tx, appt.id, assignedQueueNumber, 'HOLD' as AppointmentStatus, 'PAYMENT_SUCCESS_BATCH', bookingOrderId);
+      confirmedAppointments.push({ appointmentId: updated.id, bookingCode: updated.bookingCode, queueNumber: assignedQueueNumber });
+    }
+
+    return { status: PaymentStatus.SUCCESS, appointmentStatus: 'CONFIRMED', bookingOrderId, appointments: confirmedAppointments };
+  }
+
+  /**
+   * Xác nhận một lịch hẹn đơn lẻ sau thanh toán: cập nhật DB, upsert QR token,
+   * tạo outbox event, bắn realtime socket và gửi thông báo trong ứng dụng.
+   */
+  private async confirmSingleAppointment(
+    tx: Prisma.TransactionClient,
+    appointmentId: string,
+    assignedQueueNumber: number | null,
+    fromStatus: AppointmentStatus,
+    historyReason: string,
+    bookingOrderId?: string,
+  ) {
+    const rawToken = this.checkInToken(appointmentId);
+    const tokenHash = createHash('sha256').update(rawToken).digest('hex');
+    const bookingCode = `VC-${appointmentId.slice(0, 8).toUpperCase()}`;
+
+    const apptInclude = {
+      patientProfile: true,
+      servicePackage: { include: { specialty: true } },
+      branch: true,
+      scheduleSlot: { include: { schedule: { include: { doctor: { include: { user: true } } } } } },
+    } as const;
+
+    const updated = await tx.appointment.update({
+      where: { id: appointmentId },
       data: {
-        provider,
-        providerTransactionId: dto.providerTransactionId,
-        status: 'SUCCESS',
-        paidAt: new Date(),
-        rawPayload: dto.payload as Prisma.InputJsonValue,
+        status: 'CONFIRMED',
+        bookingCode,
+        queueNumber: assignedQueueNumber,
+        holdExpiresAt: null,
+        statusHistories: { create: { fromStatus, toStatus: 'CONFIRMED', reason: historyReason } },
+      },
+      include: apptInclude,
+    });
+
+    await tx.appointmentQrToken.upsert({
+      where: { appointmentId },
+      update: { tokenHash, expiresAt: new Date(Date.now() + 48 * 60 * 60 * 1000), usedAt: null },
+      create: { appointmentId, tokenHash, expiresAt: new Date(Date.now() + 48 * 60 * 60 * 1000) },
+    });
+
+    await tx.outboxEvent.create({
+      data: {
+        aggregateType: 'Appointment',
+        aggregateId: appointmentId,
+        eventType: 'appointment.booked',
+        payload: { appointmentId, bookingCode, ...(bookingOrderId ? { bookingOrderId } : {}), queueNumber: assignedQueueNumber },
       },
     });
 
-    await tx.invoice.update({
-      where: { id: invoiceId },
-      data: { status: 'PAID', paidAt: new Date() },
-    });
+    // Bắn sự kiện realtime socket tới Quầy tiếp đón & Bác sĩ
+    try {
+      const isHealthPkg = Boolean(updated.servicePackageId && !updated.servicePackage?.specialtyId);
+      const servicePackageName = updated.servicePackage?.name;
+      const specialtyName = updated.servicePackage?.specialty?.name;
+      const assignedDoctor = updated.scheduleSlot?.schedule?.doctor;
 
-    await (tx as any).bookingOrder.update({
-      where: { id: bookingOrderId },
-      data: { status: 'PAID' },
-    });
-
-    const confirmedAppointments: any[] = [];
-
-    for (const appt of appointments) {
-      const rawToken = this.checkInToken(appt.id);
-      const tokenHash = createHash('sha256').update(rawToken).digest('hex');
-      const bookingCode = `VC-${appt.id.slice(0, 8).toUpperCase()}`;
-
-      let assignedQueueNumber = appt.queueNumber ?? null;
-      if (assignedQueueNumber == null) {
-        assignedQueueNumber = await this.computeQueueNumber(
-          tx,
-          appt.id,
-          appt.scheduleSlotId,
-        );
-      }
-
-      const updated = await tx.appointment.update({
-        where: { id: appt.id },
-        data: {
-          status: 'CONFIRMED',
-          bookingCode,
-          queueNumber: assignedQueueNumber,
-          holdExpiresAt: null,
-          statusHistories: {
-            create: {
-              fromStatus: 'HOLD',
-              toStatus: 'CONFIRMED',
-              reason: 'PAYMENT_SUCCESS_BATCH',
-            },
-          },
-        },
-        include: {
-          patientProfile: true,
-          servicePackage: {
-            include: {
-              specialty: true,
-            },
-          },
-          branch: true,
-          scheduleSlot: {
-            include: {
-              schedule: {
-                include: {
-                  doctor: {
-                    include: { user: true },
-                  },
-                },
-              },
-            },
-          },
-        },
-      });
-
-      await tx.appointmentQrToken.upsert({
-        where: { appointmentId: appt.id },
-        update: {
-          tokenHash,
-          expiresAt: new Date(Date.now() + 48 * 60 * 60 * 1000),
-          usedAt: null,
-        },
-        create: {
-          appointmentId: appt.id,
-          tokenHash,
-          expiresAt: new Date(Date.now() + 48 * 60 * 60 * 1000),
-        },
-      });
-
-      await tx.outboxEvent.create({
-        data: {
-          aggregateType: 'Appointment',
-          aggregateId: appt.id,
-          eventType: 'appointment.booked',
-          payload: {
-            appointmentId: appt.id,
-            bookingCode,
-            bookingOrderId,
-            queueNumber: assignedQueueNumber,
-          },
-        },
-      });
-
-      // Bắn sự kiện realtime socket cho từng lịch hẹn trong gói gia đình
-      try {
-        const isHealthPkg = Boolean(updated.servicePackageId && !updated.servicePackage?.specialtyId);
-        const servicePackageName = updated.servicePackage?.name;
-        const specialtyName = updated.servicePackage?.specialty?.name;
-        const assignedDoctor = updated.scheduleSlot?.schedule?.doctor;
-
-        this.realtimeGateway.emitAppointmentBooked({
-          appointmentId: updated.id,
-          bookingCode,
-          queueNumber: assignedQueueNumber ?? undefined,
-          patientName: updated.patientProfile?.fullName,
-          patientPhone: updated.patientProfile?.phoneNumber,
-          doctorId: assignedDoctor?.id,
-          doctorName: assignedDoctor?.user?.fullName,
-          specialtyName,
-          servicePackageName,
-          packageName: servicePackageName,
-          bookingType: isHealthPkg ? 'HEALTH_PACKAGE' : (updated.servicePackageId ? 'SERVICE_PACKAGE' : 'DOCTOR'),
-          branchId: updated.branchId,
-          branchName: updated.branch?.name,
-          appointmentDate: updated.scheduleSlot?.schedule?.workDate?.toISOString().slice(0, 10),
-          startTime: updated.scheduleSlot?.startTime?.toISOString().slice(11, 16),
-          endTime: updated.scheduleSlot?.endTime?.toISOString().slice(11, 16),
-          status: 'CONFIRMED',
-        });
-
-        if (updated.patientProfile?.accountId) {
-          this.notifications.createNotification({
-            userId: updated.patientProfile.accountId,
-            title: 'Đặt lịch khám thành công!',
-            content: `Lịch khám #${bookingCode} đã được xác nhận. Ngày khám: ${updated.scheduleSlot?.schedule?.workDate?.toISOString().slice(0, 10) || ''} (${updated.scheduleSlot?.startTime?.toISOString().slice(11, 16) || ''}) tại ${updated.branch?.name || 'VitaCare Clinic'}.`,
-            type: NotificationType.BOOKING_CONFIRMED,
-            data: {
-              appointmentId: updated.id,
-              bookingCode,
-              branchName: updated.branch?.name,
-            },
-          }).catch(() => {});
-        }
-      } catch {
-        // Ignore socket emit error
-      }
-
-      confirmedAppointments.push({
-        appointmentId: updated.id,
+      this.realtimeGateway.emitAppointmentBooked({
+        appointmentId,
         bookingCode,
-        queueNumber: assignedQueueNumber,
+        queueNumber: assignedQueueNumber ?? undefined,
+        patientName: updated.patientProfile?.fullName,
+        patientPhone: updated.patientProfile?.phoneNumber,
+        doctorId: assignedDoctor?.id,
+        doctorName: assignedDoctor?.user?.fullName,
+        specialtyName,
+        servicePackageName,
+        packageName: servicePackageName,
+        bookingType: isHealthPkg ? 'HEALTH_PACKAGE' : (updated.servicePackageId ? 'SERVICE_PACKAGE' : 'DOCTOR'),
+        branchId: updated.branchId,
+        branchName: updated.branch?.name,
+        appointmentDate: updated.scheduleSlot?.schedule?.workDate?.toISOString().slice(0, 10),
+        startTime: updated.scheduleSlot?.startTime?.toISOString().slice(11, 16),
+        endTime: updated.scheduleSlot?.endTime?.toISOString().slice(11, 16),
+        status: 'CONFIRMED',
       });
+
+      // Gửi thông báo trong ứng dụng cho tài khoản bệnh nhân
+      if (updated.patientProfile?.accountId) {
+        this.notifications.createNotification({
+          userId: updated.patientProfile.accountId,
+          title: 'Đặt lịch khám thành công!',
+          content: `Lịch khám #${bookingCode} đã được xác nhận. Ngày khám: ${updated.scheduleSlot?.schedule?.workDate?.toISOString().slice(0, 10) || ''} (${updated.scheduleSlot?.startTime?.toISOString().slice(11, 16) || ''}) tại ${updated.branch?.name || 'VitaCare Clinic'}.`,
+          type: NotificationType.BOOKING_CONFIRMED,
+          data: { appointmentId, bookingCode, branchName: updated.branch?.name },
+        }).catch(() => {});
+      }
+    } catch {
+      // Ignore socket emit error
     }
 
-    return {
-      status: PaymentStatus.SUCCESS,
-      appointmentStatus: 'CONFIRMED',
-      bookingOrderId,
-      appointments: confirmedAppointments,
-    };
+    return { rawToken, updated };
   }
 }
-
-
-
-
-

@@ -9,7 +9,7 @@ import {
   ApiResponse,
   ApiTags,
 } from '@nestjs/swagger';
-import { SkipPermissions } from '../auth/permissions/decorators/skip-permissions.decorator.js';
+import { SkipPermissions } from 'src/common/decorators';
 import { CreateReceptionAppointmentSwaggerDto, UpdateAppointmentStatusSwaggerDto } from './dtos/appointment.swagger.dto.js';
 import { StaffAppointmentsService } from './staff-appointments.service.js';
 

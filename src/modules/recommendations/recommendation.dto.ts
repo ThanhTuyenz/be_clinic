@@ -22,6 +22,9 @@ export interface ProfileRecommendationResponseDto {
   profileName?: string;
   updatedAt: string;
   source: 'AI_GEMINI' | 'RULE_FALLBACK' | 'REDIS_CACHE';
+  event?: string;
+  triggerEvent?: string;
+  triggerReason?: string;
   packages: RecommendedPackageItemDto[];
 }
 
@@ -72,6 +75,9 @@ export interface HomeRecommendationResponseDto {
   profileName?: string;
   updatedAt: string;
   source: 'HYBRID' | 'AI_PROFILE' | 'BEHAVIOR' | 'FALLBACK';
+  event?: string;
+  triggerEvent?: string;
+  triggerReason?: string;
   dataOrigin: 'CACHE' | 'NEW';
   isCached: boolean;
   fromCache: boolean;

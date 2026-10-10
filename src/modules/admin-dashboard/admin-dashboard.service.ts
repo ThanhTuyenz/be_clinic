@@ -1186,22 +1186,22 @@ export class AdminDashboardService {
       startDate = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000)
     }
 
-    // 1. Thu thập Top Từ khóa tìm kiếm từ Database search_logs & Redis ZSET
+    // 1. Thu thập Top Từ khóa tìm kiếm từ Database search_logs theo khoảng thời gian
     let topSearches: Array<{ query: string; searchCount: number }> = []
     let unmatchedSearches: Array<{ query: string; searchCount: number }> = []
 
     try {
-      // 1.1. Đọc từ bảng PostgreSQL search_logs
+      const startDateKey = startDate.toISOString().slice(0, 10)
       const dbSearchLogs = await this.prisma.searchLog.groupBy({
         by: ['keyword', 'hasResults'],
         _sum: { count: true },
         where: {
-          createdAt: { gte: startDate },
+          dateKey: { gte: startDateKey },
         },
         orderBy: {
           _sum: { count: 'desc' },
         },
-        take: 20,
+        take: 30,
       })
 
       for (const log of dbSearchLogs) {
@@ -1211,36 +1211,6 @@ export class AdminDashboardService {
           topSearches.push({ query, searchCount })
         } else {
           unmatchedSearches.push({ query, searchCount })
-        }
-      }
-    } catch { }
-
-    // 1.2. Đọc bổ sung từ Redis ZSET thời gian thực
-    try {
-      const client = this.redis.getClient()
-      if (client) {
-        const rawSearches = await client.zrevrange('rec:global:search_queries', 0, 9, 'WITHSCORES')
-        for (let i = 0; i < rawSearches.length; i += 2) {
-          const query = rawSearches[i]
-          const count = parseInt(rawSearches[i + 1], 10) || 1
-          const existing = topSearches.find((s) => s.query.toLowerCase() === query.toLowerCase())
-          if (existing) {
-            existing.searchCount = Math.max(existing.searchCount, count)
-          } else {
-            topSearches.push({ query, searchCount: count })
-          }
-        }
-
-        const rawUnmatched = await client.zrevrange('rec:global:unmatched_queries', 0, 9, 'WITHSCORES')
-        for (let i = 0; i < rawUnmatched.length; i += 2) {
-          const query = rawUnmatched[i]
-          const count = parseInt(rawUnmatched[i + 1], 10) || 1
-          const existing = unmatchedSearches.find((s) => s.query.toLowerCase() === query.toLowerCase())
-          if (existing) {
-            existing.searchCount = Math.max(existing.searchCount, count)
-          } else {
-            unmatchedSearches.push({ query, searchCount: count })
-          }
         }
       }
     } catch { }

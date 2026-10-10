@@ -18,12 +18,8 @@ import {
   ApiTags,
 } from '@nestjs/swagger';
 
-import {
-  RequiresPermission,
-  PermissionAction,
-  PermissionResource,
-  PermissionResourceTarget,
-} from '../permissions/decorators/permissions.decorator';
+import { RequirePermissions } from 'src/common/decorators/require-permissions.decorator';
+import { AppPermission } from 'src/common/constants/permissions.constant';
 import { Routes, Services } from 'src/common/utils/constants';
 
 import { CreateUserDto } from './dtos/create-user.dto';
@@ -41,11 +37,7 @@ export class UsersController {
   ) {}
 
   @Post()
-  @RequiresPermission(
-    PermissionResource.USER,
-    PermissionAction.CREATE,
-    PermissionResourceTarget.ANY,
-  )
+  @RequirePermissions(AppPermission.USER_MANAGE)
   @ApiBearerAuth('access-token')
   @ApiOperation({ summary: 'Tạo mới người dùng (admin)' })
   create(@Body() createUserDto: CreateUserDto) {
@@ -53,11 +45,7 @@ export class UsersController {
   }
 
   @Get()
-  @RequiresPermission(
-    PermissionResource.USER,
-    PermissionAction.GET,
-    PermissionResourceTarget.ANY,
-  )
+  @RequirePermissions(AppPermission.USER_READ)
   @ApiBearerAuth('access-token')
   @ApiOperation({
     summary:
@@ -75,11 +63,7 @@ export class UsersController {
   }
 
   @Patch(':id')
-  @RequiresPermission(
-    PermissionResource.USER,
-    PermissionAction.EDIT,
-    PermissionResourceTarget.ANY,
-  )
+  @RequirePermissions(AppPermission.USER_MANAGE)
   @ApiBearerAuth('access-token')
   @ApiParam({ name: 'id', description: 'UUID người dùng' })
   @ApiOperation({ summary: 'Cập nhật người dùng (admin)' })
@@ -88,11 +72,7 @@ export class UsersController {
   }
 
   @Delete(':id')
-  @RequiresPermission(
-    PermissionResource.USER,
-    PermissionAction.DELETE,
-    PermissionResourceTarget.ANY,
-  )
+  @RequirePermissions(AppPermission.USER_MANAGE)
   @ApiBearerAuth('access-token')
   @HttpCode(HttpStatus.NO_CONTENT)
   @ApiParam({ name: 'id', description: 'UUID người dùng' })
@@ -102,11 +82,7 @@ export class UsersController {
   }
 
   @Patch(':id/role')
-  @RequiresPermission(
-    PermissionResource.USER,
-    PermissionAction.EDIT,
-    PermissionResourceTarget.ANY,
-  )
+  @RequirePermissions(AppPermission.USER_MANAGE)
   @ApiBearerAuth('access-token')
   @ApiParam({ name: 'id', description: 'UUID người dùng' })
   @ApiOperation({ summary: 'Gán role cho người dùng (admin)' })
@@ -115,11 +91,7 @@ export class UsersController {
   }
 
   @Delete(':id/role')
-  @RequiresPermission(
-    PermissionResource.USER,
-    PermissionAction.EDIT,
-    PermissionResourceTarget.ANY,
-  )
+  @RequirePermissions(AppPermission.USER_MANAGE)
   @ApiBearerAuth('access-token')
   @HttpCode(HttpStatus.NO_CONTENT)
   @ApiParam({ name: 'id', description: 'UUID người dùng' })
@@ -129,11 +101,7 @@ export class UsersController {
   }
 
   @Post(':id/permissions')
-  @RequiresPermission(
-    PermissionResource.USER,
-    PermissionAction.EDIT,
-    PermissionResourceTarget.ANY,
-  )
+  @RequirePermissions(AppPermission.USER_MANAGE)
   @ApiBearerAuth('access-token')
   @ApiParam({ name: 'id', description: 'UUID người dùng' })
   @ApiOperation({ summary: 'Gán quyền tùy chỉnh cho người dùng (admin)' })
@@ -145,11 +113,7 @@ export class UsersController {
   }
 
   @Delete(':id/permissions')
-  @RequiresPermission(
-    PermissionResource.USER,
-    PermissionAction.EDIT,
-    PermissionResourceTarget.ANY,
-  )
+  @RequirePermissions(AppPermission.USER_MANAGE)
   @ApiBearerAuth('access-token')
   @HttpCode(HttpStatus.NO_CONTENT)
   @ApiParam({ name: 'id', description: 'UUID người dùng' })

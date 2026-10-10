@@ -121,7 +121,12 @@ export class BehaviorTelemetryService {
       pipeline.zincrby('rec:global:popular_packages', 1, dto.targetPackageId);
     }
     if (dto.actionType === TrackingActionType.SEARCH && dto.searchQuery?.trim()) {
-      pipeline.zincrby('rec:global:search_queries', 1, dto.searchQuery.trim().toLowerCase());
+      const q = dto.searchQuery.trim().toLowerCase();
+      const dateKey = new Date().toISOString().slice(0, 10);
+      const dailyKey = `rec:global:search_queries:${dateKey}`;
+      pipeline.zincrby(dailyKey, 1, q);
+      pipeline.expire(dailyKey, 172800);
+      pipeline.zincrby('rec:global:search_queries', 1, q);
     }
 
     await pipeline.exec();

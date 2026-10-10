@@ -6,16 +6,12 @@ export enum PermissionRole {
   PATIENT = 'patient',
 }
 
-export function mapUserRoleToPermissionRole(
-  userRole: UserRole,
-): PermissionRole {
+export function mapUserRoleToPermissionRole(userRole: UserRole): PermissionRole {
   switch (userRole) {
     case UserRole.Admin:
     case UserRole.BranchManager:
       return PermissionRole.ADMIN;
     case UserRole.Doctor:
-    case UserRole.Pharmacist:
-    case UserRole.Cashier:
     case UserRole.Receptionist:
       return PermissionRole.EMPLOYEE;
     case UserRole.Patient:

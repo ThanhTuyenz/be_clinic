@@ -1,7 +1,7 @@
 import { Body, Controller, Get, Logger, Param, Post, Query, Req, SetMetadata } from '@nestjs/common';
 import { ApiOperation, ApiTags } from '@nestjs/swagger';
 import { Public } from '../../common/decorators/public.decorator.js';
-import { SkipPermissions } from '../auth/permissions/decorators/skip-permissions.decorator.js';
+import { SkipPermissions } from 'src/common/decorators';
 import { RecommendationService } from './recommendation.service.js';
 import {
   HomeRecommendationQueryDto,

@@ -42,60 +42,21 @@ export class TelemetrySyncTask {
         return;
       }
 
-      // 1. Đồng bộ Từ khóa tìm kiếm (SearchLog)
+      // 1. Thống kê Từ khóa tìm kiếm trong ngày (SearchLog)
       let totalSearchesToday = 0;
       let unmatchedSearchesToday = 0;
 
-      // 1.1. Từ khóa tìm kiếm chung
-      const searchItems = await client.zrevrange('rec:global:search_queries', 0, 100, 'WITHSCORES');
-      for (let i = 0; i < searchItems.length; i += 2) {
-        const keyword = searchItems[i];
-        const count = parseInt(searchItems[i + 1], 10) || 0;
-        if (!keyword || count <= 0) continue;
+      const dbSearchLogsToday = await this.prisma.searchLog.findMany({
+        where: { dateKey },
+        select: { count: true, hasResults: true },
+      });
 
-        totalSearchesToday += count;
-        await this.prisma.searchLog.upsert({
-          where: {
-            keyword_dateKey_hasResults: {
-              keyword,
-              dateKey,
-              hasResults: true,
-            },
-          },
-          update: { count },
-          create: {
-            keyword,
-            dateKey,
-            count,
-            hasResults: true,
-          },
-        });
-      }
-
-      // 1.2. Từ khóa chưa đáp ứng (Unmatched searches - hasResults = false)
-      const unmatchedItems = await client.zrevrange('rec:global:unmatched_queries', 0, 100, 'WITHSCORES');
-      for (let i = 0; i < unmatchedItems.length; i += 2) {
-        const keyword = unmatchedItems[i];
-        const count = parseInt(unmatchedItems[i + 1], 10) || 0;
-        if (!keyword || count <= 0) continue;
-
-        unmatchedSearchesToday += count;
-        await this.prisma.searchLog.upsert({
-          where: {
-            keyword_dateKey_hasResults: {
-              keyword,
-              dateKey,
-              hasResults: false,
-            },
-          },
-          update: { count },
-          create: {
-            keyword,
-            dateKey,
-            count,
-            hasResults: false,
-          },
-        });
+      for (const log of dbSearchLogsToday) {
+        if (log.hasResults) {
+          totalSearchesToday += log.count;
+        } else {
+          unmatchedSearchesToday += log.count;
+        }
       }
 
       // 2. Đồng bộ lượt xem gói (viewCount) vào ServicePackage

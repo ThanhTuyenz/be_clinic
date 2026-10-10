@@ -3,7 +3,7 @@ import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import type { Request } from 'express';
 import { NotificationService } from './notification.service.js';
 import { QueryNotificationsDto, SaveDeviceTokenDto } from './dtos/notification.dto.js';
-import { SkipPermissions } from '../auth/permissions/decorators/skip-permissions.decorator.js';
+import { SkipPermissions } from 'src/common/decorators';
 
 interface RequestWithUser extends Request {
   user?: {

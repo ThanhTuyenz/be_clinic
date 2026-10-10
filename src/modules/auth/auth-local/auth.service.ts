@@ -9,32 +9,31 @@ import {
 } from '@nestjs/common';
 import { IUsersService } from '../users/users.js';
 import { Services } from '../../../common/utils/constants.js';
-import { AuthEmailLoginDto } from './dtos/auth-email-login.dto.js';
-import { LoginResponseType } from './types/login-response.type.js';
+import { AuthEmailLoginDto, AuthRegisterDto } from './dtos/index.js';
 import { AuthProvidersEnum } from './enums/auth-providers.enum.js';
 import { createHash } from 'crypto';
 import { User, UserRole, UserStatus } from '../users/entities/user.entity.js';
 import { ISessionService } from '../session/session.js';
 import { IAuthService } from './auth.js';
-import { AuthRegisterDto } from './dtos/auth-register.dto.js';
 import { randomStringGenerator } from '@nestjs/common/utils/random-string-generator.util';
 import { compareHash } from '../../../common/utils/helpers.js';
 import { IMailsService } from '../../../infrastructure/mail/mails.js';
-import { JwtPayloadType } from './strategies/types/jwt-payload.type.js';
+import {
+  LoginResponseType,
+  JwtPayloadType,
+  JwtRefreshPayloadType,
+} from './types/index.js';
 import { NullableType } from '../../../common/utils/types/nullable.type.js';
-import { IForgotPasswordService } from '../forgot-password/forgot-password.js';
 import { SocialType } from '../../../common/utils/social.type.js';
-import { JwtRefreshPayloadType } from './strategies/types/jwt-refresh-payload.type.js';
 import { HistoryService } from '../history/history.service.js';
 import { HISTORY_ACTIONS } from '../history/history.js';
 import { TokenBlacklistService } from '../jwt-auth-core/token-blacklist.service.js';
-import { ZaloZnsService } from '../../../infrastructure/zalo-zns/zalo-zns.service.js';
 import { normalizePhoneVariants } from '../../../common/utils/phone.util.js';
 
 // Sub-services
 import { AuthOtpService } from './services/auth-otp.service.js';
 import { AuthTokenService } from './services/auth-token.service.js';
-import { AccountLinkingService } from './services/account-linking.service.js';
+import { PasswordResetService } from './services/password-reset.service.js';
 
 @Injectable()
 export class AuthService implements IAuthService {
@@ -44,22 +43,19 @@ export class AuthService implements IAuthService {
     @Inject(Services.USERS) private readonly usersService: IUsersService,
     @Inject(Services.MAILS) private readonly mailsService: IMailsService,
     @Inject(Services.SESSION) private readonly sessionService: ISessionService,
-    @Inject(Services.FORGOT_PASSWORD)
-    private readonly forgotPasswordService: IForgotPasswordService,
+    private readonly passwordResetService: PasswordResetService,
     private readonly historyService: HistoryService,
     private readonly tokenBlacklistService: TokenBlacklistService,
-    private readonly zaloZnsService: ZaloZnsService,
     // Sub-services
     private readonly authOtpService: AuthOtpService,
     private readonly authTokenService: AuthTokenService,
-    private readonly accountLinkingService: AccountLinkingService,
   ) {}
 
   // ─── Email / Password ─────────────────────────────────────────────────────
 
   async checkEmail(email: string): Promise<boolean> {
     const user = await this.usersService.findByEmail(email);
-    return !user;
+    return !user || user.status !== UserStatus.Active;
   }
 
   async validateLogin(loginDto: AuthEmailLoginDto): Promise<LoginResponseType> {
@@ -71,11 +67,6 @@ export class AuthService implements IAuthService {
       user = await this.usersService.findOneUser({ email: rawInput.toLowerCase() });
     } else {
       user = await this.usersService.findByPhoneVariants(normalizePhoneVariants(rawInput));
-      if (!user) {
-        user = await this.usersService.findOneUser({
-          email: `${rawInput.replace(/[\s+]/g, '')}@phone.vitacare.vn`,
-        });
-      }
     }
 
     if (!user) {
@@ -154,10 +145,14 @@ export class AuthService implements IAuthService {
       const rawPhone = socialData.phoneNumber.trim();
       user = await this.usersService.findByPhoneVariants(normalizePhoneVariants(rawPhone));
       if (user) {
-        user.zaloId = socialData.id;
+        if (authProvider === AuthProvidersEnum.zalo) {
+          user.zaloId = socialData.id;
+        } else {
+          user.socialId = socialData.id;
+        }
         if (!user.avatarUrl && socialData.avatarUrl) user.avatarUrl = socialData.avatarUrl;
         await this.usersService.saveUser(user);
-        this.logger.log(`Linked Zalo ID ${socialData.id} to user ${user.id} via phone`);
+        this.logger.log(`Linked ${authProvider} ID ${socialData.id} to user ${user.id} via phone`);
       }
     }
 
@@ -166,18 +161,23 @@ export class AuthService implements IAuthService {
       const userByEmail = await this.usersService.findOneUser({ email: socialEmail });
       if (userByEmail) {
         user = userByEmail;
-        if (authProvider === AuthProvidersEnum.zalo) user.zaloId = socialData.id;
+        if (authProvider === AuthProvidersEnum.zalo) {
+          user.zaloId = socialData.id;
+        } else {
+          user.socialId = socialData.id;
+        }
         if (!user.avatarUrl && socialData.avatarUrl) user.avatarUrl = socialData.avatarUrl;
         await this.usersService.saveUser(user);
-        this.logger.log(`Linked Zalo ID ${socialData.id} to user ${user.id} via email`);
+        this.logger.log(`Linked ${authProvider} ID ${socialData.id} to user ${user.id} via email`);
       }
     }
 
-    // 4. Nếu có user: cập nhật email/avatar nếu thiếu
+    // 4. Nếu có user: cập nhật email/avatar/socialId nếu thiếu
     if (user) {
       let changed = false;
       if (socialEmail && !user.email) { user.email = socialEmail; changed = true; }
       if (authProvider === AuthProvidersEnum.zalo && !user.zaloId) { user.zaloId = socialData.id; changed = true; }
+      if (authProvider !== AuthProvidersEnum.zalo && !user.socialId) { user.socialId = socialData.id; changed = true; }
       if (!user.avatarUrl && socialData.avatarUrl) { user.avatarUrl = socialData.avatarUrl; changed = true; }
       if (changed) await this.usersService.saveUser(user);
     } else {
@@ -192,7 +192,6 @@ export class AuthService implements IAuthService {
         provider: authProvider,
         status: UserStatus.Active,
       });
-      user = await this.usersService.findOneUser({ id: user.id });
     }
 
     if (!user) {
@@ -222,153 +221,101 @@ export class AuthService implements IAuthService {
       targetId: user.id,
     });
 
-    return { refreshToken, token: token, tokenExpires, user };
+    return { refreshToken, token, tokenExpires, user };
   }
 
   // ─── Registration ─────────────────────────────────────────────────────────
 
   async registerUser(registerDto: AuthRegisterDto): Promise<void> {
-    const rawAccount = (registerDto.email || '').trim();
-    const isEmail = rawAccount.includes('@');
-    const email = isEmail ? rawAccount.toLowerCase() : null;
-    const phoneNumber = !isEmail ? rawAccount : (registerDto.phoneNumber || null);
-
-    if (email) {
-      const existing = await this.usersService.findOneUser({ email });
-      if (existing?.status === UserStatus.Active) {
-        throw new HttpException('Email này đã được sử dụng.', HttpStatus.CONFLICT);
-      }
+    const email = (registerDto.email || '').trim().toLowerCase();
+    if (!email || !email.includes('@')) {
+      throw new HttpException('Vui lòng nhập địa chỉ email hợp lệ để đăng ký.', HttpStatus.BAD_REQUEST);
     }
 
-    if (phoneNumber) {
-      const existing = await this.usersService.findByPhoneVariants(normalizePhoneVariants(phoneNumber));
-      if (existing?.status === UserStatus.Active) {
+    const existing = await this.usersService.findOneUser({ email });
+    if (existing?.status === UserStatus.Active) {
+      throw new HttpException('Email này đã được sử dụng.', HttpStatus.CONFLICT);
+    }
+
+    // Nếu người dùng cung cấp thêm số điện thoại, kiểm tra SĐT không bị trùng với tài khoản active khác
+    if (registerDto.phoneNumber) {
+      const existingPhone = await this.usersService.findByPhoneVariants(
+        normalizePhoneVariants(registerDto.phoneNumber),
+      );
+      if (existingPhone && existingPhone.id !== existing?.id && existingPhone.status === UserStatus.Active) {
         throw new HttpException('Số điện thoại này đã được sử dụng.', HttpStatus.CONFLICT);
       }
     }
 
     const otp = this.authOtpService.generateOtp();
 
-    // ── Đăng ký bằng SĐT ──
-    if (!isEmail && phoneNumber) {
-      const virtualEmail = `${phoneNumber.replace(/[\s+]/g, '')}@phone.vitacare.vn`;
-      const existing = await this.usersService.findByPhoneVariants(normalizePhoneVariants(phoneNumber));
-
-      if (existing) {
-        existing.password = registerDto.password;
-        existing.fullName = registerDto.fullName;
-        existing.role = UserRole.Patient;
-        existing.status = UserStatus.Inactive;
-        await this.usersService.saveUser(existing);
-      } else {
-        await this.usersService.createUser({
-          fullName: registerDto.fullName,
-          password: registerDto.password,
-          email: virtualEmail,
-          phoneNumber,
-          status: UserStatus.Inactive,
-          role: UserRole.Patient,
-        } as any);
-      }
-
-      await this.authOtpService.storeOtp('reg', phoneNumber, otp);
-
-      await this.historyService.create({
-        action: HISTORY_ACTIONS.USER_REGISTERED,
-        message: `Đăng ký tài khoản mới qua Zalo SĐT ${phoneNumber}`,
-        actorEmail: phoneNumber,
-        targetType: 'user',
-        targetId: phoneNumber,
-      });
-
-      await this.zaloZnsService.sendOtp({ to: phoneNumber, otp, expiresInMinutes: 10, purpose: 'REGISTER' });
-      return;
-    }
-
     // ── Đăng ký bằng Email ──
-    const existingUser = email ? await this.usersService.findOneUser({ email }) : null;
-    if (existingUser) {
-      existingUser.password = registerDto.password;
-      existingUser.fullName = registerDto.fullName;
-      existingUser.role = UserRole.Patient;
-      existingUser.status = UserStatus.Inactive;
-      await this.usersService.saveUser(existingUser);
+    let userId: string;
+    if (existing) {
+      existing.password = registerDto.password;
+      existing.fullName = registerDto.fullName;
+      if (registerDto.phoneNumber) existing.phoneNumber = registerDto.phoneNumber;
+      existing.role = UserRole.Patient;
+      existing.status = UserStatus.Inactive;
+      const updated = await this.usersService.saveUser(existing);
+      userId = updated.id;
     } else {
-      await this.usersService.createUser({ ...registerDto, email: email!, status: UserStatus.Inactive, role: UserRole.Patient });
+      const newUser = await this.usersService.createUser({
+        ...registerDto,
+        email,
+        status: UserStatus.Inactive,
+        role: UserRole.Patient,
+      });
+      userId = newUser.id;
     }
 
-    await this.authOtpService.storeOtp('reg', email!, otp);
+    await this.authOtpService.storeOtp('reg', email, otp);
 
     await this.historyService.create({
       action: HISTORY_ACTIONS.USER_REGISTERED,
       message: `Đăng ký tài khoản mới qua email ${email}`,
-      actorEmail: email!,
+      actorEmail: email,
       targetType: 'user',
-      targetId: existingUser?.id ?? email!,
+      targetId: userId,
     });
 
     await this.mailsService.confirmRegisterUser({
-      to: email!,
+      to: email,
       data: { otp, user: registerDto.fullName, expiresInMinutes: 10 },
     });
   }
 
-  async verifyRegistrationOtp(rawIdentifier: string, otp: string): Promise<void> {
-    const identifier = (rawIdentifier || '').trim();
-    const isEmail = identifier.includes('@');
-    let user: User | null = null;
-
-    if (isEmail) {
-      user = await this.usersService.findOneUser({ email: identifier });
-    } else {
-      user =
-        (await this.usersService.findByPhoneVariants(normalizePhoneVariants(identifier))) ??
-        (await this.usersService.findOneUser({ email: `${identifier.replace(/[\s+]/g, '')}@phone.vitacare.vn` }));
-    }
+  async verifyRegistrationOtp(rawEmail: string, otp: string): Promise<void> {
+    const email = (rawEmail || '').trim().toLowerCase();
+    const user = await this.usersService.findOneUser({ email });
 
     if (!user || user.status === UserStatus.Active) {
       throw new HttpException('Tài khoản không hợp lệ hoặc đã được kích hoạt', HttpStatus.BAD_REQUEST);
     }
 
-    // OTP key phải dùng identifier gốc đúng dạng đã lưu lúc storeOtp
-    const otpIdentifier = isEmail ? identifier : (await this.resolveOtpIdentifier(identifier));
-    await this.authOtpService.verifyOtp('reg', otpIdentifier, otp);
+    await this.authOtpService.verifyOtp('reg', email, otp);
 
     user.status = UserStatus.Active;
     await this.usersService.saveUser(user);
-    await this.authOtpService.deleteOtp('reg', otpIdentifier);
+    await this.authOtpService.deleteOtp('reg', email);
   }
 
-  async resendRegistrationOtp(rawIdentifier: string): Promise<void> {
-    const identifier = (rawIdentifier || '').trim();
-    const isEmail = identifier.includes('@');
-    let user: User | null = null;
-
-    if (isEmail) {
-      user = await this.usersService.findOneUser({ email: identifier });
-    } else {
-      user =
-        (await this.usersService.findByPhoneVariants(normalizePhoneVariants(identifier))) ??
-        (await this.usersService.findOneUser({ email: `${identifier.replace(/[\s+]/g, '')}@phone.vitacare.vn` }));
-    }
+  async resendRegistrationOtp(rawEmail: string): Promise<void> {
+    const email = (rawEmail || '').trim().toLowerCase();
+    const user = await this.usersService.findOneUser({ email });
 
     if (!user) throw new HttpException('Không tìm thấy tài khoản', HttpStatus.NOT_FOUND);
     if (user.status === UserStatus.Active) throw new HttpException('Tài khoản đã được kích hoạt', HttpStatus.CONFLICT);
 
-    const otpIdentifier = isEmail ? identifier : (await this.resolveOtpIdentifier(identifier));
-    await this.authOtpService.checkCooldown('reg', otpIdentifier);
+    await this.authOtpService.checkCooldown('reg', email);
 
     const otp = this.authOtpService.generateOtp();
-    await this.authOtpService.storeOtp('reg', otpIdentifier, otp);
+    await this.authOtpService.storeOtp('reg', email, otp);
 
-    if (isEmail) {
-      await this.mailsService.confirmRegisterUser({
-        to: identifier,
-        data: { otp, user: user.fullName ?? undefined, expiresInMinutes: 10 },
-      });
-    } else {
-      await this.zaloZnsService.sendOtp({ to: user.phoneNumber || identifier, otp, expiresInMinutes: 10, purpose: 'REGISTER' });
-    }
+    await this.mailsService.confirmRegisterUser({
+      to: email,
+      data: { otp, user: user.fullName ?? undefined, expiresInMinutes: 10 },
+    });
   }
 
   // ─── Account Status ───────────────────────────────────────────────────────
@@ -403,7 +350,7 @@ export class AuthService implements IAuthService {
     }
 
     const hash = createHash('sha256').update(randomStringGenerator()).digest('hex');
-    await this.forgotPasswordService.create({ hash, user, userId: user.id });
+    await this.passwordResetService.create(hash, user.id);
 
     await this.historyService.create({
       action: HISTORY_ACTIONS.USER_FORGOT_PASSWORD_REQUESTED,
@@ -423,34 +370,18 @@ export class AuthService implements IAuthService {
   async resetPassword(hash: string, password: string): Promise<void> {
     this.logger.log(`Reset password requested, hash=${hash ? `${hash.slice(0, 8)}...` : 'missing'}`);
 
-    const forgotReq = await this.forgotPasswordService.findOne({ where: { hash } });
-    if (!forgotReq) {
-      this.logger.warn(`Reset password failed: forgot request not found`);
+    const resetRecord = await this.passwordResetService.findOne(hash);
+    if (!resetRecord) {
+      this.logger.warn(`Reset password failed: reset token not found or expired`);
       throw new HttpException(
         { status: HttpStatus.UNPROCESSABLE_ENTITY, errors: { hash: 'notFound' } },
         HttpStatus.UNPROCESSABLE_ENTITY,
       );
     }
 
-    const forgotReqWithRawUser = forgotReq as typeof forgotReq & {
-      user?: User | User['id'] | null;
-      userId?: User['id'];
-    };
-
-    const userId = this.resolveUserIdFromRelation(forgotReqWithRawUser.user) ?? forgotReqWithRawUser.userId;
-    const userSnapshot =
-      forgotReqWithRawUser.user && typeof forgotReqWithRawUser.user === 'object'
-        ? forgotReqWithRawUser.user as User
-        : undefined;
-
-    const user = userId
-      ? await this.usersService.findOneUser({ id: userId })
-      : userSnapshot?.email
-        ? await this.usersService.findOneUser({ email: userSnapshot.email })
-        : null;
-
+    const user = await this.usersService.findOneUser({ id: resetRecord.userId });
     if (!user) {
-      this.logger.warn(`Reset password failed: user not found for userId=${userId}`);
+      this.logger.warn(`Reset password failed: user not found for userId=${resetRecord.userId}`);
       throw new HttpException(
         { status: HttpStatus.UNPROCESSABLE_ENTITY, errors: { hash: 'notFound' } },
         HttpStatus.UNPROCESSABLE_ENTITY,
@@ -461,7 +392,7 @@ export class AuthService implements IAuthService {
     await this.sessionService.softDelete({ user: { id: user.id } });
     await this.tokenBlacklistService.revokeUser(user.id);
     await this.usersService.saveUser(user);
-    await this.forgotPasswordService.softDelete(forgotReq.id);
+    await this.passwordResetService.remove(hash);
 
     await this.historyService.create({
       action: HISTORY_ACTIONS.USER_RESET_PASSWORD_SUCCESS,
@@ -487,41 +418,5 @@ export class AuthService implements IAuthService {
 
   logout(data: { sessionId?: string; token?: string }): Promise<void> {
     return this.authTokenService.logout(data);
-  }
-
-  // ─── Account-linking delegates ────────────────────────────────────────────
-
-  checkPhoneLink(phoneNumber: string) {
-    return this.accountLinkingService.checkPhoneLink(phoneNumber);
-  }
-
-  requestLinkOtp(phoneNumber: string) {
-    return this.accountLinkingService.requestLinkOtp(phoneNumber);
-  }
-
-  confirmLinkAccount(dto: { phoneNumber: string; email: string; password?: string; fullName?: string; otp: string }) {
-    return this.accountLinkingService.confirmLinkAccount(dto);
-  }
-
-  // ─── Private helpers ──────────────────────────────────────────────────────
-
-  /**
-   * Tìm identifier chuẩn để làm OTP key (SĐT chuẩn hóa về +84).
-   * Nếu không tìm được, fallback về identifier gốc.
-   */
-  private async resolveOtpIdentifier(rawPhone: string): Promise<string> {
-    // Thử lấy SĐT chuẩn từ DB
-    const user = await this.usersService.findByPhoneVariants(normalizePhoneVariants(rawPhone));
-    return user?.phoneNumber ?? rawPhone;
-  }
-
-  private resolveUserIdFromRelation(userValue: unknown): User['id'] | undefined {
-    if (!userValue) return undefined;
-    if (typeof userValue === 'string' && userValue.length > 0) return userValue;
-    if (typeof userValue === 'object') {
-      const record = userValue as { id?: unknown };
-      if (typeof record.id === 'string' && record.id.length > 0) return record.id;
-    }
-    return undefined;
   }
 }

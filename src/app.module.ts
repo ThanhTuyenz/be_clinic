@@ -10,7 +10,6 @@ import geminiConfig from './config/gemini.config.js'
 import mailerConfig from './config/mailer.config.js'
 import rabbitMqConfig from './config/rabbitmq.config.js'
 import redisConfig from './infrastructure/redis/redis.config.js'
-import zaloZnsConfig from './config/zalo-zns.config.js'
 import httpsmsConfig from './config/httpsms.config.js'
 import { AppointmentsModule } from './modules/appointments/appointments.module.js'
 import { AuthModule } from './modules/auth/auth-local/auth.module.js'
@@ -22,7 +21,7 @@ import { BranchesModule } from './modules/branches/branches.module.js'
 import { ClinicRoomsModule } from './modules/clinic-rooms/clinic-rooms.module.js'
 import { DoctorsModule } from './modules/doctors/doctors.module.js'
 import { PermissionsGuard } from './modules/auth/permissions/guards/permissions.guard.js'
-import { JwtAuthGuard } from './modules/auth/auth-local/guards/jwt-auth.guard.js'
+import { JwtAuthGuard } from './modules/auth/jwt-auth-core/guards/jwt-auth.guard.js'
 import { ContactsModule } from './modules/contacts/contacts.module.js'
 import { PrismaModule } from './infrastructure/database/prisma/prisma.module.js'
 import { RabbitMqModule } from './infrastructure/messaging/rabbitmq/rabbitmq.module.js'
@@ -36,7 +35,6 @@ import { SchedulesModule } from './modules/schedules/schedules.module.js'
 import { AiAssistantModule } from './modules/ai-assistant/ai-assistant.module.js'
 import { VouchersModule } from './modules/vouchers/vouchers.module.js'
 import { RecommendationModule } from './modules/recommendations/recommendation.module.js'
-import { ZaloZnsModule } from './infrastructure/zalo-zns/zalo-zns.module.js'
 import { HttpSmsModule } from './infrastructure/httpsms/httpsms.module.js'
 import { MediaModule } from './infrastructure/media/media.module.js'
 import { NotificationModule } from './modules/notifications/notification.module.js'
@@ -46,7 +44,7 @@ import { NotificationModule } from './modules/notifications/notification.module.
     ConfigModule.forRoot({
       isGlobal: true,
       cache: true,
-      load: [appConfig, authConfig, mailerConfig, googleConfig, geminiConfig, rabbitMqConfig, redisConfig, zaloZnsConfig, httpsmsConfig],
+      load: [appConfig, authConfig, mailerConfig, googleConfig, geminiConfig, rabbitMqConfig, redisConfig, httpsmsConfig],
       envFilePath: [`.env.${process.env.NODE_ENV || 'development'}`, '.env'],
     }),
 
@@ -86,7 +84,6 @@ import { NotificationModule } from './modules/notifications/notification.module.
     AiAssistantModule,
     VouchersModule,
     RecommendationModule,
-    ZaloZnsModule,
     HttpSmsModule,
     MediaModule,
     NotificationModule,
