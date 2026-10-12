@@ -1,13 +1,13 @@
 import { Controller, Inject, Get, Post, Body, UseGuards, Req, Res, HttpStatus, HttpCode } from '@nestjs/common';
 import type { Response, Request } from 'express';
 import { ConfigService } from '@nestjs/config';
-import { Routes, Services } from 'src/common/utils/constants.js';
+import { Routes, Services } from '../../../common/utils/constants.js';
 import { IAuthService } from '../auth-local/auth.js';
 import { AuthProvidersEnum } from '../auth-local/enums/auth-providers.enum.js';
 import { ApiOperation, ApiTags } from '@nestjs/swagger';
 import { AuthGuard } from '@nestjs/passport';
-import { Public } from 'src/common/decorators/public.decorator.js';
-import { SkipPermissions } from 'src/common/decorators';
+import { Public } from '../../../common/decorators/public.decorator.js';
+import { SkipPermissions } from '../../../common/decorators/skip-permissions.decorator.js';
 import { AuthGoogleService } from './auth-google.service.js';
 import { AuthGoogleLoginDto } from './dtos/auth-google-login.dto.js';
 import { GoogleAuthGuard } from './guards/google-auth.guard.js';

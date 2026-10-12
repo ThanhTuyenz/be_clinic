@@ -54,12 +54,14 @@ export class PaymentService {
   }
 
   /**
-   * Helper: Khởi tạo instance PayOS nếu chưa có sẵn
+   * Helper: Lấy instance PayOS đã khởi tạo, hoặc khởi tạo mới nếu chưa có
    */
   private getPayOSInstance(): PayOS {
-    const clientId = (this.configService.get<string>('PAYOS_CLIENT_ID') || process.env.PAYOS_CLIENT_ID || '').trim();
-    const apiKey = (this.configService.get<string>('PAYOS_API_KEY') || process.env.PAYOS_API_KEY || '').trim();
-    const checksumKey = (this.configService.get<string>('PAYOS_CHECKSUM_KEY') || process.env.PAYOS_CHECKSUM_KEY || '').trim();
+    if (this.payOS) return this.payOS;
+
+    const clientId = (this.configService.get<string>('PAYOS_CLIENT_ID') || '').trim();
+    const apiKey = (this.configService.get<string>('PAYOS_API_KEY') || '').trim();
+    const checksumKey = (this.configService.get<string>('PAYOS_CHECKSUM_KEY') || '').trim();
 
     if (!clientId || !apiKey || !checksumKey) {
       throw new BadRequestException(

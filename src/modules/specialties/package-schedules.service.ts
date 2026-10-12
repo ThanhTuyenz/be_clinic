@@ -12,10 +12,9 @@ export class PackageSchedulesService {
   constructor(private readonly prisma: PrismaService) {}
 
   /**
-   * Lấy danh sách các ngày khả dụng cho gói dịch vụ
+   * Giải quyết thông tin cơ bản của gói dịch vụ: branchId, specialtyId, sessionType, activeDays
    */
-  async getPackageScheduleDates(packageIdentifier: string, branchIdentifier?: string) {
-    if (!packageIdentifier) throw new NotFoundException('Thiếu gói dịch vụ');
+  private async resolvePackageContext(packageIdentifier: string, branchIdentifier?: string) {
     const isId = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(packageIdentifier);
 
     const servicePackage = await this.prisma.servicePackage.findFirst({
@@ -31,6 +30,7 @@ export class PackageSchedulesService {
     });
 
     if (!servicePackage) throw new NotFoundException('Không tìm thấy gói dịch vụ');
+
     const resolvedBranchId = branchIdentifier ? await resolveBranchId(this.prisma, branchIdentifier) : null;
     const branchId =
       resolvedBranchId ||
@@ -38,11 +38,22 @@ export class PackageSchedulesService {
       servicePackage.branchBookingMethod?.branchId;
 
     if (!branchId) throw new NotFoundException('Không tìm thấy cơ sở y tế cho gói khám này');
+
     const specialtyId = servicePackage.specialtyId;
     const sessionType = (servicePackage as any).sessionType || 'ALL_DAY';
     const activeDays: number[] = (servicePackage as any).activeDaysOfWeek?.length
       ? (servicePackage as any).activeDaysOfWeek
       : [0, 1, 2, 3, 4, 5, 6];
+
+    return { branchId, specialtyId, sessionType, activeDays };
+  }
+
+  /**
+   * Lấy danh sách các ngày khả dụng cho gói dịch vụ
+   */
+  async getPackageScheduleDates(packageIdentifier: string, branchIdentifier?: string) {
+    if (!packageIdentifier) throw new NotFoundException('Thiếu gói dịch vụ');
+    const { branchId, specialtyId, sessionType, activeDays } = await this.resolvePackageContext(packageIdentifier, branchIdentifier);
 
     const { minDate, maxDate } = getBookingAllowedDateRange();
     const rows = await this.prisma.doctorSchedule.findMany({
@@ -97,33 +108,7 @@ export class PackageSchedulesService {
    */
   async getPackageTimeslots(packageIdentifier: string, date: string, branchIdentifier?: string) {
     if (!packageIdentifier) throw new NotFoundException('Thiếu gói dịch vụ');
-    const isId = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(packageIdentifier);
-
-    const servicePackage = await this.prisma.servicePackage.findFirst({
-      where: isId ? { id: packageIdentifier } : { OR: [{ slug: packageIdentifier }, { code: packageIdentifier }] },
-      select: {
-        id: true,
-        specialtyId: true,
-        sessionType: true,
-        activeDaysOfWeek: true,
-        branchBookingMethod: { select: { branchId: true } },
-        branchBookingMethods: { select: { branchBookingMethod: { select: { branchId: true } } } },
-      },
-    });
-
-    if (!servicePackage) throw new NotFoundException('Không tìm thấy gói dịch vụ');
-    const resolvedBranchId = branchIdentifier ? await resolveBranchId(this.prisma, branchIdentifier) : null;
-    const branchId =
-      resolvedBranchId ||
-      servicePackage.branchBookingMethods?.[0]?.branchBookingMethod?.branchId ||
-      servicePackage.branchBookingMethod?.branchId;
-
-    if (!branchId) throw new NotFoundException('Không tìm thấy cơ sở y tế cho gói khám này');
-    const specialtyId = servicePackage.specialtyId;
-    const sessionType = (servicePackage as any).sessionType || 'ALL_DAY';
-    const activeDays: number[] = (servicePackage as any).activeDaysOfWeek?.length
-      ? (servicePackage as any).activeDaysOfWeek
-      : [0, 1, 2, 3, 4, 5, 6];
+    const { branchId, specialtyId, sessionType, activeDays } = await this.resolvePackageContext(packageIdentifier, branchIdentifier);
 
     const workDate = parseDateUtil(date) ?? new Date(`${date}T00:00:00.000Z`);
     validateDateWithinBookingRange(workDate);
@@ -164,7 +149,7 @@ export class PackageSchedulesService {
 
     const slotMap = new Map<string, any>();
     for (const slot of rows) {
-      const { schedule, ...slotData } = slot as any;
+      const { schedule } = slot as any;
       const start = slot.startTime.toISOString().slice(11, 16);
       const end = slot.endTime.toISOString().slice(11, 16);
 

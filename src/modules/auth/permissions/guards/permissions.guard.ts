@@ -7,10 +7,10 @@ import {
 } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
 import { Request as ExpressRequest } from 'express';
-import { REQUIRE_PERMISSIONS_KEY } from 'src/common/decorators/require-permissions.decorator.js';
-import { SKIP_PERMISSIONS_KEY } from 'src/common/decorators/skip-permissions.decorator.js';
-import { IS_PUBLIC_KEY } from 'src/common/decorators/public.decorator.js';
-import { AppPermission } from 'src/common/constants/permissions.constant.js';
+import { REQUIRE_PERMISSIONS_KEY } from '../../../../common/decorators/require-permissions.decorator.js';
+import { SKIP_PERMISSIONS_KEY } from '../../../../common/decorators/skip-permissions.decorator.js';
+import { IS_PUBLIC_KEY } from '../../../../common/decorators/public.decorator.js';
+import { AppPermission } from '../constants/permissions.constant.js';
 import { PermissionsService } from '../permissions.service.js';
 
 @Injectable()
@@ -28,6 +28,7 @@ export class PermissionsGuard implements CanActivate {
       SKIP_PERMISSIONS_KEY,
       [context.getHandler(), context.getClass()],
     );
+
     if (skipPermissions) {
       return true;
     }

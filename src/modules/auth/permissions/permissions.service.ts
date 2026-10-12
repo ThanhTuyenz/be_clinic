@@ -4,7 +4,7 @@ import { RedisService } from '../../../infrastructure/redis/redis.service.js';
 import {
   calculateEffectivePermissions,
   ROLE_DEFAULT_PERMISSIONS,
-} from '../../../common/constants/permissions.constant.js';
+} from './constants/permissions.constant.js';
 
 export type UserPermissionsResult = {
   role: string;
@@ -30,9 +30,9 @@ export class PermissionsService {
    */
   async getUserPermissions(userId: string): Promise<UserPermissionsResult> {
     const cacheKey = `auth:user_perms:${userId}`;
-    const cached = await this.redis.get<UserPermissionsResult>(cacheKey);
-    if (cached) {
-      return cached;
+    if (this.redis.isEnabled()) {
+      const cached = await this.redis.get<UserPermissionsResult>(cacheKey);
+      if (cached) return cached;
     }
 
     const user = await this.prisma.user.findUnique({
@@ -79,10 +79,5 @@ export class PermissionsService {
     }
   }
 
-  /**
-   * Xóa toàn bộ cache quyền hệ thống
-   */
-  invalidateAllCache(): void {
-    this.logger.log('Invalidated all permission caches');
-  }
 }
+

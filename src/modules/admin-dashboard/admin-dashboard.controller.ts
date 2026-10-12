@@ -78,5 +78,12 @@ export class AdminDashboardController {
       forceRefresh: forceRefresh === 'true' || forceRefresh === '1',
     })
   }
+
+  @Get('system-logs')
+  @ApiOperation({ summary: 'Nhật ký hoạt động và giám sát lỗi hệ thống cho Quản trị viên' })
+  getSystemLogs(@Req() request: Request) {
+    return this.dashboard.getSystemLogs(request.user!.id)
+  }
 }
+
 

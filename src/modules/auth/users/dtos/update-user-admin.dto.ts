@@ -14,7 +14,7 @@ import {
 import { lowerCaseTransformer } from 'src/common/utils/transformers/lower-case.transformer';
 
 import { UserRole, UserStatus } from '../entities/user.entity';
-import { RolePermissionDto } from '../../roles/dtos/create-role.dto';
+import { RolePermissionDto } from './role-permission.dto';
 
 export class UpdateUserAdminDto {
   @ApiPropertyOptional()
@@ -81,6 +81,15 @@ export class UpdateUserAdminDto {
   @ApiPropertyOptional({ description: 'ID cơ sở làm việc' })
   @IsOptional()
   branchId?: string | null;
+
+  @ApiPropertyOptional({ description: 'Danh sách ID cơ sở làm việc / quản lý', type: [String] })
+  @IsOptional()
+  @IsArray()
+  branchIds?: string[];
+
+  @ApiPropertyOptional({ description: 'ID cơ sở chính' })
+  @IsOptional()
+  primaryBranchId?: string | null;
 
   @ApiPropertyOptional({ description: 'ID chuyên khoa chính (Bác sĩ)' })
   @IsOptional()

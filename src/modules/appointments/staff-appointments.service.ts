@@ -48,6 +48,7 @@ export class StaffAppointmentsService {
       ticket: row.bookingCode,
       bookingCode: row.bookingCode,
       createdAt: row.createdAt,
+      checkedInAt: row.checkedInAt ? new Date(row.checkedInAt).toISOString() : null,
       source: createdAtClinic ? 'clinic' : 'online',
       bookingSource: createdAtClinic ? 'clinic' : 'online',
       createdByStaff: createdAtClinic ? { id: creator.id, fullName: creator.fullName, email: creator.email, role: creator.role } : null,
@@ -64,9 +65,7 @@ export class StaffAppointmentsService {
         id: row.patientProfile.id,
         patientCode: row.patientProfile.patientCode || row.patientProfile.nationalId || row.patientProfile.id,
         fullName: row.patientProfile.fullName,
-        name: row.patientProfile.fullName,
         dateOfBirth: row.patientProfile.dateOfBirth,
-        dob: row.patientProfile.dateOfBirth,
         gender: row.patientProfile.gender?.toLowerCase(),
         email: row.patientProfile.account?.email,
         phone: row.patientProfile.phoneNumber || row.patientProfile.account?.phoneNumber || '',
@@ -76,9 +75,7 @@ export class StaffAppointmentsService {
       },
       doctor: bookedDoctor ? {
         id: bookedDoctor.id,
-        fullName: bookedDoctor.user?.fullName || bookedDoctor.fullName || bookedDoctor.name || '',
-        name: bookedDoctor.user?.fullName || bookedDoctor.name || bookedDoctor.fullName || '',
-        displayName: bookedDoctor.user?.fullName || bookedDoctor.displayName || bookedDoctor.fullName || '',
+        fullName: bookedDoctor.user?.fullName || bookedDoctor.fullName || '',
         department: bookedDoctor.department?.name,
         specialtyId: specialty?.id,
         specialtyName: specialty?.name,
@@ -235,7 +232,12 @@ export class StaffAppointmentsService {
         ...(dateRange ? { scheduleSlot: { schedule: { workDate: dateRange } } } : {}),
       },
       include: this.appointmentInclude(),
-      orderBy: { scheduleSlot: { schedule: { workDate: 'asc' } } },
+      orderBy: [
+        { scheduleSlot: { schedule: { workDate: 'asc' } } },
+        { checkedInAt: 'asc' },
+        { queueNumber: 'asc' },
+        { createdAt: 'asc' },
+      ],
     })
     return { appointments: rows.map((row) => this.serialize(row)) }
   }

@@ -1,7 +1,7 @@
 import { Module } from '@nestjs/common';
 import { AuthService } from './auth.service.js';
 import { AuthController } from './auth.controller.js';
-import { Services } from 'src/common/utils/constants.js';
+import { Services } from '../../../common/utils/constants.js';
 import { UsersModule } from '../users/users.module.js';
 import { SessionModule } from '../session/session.module.js';
 import { MailsModule } from '../../../infrastructure/mail/mails.module.js';

@@ -14,7 +14,7 @@ import { lowerCaseTransformer } from '../../../../common/utils/transformers/lowe
 import { UserRole, UserStatus } from '../entities/user.entity';
 import { AuthProvidersEnum } from '../../auth-local/enums/auth-providers.enum';
 import { ApiProperty } from '@nestjs/swagger';
-import { RolePermissionDto } from '../../roles/dtos/create-role.dto';
+import { RolePermissionDto } from './role-permission.dto';
 
 export class CreateUserDto {
   @ApiProperty({ example: 'doctor@vitacare.local' })
@@ -69,6 +69,15 @@ export class CreateUserDto {
   @ApiProperty({ description: 'ID cơ sở làm việc', required: false })
   @IsOptional()
   branchId?: string | null;
+
+  @ApiProperty({ description: 'Danh sách ID cơ sở làm việc / quản lý', required: false, type: [String] })
+  @IsOptional()
+  @IsArray()
+  branchIds?: string[];
+
+  @ApiProperty({ description: 'ID cơ sở chính', required: false })
+  @IsOptional()
+  primaryBranchId?: string | null;
 
   @ApiProperty({ description: 'ID chuyên khoa chính (Bác sĩ)', required: false })
   @IsOptional()

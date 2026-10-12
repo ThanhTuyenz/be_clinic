@@ -3,7 +3,7 @@ import { PassportStrategy } from '@nestjs/passport';
 import { Profile, Strategy } from 'passport-google-oauth20';
 import { ConfigService } from '@nestjs/config';
 import { AllConfigType } from '../../../../config/config.type.js';
-import { Services } from 'src/common/utils/constants.js';
+import { Services } from '../../../../common/utils/constants.js';
 import { IAuthService } from '../../auth-local/auth.js';
 import { AuthProvidersEnum } from '../../auth-local/enums/auth-providers.enum.js';
 import { SocialType } from '../../../../common/utils/social.type.js';

@@ -1,5 +1,5 @@
 import { registerAs } from '@nestjs/config';
-import { IsBoolean, IsInt, IsOptional, IsString, Max, Min } from 'class-validator';
+import { IsInt, IsOptional, IsString, Max, Min } from 'class-validator';
 import validateConfig from '../../common/utils/validate-config.js';
 import { RedisConfig } from '../../config/config.type.js';
 

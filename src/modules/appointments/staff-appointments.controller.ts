@@ -18,7 +18,7 @@ import { StaffAppointmentsService } from './staff-appointments.service.js';
 @Controller('appointments')
 @SkipPermissions()
 export class StaffAppointmentsController {
-  constructor(private readonly staffAppointments: StaffAppointmentsService) {}
+  constructor(private readonly staffAppointments: StaffAppointmentsService) { }
 
   @Get('doctor')
   @ApiOperation({ summary: 'Danh sách lịch khám của bác sĩ hiện tại' })

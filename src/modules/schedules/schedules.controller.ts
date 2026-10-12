@@ -69,7 +69,7 @@ export class SchedulesController {
   }
 
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles('ADMIN', 'BRANCH_MANAGER')
+  @Roles('ADMIN', 'BRANCH_MANAGER', 'DOCTOR')
   @ApiBearerAuth()
   @Post()
   @ApiOperation({ summary: 'Tạo ca trực mới + tự động sinh slot' })
@@ -78,7 +78,7 @@ export class SchedulesController {
   }
 
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles('ADMIN', 'BRANCH_MANAGER')
+  @Roles('ADMIN', 'BRANCH_MANAGER', 'DOCTOR')
   @ApiBearerAuth()
   @Post('batch')
   @ApiOperation({ summary: 'Phân ca định kỳ / hàng loạt theo các thứ trong tuần' })
@@ -87,7 +87,7 @@ export class SchedulesController {
   }
 
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles('ADMIN', 'BRANCH_MANAGER')
+  @Roles('ADMIN', 'BRANCH_MANAGER', 'DOCTOR')
   @ApiBearerAuth()
   @Post('copy-week')
   @ApiOperation({ summary: 'Sao chép toàn bộ lịch trực từ tuần này sang tuần sau' })
@@ -96,7 +96,7 @@ export class SchedulesController {
   }
 
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles('ADMIN', 'BRANCH_MANAGER')
+  @Roles('ADMIN', 'BRANCH_MANAGER', 'DOCTOR')
   @ApiBearerAuth()
   @Patch(':id')
   @ApiOperation({ summary: 'Cập nhật ca trực (tái sinh slot nếu thay đổi thời gian/capacity)' })
@@ -105,7 +105,7 @@ export class SchedulesController {
   }
 
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles('ADMIN', 'BRANCH_MANAGER')
+  @Roles('ADMIN', 'BRANCH_MANAGER', 'DOCTOR')
   @ApiBearerAuth()
   @Delete(':id')
   @ApiOperation({ summary: 'Xóa ca trực (cascade xóa slot)' })

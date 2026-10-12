@@ -62,6 +62,7 @@ export class TelemetrySyncTask {
       // 2. Đồng bộ lượt xem gói (viewCount) vào ServicePackage
       const pkgViewItems = await client.zrevrange('rec:global:package_views', 0, 500, 'WITHSCORES');
       let totalViewsToday = 0;
+      const updateTasks: Promise<any>[] = [];
 
       for (let i = 0; i < pkgViewItems.length; i += 2) {
         const packageId = pkgViewItems[i];
@@ -69,12 +70,17 @@ export class TelemetrySyncTask {
         if (!packageId || count <= 0) continue;
 
         totalViewsToday += count;
-        await this.prisma.servicePackage
-          .updateMany({
-            where: { id: packageId },
-            data: { viewCount: count },
-          })
-          .catch(() => {});
+        updateTasks.push(
+          this.prisma.servicePackage
+            .updateMany({
+              where: { id: packageId },
+              data: { viewCount: count },
+            })
+            .catch(() => {}),
+        );
+      }
+      if (updateTasks.length > 0) {
+        await Promise.all(updateTasks);
       }
 
       // 3. Đếm số lịch đặt trong ngày từ PostgreSQL

@@ -1,7 +1,6 @@
 import { Injectable, Logger, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import Redis from 'ioredis';
-import { randomUUID } from 'crypto';
 import { RedisConfig } from '../../config/config.type.js';
 
 @Injectable()
@@ -41,11 +40,6 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
     return Boolean(this.client);
   }
 
-  async ping(): Promise<boolean> {
-    if (!this.client) return false;
-    return (await this.client.ping()) === 'PONG';
-  }
-
   async get<T>(key: string): Promise<T | null> {
     if (!this.client) return null;
     const value = await this.client.get(key);
@@ -77,24 +71,6 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
     }
   }
 
-  async acquireLock(key: string, ttlMs: number): Promise<string | null> {
-    if (!this.client) return null;
-    const token = randomUUID();
-    const result = await this.client.set(`lock:${key}`, token, 'PX', ttlMs, 'NX');
-    return result === 'OK' ? token : null;
-  }
-
-  async releaseLock(key: string, token: string): Promise<boolean> {
-    if (!this.client) return false;
-    const result = await this.client.eval(
-      'if redis.call("get", KEYS[1]) == ARGV[1] then return redis.call("del", KEYS[1]) else return 0 end',
-      1,
-      `lock:${key}`,
-      token,
-    );
-    return result === 1;
-  }
-
   async sadd(key: string, ...members: string[]): Promise<void> {
     if (!this.client || members.length === 0) return;
     await this.client.sadd(key, ...members);
@@ -107,7 +83,7 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
 
   async smembers(key: string): Promise<string[]> {
     if (!this.client) return [];
-    return await this.client.smembers(key);
+    return this.client.smembers(key);
   }
 
   async expire(key: string, ttlSeconds: number): Promise<void> {
@@ -125,27 +101,22 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
    */
   async getTtl(key: string): Promise<number> {
     if (!this.client) return -2;
-    return await this.client.ttl(key);
-  }
-
-  async hincrby(key: string, field: string, increment: number): Promise<number> {
-    if (!this.client) return 0;
-    return await this.client.hincrby(key, field, increment);
+    return this.client.ttl(key);
   }
 
   async hset(key: string, field: string, value: string): Promise<number> {
     if (!this.client) return 0;
-    return await this.client.hset(key, field, value);
+    return this.client.hset(key, field, value);
   }
 
   async hget(key: string, field: string): Promise<string | null> {
     if (!this.client) return null;
-    return await this.client.hget(key, field);
+    return this.client.hget(key, field);
   }
 
   async hgetall(key: string): Promise<Record<string, string>> {
     if (!this.client) return {};
-    return await this.client.hgetall(key);
+    return this.client.hgetall(key);
   }
 
   getClient(): Redis | undefined {

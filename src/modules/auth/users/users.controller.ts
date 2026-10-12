@@ -27,14 +27,14 @@ import { UpdateUserAdminDto } from './dtos/update-user-admin.dto';
 import { UsersPaginationQueryDto } from './dtos/users-pagination-query.dto';
 import { AssignRoleDto } from './dtos/assign-role.dto';
 import { IUsersService } from './users';
-import { RolePermissionDto } from '../roles/dtos/create-role.dto';
+import { RolePermissionDto } from './dtos/role-permission.dto';
 
 @ApiTags('Users')
 @Controller(Routes.USERS)
 export class UsersController {
   constructor(
     @Inject(Services.USERS) private readonly usersService: IUsersService,
-  ) {}
+  ) { }
 
   @Post()
   @RequirePermissions(AppPermission.USER_MANAGE)

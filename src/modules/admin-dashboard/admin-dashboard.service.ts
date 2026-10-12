@@ -1,6 +1,6 @@
 import { ForbiddenException, Injectable, Logger } from '@nestjs/common'
 import { ConfigService } from '@nestjs/config'
-import { GoogleGenAI, Type } from '@google/genai'
+import { GoogleGenAI } from '@google/genai'
 import { PrismaService } from '../../infrastructure/database/prisma/prisma.service.js'
 import { RedisService } from '../../infrastructure/redis/redis.service.js'
 
@@ -53,7 +53,21 @@ export class AdminDashboardService {
       select: {
         id: true,
         role: true,
-        branchAssignments: { select: { branchId: true } },
+        branchAssignments: {
+          select: {
+            branchId: true,
+            isPrimary: true,
+            branch: {
+              select: {
+                id: true,
+                code: true,
+                name: true,
+                address: true,
+                phoneNumber: true,
+              },
+            },
+          },
+        },
         doctor: { select: { id: true } },
       },
     })
@@ -228,8 +242,6 @@ export class AdminDashboardService {
       revMonth,
       todayAppointments,
       uniquePatientsToday,
-      uniquePatientsWeek,
-      uniquePatientsMonth,
       slotStats,
       weekAppointments,
       weekInvoices,
@@ -275,16 +287,6 @@ export class AdminDashboardService {
       }),
       this.prisma.appointment.findMany({
         where: todayScope,
-        distinct: ['patientProfileId'],
-        select: { patientProfileId: true },
-      }),
-      this.prisma.appointment.findMany({
-        where: weekScope,
-        distinct: ['patientProfileId'],
-        select: { patientProfileId: true },
-      }),
-      this.prisma.appointment.findMany({
-        where: monthScope,
         distinct: ['patientProfileId'],
         select: { patientProfileId: true },
       }),
@@ -547,8 +549,8 @@ export class AdminDashboardService {
       },
       patients: {
         today: uniquePatientsToday.length || todayCounts.total,
-        week: uniquePatientsWeek.length || weekCounts.total,
-        month: uniquePatientsMonth.length || monthCounts.total,
+        week: runningPatientSet.size || weekCounts.total,
+        month: runningMonthPatients.size || monthCounts.total,
       },
       occupancyRate,
       chartBars: {
@@ -556,22 +558,33 @@ export class AdminDashboardService {
         week: weekBars,
         month: monthBars,
       },
-      todayRows: todayAppointments.slice(0, 10).map((a) => ({
-        id: a.id,
-        bookingCode: a.bookingCode,
-        status: a.status,
-        queueNumber: a.queueNumber,
-        patientName: a.patientProfile?.fullName || 'Bệnh nhân',
-        patientPhone: a.patientProfile?.phoneNumber || '',
-        doctorName: a.scheduleSlot?.schedule?.doctor?.user?.fullName || 'Bác sĩ trực',
-        clinicRoom: a.scheduleSlot?.schedule?.room?.name || a.scheduleSlot?.schedule?.room?.code || 'Phòng khám',
-        branchName: a.scheduleSlot?.schedule?.branch?.name || 'VitaCare Clinic',
-        startTime: a.scheduleSlot?.startTime ? a.scheduleSlot.startTime.toISOString().slice(11, 16) : null,
-        amount: Number(a.invoice?.totalAmount || a.servicePrice || 0),
-        isPaid: a.invoice?.status === 'PAID',
-      })),
+      todayRows: todayAppointments.slice(0, 20).map((a) => {
+        const dRank = a.scheduleSlot?.schedule?.doctor?.academicRank || '';
+        const rawName = a.scheduleSlot?.schedule?.doctor?.user?.fullName || 'Bác sĩ';
+        const docDisplayName = dRank ? `${dRank} ${rawName}` : rawName;
+        return {
+          id: a.id,
+          bookingCode: a.bookingCode,
+          status: a.status,
+          queueNumber: a.queueNumber,
+          patientName: a.patientProfile?.fullName || 'Bệnh nhân',
+          patientPhone: a.patientProfile?.phoneNumber || '',
+          doctorName: docDisplayName,
+          clinicRoom: a.scheduleSlot?.schedule?.room?.name || a.scheduleSlot?.schedule?.room?.code || 'Phòng khám',
+          branchName: a.scheduleSlot?.schedule?.branch?.name || 'VitaCare Clinic',
+          startTime: a.scheduleSlot?.startTime ? a.scheduleSlot.startTime.toISOString().slice(11, 16) : null,
+          endTime: a.scheduleSlot?.endTime ? a.scheduleSlot.endTime.toISOString().slice(11, 16) : null,
+          amount: Number(a.invoice?.totalAmount || a.servicePrice || 0),
+          isPaid: a.invoice?.status === 'PAID',
+        };
+      }),
       branchComparison,
       totalAppointments: todayCounts.total,
+      currentBranch:
+        user.branchAssignments.find((b: any) => b.isPrimary)?.branch ||
+        user.branchAssignments[0]?.branch ||
+        null,
+      managedBranches: user.branchAssignments.map((b: any) => b.branch).filter(Boolean),
     }
   }
 
@@ -591,22 +604,17 @@ export class AdminDashboardService {
     )
 
     const currentScope = this.buildAppointmentWhere(scope, fromDate, toDate)
-    const prevScope = this.buildAppointmentWhere(scope, prevFromDate, prevToDate)
 
     const [
       currCounts,
-      prevCounts,
       currRev,
       prevRev,
       appointments,
-      uniquePatients,
       paymentTxs,
-      topPackages,
       doctorsPerformanceRows,
       paidInvoices,
     ] = await Promise.all([
       this.calculateStatusCounts(currentScope),
-      this.calculateStatusCounts(prevScope),
       this.calculateRevenue(scope.branchId, fromDate, toDate),
       this.calculateRevenue(scope.branchId, prevFromDate, prevToDate),
       this.prisma.appointment.findMany({
@@ -642,11 +650,6 @@ export class AdminDashboardService {
           invoice: { select: { totalAmount: true, status: true, paidAt: true } },
         },
       }),
-      this.prisma.appointment.findMany({
-        where: currentScope,
-        distinct: ['patientProfileId'],
-        select: { patientProfileId: true },
-      }),
       this.prisma.paymentTransaction.findMany({
         where: {
           status: 'SUCCESS',
@@ -657,11 +660,6 @@ export class AdminDashboardService {
           ...(scope.branchId ? { invoice: { issuedBranchId: scope.branchId } } : {}),
         },
         select: { method: true, amount: true },
-      }),
-      this.prisma.servicePackage.findMany({
-        where: { isActive: true },
-        select: { id: true, name: true, price: true, specialty: { select: { name: true } } },
-        take: 10,
       }),
       this.prisma.doctor.findMany({
         where: {
@@ -709,7 +707,8 @@ export class AdminDashboardService {
 
     const daysCount = Math.max(1, Math.round((toDate.getTime() - fromDate.getTime()) / (1000 * 3600 * 24)))
     const dailyAvgNum = Math.round(totalRevNum / daysCount)
-    const uniquePatientCount = uniquePatients.length
+    const patientIds = Array.from(new Set(appointments.map((a) => a.patientProfileId).filter((id): id is string => Boolean(id))))
+    const uniquePatientCount = patientIds.length
     const avgPerPatientNum = uniquePatientCount > 0 ? Math.round(totalRevNum / uniquePatientCount) : 0
 
     const totalAppts = currCounts.total || appointments.length || 0
@@ -718,7 +717,6 @@ export class AdminDashboardService {
     const noShowRate = totalAppts > 0 ? `${(((currCounts as any).noShow || 0) / totalAppts * 100).toFixed(1)}%` : '0%'
 
     // 2. Tách nhỏ các tính toán qua các hàm riêng biệt
-    const patientIds = uniquePatients.map((p) => p.patientProfileId).filter(Boolean)
     const { newPatientsPct, returnPatientsPct } = await this.computePatientRetention(patientIds, fromDate)
 
     const payments = this.computePaymentDistribution(paymentTxs)
@@ -1192,11 +1190,12 @@ export class AdminDashboardService {
 
     try {
       const startDateKey = startDate.toISOString().slice(0, 10)
+      const endDateKey = endDate.toISOString().slice(0, 10)
       const dbSearchLogs = await this.prisma.searchLog.groupBy({
         by: ['keyword', 'hasResults'],
         _sum: { count: true },
         where: {
-          dateKey: { gte: startDateKey },
+          dateKey: { gte: startDateKey, lte: endDateKey },
         },
         orderBy: {
           _sum: { count: 'desc' },
@@ -1237,7 +1236,7 @@ export class AdminDashboardService {
     // 3. Truy vấn Lịch hẹn & Hồ sơ bệnh nhân từ PostgreSQL trong khoảng thời gian
     const appointments = await this.prisma.appointment.findMany({
       where: {
-        createdAt: { gte: startDate },
+        createdAt: { gte: startDate, lte: endDate },
         ...(branchScope.branchId ? { branchId: branchScope.branchId } : {}),
       },
       include: {
@@ -1415,7 +1414,7 @@ export class AdminDashboardService {
     return {
       timeRange: filter.timeFilter || '30days',
       startDate: this.dateKey(startDate),
-      endDate: this.dateKey(now),
+      endDate: this.dateKey(endDate),
       kpis: {
         totalSearches,
         unmatchedCount,
@@ -1650,6 +1649,162 @@ Hãy phân tích sắc bén, sâu sắc theo góc nhìn y khoa và quản trị 
   private hasVietnameseDiacritics(str: string): boolean {
     return /[àáạảãâầấậẩẫăằắặẳẵèéẹẻẽêềếệểễìíịỉĩòóọỏõôồốộổỗơờớợởỡùúụủũưừứựửữỳýỵỷỹđ]/i.test(str)
   }
-}
 
+  async getSystemLogs(userId: string) {
+    const user = await this.getStaffUser(userId)
+    if (user.role !== 'ADMIN') {
+      throw new ForbiddenException('Chỉ Quản trị viên hệ thống mới có quyền truy cập nhật ký và giám sát hệ thống')
+    }
+
+    const [auditRows, outboxRows, loginUsers, branchesCount, managersCount, doctorsCount, staffCount, bookingMethodsCount] = await Promise.all([
+      this.prisma.auditLog.findMany({
+        take: 50,
+        orderBy: { createdAt: 'desc' },
+        include: {
+          actor: {
+            select: { id: true, fullName: true, email: true, role: true },
+          },
+        },
+      }),
+      this.prisma.outboxEvent.findMany({
+        take: 50,
+        orderBy: { createdAt: 'desc' },
+      }),
+      this.prisma.user.findMany({
+        where: { lastLoginAt: { not: null }, isDeleted: false },
+        take: 50,
+        orderBy: { lastLoginAt: 'desc' },
+        select: {
+          id: true,
+          fullName: true,
+          email: true,
+          phoneNumber: true,
+          role: true,
+          status: true,
+          lastLoginAt: true,
+          branchAssignments: {
+            select: {
+              branch: { select: { id: true, name: true, code: true } },
+            },
+          },
+        },
+      }),
+      this.prisma.branch.count({ where: { isActive: true } }),
+      this.prisma.user.count({ where: { role: 'BRANCH_MANAGER', isDeleted: false } }),
+      this.prisma.user.count({ where: { role: 'DOCTOR', isDeleted: false } }),
+      this.prisma.user.count({ where: { role: 'RECEPTIONIST', isDeleted: false } }),
+      this.prisma.bookingMethod.count({ where: { isActive: true } }),
+    ])
+
+    const auditLogs = auditRows.map((r) => ({
+      id: String(r.id),
+      type: r.action?.includes('LOGIN') ? 'LOGIN' : 'AUDIT',
+      action: r.action,
+      targetType: r.targetType || 'SYSTEM',
+      targetId: r.targetId || '',
+      metadata: r.metadata,
+      actorName: r.actor?.fullName || r.actor?.email || 'Quản trị viên',
+      actorRole: r.actor?.role || 'ADMIN',
+      status: 'SUCCESS',
+      createdAt: r.createdAt,
+    }))
+
+    const outboxLogs = outboxRows.map((r) => ({
+      id: r.id,
+      type: 'OUTBOX',
+      action: r.eventType,
+      targetType: r.aggregateType,
+      targetId: r.aggregateId,
+      metadata: r.payload,
+      actorName: 'Event Bus (Outbox)',
+      actorRole: 'WORKER',
+      status: r.status === 'FAILED' || r.lastError ? 'ERROR' : r.status,
+      error: r.lastError,
+      createdAt: r.createdAt,
+    }))
+
+    const recentLogins = loginUsers.map((u) => ({
+      id: u.id,
+      userId: u.id,
+      fullName: u.fullName || u.email || 'Người dùng',
+      email: u.email || '',
+      phone: u.phoneNumber || '',
+      role: u.role,
+      status: u.status,
+      loginAt: u.lastLoginAt,
+      branchName: u.branchAssignments[0]?.branch?.name || 'Toàn hệ thống',
+      branchCode: u.branchAssignments[0]?.branch?.code || 'SYS',
+    }))
+
+    // 1. Health check thực tế Database
+    const dbStart = Date.now()
+    let dbStatus = 'ONLINE'
+    let dbLatency = 0
+    try {
+      await this.prisma.$queryRawUnsafe('SELECT 1')
+      dbLatency = Date.now() - dbStart
+    } catch {
+      dbStatus = 'OFFLINE'
+    }
+
+    // 2. Health check thực tế Redis
+    let redisStatus = 'STANDBY'
+    let redisLatency = 0
+    if (this.redis.isEnabled()) {
+      try {
+        const rStart = Date.now()
+        const pong = await this.redis.getClient()?.ping()
+        redisLatency = Date.now() - rStart
+        redisStatus = pong === 'PONG' ? 'ONLINE' : 'DEGRADED'
+      } catch {
+        redisStatus = 'OFFLINE'
+      }
+    }
+
+    // 3. Health check thực tế Transactional Outbox
+    const [pendingOutboxCount, failedOutboxCount] = await Promise.all([
+      this.prisma.outboxEvent.count({ where: { status: 'PENDING' } }),
+      this.prisma.outboxEvent.count({ where: { status: 'FAILED' } }),
+    ])
+    const outboxStatus = failedOutboxCount > 0 ? 'WARNING' : pendingOutboxCount > 0 ? 'PROCESSING' : 'ONLINE'
+
+    const logs = [...auditLogs, ...outboxLogs].sort(
+      (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
+    )
+
+    return {
+      success: true,
+      summary: {
+        branchesCount,
+        managersCount,
+        doctorsCount,
+        staffCount,
+        bookingMethodsCount,
+        totalLogs: logs.length,
+        errorCount: logs.filter((l) => l.status === 'ERROR' || l.status === 'FAILED').length,
+        recentLoginsCount: recentLogins.length,
+      },
+      services: {
+        database: {
+          status: dbStatus,
+          name: 'PostgreSQL 16 (Prisma ORM)',
+          latency: `${dbLatency}ms`,
+        },
+        redis: {
+          status: redisStatus,
+          name: 'Redis Cache & Pub/Sub',
+          latency: redisStatus === 'ONLINE' ? `${redisLatency}ms` : undefined,
+        },
+        outbox: {
+          status: outboxStatus,
+          name: 'Transactional Outbox Worker',
+          pendingCount: pendingOutboxCount,
+          failedCount: failedOutboxCount,
+        },
+      },
+      recentLogins,
+      logs,
+    }
+  }
+}
 

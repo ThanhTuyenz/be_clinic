@@ -9,8 +9,6 @@ import { User, UserRole, UserStatus } from './entities/user.entity.js';
 import { FindUsersOptions, IUsersService, UsersPaginatedResult, UserUpdate } from './users.js';
 import { HistoryService } from '../history/history.service.js';
 import { HISTORY_ACTIONS } from '../history/history.js';
-import { IRolesService } from '../roles/roles.js';
-import { Services } from '../../../common/utils/constants.js';
 import { PermissionsService } from '../permissions/permissions.service.js';
 import { calculateEffectivePermissions } from '../../../common/constants/permissions.constant.js';
 import { RedisService } from '../../../infrastructure/redis/redis.service.js';
@@ -20,7 +18,6 @@ export class UsersService implements IUsersService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly historyService: HistoryService,
-    @Inject(Services.ROLES) private readonly rolesService: IRolesService,
     private readonly permissionsService: PermissionsService,
     private readonly redis: RedisService,
   ) {}
@@ -36,7 +33,6 @@ export class UsersService implements IUsersService {
     if (phoneNumber && (await this.prisma.user.findFirst({ where: { phoneNumber } }))) {
       throw new HttpException('Số điện thoại này đã được sử dụng', HttpStatus.CONFLICT);
     }
-    if (dto.roleId) await this.rolesService.findOne(dto.roleId);
     const row = await this.prisma.user.create({
       data: {
         email,
@@ -55,11 +51,17 @@ export class UsersService implements IUsersService {
       },
     });
 
-    if (dto.branchId) {
+    const targetBranchIds: string[] = Array.isArray(dto.branchIds) && dto.branchIds.length > 0
+      ? dto.branchIds
+      : (dto.branchId ? [dto.branchId] : []);
+    const primaryId = dto.primaryBranchId || targetBranchIds[0];
+
+    for (const bId of targetBranchIds) {
+      if (!bId) continue;
       await this.prisma.userBranchAssignment.upsert({
-        where: { userId_branchId: { userId: row.id, branchId: dto.branchId } },
-        update: { isPrimary: true },
-        create: { userId: row.id, branchId: dto.branchId, isPrimary: true },
+        where: { userId_branchId: { userId: row.id, branchId: bId } },
+        update: { isPrimary: bId === primaryId },
+        create: { userId: row.id, branchId: bId, isPrimary: bId === primaryId },
       });
     }
 
@@ -180,7 +182,6 @@ export class UsersService implements IUsersService {
   async updateUser(id: string, payload: UserUpdate): Promise<User> {
     const existing = await this.findOneUser({ id });
     if (!existing) throw new NotFoundException('Không tìm thấy người dùng');
-    if (payload.roleId) await this.rolesService.findOne(payload.roleId);
     const next = { ...payload };
     if (next.isBlocked === true) next.blockedAt = existing.blockedAt ?? new Date();
     if (next.isBlocked === false) next.blockedAt = null;
@@ -193,15 +194,25 @@ export class UsersService implements IUsersService {
     }
 
     const p = payload as any;
-    if (p.branchId) {
-      await this.prisma.userBranchAssignment.deleteMany({
-        where: { userId: row.id, branchId: { not: p.branchId } },
-      });
-      await this.prisma.userBranchAssignment.upsert({
-        where: { userId_branchId: { userId: row.id, branchId: p.branchId } },
-        update: { isPrimary: true },
-        create: { userId: row.id, branchId: p.branchId, isPrimary: true },
-      });
+    if (p.branchIds !== undefined || p.branchId !== undefined) {
+      const targetBranchIds: string[] = Array.isArray(p.branchIds)
+        ? p.branchIds
+        : (p.branchId ? [p.branchId] : []);
+      const primaryId = p.primaryBranchId || targetBranchIds[0];
+
+      if (targetBranchIds.length > 0) {
+        await this.prisma.userBranchAssignment.deleteMany({
+          where: { userId: row.id, branchId: { notIn: targetBranchIds } },
+        });
+        for (const bId of targetBranchIds) {
+          if (!bId) continue;
+          await this.prisma.userBranchAssignment.upsert({
+            where: { userId_branchId: { userId: row.id, branchId: bId } },
+            update: { isPrimary: bId === primaryId },
+            create: { userId: row.id, branchId: bId, isPrimary: bId === primaryId },
+          });
+        }
+      }
     }
 
     if (String(row.role).toUpperCase() === 'DOCTOR') {
@@ -275,7 +286,6 @@ export class UsersService implements IUsersService {
   }
 
   async assignRole(userId: string, roleId: string): Promise<User> {
-    await this.rolesService.findOne(roleId);
     return this.updateUser(userId, { roleId });
   }
 
