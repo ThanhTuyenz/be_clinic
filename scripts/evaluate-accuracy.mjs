@@ -788,6 +788,9 @@ async function main() {
   const reportPath = path.join(reportDir, 'BENCHMARK_REPORT.md');
   const jsonPath = path.join(reportDir, 'benchmark_results.json');
 
+  const constraintViolationRate = results.length > 0
+    ? (totalViolations / (results.length * 3)) * 100
+    : 0;
   const markdownContent = `# BÁO CÁO THỰC NGHIỆM & ĐÁNH GIÁ ĐỘ CHÍNH XÁC HỆ THỐNG GỢI Ý (BENCHMARK)
 **Đề tài:** Hệ thống Quản lý và Đặt lịch Phòng khám Thông minh VitaCare Clinic  
 **Kiến trúc:** Multi-stage Hybrid (Rule-based Filter + RedisSearch HNSW Vector Retrieval + Gemini LLM)  
@@ -802,7 +805,7 @@ async function main() {
 | **Precision@3** | **${(avgPrecision * 100).toFixed(2)}%** | Tỷ lệ gói khám phù hợp đúng bệnh trong Top 3 gợi ý |
 | **Hit Rate@3** | **${(avgHitRate * 100).toFixed(2)}%** | Tỷ lệ bệnh nhân nhận được ít nhất 1 gói khám hoàn toàn chính xác |
 | **MRR (Mean Reciprocal Rank)** | **${avgMRR.toFixed(3)}** | Gói khám quan trọng/cấp thiết nhất luôn nằm ở vị trí ưu tiên #1 |
-| **Constraint Violation Rate** | **0.00%** | Tỷ lệ vi phạm giới tính/độ tuổi (An toàn tuyệt đối trong y tế) |
+| **Constraint Violation Rate** | **${constraintViolationRate.toFixed(2)}%** | Tỷ lệ vi phạm các ràng buộc dữ liệu đã kiểm thử; không thay thế đánh giá lâm sàng |
 | **P50 Latency (Thời gian)** | **${p50Latency.toFixed(2)} ms** | Thời gian phản hồi trung vị (nhờ RedisSearch HNSW trên RAM) |
 | **P90 Latency** | **${p90Latency.toFixed(2)} ms** | 90% số lượt truy vấn hoàn thành dưới ngưỡng này |
 
@@ -814,7 +817,7 @@ async function main() {
 | :--- | :---: | :---: | :---: | :---: |
 | **Rule-based thuần túy (Heuristics)** | 60.0% | 83.3% | 0.0% | 15.2 ms |
 | **Pure Vector Search (Không bộ lọc)** | 73.3% | 90.0% | 6.7% (dễ nhầm giới tính) | 8.5 ms |
-| **Đề xuất của Đề tài (Rule + RedisSearch HNSW + LLM)** | **${(avgPrecision * 100).toFixed(1)}%** | **${(avgHitRate * 100).toFixed(1)}%** | **0.0%** | **${avgLatency.toFixed(1)} ms (< 5ms khi cached)** |
+| **Đề xuất của Đề tài (Rule + RedisSearch HNSW + LLM)** | **${(avgPrecision * 100).toFixed(1)}%** | **${(avgHitRate * 100).toFixed(1)}%** | **${constraintViolationRate.toFixed(1)}%** | **${avgLatency.toFixed(1)} ms** |
 
 ---
 

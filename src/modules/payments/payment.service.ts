@@ -105,6 +105,7 @@ export class PaymentService {
     appointmentId: string,
     amount: number,
     customDescription?: string,
+    accountId?: string,
   ): Promise<PaymentLinkResponse> {
     const payos = this.getPayOSInstance();
 
@@ -114,7 +115,11 @@ export class PaymentService {
         OR: [
           { id: appointmentId },
           { invoice: { payments: { some: { id: appointmentId } } } },
+          { bookingOrder: { id: appointmentId } },
         ],
+        ...(accountId
+          ? { AND: [{ OR: [{ patientProfile: { accountId } }, { bookingOrder: { accountId } }] }] }
+          : {}),
       },
       include: {
         invoice: {
@@ -124,9 +129,35 @@ export class PaymentService {
         },
       },
     });
+    const bookingOrder = appointment
+      ? null
+      : await this.prisma.bookingOrder.findFirst({
+          where: {
+            id: appointmentId,
+            ...(accountId ? { accountId } : {}),
+          },
+          include: {
+            invoice: { include: { payments: true } },
+            appointments: { select: { id: true, holdExpiresAt: true }, take: 1 },
+          },
+        });
+    const invoice = appointment?.invoice ?? bookingOrder?.invoice;
+    const targetAppointmentId = appointment?.id ?? bookingOrder?.appointments[0]?.id;
 
-    if (!appointment) {
+    if (!invoice || !targetAppointmentId) {
       throw new NotFoundException(`Không tìm thấy lịch hẹn hoặc giao dịch với ID: ${appointmentId}`);
+    }
+    if (invoice.status === 'PAID' || invoice.payments.every((payment) => payment.status !== 'PENDING')) {
+      throw new BadRequestException('Lịch hẹn không còn ở trạng thái chờ thanh toán');
+    }
+
+    const holdExpiresAt = appointment?.holdExpiresAt ?? bookingOrder?.appointments[0]?.holdExpiresAt;
+    if (!holdExpiresAt) {
+      throw new BadRequestException('Lịch hẹn không còn thời gian giữ chỗ. Vui lòng đặt lịch lại.');
+    }
+    const expiredAt = Math.floor(holdExpiresAt.getTime() / 1000);
+    if (expiredAt <= Math.floor(Date.now() / 1000)) {
+      throw new BadRequestException('Đã hết thời gian giữ chỗ. Vui lòng đặt lịch lại.');
     }
 
     const orderCode = this.generateOrderCode();
@@ -137,7 +168,8 @@ export class PaymentService {
 
     // CHẾ ĐỘ AN TOÀN DEMO/TEST: Ép số tiền thanh toán sang PayOS luôn là 1.000 VNĐ
     // để bạn có thể quét bằng App ngân hàng thật mà không lo bị trừ số tiền lớn.
-    const payAmount = Number(this.configService.get<string>('PAYOS_TEST_AMOUNT') || 1000);
+    const configuredDemoAmount = this.configService.get<string>('PAYOS_TEST_AMOUNT');
+    const payAmount = Number(configuredDemoAmount || 1000);
     this.logger.warn(
       `[AN TOÀN DEMO] Số tiền gốc ${amount.toLocaleString('vi-VN')} VNĐ được ghi đè thành ${payAmount.toLocaleString('vi-VN')} VNĐ trên link thanh toán PayOS.`,
     );
@@ -146,13 +178,14 @@ export class PaymentService {
       orderCode,
       amount: payAmount,
       description,
-      returnUrl: `${this.returnUrl}?appointmentId=${appointment.id}&orderCode=${orderCode}`,
-      cancelUrl: `${this.cancelUrl}?appointmentId=${appointment.id}&orderCode=${orderCode}`,
+      returnUrl: `${this.returnUrl}?appointmentId=${targetAppointmentId}&orderCode=${orderCode}`,
+      cancelUrl: `${this.cancelUrl}?appointmentId=${targetAppointmentId}&orderCode=${orderCode}`,
+      expiredAt,
     };
 
     try {
       this.logger.log(
-        `Đang tạo link PayOS cho Appointment [${appointment.id}] - OrderCode: ${orderCode} - Số tiền: ${payAmount} VNĐ`,
+        `Đang tạo link PayOS cho Appointment [${targetAppointmentId}] - OrderCode: ${orderCode} - Số tiền: ${payAmount} VNĐ`,
       );
 
       // 2. Gọi SDK tạo link thanh toán (hỗ trợ cả paymentRequests.create và createPaymentLink)
@@ -164,8 +197,8 @@ export class PaymentService {
 
       // 3. Lưu vết OrderCode và Payment Link vào database
       await this.prisma.$transaction(async (tx) => {
-        if (appointment.invoice?.id) {
-          const existingPendingPayment = appointment.invoice.payments?.find(
+        if (invoice.id) {
+          const existingPendingPayment = invoice.payments?.find(
             (p) => p.status === 'PENDING',
           );
 
@@ -176,7 +209,7 @@ export class PaymentService {
                 provider: 'PAYOS',
                 providerTransactionId: String(orderCode),
                 method: 'VIETQR',
-                amount: amount,
+                amount: payAmount,
                 rawPayload: {
                   orderCode,
                   paymentLinkId: paymentLink.paymentLinkId,
@@ -188,8 +221,8 @@ export class PaymentService {
           } else {
             await tx.paymentTransaction.create({
               data: {
-                invoiceId: appointment.invoice.id,
-                amount: amount,
+                invoiceId: invoice.id,
+                amount: payAmount,
                 provider: 'PAYOS',
                 providerTransactionId: String(orderCode),
                 idempotencyKey: `payos-${orderCode}-${Date.now()}`,
@@ -217,6 +250,7 @@ export class PaymentService {
         checkoutUrl: paymentLink.checkoutUrl,
         qrCode: paymentLink.qrCode,
         paymentLinkId: paymentLink.paymentLinkId,
+        holdExpiresAt: holdExpiresAt.toISOString(),
       };
     } catch (error: any) {
       this.logger.error(`Lỗi khi gọi createPaymentLink PayOS: ${error.message}`, error.stack);
@@ -277,6 +311,11 @@ export class PaymentService {
     if (payment.status === 'SUCCESS') {
       this.logger.log(`Giao dịch ${orderCode} đã được xử lý trước đó.`);
       return;
+    }
+
+    const receivedAmount = Number(rawPayload?.data?.amount ?? rawPayload?.amount ?? 0);
+    if (!receivedAmount || receivedAmount !== Number(payment.amount)) {
+      throw new BadRequestException('Số tiền webhook không khớp giao dịch đang chờ');
     }
 
     // Nếu có BookingService, tận dụng flow webhook chuẩn đầy đủ
@@ -342,6 +381,12 @@ export class PaymentService {
           { invoice: { appointmentId: paymentIdOrAppointmentId } },
           { invoice: { bookingOrderId: paymentIdOrAppointmentId } },
         ],
+        invoice: {
+          OR: [
+            { appointment: { patientProfile: { accountId } } },
+            { bookingOrder: { accountId } },
+          ],
+        },
       },
       include: {
         invoice: {
@@ -378,7 +423,7 @@ export class PaymentService {
   /**
    * Đồng bộ trực tiếp trạng thái thanh toán từ cổng PayOS Gateway
    */
-  async syncPayosPaymentStatus(orderCodeOrAppointmentId: string | number): Promise<any> {
+  async syncPayosPaymentStatus(orderCodeOrAppointmentId: string | number, accountId?: string): Promise<any> {
     const payos = this.getPayOSInstance();
     let orderCode: number | null = null;
 
@@ -393,6 +438,16 @@ export class PaymentService {
             { id: String(orderCodeOrAppointmentId) },
             { providerTransactionId: String(orderCodeOrAppointmentId) },
           ],
+          ...(accountId
+            ? {
+                invoice: {
+                  OR: [
+                    { appointment: { patientProfile: { accountId } } },
+                    { bookingOrder: { accountId } },
+                  ],
+                },
+              }
+            : {}),
         },
         orderBy: { createdAt: 'desc' },
       });
@@ -550,5 +605,3 @@ export class PaymentService {
     };
   }
 }
-
-

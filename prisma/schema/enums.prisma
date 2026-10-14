@@ -8,6 +8,8 @@ enum UserRole {
   DOCTOR         @map("doctor")
   RECEPTIONIST   @map("receptionist")
   PATIENT        @map("patient")
+  PHARMACIST     @map("pharmacist")
+  CASHIER        @map("cashier")
 }
 
 enum UserStatus {
@@ -25,6 +27,12 @@ enum Gender {
   MALE
   FEMALE
   OTHER
+}
+
+enum PackageGenderTarget {
+  ALL
+  MALE
+  FEMALE
 }
 
 enum ScheduleStatus {

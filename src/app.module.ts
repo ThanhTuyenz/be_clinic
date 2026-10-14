@@ -38,6 +38,7 @@ import { RecommendationModule } from './modules/recommendations/recommendation.m
 import { HttpSmsModule } from './infrastructure/httpsms/httpsms.module.js'
 import { MediaModule } from './infrastructure/media/media.module.js'
 import { NotificationModule } from './modules/notifications/notification.module.js'
+import { TelehealthModule } from './modules/telehealth/telehealth.module.js'
 
 @Module({
   imports: [
@@ -87,6 +88,7 @@ import { NotificationModule } from './modules/notifications/notification.module.
     HttpSmsModule,
     MediaModule,
     NotificationModule,
+    TelehealthModule,
   ],
 
   controllers: [],

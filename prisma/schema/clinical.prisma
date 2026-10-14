@@ -90,6 +90,7 @@ model Doctor {
   biography       String?                   @db.Text
   avatarUrl       String?                   @map("avatar_url") @db.VarChar(500)
   consultationFee Decimal                   @default(0) @map("consultation_fee") @db.Decimal(12, 2)
+  onlineConsultationFee Decimal?            @map("online_consultation_fee") @db.Decimal(12, 2)
   slotDuration    Int                       @default(30) @map("slot_duration")
   ratingAverage   Float                     @default(0.0) @map("rating_average")
   ratingCount     Int                       @default(0) @map("rating_count")

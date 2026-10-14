@@ -483,7 +483,7 @@ export class AdminDashboardService {
       }
     })
 
-    // Công suất buồng khám hôm nay
+    // Công suất phòng khám hôm nay
     const totalCapacity = slotStats._sum.capacity || 100
     const occupied = slotStats._sum.occupiedCount || todayCounts.total
     const occupancyRate = Math.min(100, Math.round((occupied / Math.max(totalCapacity, 1)) * 100))

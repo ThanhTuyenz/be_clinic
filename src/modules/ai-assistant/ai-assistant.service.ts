@@ -1034,7 +1034,7 @@ QUY TẮC PHÂN BIỆT Ý ĐỊNH XEM DANH SÁCH vs ĐẶT LỊCH (CRITICAL INTE
       const selectedPkgId = dto.servicePackageId || session.lastProposal?.servicePackageId
 
       const checkoutResult = await this.bookingService.checkout(userId, {
-        bookingType: selectedPkgId ? 'SERVICE_PACKAGE' : 'DOCTOR',
+        bookingMethodCode: selectedPkgId ? 'SPECIALTY_EXAM' : 'CONSULTATION',
         servicePackageId: selectedPkgId,
         scheduleSlotId: dto.selectedSlotId,
         patientProfileId: profileId,

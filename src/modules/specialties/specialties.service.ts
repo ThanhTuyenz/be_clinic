@@ -172,6 +172,7 @@ export class SpecialtiesService {
         biography: true,
         avatarUrl: true,
         consultationFee: true,
+        onlineConsultationFee: true,
         ratingAverage: true,
         ratingCount: true,
         isFeatured: true,
@@ -199,6 +200,7 @@ export class SpecialtiesService {
       ...doctor,
       fullName: user.fullName || 'Bác sĩ',
       consultationFee: Number(doctor.consultationFee),
+      onlineConsultationFee: Number(doctor.onlineConsultationFee ?? doctor.consultationFee),
       branchAssignments: user.branchAssignments,
     }));
   }
@@ -283,6 +285,7 @@ export class SpecialtiesService {
           biography: true,
           avatarUrl: true,
           consultationFee: true,
+          onlineConsultationFee: true,
           ratingAverage: true,
           ratingCount: true,
           isFeatured: true,
@@ -311,6 +314,7 @@ export class SpecialtiesService {
         experienceYears: d.experienceYears,
         biography: d.biography,
         consultationFee: Number(d.consultationFee) || 0,
+        onlineConsultationFee: Number(d.onlineConsultationFee ?? d.consultationFee) || 0,
         avatarUrl: d.avatarUrl,
         ratingAverage: Number(d.ratingAverage) || 5.0,
         ratingCount: d.ratingCount,

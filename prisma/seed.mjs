@@ -293,6 +293,7 @@ async function main() {
         experienceYears: docData.experienceYears || 0,
         biography: docData.biography || null,
         consultationFee: docData.consultationFee,
+        onlineConsultationFee: docData.onlineConsultationFee ?? Math.round((docData.consultationFee || 0) * 0.8 / 10000) * 10000,
         avatarUrl: docData.avatarUrl,
         ratingAverage: docData.ratingAverage || 4.9,
         ratingCount: docData.ratingCount || 100,
@@ -306,6 +307,7 @@ async function main() {
         experienceYears: docData.experienceYears || 0,
         biography: docData.biography || null,
         consultationFee: docData.consultationFee,
+        onlineConsultationFee: docData.onlineConsultationFee ?? Math.round((docData.consultationFee || 0) * 0.8 / 10000) * 10000,
         avatarUrl: docData.avatarUrl,
         ratingAverage: docData.ratingAverage || 4.9,
         ratingCount: docData.ratingCount || 100,
@@ -580,17 +582,6 @@ async function main() {
           imageUrl: specMeta.followupImg || spec.iconUrl || null,
           methodCode: 'SPECIALTY_EXAM',
         },
-        {
-          code: `CONSULT-${codeSuffix}-ADVICE`,
-          name: `Tư vấn ${spec.name} (${branch.name})`,
-          price: 150000,
-          durationMin: 20,
-          description: specMeta.adviceDesc || `Tư vấn từ xa và định hướng thăm khám chuyên khoa ${spec.name}.`,
-          notes: 'Chuẩn bị sẵn các câu hỏi và tiền sử bệnh lý để trao đổi trực tiếp với Bác sĩ chuyên khoa.',
-          symptoms: specMeta.symptoms,
-          imageUrl: specMeta.adviceImg || spec.iconUrl || null,
-          methodCode: 'CONSULTATION',
-        },
       ];
 
       for (const service of specialtyServices) {
@@ -758,12 +749,56 @@ async function main() {
       }
     }
 
+    const bookingMethodCode =
+      appt.bookingMethodCode || (appt.packageCodeSuffix ? 'HEALTH_PACKAGE' : 'CONSULTATION');
     let servicePackageId = null;
     if (appt.packageCodeSuffix) {
       const pkg = await prisma.servicePackage.findFirst({
         where: { code: `PKG-${appt.packageCodeSuffix}-${branch.code}` },
       });
       servicePackageId = pkg?.id ?? null;
+    }
+    if (!servicePackageId && ['SPECIALTY_EXAM', 'AFTER_HOURS'].includes(bookingMethodCode)) {
+      const doctorSpecialty = doctor
+        ? await prisma.doctorSpecialty.findFirst({
+            where: { doctorId: doctor.id, isPrimary: true },
+            select: { specialtyId: true },
+          })
+        : null;
+      const packageForMethod = await prisma.servicePackage.findFirst({
+        where: {
+          specialtyId: doctorSpecialty?.specialtyId,
+          branchBookingMethod: {
+            branchId: actualBranchId,
+            bookingMethod: { code: bookingMethodCode, isActive: true },
+          },
+          isActive: true,
+        },
+        select: { id: true },
+      });
+      servicePackageId = packageForMethod?.id ?? null;
+    }
+    const branchBookingMethod = await prisma.branchBookingMethod.findFirst({
+      where: {
+        branchId: actualBranchId,
+        isEnabled: true,
+        bookingMethod: { code: bookingMethodCode, isActive: true },
+      },
+      select: { bookingMethodId: true },
+    });
+    if (!branchBookingMethod) {
+      throw new Error(
+        `Không tìm thấy booking method ${bookingMethodCode} tại chi nhánh ${actualBranchId} cho ${appt.bookingCode}`,
+      );
+    }
+    if (!servicePackageId && ['SPECIALTY_EXAM', 'AFTER_HOURS', 'HEALTH_PACKAGE'].includes(bookingMethodCode)) {
+      throw new Error(`Appointment package bị thiếu cho method ${bookingMethodCode}: ${appt.bookingCode}`);
+    }
+    if (servicePackageId && !['SPECIALTY_EXAM', 'AFTER_HOURS', 'HEALTH_PACKAGE'].includes(bookingMethodCode)) {
+      throw new Error(`Appointment package không hợp lệ với method ${bookingMethodCode}: ${appt.bookingCode}`);
+    }
+    if (!servicePackageId && !['CONSULTATION', 'ONLINE_CONSULTATION'].includes(bookingMethodCode)) {
+      throw new Error(`Appointment không package có method không hợp lệ: ${appt.bookingCode}`);
     }
 
     const checkedInAt = (appt.status === 'CHECKED_IN' || appt.status === 'COMPLETED')
@@ -794,6 +829,7 @@ async function main() {
         bookingOrderId: bookingOrder.id,
         patientProfileId: profile.id,
         branchId: actualBranchId,
+        bookingMethodId: branchBookingMethod.bookingMethodId,
         scheduleSlotId,
         servicePackageId,
         servicePrice: appt.price,
@@ -807,6 +843,7 @@ async function main() {
         bookingCode: appt.bookingCode,
         patientProfileId: profile.id,
         branchId: actualBranchId,
+        bookingMethodId: branchBookingMethod.bookingMethodId,
         scheduleSlotId,
         servicePackageId,
         servicePrice: appt.price,

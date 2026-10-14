@@ -1,4 +1,4 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { ForbiddenException, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../../infrastructure/database/prisma/prisma.service.js';
 import { RedisService } from '../../infrastructure/redis/redis.service.js';
 import {
@@ -31,19 +31,22 @@ export class RecommendationService {
   async getHomeRecommendations(
     query: HomeRecommendationQueryDto,
     userId?: string,
+    userRole?: string,
   ): Promise<HomeRecommendationResponseDto> {
+    if (query.profileId) {
+      await this.assertProfileAccess(query.profileId, userId, userRole);
+    }
     const t0 = Date.now();
     const homeCacheKey = this.buildHomeCacheKey({
       userId,
       sessionId: query.sessionId,
       profileId: query.profileId,
-      branchId: query.branchId,
     });
 
     const cached = await this.getCachedHomeRecommendations(homeCacheKey);
     if (cached) {
       this.logger.log(
-        `🟢 [REC-HOME: CACHE HIT (0ms)] Source: ${cached.source} | Profile: ${cached.profileName || 'None'} | ${cached.packages.length} pkgs | CacheKey: ${homeCacheKey}`,
+        `🟢 [REC-HOME: CACHE HIT (0ms)] Source: ${cached.source} | ${cached.packages.length} pkgs | CacheKey: ${homeCacheKey}`,
       );
       return {
         ...cached,
@@ -53,11 +56,11 @@ export class RecommendationService {
       };
     }
 
-    const allActivePackages = await this.candidateRetrievalService.loadActivePackages(query.branchId);
+    const allActivePackages = await this.candidateRetrievalService.loadActivePackages();
 
     const [profileTower, behaviorTower] = await Promise.all([
-      this.candidateRetrievalService.getProfileCandidates(query.profileId, query.branchId, allActivePackages),
-      this.candidateRetrievalService.getBehaviorCandidates(userId, query.sessionId, query.branchId, allActivePackages),
+      this.candidateRetrievalService.getProfileCandidates(query.profileId, allActivePackages),
+      this.candidateRetrievalService.getBehaviorCandidates(userId, query.sessionId, allActivePackages),
     ]);
 
     const candidatePool = this.candidateRetrievalService.buildHomeCandidatePool(
@@ -118,12 +121,12 @@ export class RecommendationService {
       detectedSource = 'HYBRID';
       event = 'CREATE_PROFILE + BEHAVIOR_SCORE';
       triggerEvent = 'CREATE_PROFILE + BEHAVIOR_SCORE';
-      triggerReason = `Kết hợp Phân tích Hồ sơ (${profileTower.profile?.fullName}) và Điểm số tương tác hành vi (${behaviorTower.candidates.length} gói quan tâm)`;
+      triggerReason = `Kết hợp hồ sơ và ${behaviorTower.candidates.length} gói quan tâm từ hành vi`;
     } else if (hasProfileIntent) {
       detectedSource = 'AI_PROFILE';
       event = 'CREATE_PROFILE';
       triggerEvent = 'CREATE_PROFILE';
-      triggerReason = `Kích hoạt từ Hồ sơ bệnh nhân (${profileTower.profile?.fullName}, ${profileTower.age} tuổi, tiền sử: ${profileTower.medicalHistory || 'Không'})`;
+      triggerReason = `Kích hoạt từ hồ sơ bệnh nhân (${profileTower.age} tuổi)`;
     } else if (hasBehaviorIntent) {
       detectedSource = 'BEHAVIOR';
       if (behaviorTower.dropOffPkgId) {
@@ -143,7 +146,7 @@ export class RecommendationService {
 
     this.logger.log(
       `🔍 [REC-HOME: PIPELINE START]\n` +
-      `  👤 Nhánh Hồ sơ (Profile Tower): ${hasProfileIntent ? `CÓ (${profileTower.profile.fullName}, ${profileTower.age} tuổi, ${profileTower.gender}, Tiền sử: "${profileTower.medicalHistory || 'Không'}") -> ${profileTower.candidates.length} ứng viên` : 'KHÔNG (Khách vãng lai / Chưa chọn hồ sơ)'}\n` +
+      `  👤 Nhánh Hồ sơ (Profile Tower): ${hasProfileIntent ? `CÓ (${profileTower.age} tuổi, ${profileTower.gender}) -> ${profileTower.candidates.length} ứng viên` : 'KHÔNG (Khách vãng lai / Chưa chọn hồ sơ)'}\n` +
       `  🎯 Nhánh Hành vi (Behavior Tower): ${hasBehaviorIntent ? `CÓ (Chuyên khoa: [${behaviorTower.topSpecialties.map((s: any) => `${s.specialtyName}:${s.score}đ`).join(', ')}], Tìm kiếm: "${behaviorTower.lastSearchQuery || 'không'}", Bỏ dở: "${behaviorTower.dropOffPkgId || 'không'}") -> ${behaviorTower.candidates.length} ứng viên` : 'KHÔNG (Chưa có điểm hành vi)'}\n` +
       `  ⚡ Sự kiện kích hoạt (Trigger Event): [${event}] ${triggerReason}\n` +
       `  📦 Tổng ứng viên (Candidate Pool): ${candidatePool.length} gói | Mô hình dự kiến: ${detectedSource}`,
@@ -158,7 +161,7 @@ export class RecommendationService {
         );
         if (cachedProfileRec && Array.isArray(cachedProfileRec.packages) && cachedProfileRec.packages.length > 0) {
           this.logger.log(
-            `⚡ [REC-HOME: FAST-PATH PROFILE CACHE HIT] Tái sử dụng kết quả AI Hồ sơ 7 ngày (${cachedProfileRec.packages.length} gói) cho ${profileTower.profile.fullName} (0ms LLM)`,
+            `⚡ [REC-HOME: FAST-PATH PROFILE CACHE HIT] Tái sử dụng kết quả AI Hồ sơ 7 ngày (${cachedProfileRec.packages.length} gói) (0ms LLM)`,
           );
           return {
             packages: cachedProfileRec.packages.slice(0, TELEMETRY_CONFIG.HOME_FINAL_PACKAGES_LIMIT),
@@ -185,7 +188,6 @@ export class RecommendationService {
         reRankedPackages = await this.aiRankingService.evaluateHybridWithGemini({
           profile: profileTower.profile
             ? {
-              fullName: profileTower.profile.fullName,
               age: profileTower.age,
               gender: profileTower.gender,
               bmi: profileTower.bmi,
@@ -341,7 +343,7 @@ export class RecommendationService {
       });
     } catch {
       setImmediate(() => {
-        this.analyzeAndCacheRecommendations(profileId).catch(() => { });
+        this.analyzeAndCacheRecommendations(profileId, undefined, undefined, true).catch(() => { });
       });
     }
   }
@@ -353,8 +355,8 @@ export class RecommendationService {
         await Promise.allSettled([
           this.redis.delete(key),
           this.redis.delete(`${key}:all`),
-          this.redis.deletePattern(`rec:home:prof:${profileId}:*`),
-          this.redis.deletePattern(`rec:home:u:*:${profileId}:*`),
+          this.redis.deletePattern(`rec:v2:home:prof:${profileId}*`),
+          this.redis.deletePattern(`rec:v2:home:u:*:${profileId}`),
         ]);
       }
     } catch { }
@@ -362,9 +364,14 @@ export class RecommendationService {
 
   async analyzeAndCacheRecommendations(
     profileId: string,
-    branchId?: string,
+    actorId?: string,
+    actorRole?: string,
+    isInternal = false,
   ): Promise<ProfileRecommendationResponseDto> {
-    const profileTower = await this.candidateRetrievalService.getProfileCandidates(profileId, branchId, undefined, true);
+    if (!isInternal) {
+      await this.assertProfileAccess(profileId, actorId, actorRole);
+    }
+    const profileTower = await this.candidateRetrievalService.getProfileCandidates(profileId, undefined, true);
     if (!profileTower.profile) {
       return {
         profileId,
@@ -394,7 +401,6 @@ export class RecommendationService {
       try {
         aiList = await this.aiRankingService.evaluateHybridWithGemini({
           profile: {
-            fullName: profileTower.profile.fullName,
             age: profileTower.age,
             gender: profileTower.gender,
             bmi: profileTower.bmi,
@@ -423,7 +429,7 @@ export class RecommendationService {
       source,
       event: 'CREATE_PROFILE',
       triggerEvent: 'CREATE_PROFILE',
-      triggerReason: `Phân tích bệnh án & Hồ sơ bệnh nhân (${profileTower.profile.fullName})`,
+      triggerReason: 'Phân tích hồ sơ bệnh nhân',
       packages: aiList,
     };
 
@@ -460,26 +466,38 @@ export class RecommendationService {
     return this.behaviorTelemetryService.getBehaviorTelemetryContext(userId, sessionId);
   }
 
-  async getProfileCandidates(profileId?: string, branchId?: string, preloadedPackages?: any[], skipCache = false) {
-    return this.candidateRetrievalService.getProfileCandidates(profileId, branchId, preloadedPackages, skipCache);
+  async getProfileCandidates(profileId?: string, preloadedPackages?: any[], skipCache = false) {
+    return this.candidateRetrievalService.getProfileCandidates(profileId, preloadedPackages, skipCache);
   }
 
-  async getBehaviorCandidates(userId?: string, sessionId?: string, branchId?: string, preloadedPackages?: any[]) {
-    return this.candidateRetrievalService.getBehaviorCandidates(userId, sessionId, branchId, preloadedPackages);
+  async getBehaviorCandidates(userId?: string, sessionId?: string, preloadedPackages?: any[]) {
+    return this.candidateRetrievalService.getBehaviorCandidates(userId, sessionId, preloadedPackages);
   }
 
-  private buildHomeCacheKey(params: { userId?: string; sessionId?: string; profileId?: string; branchId?: string }): string {
-    const b = params.branchId || 'all';
+  private buildHomeCacheKey(params: { userId?: string; sessionId?: string; profileId?: string }): string {
     if (params.userId) {
       const p = params.profileId || 'noprofile';
-      return `rec:home:u:${params.userId}:${p}:${b}`;
+      return `rec:v2:home:u:${params.userId}:${p}`;
     }
     if (params.profileId) {
-      return `rec:home:prof:${params.profileId}:${b}`;
+      return `rec:v2:home:prof:${params.profileId}`;
     }
     if (params.sessionId) {
-      return `rec:home:sess:${params.sessionId}:${b}`;
+      return `rec:v2:home:sess:${params.sessionId}`;
     }
-    return `rec:home:generic:${b}`;
+    return 'rec:v2:home:generic';
+  }
+
+  private async assertProfileAccess(profileId: string, actorId?: string, actorRole?: string): Promise<void> {
+    const profile = await this.prisma.patientProfile.findUnique({
+      where: { id: profileId },
+      select: { accountId: true },
+    });
+    if (!profile) throw new NotFoundException('Không tìm thấy hồ sơ bệnh nhân.');
+
+    const staffRoles = ['ADMIN', 'SUPER_ADMIN', 'BRANCH_MANAGER', 'RECEPTIONIST', 'DOCTOR'];
+    if (!actorId || (!staffRoles.includes(String(actorRole).toUpperCase()) && profile.accountId !== actorId)) {
+      throw new ForbiddenException('Bạn không có quyền truy cập gợi ý của hồ sơ này.');
+    }
   }
 }

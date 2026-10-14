@@ -106,7 +106,7 @@ export class RabbitMqService implements OnModuleInit, OnModuleDestroy {
     });
     for (const event of events) {
       try {
-        const isHold = event.eventType === 'appointment.hold.created';
+        const isHold = event.eventType === 'appointment.hold.created' || event.eventType === 'booking_order.hold.created';
         const payload = event.payload as { holdExpiresAt?: string };
         const expiration = isHold
           ? String(Math.max(1, new Date(payload.holdExpiresAt ?? 0).getTime() - Date.now()))
@@ -129,10 +129,20 @@ export class RabbitMqService implements OnModuleInit, OnModuleDestroy {
     await this.channel.consume(topology.expiredQueue, async (message: any) => {
       if (!message) return;
       try {
-        const payload = JSON.parse(message.content.toString()) as { eventId: string; appointmentId: string };
+        const payload = JSON.parse(message.content.toString()) as {
+          eventId: string;
+          appointmentId?: string;
+          appointmentIds?: string[];
+        };
         const processed = await this.prisma.processedEvent.findUnique({ where: { eventId: payload.eventId } });
         if (!processed) {
-          await this.bookingService.expireHold(payload.appointmentId);
+          if (payload.appointmentIds?.length) {
+            await this.bookingService.expireBookingOrderHold(payload.appointmentIds);
+          } else if (payload.appointmentId) {
+            await this.bookingService.expireHold(payload.appointmentId);
+          } else {
+            throw new Error('Hold expiration event thiếu appointmentId/appointmentIds');
+          }
           await this.prisma.processedEvent.create({ data: { eventId: payload.eventId, consumer: 'appointment-expiration' } });
         }
         this.channel.ack(message);
@@ -181,13 +191,13 @@ export class RabbitMqService implements OnModuleInit, OnModuleDestroy {
         if (payload.eventId) {
           const processed = await this.prisma.processedEvent.findUnique({ where: { eventId: payload.eventId } });
           if (!processed) {
-            await this.recommendationService.analyzeAndCacheRecommendations(payload.profileId, payload.branchId);
+            await this.recommendationService.analyzeAndCacheRecommendations(payload.profileId, undefined, undefined, true);
             await this.prisma.processedEvent.create({
               data: { eventId: payload.eventId, consumer: 'recommendation-analyzer' },
             });
           }
         } else {
-          await this.recommendationService.analyzeAndCacheRecommendations(payload.profileId, payload.branchId);
+          await this.recommendationService.analyzeAndCacheRecommendations(payload.profileId, undefined, undefined, true);
         }
         this.channel.ack(message);
         this.logger.log(`[RabbitMQ] Successfully analyzed & cached recommendations for profile: ${payload.profileId}`);

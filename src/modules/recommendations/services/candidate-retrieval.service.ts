@@ -20,7 +20,6 @@ export class CandidateRetrievalService {
   //   ứng viên theo hồ sơ
   async getProfileCandidates(
     profileId?: string,
-    branchId?: string,
     preloadedPackages?: any[],
     skipCache = false,
   ): Promise<{
@@ -78,25 +77,51 @@ export class CandidateRetrievalService {
         status: 'COMPLETED',
       },
       include: {
-        servicePackage: { select: { id: true, name: true, code: true, specialtyId: true, specialty: { select: { id: true, name: true } } } },
+      servicePackage: {
+        select: {
+          id: true,
+          name: true,
+          code: true,
+          specialtyId: true,
+          isFollowUp: true,
+          followUpAfterDays: true,
+          specialty: { select: { id: true, name: true } },
+        },
       },
-      orderBy: { createdAt: 'desc' },
-      take: 3,
+    },
+    orderBy: { createdAt: 'desc' },
+    take: 20,
     });
 
     const candidates: Array<{ pkg: any; isFollowUp?: boolean }> = [];
 
     // Tái dùng danh sách gói đã load sẵn (tránh query N+1 khi gọi từ Orchestrator)
-    const allPackages = preloadedPackages ?? await this.loadActivePackages(branchId);
+    const allPackages = preloadedPackages ?? await this.loadActivePackages();
+
+    const now = Date.now();
+    const recentlyCompletedPackageIds = new Set(
+      pastAppointments
+        .filter((appointment) =>
+          now - appointment.createdAt.getTime() <= TELEMETRY_CONFIG.RECENCY_SUPPRESSION_DAYS * 24 * 60 * 60 * 1000,
+        )
+        .map((appointment) => appointment.servicePackageId)
+        .filter((id): id is string => Boolean(id)),
+    );
 
     if (pastAppointments.length > 0) {
       const latest = pastAppointments[0];
       const specId = latest.servicePackage?.specialtyId;
-      if (specId) {
+      const daysSinceLatest = Math.floor((now - latest.createdAt.getTime()) / (24 * 60 * 60 * 1000));
+      const followUpAfterDays =
+        latest.servicePackage?.followUpAfterDays ?? TELEMETRY_CONFIG.FOLLOW_UP_DEFAULT_DAYS;
+      if (specId && daysSinceLatest >= followUpAfterDays) {
         const followUpPkg = allPackages.find(
-          (p) => p.specialtyId === specId && (p.code.endsWith('-FOLLOWUP') || p.name.toLowerCase().includes('tái khám')),
+          (p) =>
+            p.specialtyId === specId &&
+            this.isFollowUpPackage(p) &&
+            this.isPackageEligibleForProfile(p, { profile, age, gender }),
         );
-        if (followUpPkg) {
+        if (followUpPkg && !recentlyCompletedPackageIds.has(followUpPkg.id)) {
           candidates.push({ pkg: followUpPkg, isFollowUp: true });
         }
       }
@@ -123,7 +148,7 @@ export class CandidateRetrievalService {
     if (candidates.length < 6) {
       // Lọc độ tuổi & giới tính
       const validScreening = allPackages.filter((pkg) => {
-        if (pkg.code.endsWith('-FOLLOWUP') || pkg.name.toLowerCase().includes('tái khám')) return false;
+        if (this.isFollowUpPackage(pkg) || recentlyCompletedPackageIds.has(pkg.id)) return false;
         if (!this.isPackageAppropriateForGender(pkg.name, pkg.description || '', gender)) return false;
         if (!this.isPackageAppropriateForAge(pkg.name, pkg.description || '', age)) return false;
         return true;
@@ -164,7 +189,6 @@ export class CandidateRetrievalService {
   async getBehaviorCandidates(
     userId?: string,
     sessionId?: string,
-    branchId?: string,
     preloadedPackages?: any[],
   ): Promise<{
     topSpecialties: Array<{ specialtyId: number; specialtyName: string; score: number }>;
@@ -176,7 +200,7 @@ export class CandidateRetrievalService {
     const candidates: Array<{ pkg: any; sourceType: 'SEARCH_INTENT' | 'DROP_OFF' | 'RECENT_VIEW' }> = [];
     const addedPackageIds = new Set<string>();
 
-    const allPackages = preloadedPackages ?? await this.loadActivePackages(branchId);
+    const allPackages = preloadedPackages ?? await this.loadActivePackages();
 
     // 1. Ưu tiên gói bỏ dở
     if (context.dropOffPkgId) {
@@ -277,11 +301,10 @@ export class CandidateRetrievalService {
   }
 
   // load toàn bộ gói
-  async loadActivePackages(branchId?: string): Promise<any[]> {
+  async loadActivePackages(): Promise<any[]> {
     return this.prisma.servicePackage.findMany({
       where: {
         isActive: true,
-        ...(branchId ? { branchBookingMethod: { branchId, isEnabled: true } } : {}),
       },
       include: { specialty: { select: { id: true, name: true, slug: true } } },
       orderBy: { price: 'asc' },
@@ -291,6 +314,12 @@ export class CandidateRetrievalService {
   // kiểm tra gói phù hợp với 
   isPackageEligibleForProfile(pkg: any, profileTower: any): boolean {
     if (!profileTower?.profile) return true;
+    const targetGender = String(pkg.targetGender || 'ALL').toUpperCase();
+    const gender = String(profileTower.gender || 'OTHER').toUpperCase();
+    if (targetGender !== 'ALL' && targetGender !== gender) return false;
+    if (typeof pkg.minAge === 'number' && profileTower.age < pkg.minAge) return false;
+    if (typeof pkg.maxAge === 'number' && profileTower.age > pkg.maxAge) return false;
+    if (pkg.isPediatric === true && profileTower.age >= 18) return false;
     if (!this.isPackageAppropriateForGender(pkg.name, pkg.description || '', profileTower.gender)) return false;
     if (!this.isPackageAppropriateForAge(pkg.name, pkg.description || '', profileTower.age)) return false;
     return true;
@@ -309,12 +338,18 @@ export class CandidateRetrievalService {
     return true;
   }
 
+  private isFollowUpPackage(pkg: any): boolean {
+    return pkg.isFollowUp === true ||
+      String(pkg.code || '').toUpperCase().endsWith('-FOLLOWUP') ||
+      String(pkg.name || '').toLowerCase().includes('tái khám');
+  }
+
   isPackageAppropriateForAge(name: string, description: string, age: number): boolean {
     const text = `${name} ${description}`.toLowerCase();
     if (age >= 18) {
       const pediatricsKeywords = ['nhi khoa', 'sơ sinh', 'trẻ em', 'tiêm chủng trẻ em'];
       if (pediatricsKeywords.some((kw) => text.includes(kw))) return false;
-    } else if (age < 16) {
+    } else if (age < 18) {
       const adultKeywords = ['lão khoa', 'tiền mãn kinh', 'mãn kinh', 'tuyến tiền liệt', 'tiền hôn nhân'];
       if (adultKeywords.some((kw) => text.includes(kw))) return false;
     }
@@ -342,6 +377,6 @@ export class CandidateRetrievalService {
   }
 
   buildCacheKey(profileId: string): string {
-    return `rec:profile:${profileId}`;
+    return `rec:v2:profile:${profileId}`;
   }
 }

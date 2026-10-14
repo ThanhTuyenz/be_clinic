@@ -40,7 +40,7 @@ export default registerAs<RabbitMqConfig>('rabbitmq', () => {
   return {
     enabled: process.env.RABBITMQ_ENABLED === 'true',
     url: env.RABBITMQ_URL,
-    holdTtlMs: env.RABBITMQ_HOLD_TTL_MS ?? 60_000,
+    holdTtlMs: env.RABBITMQ_HOLD_TTL_MS ?? 15 * 60_000,
     prefetch: env.RABBITMQ_PREFETCH ?? 10,
     outboxBatchSize: env.RABBITMQ_OUTBOX_BATCH_SIZE ?? 50,
     outboxPollMs: env.RABBITMQ_OUTBOX_POLL_MS ?? 3_000,

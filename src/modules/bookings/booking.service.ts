@@ -18,6 +18,24 @@ const ACTIVE_APPOINTMENT_STATUSES: AppointmentStatus[] = [
 
 export const BOOKING_SERVICE_FEE = 10_000;
 
+const CHECKOUT_SERVICE_PACKAGE_SELECT = {
+  id: true,
+  name: true,
+  price: true,
+  isActive: true,
+  specialtyId: true,
+  branchBookingMethod: {
+    select: { branchId: true, bookingMethodId: true, isEnabled: true },
+  },
+  branchBookingMethods: {
+    select: {
+      branchBookingMethod: {
+        select: { branchId: true, bookingMethodId: true, isEnabled: true },
+      },
+    },
+  },
+} satisfies Prisma.ServicePackageSelect;
+
 @Injectable()
 export class BookingService {
   constructor(
@@ -28,6 +46,16 @@ export class BookingService {
     private readonly realtimeGateway: RealtimeGateway,
     private readonly notifications: NotificationService,
   ) {}
+
+  private isDoctorBookingMethod(code: string): boolean {
+    return code === 'CONSULTATION' || code === 'ONLINE_CONSULTATION';
+  }
+
+  private validateBookingMethodCode(code: string): void {
+    if (!['SPECIALTY_EXAM', 'CONSULTATION', 'ONLINE_CONSULTATION', 'HEALTH_PACKAGE', 'AFTER_HOURS'].includes(code)) {
+      throw new BadRequestException('Hình thức khám không hợp lệ');
+    }
+  }
 
 
   public checkInToken(appointmentId: string) {
@@ -82,7 +110,9 @@ export class BookingService {
         });
         if (!profile) throw new NotFoundException('Không tìm thấy hồ sơ bệnh nhân');
 
-        if (dto.bookingType === 'DOCTOR') {
+        this.validateBookingMethodCode(dto.bookingMethodCode);
+        const isDoctor = this.isDoctorBookingMethod(dto.bookingMethodCode);
+        if (isDoctor) {
           if (!dto.scheduleSlotId) throw new BadRequestException('Thiếu khung giờ của bác sĩ');
           
           let doctorSlot: any = null;
@@ -115,7 +145,9 @@ export class BookingService {
           if (reserved !== 1) throw new ConflictException('Bác sĩ vừa hết chỗ trong khung giờ này');
           const holdTtlMs = this.config.getOrThrow<RabbitMqConfig>('rabbitmq').holdTtlMs;
           const [{ now, expiresAt }] = await tx.$queryRaw<Array<{ now: Date; expiresAt: Date }>>`SELECT NOW() AS "now", NOW() + (${holdTtlMs} * INTERVAL '1 millisecond') AS "expiresAt"`;
-          const price = doctorSlot.schedule.doctor.consultationFee;
+          const price = dto.bookingMethodCode === 'ONLINE_CONSULTATION'
+            ? (doctorSlot.schedule.doctor.onlineConsultationFee ?? doctorSlot.schedule.doctor.consultationFee)
+            : doctorSlot.schedule.doctor.consultationFee;
           const subtotal = Number(price);
           const serviceFee = BOOKING_SERVICE_FEE;
           let discountAmount = 0;
@@ -127,7 +159,25 @@ export class BookingService {
           }
           const totalAmount = Math.max(0, subtotal + serviceFee - discountAmount);
 
-          const appointment = await tx.appointment.create({ data: { patientProfileId: profile.id, branchId: doctorSlot.schedule.branchId, scheduleSlotId: doctorSlot.id, servicePrice: price, symptomsDescription: dto.symptomsDescription, bookedViaAi: dto.bookedViaAi ?? false, holdExpiresAt: expiresAt, statusHistories: { create: { toStatus: 'HOLD', actorId: accountId } } } });
+          const bookingMethod = await tx.bookingMethod.findFirst({
+            where: { code: dto.bookingMethodCode, isActive: true },
+            select: { id: true },
+          });
+          if (!bookingMethod) throw new BadRequestException('Hình thức khám không khả dụng');
+
+          const appointment = await tx.appointment.create({
+            data: {
+              patientProfileId: profile.id,
+              branchId: doctorSlot.schedule.branchId,
+              bookingMethodId: bookingMethod?.id ?? null,
+              scheduleSlotId: doctorSlot.id,
+              servicePrice: price,
+              symptomsDescription: dto.symptomsDescription,
+              bookedViaAi: dto.bookedViaAi ?? false,
+              holdExpiresAt: expiresAt,
+              statusHistories: { create: { toStatus: 'HOLD', actorId: accountId } },
+            },
+          });
 
           const invoiceItems = [
             { description: `Khám với ${doctorSlot.schedule.doctor.fullName}`, quantity: 1, unitPrice: price, amount: price },
@@ -165,15 +215,15 @@ export class BookingService {
         }
 
         if (!dto.servicePackageId) throw new BadRequestException('Thiếu gói dịch vụ');
-        const slotId = dto.scheduleSlotId || dto.servicePackageScheduleSlotId;
+        if (this.isDoctorBookingMethod(dto.bookingMethodCode)) {
+          throw new BadRequestException('Hình thức tư vấn không sử dụng gói dịch vụ');
+        }
+        const slotId = dto.scheduleSlotId;
         if (!slotId) throw new BadRequestException('Thiếu khung giờ khám');
 
         const servicePackage = await tx.servicePackage.findUnique({
           where: { id: dto.servicePackageId },
-          include: {
-            branchBookingMethod: true,
-            branchBookingMethods: { include: { branchBookingMethod: true } },
-          },
+          select: CHECKOUT_SERVICE_PACKAGE_SELECT,
         });
         if (!servicePackage || !servicePackage.isActive) {
           throw new NotFoundException('Gói dịch vụ không khả dụng');
@@ -264,10 +314,30 @@ export class BookingService {
         }
         const totalAmount = Math.max(0, subtotal + serviceFee - discountAmount);
 
+        let bookingMethodId = validBranchBbm?.bookingMethodId || servicePackage.branchBookingMethod?.bookingMethodId || null;
+        const packageBookingMethod = await tx.bookingMethod.findFirst({
+          where: { code: dto.bookingMethodCode, isActive: true },
+          select: { id: true },
+        });
+        if (!packageBookingMethod) throw new BadRequestException('Hình thức khám không khả dụng');
+        const supportsRequestedMethod =
+          (validBranchBbm?.bookingMethodId === packageBookingMethod.id) ||
+          servicePackage.branchBookingMethods?.some(
+            (link) =>
+              link.branchBookingMethod?.branchId === targetBranchId &&
+              link.branchBookingMethod?.isEnabled &&
+              link.branchBookingMethod?.bookingMethodId === packageBookingMethod.id,
+          );
+        if (!supportsRequestedMethod) {
+          throw new ConflictException('Gói dịch vụ không hỗ trợ hình thức khám đã chọn tại cơ sở này');
+        }
+        bookingMethodId = packageBookingMethod.id;
+
         const appointment = await tx.appointment.create({
           data: {
             patientProfileId: profile.id,
             branchId: targetBranchId,
+            bookingMethodId,
             scheduleSlotId: activeSlot.id,
             servicePackageId: servicePackage.id,
             servicePrice: servicePackage.price,
@@ -361,10 +431,19 @@ export class BookingService {
           WHERE "id" = ${appointment.scheduleSlotId}::uuid
         `;
       }
+
       await tx.paymentTransaction.updateMany({ where: { invoice: { appointmentId }, status: 'PENDING' }, data: { status: 'FAILED' } });
       await tx.appointmentStatusHistory.create({ data: { appointmentId, fromStatus: 'HOLD', toStatus: 'CANCELLED', reason: 'PAYMENT_HOLD_TIMEOUT' } });
       return true;
     }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
+  }
+
+  async expireBookingOrderHold(appointmentIds: string[]): Promise<boolean> {
+    let changed = false;
+    for (const appointmentId of appointmentIds) {
+      changed = (await this.expireHold(appointmentId)) || changed;
+    }
+    return changed;
   }
 
   async handlePaymentWebhook(provider: string, dto: PaymentWebhookDto) {
@@ -581,11 +660,27 @@ export class BookingService {
         servicePackageId: true,
         scheduleSlotId: true,
         branchId: true,
+        symptomsDescription: true,
+        bookingMethod: {
+          select: { id: true, code: true, name: true },
+        },
         patientProfile: {
           select: { id: true, fullName: true },
         },
         servicePackage: {
-          select: { id: true, name: true },
+          select: {
+            id: true,
+            name: true,
+            code: true,
+            branchBookingMethod: {
+              select: {
+                bookingMethod: { select: { code: true, name: true } },
+              },
+            },
+          },
+        },
+        telehealthSession: {
+          select: { id: true },
         },
         branch: {
           select: { id: true, name: true, address: true },
@@ -635,6 +730,17 @@ export class BookingService {
       const doctorSlot = row.scheduleSlot;
       const room = doctorSlot?.schedule.room;
       const branch = row.branch;
+      const bookingMethod = row.bookingMethod
+        ? { code: row.bookingMethod.code, name: row.bookingMethod.name }
+        : row.servicePackage?.branchBookingMethod?.bookingMethod
+        ? { code: row.servicePackage.branchBookingMethod.bookingMethod.code, name: row.servicePackage.branchBookingMethod.bookingMethod.name }
+        : null;
+
+      const isTelehealth = Boolean(
+        row.telehealthSession ||
+        bookingMethod?.code === 'ONLINE_CONSULTATION'
+      );
+
       return {
         id: row.id,
         bookingCode: row.bookingCode,
@@ -651,6 +757,8 @@ export class BookingService {
         endTime: doctorSlot?.endTime?.toISOString().slice(11, 16) ?? null,
         scheduleSlotId: row.scheduleSlotId,
         servicePackageId: row.servicePackageId,
+        isTelehealth,
+        bookingMethod,
         patient: { id: row.patientProfile.id, fullName: row.patientProfile.fullName },
         doctor: (() => { const d = doctorSlot?.schedule?.doctor; return d ? { id: d.id, fullName: d.user?.fullName ?? '' } : null; })(),
         doctorId: doctorSlot?.schedule?.doctorId ?? null,
@@ -1512,6 +1620,9 @@ export class BookingService {
       throw new BadRequestException('Danh sách thành viên không được rỗng');
     }
     const groupType = dto.groupType ?? (dto.items.length === 1 ? 'SINGLE' : 'FAMILY');
+    if (groupType === 'FAMILY' && dto.items.some((item) => item.servicePackageId)) {
+      throw new BadRequestException('Đặt khám gia đình chỉ hỗ trợ khám theo bác sĩ, không dùng gói khám');
+    }
 
     try {
       return await this.prisma.$transaction(async (tx) => {
@@ -1538,7 +1649,9 @@ export class BookingService {
         for (const item of dto.items) {
           const profile = profiles.find((p) => p.id === item.patientProfileId)!;
 
-          if (item.bookingType === 'DOCTOR' || !item.servicePackageId) {
+          this.validateBookingMethodCode(item.bookingMethodCode);
+          const isDoctorBooking = this.isDoctorBookingMethod(item.bookingMethodCode);
+          if (isDoctorBooking) {
             // ── Đặt theo bác sĩ ──────────────────────────────────
             if (!item.scheduleSlotId) throw new BadRequestException(`Thiếu khung giờ bác sĩ cho ${profile.fullName}`);
 
@@ -1570,9 +1683,10 @@ export class BookingService {
                 include: { schedule: { include: { doctor: true } } },
               });
             }
-            if (!doctorSlot || !doctorSlot.isActive || doctorSlot.schedule.status !== 'OPEN') {
+            if (!doctorSlot || !doctorSlot.isActive || doctorSlot.schedule.status !== 'OPEN' || !doctorSlot.schedule.doctor.isActive) {
               throw new NotFoundException(`Khung giờ bác sĩ không khả dụng cho ${profile.fullName}`);
             }
+            this.validateBookingLeadTime(doctorSlot.schedule.workDate);
 
             // Duplicate check
             const dup = await tx.appointment.findFirst({
@@ -1590,11 +1704,20 @@ export class BookingService {
             `;
             if (reserved !== 1) throw new ConflictException(`Bác sĩ vừa hết chỗ trong khung giờ này (${profile.fullName})`);
 
-            const price = doctorSlot.schedule.doctor.consultationFee;
+            const doctorMethod = await tx.bookingMethod.findFirst({
+              where: { code: item.bookingMethodCode, isActive: true },
+              select: { id: true },
+            });
+            if (!doctorMethod) throw new BadRequestException('Hình thức khám không khả dụng');
+
+            const price = item.bookingMethodCode === 'ONLINE_CONSULTATION'
+              ? (doctorSlot.schedule.doctor.onlineConsultationFee ?? doctorSlot.schedule.doctor.consultationFee)
+              : doctorSlot.schedule.doctor.consultationFee;
             totalAmount = totalAmount.add(price);
             appointmentData.push({
               patientProfileId: profile.id,
               branchId: doctorSlot.schedule.branchId,
+              bookingMethodId: doctorMethod?.id ?? null,
               scheduleSlotId: doctorSlot.id,
               servicePrice: price,
               symptomsDescription: item.symptomsDescription,
@@ -1609,17 +1732,17 @@ export class BookingService {
             });
           } else {
             // ── Đặt theo gói dịch vụ ─────────────────────────────
-            const slotId = item.scheduleSlotId || item.servicePackageScheduleSlotId;
+            if (!item.servicePackageId) {
+              throw new BadRequestException(`Thiếu gói dịch vụ cho ${profile.fullName}`);
+            }
+            const slotId = item.scheduleSlotId;
             const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
             if (!slotId || !UUID_REGEX.test(slotId)) {
               throw new BadRequestException(`Khung giờ khám không hợp lệ cho ${profile.fullName}. Vui lòng chọn lại khung giờ khám.`);
             }
             const pkg = await tx.servicePackage.findUnique({
               where: { id: item.servicePackageId },
-              include: {
-                branchBookingMethod: true,
-                branchBookingMethods: { include: { branchBookingMethod: true } },
-              },
+              select: CHECKOUT_SERVICE_PACKAGE_SELECT,
             });
             if (!pkg || !pkg.isActive) {
               throw new NotFoundException(`Gói dịch vụ không khả dụng cho ${profile.fullName}`);
@@ -1632,6 +1755,10 @@ export class BookingService {
             if (!doctorSlot || !doctorSlot.isActive || doctorSlot.schedule.status !== 'OPEN') {
               throw new NotFoundException(`Khung giờ khám không khả dụng cho ${profile.fullName}`);
             }
+            if (!doctorSlot.schedule.doctor.isActive) {
+              throw new NotFoundException(`Bác sĩ không khả dụng cho ${profile.fullName}`);
+            }
+            this.validateBookingLeadTime(doctorSlot.schedule.workDate);
 
             const targetBranchId = doctorSlot.schedule.branchId;
             const validBranchBbm =
@@ -1659,10 +1786,29 @@ export class BookingService {
             `;
             if (reserved !== 1) throw new ConflictException(`Khung giờ khám hết chỗ (${profile.fullName})`);
 
+            const packageMethod = await tx.bookingMethod.findFirst({
+              where: { code: item.bookingMethodCode, isActive: true },
+              select: { id: true },
+            });
+            if (!packageMethod) throw new BadRequestException('Hình thức khám không khả dụng');
+            const supportsRequestedMethod =
+              (validBranchBbm?.bookingMethodId === packageMethod.id) ||
+              pkg.branchBookingMethods?.some(
+                (link) =>
+                  link.branchBookingMethod?.branchId === targetBranchId &&
+                  link.branchBookingMethod?.isEnabled &&
+                  link.branchBookingMethod?.bookingMethodId === packageMethod.id,
+              );
+            if (!supportsRequestedMethod) {
+              throw new ConflictException(`Gói dịch vụ không hỗ trợ hình thức khám đã chọn (${profile.fullName})`);
+            }
+            const pkgMethodId = packageMethod.id;
+
             totalAmount = totalAmount.add(pkg.price);
             appointmentData.push({
               patientProfileId: profile.id,
               branchId: targetBranchId,
+              bookingMethodId: pkgMethodId,
               scheduleSlotId: doctorSlot.id,
               servicePackageId: pkg.id,
               servicePrice: pkg.price,
@@ -1707,6 +1853,10 @@ export class BookingService {
 
         // Tạo BookingOrder tổng
         const orderCode = `ORD-${Date.now().toString(36).toUpperCase()}`;
+        const branchIds = new Set(appointmentData.map((item) => item.branchId));
+        if (branchIds.size > 1) {
+          throw new BadRequestException('Các thành viên trong một đơn gia đình phải khám cùng cơ sở');
+        }
         const branchId = appointmentData[0]?.branchId;
         const bookingOrder = await (tx as any).bookingOrder.create({
           data: {

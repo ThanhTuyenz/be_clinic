@@ -21,32 +21,6 @@ export class SchedulesController {
     return this.schedulesService.bookingMethods(branchId);
   }
 
-  @Public()
-  @Get(['branch-available-dates', 'public/branch-available-dates'])
-  @ApiOperation({ summary: 'Các ngày có bác sĩ nhận khám tại cơ sở' })
-  @ApiQuery({ name: 'branchId' })
-  @ApiQuery({ name: 'specialtyId', required: false, type: Number })
-  branchAvailableDates(
-    @Query('branchId') branchId: string,
-    @Query('specialtyId') specialtyId?: string,
-  ) {
-    return this.schedulesService.branchAvailableDates(branchId, specialtyId ? Number(specialtyId) : undefined);
-  }
-
-  @Public()
-  @Get(['branch-timeslots', 'public/branch-timeslots'])
-  @ApiOperation({ summary: 'Khung giờ khám theo ngày tại cơ sở kèm danh sách bác sĩ' })
-  @ApiQuery({ name: 'branchId' })
-  @ApiQuery({ name: 'date', example: '2026-09-07' })
-  @ApiQuery({ name: 'specialtyId', required: false, type: Number })
-  branchTimeslots(
-    @Query('branchId') branchId: string,
-    @Query('date') date: string,
-    @Query('specialtyId') specialtyId?: string,
-  ) {
-    return this.schedulesService.branchTimeslots(branchId, date, specialtyId ? Number(specialtyId) : undefined);
-  }
-
   @Get()
   @SkipPermissions()
   @ApiOperation({ summary: 'Danh sách ca làm việc (có thể lọc theo doctorId, branchId, ngày, withSlots, availableOnly)' })

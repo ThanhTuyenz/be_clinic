@@ -1,4 +1,4 @@
-import { IsEnum, IsNotEmpty, IsNumber, IsOptional, IsString, MaxLength } from 'class-validator';
+import { IsEnum, IsNotEmpty, IsNumber, IsOptional, IsString, MaxLength, MinLength } from 'class-validator';
 
 export type RecommendationPriority = 'HIGH' | 'MEDIUM' | 'LOW';
 
@@ -64,6 +64,14 @@ export class HomeRecommendationQueryDto {
   @IsString()
   @IsOptional()
   profileId?: string;
+}
+
+export class SemanticSearchQueryDto {
+  @IsString()
+  @IsNotEmpty({ message: 'Từ khóa tìm kiếm không được để trống' })
+  @MinLength(2, { message: 'Từ khóa tìm kiếm phải có ít nhất 2 ký tự' })
+  @MaxLength(200, { message: 'Từ khóa tìm kiếm không được vượt quá 200 ký tự' })
+  q: string;
 
   @IsString()
   @IsOptional()

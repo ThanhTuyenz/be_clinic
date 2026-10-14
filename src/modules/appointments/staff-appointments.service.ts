@@ -43,10 +43,26 @@ export class StaffAppointmentsService {
     const creator = row.statusHistories?.[0]?.actor
     const createdAtClinic = creator && creator.role !== 'PATIENT'
     const specialty = row.servicePackage?.specialty ?? bookedDoctor?.specialties?.find((item: any) => item.isPrimary)?.specialty ?? bookedDoctor?.specialties?.[0]?.specialty
+    const bookingMethod = (row as any).bookingMethod
+      ? {
+          code: (row as any).bookingMethod.code,
+          name: (row as any).bookingMethod.name,
+        }
+      : row.servicePackage?.branchBookingMethod?.bookingMethod
+      ? {
+          code: row.servicePackage.branchBookingMethod.bookingMethod.code,
+          name: row.servicePackage.branchBookingMethod.bookingMethod.name,
+        }
+      : { code: 'DOCTOR', name: 'Khám với bác sĩ' }
+    const isTelehealth = Boolean((row as any).telehealthSession || bookingMethod.code === 'ONLINE_CONSULTATION')
+    const bookingOrder = row.bookingOrder
     return {
       id: row.id,
       ticket: row.bookingCode,
       bookingCode: row.bookingCode,
+      bookingOrderId: row.bookingOrderId ?? null,
+      orderCode: bookingOrder?.orderCode ?? null,
+      groupType: bookingOrder?.groupType ?? 'SINGLE',
       createdAt: row.createdAt,
       checkedInAt: row.checkedInAt ? new Date(row.checkedInAt).toISOString() : null,
       source: createdAtClinic ? 'clinic' : 'online',
@@ -86,12 +102,8 @@ export class StaffAppointmentsService {
         code: row.servicePackage.code,
         name: row.servicePackage.name,
       } : null,
-      bookingMethod: row.servicePackage?.branchBookingMethod?.bookingMethod
-        ? {
-            code: row.servicePackage.branchBookingMethod.bookingMethod.code,
-            name: row.servicePackage.branchBookingMethod.bookingMethod.name,
-          }
-        : { code: 'DOCTOR', name: 'Khám với bác sĩ' },
+      bookingMethod,
+      isTelehealth,
       branch: row.branch ? { id: row.branch.id, code: row.branch.code, name: row.branch.name, address: row.branch.address } : null,
       invoice: invoice ? {
         id: invoice.id,
@@ -139,6 +151,8 @@ export class StaffAppointmentsService {
       branch: { select: { id: true, code: true, name: true, address: true } },
       bookingOrder: {
         select: {
+          orderCode: true,
+          groupType: true,
           invoice: {
             select: {
               id: true,
@@ -184,6 +198,12 @@ export class StaffAppointmentsService {
           specialty: { select: { id: true, name: true } },
           branchBookingMethod: { select: { bookingMethod: { select: { code: true, name: true } } } },
         },
+      },
+      telehealthSession: {
+        select: { id: true },
+      },
+      bookingMethod: {
+        select: { id: true, code: true, name: true },
       },
       invoice: {
         select: {
@@ -1274,5 +1294,4 @@ export class StaffAppointmentsService {
     }
   }
 }
-
 

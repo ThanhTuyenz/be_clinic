@@ -19,10 +19,9 @@ export class AppointmentItemDto {
   @IsUUID()
   patientProfileId: string;
 
-  @ApiPropertyOptional({ enum: ['SERVICE_PACKAGE', 'DOCTOR'], default: 'DOCTOR' })
-  @IsOptional()
-  @IsIn(['SERVICE_PACKAGE', 'DOCTOR'])
-  bookingType?: 'SERVICE_PACKAGE' | 'DOCTOR';
+  @ApiProperty({ description: 'Mã hình thức đặt khám (SPECIALTY_EXAM, CONSULTATION, ONLINE_CONSULTATION, AFTER_HOURS, HEALTH_PACKAGE)' })
+  @IsString()
+  bookingMethodCode: string;
 
   @ApiPropertyOptional({ description: 'ID slot bác sĩ (uuid hoặc virtual_scheduleId_HH:MM)' })
   @IsOptional()
@@ -33,11 +32,6 @@ export class AppointmentItemDto {
   @IsOptional()
   @IsUUID()
   servicePackageId?: string;
-
-  @ApiPropertyOptional({ format: 'uuid' })
-  @IsOptional()
-  @IsUUID()
-  servicePackageScheduleSlotId?: string;
 
   @ApiPropertyOptional({ maxLength: 2000 })
   @IsOptional()
@@ -88,4 +82,3 @@ export class BatchCheckoutDto {
   @IsString()
   voucherCode?: string;
 }
-

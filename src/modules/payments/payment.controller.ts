@@ -8,6 +8,7 @@ import {
   Post,
   Req,
 } from '@nestjs/common';
+import type { Request } from 'express';
 
 import { ApiBearerAuth, ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
 import { Public } from '../../common/decorators/public.decorator.js';
@@ -23,7 +24,6 @@ export class PaymentController {
 
   constructor(private readonly paymentService: PaymentService) {}
 
-  @Public()
   @ApiBearerAuth('access-token')
   @Post('create')
   @HttpCode(HttpStatus.OK)
@@ -31,37 +31,36 @@ export class PaymentController {
   @ApiResponse({ status: 200, description: 'Tạo link thanh toán thành công' })
   @ApiResponse({ status: 400, description: 'Dữ liệu đầu vào không hợp lệ' })
   @ApiResponse({ status: 404, description: 'Không tìm thấy lịch hẹn' })
-  async createPayment(@Body() dto: CreatePaymentDto) {
+  async createPayment(@Body() dto: CreatePaymentDto, @Req() req: Request) {
     this.logger.log(`[PayOS] Bắt đầu tạo link thanh toán: appointmentId=${dto.appointmentId}, amount=${dto.amount}`);
     const result = await this.paymentService.createPaymentUrl(
       dto.appointmentId,
       dto.amount,
       dto.description,
+      req.user!.id,
     );
     this.logger.log(`[PayOS] Tạo link thành công: orderCode=${result.orderCode}, checkoutUrl=${result.checkoutUrl}`);
     return result;
   }
 
-  @Public()
   @ApiBearerAuth('access-token')
   @Post('simulate-success')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Mô phỏng thanh toán thành công (Dành cho Test/Demo)' })
-  async simulateSuccess(@Body('paymentId') paymentId: string, @Req() req: any) {
-    const accountId = req.user?.id || '';
+  async simulateSuccess(@Body('paymentId') paymentId: string, @Req() req: Request) {
+    const accountId = req.user!.id;
     return await this.paymentService.simulateSuccess(accountId, paymentId);
   }
 
-  @Public()
   @Post('sync')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Đồng bộ kết quả thanh toán từ cổng PayOS Gateway' })
-  async syncPayment(@Body('orderCode') orderCode?: string | number, @Body('appointmentId') appointmentId?: string) {
+  async syncPayment(@Body('orderCode') orderCode: string | number | undefined, @Body('appointmentId') appointmentId: string | undefined, @Req() req: Request) {
     const target = orderCode || appointmentId;
     if (!target) {
       return { success: false, message: 'Thiếu orderCode hoặc appointmentId' };
     }
-    const result = await this.paymentService.syncPayosPaymentStatus(target);
+    const result = await this.paymentService.syncPayosPaymentStatus(target, req.user!.id);
     return {
       success: true,
       data: result,

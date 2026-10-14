@@ -39,4 +39,6 @@ export const TELEMETRY_CONFIG = {
   HOME_CACHE_TTL_PERSONALIZED: 24 * 60 * 60, // 24 giờ (Cache được xóa tự động tức thì khi có hành vi mới hoặc cập nhật hồ sơ)
   HOME_CACHE_TTL_FALLBACK: 24 * 60 * 60,     // 24 giờ cho khách vãng lai
   PROFILE_CACHE_TTL_SECONDS: 7 * 24 * 60 * 60, // 7 ngày cho hồ sơ bệnh án
+  RECENCY_SUPPRESSION_DAYS: 90,
+  FOLLOW_UP_DEFAULT_DAYS: 180,
 } as const;

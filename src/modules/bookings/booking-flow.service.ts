@@ -36,8 +36,13 @@ export class BookingFlowService {
       'chuyen-khoa': 'SPECIALTY_EXAM',
       doctor: 'CONSULTATION',
       'bac-si': 'CONSULTATION',
+      'online-consultation': 'ONLINE_CONSULTATION',
+      online: 'ONLINE_CONSULTATION',
       'health-package': 'HEALTH_PACKAGE',
       'goi-kham': 'HEALTH_PACKAGE',
+      'after-hours': 'AFTER_HOURS',
+      'ngoai-gio': 'AFTER_HOURS',
+      followup: 'SPECIALTY_EXAM',
     };
     const requiredMethodCode = methodCodeMap[rawFlow];
 
@@ -183,7 +188,11 @@ export class BookingFlowService {
       })
       .filter((pkg) => pkg.branches.length > 0);
 
-    const specialtyPackages = formattedPackages.filter((p) => p.specialtyId !== null);
+    const specialtyPackages = formattedPackages.filter((p) =>
+      p.specialtyId !== null &&
+      (parsedSpecialtyId === undefined || p.specialtyId === parsedSpecialtyId) &&
+      (!effectiveBranchId || p.branches.some((branch) => branch.id === effectiveBranchId)),
+    );
     const generalHealthPackages = formattedPackages.filter((p) => p.specialtyId === null || p.bookingMethod?.code === 'HEALTH_PACKAGE');
 
     const selectedBranch = effectiveBranchId
@@ -191,7 +200,7 @@ export class BookingFlowService {
       : null;
 
     // 2. Tùy biến gom dữ liệu chuẩn theo luồng (flow)
-    if (rawFlow === 'doctor' || rawFlow === 'bac-si') {
+    if (rawFlow === 'doctor' || rawFlow === 'bac-si' || rawFlow === 'online-consultation' || rawFlow === 'online') {
       const doctors = await this.prisma.doctor.findMany({
         where: {
           isActive: true,
@@ -210,6 +219,7 @@ export class BookingFlowService {
           biography: true,
           avatarUrl: true,
           consultationFee: true,
+          onlineConsultationFee: true,
           ratingAverage: true,
           ratingCount: true,
           isFeatured: true,
@@ -246,6 +256,7 @@ export class BookingFlowService {
           biography: d.biography,
           avatarUrl: d.avatarUrl,
           consultationFee: Number(d.consultationFee) || 0,
+          onlineConsultationFee: Number(d.onlineConsultationFee ?? d.consultationFee) || 0,
           ratingAverage: Number(d.ratingAverage) || 5.0,
           ratingCount: d.ratingCount,
           isFeatured: d.isFeatured,
@@ -281,17 +292,19 @@ export class BookingFlowService {
 
       return {
         flow: 'doctor',
+        bookingMethodCode: requiredMethodCode || 'CONSULTATION',
         branches,
         selectedBranch,
         bookingMethods,
         doctors: formattedDoctors,
         specialties: Array.from(specialtyMap.values()),
-        services: specialtyPackages,
-        healthPackages: generalHealthPackages.length > 0 ? generalHealthPackages : formattedPackages,
+        services: [],
+        healthPackages: [],
       };
     }
 
-    if (rawFlow === 'specialty' || rawFlow === 'chuyen-khoa') {
+    if (rawFlow === 'specialty' || rawFlow === 'chuyen-khoa' || rawFlow === 'after-hours' || rawFlow === 'ngoai-gio') {
+      const specialtyMethodCode = requiredMethodCode || 'SPECIALTY_EXAM';
       const specialties = await this.prisma.specialty.findMany({
         where: {
           isActive: true,
@@ -305,7 +318,7 @@ export class BookingFlowService {
                       bookingMethods: {
                         some: {
                           isEnabled: true,
-                          bookingMethod: { code: 'SPECIALTY_EXAM', isActive: true },
+                          bookingMethod: { code: specialtyMethodCode, isActive: true },
                         },
                       },
                     },
@@ -320,7 +333,7 @@ export class BookingFlowService {
                       bookingMethods: {
                         some: {
                           isEnabled: true,
-                          bookingMethod: { code: 'SPECIALTY_EXAM', isActive: true },
+                          bookingMethod: { code: specialtyMethodCode, isActive: true },
                         },
                       },
                     },
@@ -343,7 +356,7 @@ export class BookingFlowService {
                 bookingMethods: {
                   some: {
                     isEnabled: true,
-                    bookingMethod: { code: 'SPECIALTY_EXAM', isActive: true },
+                    bookingMethod: { code: specialtyMethodCode, isActive: true },
                   },
                 },
               },
@@ -362,7 +375,7 @@ export class BookingFlowService {
                     {
                       branchBookingMethod: {
                         isEnabled: true,
-                        bookingMethod: { code: 'SPECIALTY_EXAM', isActive: true },
+                        bookingMethod: { code: specialtyMethodCode, isActive: true },
                       },
                     },
                     {
@@ -370,7 +383,7 @@ export class BookingFlowService {
                         some: {
                           branchBookingMethod: {
                             isEnabled: true,
-                            bookingMethod: { code: 'SPECIALTY_EXAM', isActive: true },
+                            bookingMethod: { code: specialtyMethodCode, isActive: true },
                           },
                         },
                       },
@@ -385,6 +398,7 @@ export class BookingFlowService {
 
       return {
         flow: 'specialty',
+        bookingMethodCode: requiredMethodCode || 'SPECIALTY_EXAM',
         branches,
         selectedBranch,
         bookingMethods,
@@ -402,6 +416,7 @@ export class BookingFlowService {
     if (rawFlow === 'health-package' || rawFlow === 'goi-kham') {
       return {
         flow: 'health-package',
+        bookingMethodCode: 'HEALTH_PACKAGE',
         branches,
         selectedBranch,
         bookingMethods,
@@ -450,6 +465,7 @@ export class BookingFlowService {
           biography: true,
           avatarUrl: true,
           consultationFee: true,
+          onlineConsultationFee: true,
           ratingAverage: true,
           ratingCount: true,
           isFeatured: true,
@@ -466,6 +482,7 @@ export class BookingFlowService {
 
     return {
       flow: 'facility',
+      bookingMethodCode: requiredMethodCode || 'SPECIALTY_EXAM',
       branches,
       selectedBranch,
       bookingMethods,
@@ -486,6 +503,7 @@ export class BookingFlowService {
           biography: d.biography,
           avatarUrl: d.avatarUrl,
           consultationFee: Number(d.consultationFee) || 0,
+          onlineConsultationFee: Number(d.onlineConsultationFee ?? d.consultationFee) || 0,
           ratingAverage: Number(d.ratingAverage) || 5.0,
           ratingCount: d.ratingCount,
           isFeatured: d.isFeatured,
@@ -531,9 +549,26 @@ export class BookingFlowService {
           branchBookingMethods: { select: { branchBookingMethod: { select: { branchId: true } } } },
         },
       });
+      if (
+        servicePackage &&
+        effectiveBranchId &&
+        servicePackage.branchBookingMethod?.branchId !== effectiveBranchId &&
+        !servicePackage.branchBookingMethods.some(
+          (link) => link.branchBookingMethod.branchId === effectiveBranchId,
+        )
+      ) {
+        throw new NotFoundException('Gói khám không được áp dụng tại cơ sở đã chọn');
+      }
     }
 
     const packageSpecialtyId = servicePackage?.specialtyId ?? undefined;
+    if (
+      parsedSpecialtyId !== undefined &&
+      packageSpecialtyId !== undefined &&
+      parsedSpecialtyId !== packageSpecialtyId
+    ) {
+      throw new BadRequestException('Dịch vụ khám không thuộc chuyên khoa đã chọn');
+    }
     const targetSpecialtyId = parsedSpecialtyId ?? packageSpecialtyId;
     const sessionType = (servicePackage as any)?.sessionType || 'ALL_DAY';
     const activeDays: number[] = (servicePackage as any)?.activeDaysOfWeek?.length
@@ -624,6 +659,20 @@ export class BookingFlowService {
       };
     }
 
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(targetDateStr)) {
+      throw new BadRequestException('Ngày khám phải có định dạng YYYY-MM-DD');
+    }
+    const [targetYear, targetMonth, targetDay] = targetDateStr.split('-').map(Number);
+    const requestedDate = new Date(Date.UTC(targetYear, targetMonth - 1, targetDay));
+    if (
+      Number.isNaN(requestedDate.getTime()) ||
+      requestedDate.toISOString().slice(0, 10) !== targetDateStr ||
+      requestedDate < minDate ||
+      requestedDate > maxDate
+    ) {
+      throw new BadRequestException('Ngày khám nằm ngoài khoảng thời gian cho phép');
+    }
+
     const [ty, tm, td] = targetDateStr.split('-').map(Number);
     const startOfTargetDate = new Date(Date.UTC(ty, tm - 1, td, 0, 0, 0, 0));
     const endOfTargetDate = new Date(Date.UTC(ty, tm - 1, td, 23, 59, 59, 999));
@@ -655,6 +704,7 @@ export class BookingFlowService {
                 id: true,
                 academicRank: true,
                 consultationFee: true,
+                onlineConsultationFee: true,
                 avatarUrl: true,
                 experienceYears: true,
                 user: { select: { fullName: true } },
@@ -726,6 +776,7 @@ export class BookingFlowService {
         avatarUrl: slot.schedule.doctor.avatarUrl,
         experienceYears: slot.schedule.doctor.experienceYears,
         consultationFee: Number(slot.schedule.doctor.consultationFee) || 0,
+        onlineConsultationFee: Number(slot.schedule.doctor.onlineConsultationFee ?? slot.schedule.doctor.consultationFee) || 0,
         roomId: slot.schedule.room?.id || null,
         roomName: slot.schedule.room?.name || null,
         remainingSlots: remainingForThisDoc,

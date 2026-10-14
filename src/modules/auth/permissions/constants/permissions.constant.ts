@@ -87,7 +87,7 @@ export const PERMISSION_CATALOG: PermissionItem[] = [
   {
     code: AppPermission.APPOINTMENT_CHECKIN,
     label: 'Xác nhận tiếp đón (Check-in) & Cấp số',
-    description: 'Quét mã QR vé hẹn / CCCD, phân bổ buồng khám và đưa bệnh nhân vào hàng đợi bác sĩ.',
+    description: 'Quét mã QR vé hẹn / CCCD, phân bổ phòng khám và đưa bệnh nhân vào hàng đợi bác sĩ.',
     group: 'appointment',
   },
   {
@@ -138,8 +138,8 @@ export const PERMISSION_CATALOG: PermissionItem[] = [
   },
   {
     code: AppPermission.ROOM_MANAGE,
-    label: 'Điều phối & cấu hình buồng khám',
-    description: 'Gán chuyên khoa cho phòng khám, theo dõi tải buồng khám và trạng thái phòng.',
+    label: 'Điều phối & cấu hình phòng khám',
+    description: 'Gán chuyên khoa cho phòng khám, theo dõi tải phòng khám và trạng thái phòng.',
     group: 'operation',
   },
   {

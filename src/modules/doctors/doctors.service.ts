@@ -51,6 +51,7 @@ export class DoctorsService {
         biography: true,
         avatarUrl: true,
         consultationFee: true,
+        onlineConsultationFee: true,
         ratingAverage: true,
         ratingCount: true,
         isFeatured: true,
@@ -79,6 +80,7 @@ export class DoctorsService {
       ...doctor,
       fullName: user.fullName || 'Bác sĩ',
       consultationFee: Number(doctor.consultationFee),
+      onlineConsultationFee: Number(doctor.onlineConsultationFee ?? doctor.consultationFee),
       branchAssignments: user.branchAssignments,
     }));
   }

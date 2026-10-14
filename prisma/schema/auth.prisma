@@ -33,6 +33,7 @@ model User {
   checkedInAppointments    Appointment[]              @relation("CheckedInBy")
   auditLogs                AuditLog[]                 @relation("AuditActor")
   appointmentStatusChanges AppointmentStatusHistory[] @relation("AppointmentStatusActor")
+  telehealthSessionsEnded  TelehealthSession[]        @relation("TelehealthSessionEndedBy")
   aiConversations          AIConversation[]
   aiBookingIntentLogs      AIBookingIntentLog[]
   voucherUsages            VoucherUsage[]

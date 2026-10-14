@@ -77,25 +77,31 @@ export class BehaviorTelemetryService {
     if (!client) return;
 
     for (const key of userKeys) {
-      const pipeline = client.pipeline();
-
       // 1. Tăng điểm chuyên khoa quan tâm (capped at MAX_SPECIALTY_SCORE_CAP)
       if (specialtyId && scoreToAdd > 0) {
         const field = `specialty:${specialtyId}`;
-        const currentVal = await client.hget(key, field);
-        const currentScore = parseInt(currentVal || '0', 10);
-        const newScore = Math.min(currentScore + scoreToAdd, TELEMETRY_CONFIG.MAX_SPECIALTY_SCORE_CAP);
-        pipeline.hset(key, field, newScore.toString());
+        await client.eval(
+          'local current = tonumber(redis.call("HGET", KEYS[1], ARGV[1]) or "0"); local next = math.min(current + tonumber(ARGV[2]), tonumber(ARGV[3])); redis.call("HSET", KEYS[1], ARGV[1], next); return next;',
+          1,
+          key,
+          field,
+          scoreToAdd,
+          TELEMETRY_CONFIG.MAX_SPECIALTY_SCORE_CAP,
+        );
       }
 
+      const pipeline = client.pipeline();
+      const eventAt = Date.now().toString();
       // 2. Lưu từ khóa tìm kiếm gần nhất
       if (dto.actionType === TrackingActionType.SEARCH && dto.searchQuery?.trim()) {
         pipeline.hset(key, 'last_search_query', dto.searchQuery.trim().toLowerCase());
+        pipeline.hset(key, 'last_search_at', eventAt);
       }
 
       // 3. Lưu gói khám bỏ dở ở bước thanh toán
       if (dto.actionType === TrackingActionType.DROP_OFF && dto.targetPackageId) {
         pipeline.hset(key, 'drop_off_pkg', dto.targetPackageId);
+        pipeline.hset(key, 'drop_off_at', eventAt);
       }
 
       // Gia hạn TTL cho dữ liệu hành vi (14 ngày)
@@ -184,10 +190,10 @@ export class BehaviorTelemetryService {
     try {
       const deletePromises: Promise<any>[] = [];
       if (userId) {
-        deletePromises.push(this.redis.deletePattern(`rec:home:u:${userId}:*`));
+        deletePromises.push(this.redis.deletePattern(`rec:v2:home:u:${userId}:*`));
       }
       if (sessionId) {
-        deletePromises.push(this.redis.deletePattern(`rec:home:sess:${sessionId}:*`));
+        deletePromises.push(this.redis.deletePattern(`rec:v2:home:sess:${sessionId}*`));
       }
       if (deletePromises.length > 0) {
         await Promise.all(deletePromises);
@@ -219,6 +225,8 @@ export class BehaviorTelemetryService {
     const specialtyScoreMap = new Map<number, number>();
     let lastSearchQuery: string | undefined;
     let dropOffPkgId: string | undefined;
+    let lastSearchAt = 0;
+    let dropOffAt = 0;
 
     for (const key of keys) {
       try {
@@ -233,9 +241,17 @@ export class BehaviorTelemetryService {
               specialtyScoreMap.set(specId, Math.max(specialtyScoreMap.get(specId) || 0, score));
             }
           } else if (field === 'last_search_query' && val) {
-            lastSearchQuery = String(val);
+            const eventAt = Number(hashData.last_search_at || 0);
+            if (eventAt >= lastSearchAt) {
+              lastSearchAt = eventAt;
+              lastSearchQuery = String(val);
+            }
           } else if (field === 'drop_off_pkg' && val) {
-            dropOffPkgId = String(val);
+            const eventAt = Number(hashData.drop_off_at || 0);
+            if (eventAt >= dropOffAt) {
+              dropOffAt = eventAt;
+              dropOffPkgId = String(val);
+            }
           }
         }
       } catch { }

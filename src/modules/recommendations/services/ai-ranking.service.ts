@@ -31,7 +31,6 @@ export class AiRankingService {
 
   async evaluateHybridWithGemini(context: {
     profile: {
-      fullName: string;
       age: number;
       gender: string;
       bmi: number | null;
@@ -60,7 +59,7 @@ export class AiRankingService {
     if (!this.aiClient || context.candidates.length === 0) return [];
 
     try {
-      const prompt = this.buildHybridPrompt(context);
+      const prompt = this.buildHybridPrompt(this.sanitizeContext(context));
 
       const generatePromise = this.aiClient.models.generateContent({
         model: this.modelName,
@@ -103,6 +102,7 @@ export class AiRankingService {
       const result: RecommendedPackageItemDto[] = [];
 
       for (const sel of selections) {
+        if (typeof sel?.packageId !== 'string') continue;
         const match = candidateMap.get(sel.packageId);
         if (!match || addedIds.has(match.id)) continue;
 
@@ -119,8 +119,14 @@ export class AiRankingService {
           specialtyId: match.specialtyId,
           specialtyName: match.specialtyName,
           priority: ['HIGH', 'MEDIUM', 'LOW'].includes(sel.priority) ? sel.priority : 'MEDIUM',
-          badge: sel.badge || (finalSourceType === 'SEARCH_INTENT' ? 'Phù hợp tìm kiếm' : 'Đề xuất chuyên khoa'),
-          clinicalReason: sel.clinicalReason || 'Phù hợp với nhu cầu tầm soát và thể trạng sức khỏe.',
+          badge: this.limitText(
+            sel.badge || (finalSourceType === 'SEARCH_INTENT' ? 'Phù hợp tìm kiếm' : 'Đề xuất chuyên khoa'),
+            80,
+          ),
+          clinicalReason: this.limitText(
+            sel.clinicalReason || 'Phù hợp với nhu cầu tầm soát và thể trạng sức khỏe.',
+            300,
+          ),
           sourceType: finalSourceType,
         });
       }
@@ -134,7 +140,6 @@ export class AiRankingService {
 
   private buildHybridPrompt(context: {
     profile: {
-      fullName: string;
       age: number;
       gender: string;
       bmi: number | null;
@@ -166,7 +171,6 @@ Hãy đánh giá hồ sơ bệnh nhân và hành vi quan tâm gần đây để 
 
 THÔNG TIN BỆNH NHÂN:
 ${context.profile ? `
-- Họ tên: ${context.profile.fullName}
 - Tuổi: ${context.profile.age} tuổi
 - Giới tính: ${context.profile.gender}
 - Chỉ số BMI: ${context.profile.bmi ?? 'Chưa ghi nhận'}
@@ -208,6 +212,47 @@ QUY TẮC RE-RANKING:
    - Khi theo hồ sơ: Nêu rõ căn cứ theo độ tuổi và tiền sử bệnh của bệnh nhân.
    - Khi theo hành vi: Giải thích dựa trên nhu cầu tìm kiếm và chuyên khoa người dùng vừa quan tâm gần đây.
 `;
+  }
+
+  private sanitizeContext<T extends {
+    profile: {
+      medicalHistory: string;
+      allergies: string;
+    } | null;
+    behaviorContext: {
+      topSpecialties: string;
+      lastSearchQuery: string;
+      dropOffPkgName?: string;
+    };
+    candidates: Array<{ name: string; description: string }>;
+  }>(context: T): T {
+    const profile = context.profile
+      ? {
+          ...context.profile,
+          medicalHistory: this.limitText(context.profile.medicalHistory, 500),
+          allergies: this.limitText(context.profile.allergies, 300),
+        }
+      : null;
+
+    return {
+      ...context,
+      profile,
+      behaviorContext: {
+        ...context.behaviorContext,
+        topSpecialties: this.limitText(context.behaviorContext.topSpecialties, 300),
+        lastSearchQuery: this.limitText(context.behaviorContext.lastSearchQuery, 200),
+        dropOffPkgName: this.limitText(context.behaviorContext.dropOffPkgName, 200),
+      },
+      candidates: context.candidates.map((candidate) => ({
+        ...candidate,
+        name: this.limitText(candidate.name, 200),
+        description: this.limitText(candidate.description, 300),
+      })),
+    };
+  }
+
+  private limitText(value: unknown, maxLength: number): string {
+    return typeof value === 'string' ? value.trim().slice(0, maxLength) : '';
   }
 
   private safeParseSelections(rawText?: string): any[] {

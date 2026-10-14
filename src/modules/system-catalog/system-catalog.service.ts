@@ -65,8 +65,8 @@ export class SystemCatalogService {
     if (this.redis.isEnabled()) {
       try {
         await this.redis.deletePattern('cache:public:*');
-        await this.redis.deletePattern('rec:home:*');
-        await this.redis.deletePattern('rec:profile:*');
+        await this.redis.deletePattern('rec:v2:home:*');
+        await this.redis.deletePattern('rec:v2:profile:*');
       } catch (err: any) {
         console.warn('[SystemCatalogService] Failed to invalidate public cache:', err?.message);
       }

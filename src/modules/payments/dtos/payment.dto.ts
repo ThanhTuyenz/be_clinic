@@ -81,6 +81,7 @@ export class PayosWebhookDto {
  * Response trả về cho client sau khi tạo link thanh toán thành công
  */
 export interface PaymentLinkResponse {
+  holdExpiresAt: string;
   orderCode: number;
   amount?: number;
   description?: string;

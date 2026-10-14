@@ -4,7 +4,6 @@ import { Public } from '../../common/decorators/public.decorator.js';
 import { SkipPermissions } from 'src/common/decorators';
 import { SpecialtiesService } from './specialties.service.js';
 import { PackagesService } from './packages.service.js';
-import { PackageSchedulesService } from './package-schedules.service.js';
 
 @ApiTags('Specialties & Services')
 @Public()
@@ -14,7 +13,6 @@ export class SpecialtiesController {
   constructor(
     private readonly specialtiesService: SpecialtiesService,
     private readonly packagesService: PackagesService,
-    private readonly packageSchedulesService: PackageSchedulesService,
   ) {}
 
   /**
@@ -160,31 +158,6 @@ export class SpecialtiesController {
   @ApiQuery({ name: 'branchId', required: false })
   getHealthPackages(@Query('branchId') branchId?: string) {
     return this.packagesService.healthPackages(branchId);
-  }
-
-  /**
-   * Lịch khám của gói dịch vụ
-   */
-  @Get(['services/schedule-dates', 'public/service-package-schedule-dates'])
-  @ApiOperation({ summary: 'Các ngày có lịch khám cho gói dịch vụ' })
-  getServicePackageScheduleDates(
-    @Query('packageId') packageId: string,
-    @Query('branchId') branchId?: string,
-  ) {
-    return this.packageSchedulesService.getPackageScheduleDates(packageId, branchId);
-  }
-
-  /**
-   * Khung giờ của gói dịch vụ
-   */
-  @Get(['services/timeslots', 'public/service-package-timeslots'])
-  @ApiOperation({ summary: 'Khung giờ khám cho gói dịch vụ theo ngày' })
-  getServicePackageTimeslots(
-    @Query('packageId') packageId: string,
-    @Query('date') date: string,
-    @Query('branchId') branchId?: string,
-  ) {
-    return this.packageSchedulesService.getPackageTimeslots(packageId, date, branchId);
   }
 
   /**
