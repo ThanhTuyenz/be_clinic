@@ -126,14 +126,7 @@ export class BehaviorTelemetryService {
       pipeline.zincrby('rec:global:package_views', 1, dto.targetPackageId);
       pipeline.zincrby('rec:global:popular_packages', 1, dto.targetPackageId);
     }
-    if (dto.actionType === TrackingActionType.SEARCH && dto.searchQuery?.trim()) {
-      const q = dto.searchQuery.trim().toLowerCase();
-      const dateKey = new Date().toISOString().slice(0, 10);
-      const dailyKey = `rec:global:search_queries:${dateKey}`;
-      pipeline.zincrby(dailyKey, 1, q);
-      pipeline.expire(dailyKey, 172800);
-      pipeline.zincrby('rec:global:search_queries', 1, q);
-    }
+    // Executed searches are counted by SemanticSearchService, not again by behavior tracking.
 
     await pipeline.exec();
   }
@@ -154,33 +147,6 @@ export class BehaviorTelemetryService {
       }
     }
 
-    // 2. Ghi log tìm kiếm
-    if (dto.actionType === TrackingActionType.SEARCH && dto.searchQuery?.trim()) {
-      try {
-        const keyword = dto.searchQuery.trim().toLowerCase();
-        if (keyword.length >= 2) {
-          const dateKey = new Date().toISOString().slice(0, 10);
-          await this.prisma.searchLog.upsert({
-            where: {
-              keyword_dateKey_hasResults: {
-                keyword,
-                dateKey,
-                hasResults: true,
-              },
-            },
-            update: { count: { increment: 1 } },
-            create: {
-              keyword,
-              dateKey,
-              count: 1,
-              hasResults: true,
-            },
-          });
-        }
-      } catch (err: any) {
-        this.logger.debug(`[Telemetry] Failed to persist DB search log: ${err?.message}`);
-      }
-    }
   }
 
   /**

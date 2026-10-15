@@ -465,7 +465,7 @@ export class PaymentService {
       this.logger.log(`[PayOS Sync] Đang truy vấn trạng thái từ PayOS Gateway cho orderCode: ${orderCode}`);
       const paymentInfo: any = typeof (payos as any).getPaymentLinkInformation === 'function'
         ? await (payos as any).getPaymentLinkInformation(orderCode)
-        : await payos.paymentRequests.get(orderCode);
+        : await payos.paymentRequests.get(orderCode, { timeout: 5000, maxRetries: 0 });
 
       this.logger.log(`[PayOS Sync] Kết quả trạng thái PayOS [${paymentInfo.status}] cho orderCode ${orderCode}`);
 

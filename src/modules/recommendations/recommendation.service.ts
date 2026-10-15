@@ -454,8 +454,8 @@ export class RecommendationService {
     return this.behaviorTelemetryService.trackUserBehavior(dto, userId);
   }
 
-  async semanticSearchPackages(query: string, branchId?: string) {
-    return this.semanticSearchService.semanticSearchPackages(query, branchId);
+  async semanticSearchPackages(query: string, branchId?: string, context: { sessionId?: string; accountId?: string } = {}) {
+    return this.semanticSearchService.semanticSearchPackages(query, branchId, context);
   }
 
   async suggestSymptomsForPackage(name: string, specialtyName?: string): Promise<{ symptoms: string[] }> {
@@ -495,7 +495,7 @@ export class RecommendationService {
     });
     if (!profile) throw new NotFoundException('Không tìm thấy hồ sơ bệnh nhân.');
 
-    const staffRoles = ['ADMIN', 'SUPER_ADMIN', 'BRANCH_MANAGER', 'RECEPTIONIST', 'DOCTOR'];
+    const staffRoles = ['CHAIN_MANAGER', 'SUPER_ADMIN', 'BRANCH_MANAGER', 'RECEPTIONIST', 'DOCTOR'];
     if (!actorId || (!staffRoles.includes(String(actorRole).toUpperCase()) && profile.accountId !== actorId)) {
       throw new ForbiddenException('Bạn không có quyền truy cập gợi ý của hồ sơ này.');
     }

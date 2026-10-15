@@ -11,6 +11,7 @@ import { PaymentWebhookDto } from '../payments/dtos/payment-webhook.dto.js';
 import { RescheduleAppointmentDto } from './dtos/reschedule-appointment.dto.js';
 import { RealtimeGateway } from '../../infrastructure/realtime/realtime.gateway.js';
 import { NotificationService } from '../notifications/notification.service.js';
+import { SearchAnalyticsService } from '../search-analytics/search-analytics.service.js';
 
 const ACTIVE_APPOINTMENT_STATUSES: AppointmentStatus[] = [
   'HOLD', 'CONFIRMED', 'CHECKED_IN',
@@ -45,6 +46,7 @@ export class BookingService {
     private readonly vouchersService: VouchersService,
     private readonly realtimeGateway: RealtimeGateway,
     private readonly notifications: NotificationService,
+    private readonly analytics: SearchAnalyticsService,
   ) {}
 
   private isDoctorBookingMethod(code: string): boolean {
@@ -169,6 +171,7 @@ export class BookingService {
             data: {
               patientProfileId: profile.id,
               branchId: doctorSlot.schedule.branchId,
+              ...await this.analytics.attribution(tx, accountId, dto, { branchId: doctorSlot.schedule.branchId, doctorId: doctorSlot.schedule.doctor.id }),
               bookingMethodId: bookingMethod?.id ?? null,
               scheduleSlotId: doctorSlot.id,
               servicePrice: price,
@@ -337,6 +340,7 @@ export class BookingService {
           data: {
             patientProfileId: profile.id,
             branchId: targetBranchId,
+            ...await this.analytics.attribution(tx, accountId, dto, { branchId: targetBranchId, packageId: dto.servicePackageId }),
             bookingMethodId,
             scheduleSlotId: activeSlot.id,
             servicePackageId: servicePackage.id,
@@ -453,7 +457,7 @@ export class BookingService {
         include: {
           invoice: {
             include: {
-              appointment: true,
+              appointment: { include: { statusHistories: { orderBy: { createdAt: 'desc' }, take: 1 } } },
               bookingOrder: {
                 include: {
                   appointments: {
@@ -468,7 +472,7 @@ export class BookingService {
         },
       });
       if (!payment) throw new NotFoundException('Không tìm thấy giao dịch');
-      if (payment.providerTransactionId === dto.providerTransactionId && ['SUCCESS', 'REFUNDED', 'CANCELLED'].includes(payment.status)) {
+      if (payment.providerTransactionId === dto.providerTransactionId && ['SUCCESS', 'REFUNDED', 'REFUND_REQUIRED', 'CANCELLED'].includes(payment.status)) {
         return {
           status: payment.status,
           appointmentStatus: payment.invoice.appointment?.status ?? (payment.invoice.bookingOrder?.status as any),
@@ -499,16 +503,18 @@ export class BookingService {
 
       const appointment = payment.invoice.appointment;
       if (appointment) {
-        if (appointment.status === 'HOLD' && appointment.holdExpiresAt && appointment.holdExpiresAt > new Date()) {
+        // A HOLD still owns its capacity, including while expiry reconciliation is running.
+        if (appointment.status === 'HOLD') {
           return this.confirmPaid(tx, payment.id, payment.invoiceId, appointment.id, provider, dto, false);
         }
         // Late payment: appointment was CANCELLED due to timeout, but user paid anyway
-        if (appointment.status === 'CANCELLED' && appointment.holdExpiresAt && appointment.holdExpiresAt <= new Date()) {
+        if (appointment.status === 'CANCELLED' && appointment.holdExpiresAt && appointment.holdExpiresAt <= new Date()
+          && appointment.statusHistories[0]?.reason === 'PAYMENT_HOLD_TIMEOUT') {
            const doctorReserved = appointment.scheduleSlotId ? await tx.$executeRaw`UPDATE "doctor_schedule_slots" SET "occupied_count" = "occupied_count" + 1, "updated_at" = NOW() WHERE "id" = ${appointment.scheduleSlotId}::uuid AND "occupied_count" < "capacity" AND "is_active" = TRUE` : 0;
           if (doctorReserved === 1) return this.confirmPaid(tx, payment.id, payment.invoiceId, appointment.id, provider, dto, true);
-          await tx.paymentTransaction.update({ where: { id: payment.id }, data: { provider, providerTransactionId: dto.providerTransactionId, status: 'REFUNDED', paidAt: new Date(), rawPayload: dto.payload as Prisma.InputJsonValue } });
+          await tx.paymentTransaction.update({ where: { id: payment.id }, data: { provider, providerTransactionId: dto.providerTransactionId, status: 'REFUND_REQUIRED', paidAt: new Date(), rawPayload: dto.payload as Prisma.InputJsonValue } });
           await tx.outboxEvent.create({ data: { aggregateType: 'PaymentTransaction', aggregateId: payment.id, eventType: 'payment.refund.required', payload: { paymentId: payment.id, appointmentId: appointment.id, reason: 'LATE_SUCCESS_SLOT_FULL' } } });
-          return { status: PaymentStatus.REFUNDED, appointmentStatus: AppointmentStatus.CANCELLED };
+          return { status: PaymentStatus.REFUND_REQUIRED, appointmentStatus: AppointmentStatus.CANCELLED };
         }
         return { status: payment.status, appointmentStatus: appointment.status };
       }
@@ -531,6 +537,8 @@ export class BookingService {
         status: true,
         holdExpiresAt: true,
         bookingCode: true,
+        bookingMethod: { select: { code: true, name: true } },
+        telehealthSession: { select: { id: true } },
         queueNumber: true,
         invoice: { select: { payments: { select: { status: true }, orderBy: { createdAt: 'desc' }, take: 1 } } },
         qrToken: { select: { id: true } },
@@ -593,6 +601,7 @@ export class BookingService {
     }
 
     const doctorSlot = row.scheduleSlot;
+    const isTelehealth = Boolean(row.telehealthSession || row.bookingMethod?.code === 'ONLINE_CONSULTATION');
     const room = doctorSlot?.schedule.room;
     const branch = doctorSlot?.schedule.branch ?? row.branch;
     const estimatedQueueNumber = row.queueNumber;
@@ -629,9 +638,11 @@ export class BookingService {
       paymentStatus: row.invoice?.payments[0]?.status ?? null,
       hasQr: Boolean(row.qrToken),
       bookingCode: row.bookingCode,
-      queueNumber: row.queueNumber,
-      estimatedQueueNumber: row.queueNumber ?? estimatedQueueNumber,
-      room: room ? { id: room.id, code: room.code, name: room.name } : null,
+      isTelehealth,
+      bookingMethod: row.bookingMethod,
+      queueNumber: isTelehealth ? null : row.queueNumber,
+      estimatedQueueNumber: isTelehealth ? null : row.queueNumber ?? estimatedQueueNumber,
+      room: !isTelehealth && room ? { id: room.id, code: room.code, name: room.name } : null,
       branch: branch ? { id: branch.id, name: branch.name, address: branch.address } : null,
       appointments: siblingAppts.length > 0 ? siblingAppts : undefined,
     };
@@ -748,7 +759,7 @@ export class BookingService {
         orderCode: (row as any).bookingOrder?.orderCode ?? null,
         groupType: (row as any).bookingOrder?.groupType ?? null,
         status: row.status,
-        queueNumber: row.queueNumber,
+        queueNumber: isTelehealth ? null : row.queueNumber,
         holdExpiresAt: row.holdExpiresAt,
         rescheduleCount: (row as any).rescheduleCount ?? 0,
         createdAt: row.createdAt,
@@ -767,7 +778,7 @@ export class BookingService {
         healthPackage: row.servicePackage ? { id: row.servicePackage.id, name: row.servicePackage.name } : null,
         branch: branch ? { id: branch.id, name: branch.name, address: branch.address } : null,
         branchId: branch?.id ?? row.branchId,
-        room: room ? { id: room.id, code: room.code, name: room.name } : null,
+        room: !isTelehealth && room ? { id: room.id, code: room.code, name: room.name } : null,
         totalAmount: Number(row.invoice?.totalAmount ?? row.servicePrice ?? 0),
         invoiceStatus: row.invoice?.status ?? null,
         paymentStatus: row.invoice?.payments[0]?.status ?? null,
@@ -784,6 +795,8 @@ export class BookingService {
         status: true,
         queueNumber: true,
         servicePrice: true,
+        bookingMethod: { select: { code: true, name: true } },
+        telehealthSession: { select: { id: true } },
         patientProfile: {
           select: {
             id: true,
@@ -840,7 +853,8 @@ export class BookingService {
       },
     });
     if (!row) throw new NotFoundException('Không tìm thấy lịch hẹn');
-    if (!['CONFIRMED', 'CHECKED_IN'].includes(row.status)) throw new ConflictException('Lịch hẹn chưa sẵn sàng check-in');
+    const isTelehealth = Boolean(row.telehealthSession || row.bookingMethod?.code === 'ONLINE_CONSULTATION');
+    if (!(isTelehealth ? ['CONFIRMED', 'CHECKED_IN', 'IN_EXAMINATION', 'COMPLETED'] : ['CONFIRMED', 'CHECKED_IN']).includes(row.status)) throw new ConflictException('Lịch hẹn chưa được xác nhận');
     const doctorSlot = row.scheduleSlot;
     const room = doctorSlot?.schedule.room;
     const branch = doctorSlot?.schedule.branch ?? row.branch;
@@ -850,7 +864,7 @@ export class BookingService {
     const tokenHash = createHash('sha256').update(rawToken).digest('hex');
     const appointmentDate = (doctorSlot?.schedule.workDate ? doctorSlot.schedule.workDate.toISOString().slice(0, 10) : new Date().toISOString().slice(0, 10));
     const expiresAt = new Date(`${appointmentDate}T23:59:59.999+07:00`);
-    await this.prisma.appointmentQrToken.upsert({
+    if (!isTelehealth) await this.prisma.appointmentQrToken.upsert({
       where: { appointmentId: row.id },
       update: { tokenHash, expiresAt, usedAt: row.status === 'CHECKED_IN' ? new Date() : null },
       create: { appointmentId: row.id, tokenHash, expiresAt },
@@ -862,15 +876,17 @@ export class BookingService {
     return {
       appointmentId: row.id,
       bookingCode: row.bookingCode,
-      qrPayload: `VITACARE_CHECKIN:${rawToken}`,
+      qrPayload: isTelehealth ? null : `VITACARE_CHECKIN:${rawToken}`,
       expiresAt,
       status: row.status,
-      queueNumber: row.queueNumber,
-      estimatedQueueNumber,
+      isTelehealth,
+      bookingMethod: row.bookingMethod,
+      queueNumber: isTelehealth ? null : row.queueNumber,
+      estimatedQueueNumber: isTelehealth ? null : estimatedQueueNumber,
       appointmentDate,
       startTime: doctorSlot?.startTime ? doctorSlot.startTime.toISOString().slice(11, 16) : null,
       endTime: doctorSlot?.endTime ? doctorSlot.endTime.toISOString().slice(11, 16) : null,
-      room: room ? { id: room.id, code: room.code, name: room.name } : null,
+      room: !isTelehealth && room ? { id: room.id, code: room.code, name: room.name } : null,
       branch: { id: branch.id, name: branch.name, address: branch.address },
       doctor: doc ? { id: doc.id, fullName: doc.user?.fullName ?? '', academicRank: doc.academicRank ?? null } : null,
       specialty: specialtyName,
@@ -1373,7 +1389,7 @@ export class BookingService {
     const rawToken = String(rawPayload || '').trim().replace(/^VITACARE_CHECKIN:/, '');
     if (!rawToken) throw new BadRequestException('Thiếu mã QR check-in');
     const actor = await this.prisma.user.findUnique({ where: { id: actorId || '' }, select: { role: true } });
-    if (!actor || !['ADMIN', 'BRANCH_MANAGER', 'RECEPTIONIST'].includes(actor.role)) throw new ForbiddenException('Không có quyền check-in bệnh nhân');
+    if (!actor || !['CHAIN_MANAGER', 'BRANCH_MANAGER', 'RECEPTIONIST'].includes(actor.role)) throw new ForbiddenException('Không có quyền check-in bệnh nhân');
     const tokenHash = createHash('sha256').update(rawToken).digest('hex');
     return this.prisma.$transaction(async (tx) => {
       const qr = await tx.appointmentQrToken.findUnique({
@@ -1474,7 +1490,7 @@ export class BookingService {
 
   async checkInByNationalId(rawInput: string, actorId: string, branchId?: string) {
     const actor = await this.prisma.user.findUnique({ where: { id: actorId }, select: { role: true } });
-    if (!actor || !['ADMIN', 'BRANCH_MANAGER', 'RECEPTIONIST'].includes(actor.role)) {
+    if (!actor || !['CHAIN_MANAGER', 'BRANCH_MANAGER', 'RECEPTIONIST'].includes(actor.role)) {
       throw new ForbiddenException('Không có quyền check-in bệnh nhân');
     }
 
@@ -1717,6 +1733,7 @@ export class BookingService {
             appointmentData.push({
               patientProfileId: profile.id,
               branchId: doctorSlot.schedule.branchId,
+              ...await this.analytics.attribution(tx, accountId, item, { branchId: doctorSlot.schedule.branchId, doctorId: doctorSlot.schedule.doctor.id }),
               bookingMethodId: doctorMethod?.id ?? null,
               scheduleSlotId: doctorSlot.id,
               servicePrice: price,
@@ -1808,6 +1825,7 @@ export class BookingService {
             appointmentData.push({
               patientProfileId: profile.id,
               branchId: targetBranchId,
+              ...await this.analytics.attribution(tx, accountId, item, { branchId: targetBranchId, packageId: pkg.id }),
               bookingMethodId: pkgMethodId,
               scheduleSlotId: doctorSlot.id,
               servicePackageId: pkg.id,

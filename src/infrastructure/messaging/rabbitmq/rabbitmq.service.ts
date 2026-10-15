@@ -4,6 +4,7 @@ import * as amqp from 'amqplib';
 import QRCode from 'qrcode';
 import { PrismaService } from '../../database/prisma/prisma.service.js';
 import { BookingService } from '../../../modules/bookings/booking.service.js';
+import { PaymentReconciliationService } from '../../../modules/payments/payment-reconciliation.service.js';
 import { MailsService } from '../../mail/mails.service.js';
 import { RecommendationService } from '../../../modules/recommendations/recommendation.service.js';
 import { HttpSmsService } from '../../httpsms/httpsms.service.js';
@@ -27,6 +28,7 @@ export class RabbitMqService implements OnModuleInit, OnModuleDestroy {
     private readonly recommendationService: RecommendationService,
     private readonly httpSmsService: HttpSmsService,
     private readonly embeddingService: EmbeddingService,
+    private readonly paymentReconciliation: PaymentReconciliationService,
   ) {}
 
   async onModuleInit(): Promise<void> {
@@ -137,9 +139,11 @@ export class RabbitMqService implements OnModuleInit, OnModuleDestroy {
         const processed = await this.prisma.processedEvent.findUnique({ where: { eventId: payload.eventId } });
         if (!processed) {
           if (payload.appointmentIds?.length) {
-            await this.bookingService.expireBookingOrderHold(payload.appointmentIds);
+            for (const appointmentId of payload.appointmentIds) {
+              await this.paymentReconciliation.expireHoldIfUnpaid(appointmentId);
+            }
           } else if (payload.appointmentId) {
-            await this.bookingService.expireHold(payload.appointmentId);
+            await this.paymentReconciliation.expireHoldIfUnpaid(payload.appointmentId);
           } else {
             throw new Error('Hold expiration event thiếu appointmentId/appointmentIds');
           }
@@ -405,7 +409,7 @@ export class RabbitMqService implements OnModuleInit, OnModuleDestroy {
     });
     for (const appointment of stale) {
       try {
-        await this.bookingService.expireHold(appointment.id);
+        await this.paymentReconciliation.expireHoldIfUnpaid(appointment.id);
       } catch (error) {
         this.logger.error(`Reconciliation failed for appointment ${appointment.id}`, error);
       }

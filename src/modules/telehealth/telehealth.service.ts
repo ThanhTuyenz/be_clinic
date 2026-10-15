@@ -19,6 +19,7 @@ export class TelehealthService {
       where: { id: appointmentId },
       select: {
         id: true,
+        status: true,
         bookingMethod: { select: { code: true } },
         patientProfile: { select: { accountId: true } },
         scheduleSlot: { select: { schedule: { select: { doctor: { select: { userId: true } } } } } },
@@ -30,7 +31,7 @@ export class TelehealthService {
     }
     const normalizedRole = String(role || '').toUpperCase();
     const allowed =
-      normalizedRole === 'ADMIN' ||
+      normalizedRole === 'CHAIN_MANAGER' ||
       normalizedRole === 'BRANCH_MANAGER' ||
       (normalizedRole === 'PATIENT' && appointment.patientProfile.accountId === userId) ||
       (normalizedRole === 'DOCTOR' && appointment.scheduleSlot?.schedule.doctor.userId === userId);
@@ -47,6 +48,9 @@ export class TelehealthService {
     const role: 'DOCTOR' | 'PATIENT' =
       user.role === 'DOCTOR' || Boolean(user.doctor) ? 'DOCTOR' : 'PATIENT';
     const appointment = await this.authorizeAppointment(appointmentId, userId, role);
+    if (!['CONFIRMED', 'CHECKED_IN', 'IN_EXAMINATION'].includes(appointment.status)) {
+      throw new ForbiddenException('Lịch hẹn chưa được xác nhận hoặc đã kết thúc.');
+    }
     if (
       (role === 'DOCTOR' && appointment.scheduleSlot?.schedule.doctor.userId !== userId) ||
       (role === 'PATIENT' && appointment.patientProfile.accountId !== userId)
@@ -287,22 +291,16 @@ export class TelehealthService {
     role?: string,
   ) {
     if (!data?.endedByUserId) throw new ForbiddenException('Thiếu người kết thúc phiên tư vấn.');
+    const normalizedRole = String(role || '').toUpperCase();
+    if (!['DOCTOR', 'ADMIN', 'SUPER_ADMIN'].includes(normalizedRole)) {
+      throw new ForbiddenException('Chỉ bác sĩ hoặc quản trị viên mới được hoàn tất buổi tư vấn.');
+    }
     await this.authorizeAppointment(appointmentId, data.endedByUserId, role);
     const room = this.activeRooms.get(appointmentId);
     const now = new Date();
     const startedAt = room?.startedAt || now;
     const durationSeconds = Math.max(0, Math.round((now.getTime() - startedAt.getTime()) / 1000));
     const chatMessages = room?.messages || [];
-
-    if (room) {
-      room.status = 'COMPLETED';
-      room.endedAt = now;
-
-      if (room.doctor?.socketId) this.socketMap.delete(room.doctor.socketId);
-      if (room.patient?.socketId) this.socketMap.delete(room.patient.socketId);
-
-      this.activeRooms.delete(appointmentId);
-    }
 
     try {
       // 1. Lưu bản ghi phiên tư vấn vào bảng telehealth_sessions
@@ -352,6 +350,14 @@ export class TelehealthService {
         }
         return session;
       });
+
+      if (room) {
+        room.status = 'COMPLETED';
+        room.endedAt = now;
+        if (room.doctor?.socketId) this.socketMap.delete(room.doctor.socketId);
+        if (room.patient?.socketId) this.socketMap.delete(room.patient.socketId);
+        this.activeRooms.delete(appointmentId);
+      }
 
       this.logger.log(
         `[Telehealth] Session saved to DB for appointment ${appointmentId}. Duration: ${durationSeconds}s, Messages: ${chatMessages.length}`,

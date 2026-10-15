@@ -218,7 +218,7 @@ export class PatientProfilesService {
       where: { id: userId },
       select: { role: true },
     });
-    const isStaff = user && ['ADMIN', 'SUPER_ADMIN', 'BRANCH_MANAGER', 'RECEPTIONIST', 'DOCTOR'].includes(user.role);
+    const isStaff = user && ['CHAIN_MANAGER', 'SUPER_ADMIN', 'BRANCH_MANAGER', 'RECEPTIONIST', 'DOCTOR'].includes(user.role);
     if (!isStaff && profile.accountId !== userId) {
       throw new ForbiddenException('Không có quyền truy cập hồ sơ bệnh án này');
     }

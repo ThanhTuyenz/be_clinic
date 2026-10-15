@@ -4,6 +4,7 @@
 
 enum UserRole {
   ADMIN          @map("admin")
+  CHAIN_MANAGER  @map("chain_manager")
   BRANCH_MANAGER @map("branch_manager")
   DOCTOR         @map("doctor")
   RECEPTIONIST   @map("receptionist")

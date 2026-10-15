@@ -1,11 +1,17 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, ServiceUnavailableException } from '@nestjs/common';
+import { containsSearchPhrase, matchesSearchConstraints, normalizeSearch, parseSearchIntent, searchTextScore } from '../../../common/utils/search-query.js';
 import { PrismaService } from '../../../infrastructure/database/prisma/prisma.service.js';
 import { RedisService } from '../../../infrastructure/redis/redis.service.js';
 import { EmbeddingService, PackageForRetrieval } from '../../../infrastructure/embedding/embedding.service.js';
+import { SearchAnalyticsService } from '../../search-analytics/search-analytics.service.js';
+import { vietnamDateKey } from '../../search-analytics/analytics-time.js';
 
 export interface SemanticSearchResult {
   query: string;
+  searchId?: string;
+  branchId?: string;
   total: number;
+  partial?: boolean;
   packages: Array<{
     id: string;
     code: string;
@@ -15,6 +21,9 @@ export interface SemanticSearchResult {
     specialtyName: string;
     similarityScore: number;
     description: string;
+    branchId?: string;
+    bookingMethodCode?: string;
+    specialtyId?: number | null;
   }>;
   doctors: Array<{
     id: string;
@@ -43,26 +52,67 @@ export class SemanticSearchService {
     private readonly prisma: PrismaService,
     private readonly redis: RedisService,
     private readonly embeddingService: EmbeddingService,
+    private readonly analytics: SearchAnalyticsService,
   ) { }
 
   /**
    * Tìm kiếm thông minh đa thực thể (Gói khám, Bác sĩ, Cơ sở) bằng Vector Embeddings & Heuristic Matcher
    */
-  async semanticSearchPackages(query: string, branchId?: string): Promise<SemanticSearchResult> {
+  async semanticSearchPackages(query: string, branchId?: string, context: { sessionId?: string; accountId?: string } = {}): Promise<SemanticSearchResult> {
+    const start = performance.now();
+    let result: SemanticSearchResult;
+    try {
+      result = await this.runSearch(query, branchId);
+    } catch (error) {
+      await this.analytics.recordSearch(query, context, null, performance.now() - start).catch(() => this.logger.warn('Không thể lưu lỗi tìm kiếm'));
+      throw error;
+    }
+    result.searchId = await this.analytics.recordSearch(query, context, result, performance.now() - start)
+      .catch(() => { this.logger.warn('Không thể lưu lượt tìm kiếm'); return undefined; });
+    return result;
+  }
+
+  private async runSearch(query: string, branchId?: string): Promise<SemanticSearchResult> {
     if (!query || !query.trim()) {
       return { query: '', total: 0, packages: [], doctors: [], branches: [] };
     }
-    const q = query.trim();
+    const originalQuery = query.trim();
+    let q = originalQuery;
+    // Resolve an explicitly named branch before retrieving candidates.
+    const availableBranches = await this.prisma.branch.findMany({
+      where: { isActive: true },
+      select: { id: true, code: true, name: true, address: true, phoneNumber: true },
+    });
+    if (!branchId && /\b(co so|chi nhanh)\b/.test(normalizeSearch(q))) {
+      const matches = availableBranches.filter(branch => {
+        const alias = normalizeSearch(branch.name).replace(/^vitacare\s*/, '');
+        return containsSearchPhrase(q, alias);
+      });
+      if (matches.length === 1) {
+        branchId = matches[0].id;
+        q = normalizeSearch(q).replace(normalizeSearch(matches[0].name), ' ')
+          .replace(normalizeSearch(matches[0].name).replace(/^vitacare\s*/, ''), ' ').trim();
+      }
+    }
 
     // 1. Thực thi đồng thời 3 luồng tìm kiếm song song
-    const [packages, doctors, branches] = await Promise.all([
-      this.searchPackages(q, branchId),
-      this.searchDoctors(q),
-      this.searchBranches(q),
+    const results = await Promise.allSettled([
+      parseSearchIntent(originalQuery).entity === 'doctor' ? Promise.resolve([]) : this.searchPackages(q, branchId),
+      this.searchDoctors(q, branchId),
+      this.searchBranches(originalQuery, availableBranches),
     ]);
+    const packages = results[0].status === 'fulfilled' ? results[0].value : [];
+    const doctors = results[1].status === 'fulfilled' ? results[1].value : [];
+    const branches = results[2].status === 'fulfilled' ? results[2].value : [];
+    const partial = results.some(result => result.status === 'rejected');
+    if (partial && packages.length + doctors.length + branches.length === 0) {
+      throw new ServiceUnavailableException('Không thể tải kết quả tìm kiếm. Vui lòng thử lại.');
+    }
 
     const finalResult: SemanticSearchResult = {
-      query: q,
+      query: originalQuery,
+      branchId,
+      partial,
       total: packages.length + doctors.length + branches.length,
       packages,
       doctors,
@@ -71,7 +121,8 @@ export class SemanticSearchService {
 
     // 2. Telemetry Bất đồng bộ (Fire-and-forget: Không làm chậm response của Client)
     setImmediate(() => {
-      this.recordTelemetryAsync(q, packages.length > 0 || doctors.length > 0).catch((err) => {
+      if (partial) return;
+      this.recordTelemetryAsync(originalQuery, finalResult.total > 0).catch((err) => {
         this.logger.debug(`[SemanticSearch] Telemetry background log error: ${err?.message}`);
       });
     });
@@ -87,11 +138,10 @@ export class SemanticSearchService {
       const candidatePackages = await this.getCachedCandidatePackages(branchId);
       if (!candidatePackages || candidatePackages.length === 0) return [];
 
-      const results = await this.embeddingService.searchByNaturalLanguage(q, candidatePackages, 6);
+      const results = await this.embeddingService.searchByNaturalLanguage(q, candidatePackages, 6, { strictSemantic: true });
 
-      // Lọc theo ngưỡng điểm tối thiểu để loại bỏ kết quả nhiễu (Thresholding)
+      // Eligibility and relevance thresholds are applied once by the retrieval engine.
       return results
-        .filter((r) => r.score >= 1.0) // Điểm kết hợp text/symptom/vector >= 1.0
         .map((r) => ({
           id: r.package.id,
           code: r.package.code,
@@ -101,81 +151,76 @@ export class SemanticSearchService {
           specialtyName: r.package.specialtyName,
           similarityScore: Math.round(r.score * 100) / 100,
           description: r.package.description,
+          branchId: r.package.branchId,
+          bookingMethodCode: r.package.bookingMethodCode,
+          specialtyId: r.package.specialtyId,
         }));
     } catch (err: any) {
       this.logger.warn(`[SemanticSearch] searchPackages error: ${err?.message}`);
-      return [];
+      throw err;
     }
   }
 
   /**
    * 2. Tìm kiếm Bác sĩ (Bảo vệ thông tin nhạy cảm: Không select phone/email)
    */
-  private async searchDoctors(q: string) {
+  private async searchDoctors(q: string, branchId?: string) {
     try {
+      const intent = parseSearchIntent(q);
+      if (!intent.text) return [];
       const matched = await this.prisma.doctor.findMany({
         where: {
           isActive: true,
-          OR: [
-            { user: { fullName: { contains: q, mode: 'insensitive' } } },
-            { academicRank: { contains: q, mode: 'insensitive' } },
-            { specialties: { some: { specialty: { name: { contains: q, mode: 'insensitive' } } } } },
-          ],
+          ...(branchId ? { user: { branchAssignments: { some: { branchId } } } } : {}),
         },
-        take: 4,
         select: {
           id: true,
           academicRank: true,
           experienceYears: true,
           avatarUrl: true,
           ratingAverage: true,
+          consultationFee: true,
           user: { select: { fullName: true } }, // Chỉ lấy fullName, loại bỏ phoneNumber và email nhạy cảm
           specialties: { select: { specialty: { select: { name: true } } } },
         },
       });
 
-      return matched.map((doc) => ({
+      return matched.filter(doc => matchesSearchConstraints(intent, { price: Number(doc.consultationFee) })).map(doc => ({ doc, score: Math.max(
+        searchTextScore(intent.text, doc.user?.fullName || ''),
+        searchTextScore(intent.text, doc.academicRank || ''),
+        ...doc.specialties.map(s => searchTextScore(intent.text, s.specialty.name)),
+      ) })).filter(hit => hit.score > 0).sort((a, b) => b.score - a.score || a.doc.id.localeCompare(b.doc.id))
+        .slice(0, 4).map(({ doc }) => ({
         id: doc.id,
         fullName: doc.user?.fullName || 'Bác sĩ',
         academicRank: doc.academicRank || 'Bác sĩ',
         specialties: doc.specialties.map((s) => s.specialty?.name).filter(Boolean) as string[],
         experienceYears: doc.experienceYears || 0,
         avatarUrl: doc.avatarUrl || null,
-        ratingAverage: doc.ratingAverage || 5.0,
+        ratingAverage: doc.ratingAverage,
       }));
     } catch (err: any) {
       this.logger.warn(`[SemanticSearch] searchDoctors error: ${err?.message}`);
-      return [];
+      throw err;
     }
   }
 
   /**
    * 3. Tìm kiếm Cơ sở y tế
    */
-  private async searchBranches(q: string) {
-    try {
-      return await this.prisma.branch.findMany({
-        where: {
-          isActive: true,
-          OR: [
-            { name: { contains: q, mode: 'insensitive' } },
-            { address: { contains: q, mode: 'insensitive' } },
-          ],
-        },
-        take: 3,
-        select: { id: true, code: true, name: true, address: true, phoneNumber: true },
-      });
-    } catch (err: any) {
-      this.logger.warn(`[SemanticSearch] searchBranches error: ${err?.message}`);
-      return [];
-    }
+  private async searchBranches(q: string, branches: SemanticSearchResult['branches']) {
+    const intent = parseSearchIntent(q);
+    if (!intent.text) return [];
+    return branches.map(branch => ({ branch, score: Math.max(
+      searchTextScore(intent.text, branch.name), searchTextScore(intent.text, branch.address),
+    ) })).filter(hit => hit.score > 0).sort((a, b) => b.score - a.score).slice(0, 3).map(hit => hit.branch);
   }
 
   /**
    * Lấy danh sách gói khám ứng viên (Được đệm Cache Redis 5 phút để tránh quét DB liên tục)
    */
   private async getCachedCandidatePackages(branchId?: string): Promise<PackageForRetrieval[]> {
-    const cacheKey = `rec:cache:search_candidates:${branchId || 'all'}`;
+    const cacheKey = `rec:cache:search_candidates:v2:${branchId || 'all'}`;
 
     if (this.redis.isEnabled()) {
       try {
@@ -189,15 +234,25 @@ export class SemanticSearchService {
     const pkgs = await this.prisma.servicePackage.findMany({
       where: {
         isActive: true,
-        ...(branchId ? { branchBookingMethod: { branchId, isEnabled: true } } : {}),
+        OR: [
+          { branchBookingMethod: { ...(branchId ? { branchId } : {}), isEnabled: true, branch: { isActive: true }, bookingMethod: { isActive: true } } },
+          { branchBookingMethods: { some: { branchBookingMethod: { ...(branchId ? { branchId } : {}), isEnabled: true, branch: { isActive: true }, bookingMethod: { isActive: true } } } } },
+        ],
       },
-      include: {
+      select: {
+        id: true, code: true, name: true, price: true, durationMin: true, description: true,
+        symptoms: true, specialtyId: true, targetGender: true, minAge: true, maxAge: true,
         specialty: { select: { id: true, name: true, symptoms: true, description: true } },
+        branchBookingMethod: { select: { branchId: true, isEnabled: true, branch: { select: { isActive: true } }, bookingMethod: { select: { code: true, isActive: true } } } },
+        branchBookingMethods: { select: { branchBookingMethod: { select: { branchId: true, isEnabled: true, branch: { select: { isActive: true } }, bookingMethod: { select: { code: true, isActive: true } } } } } },
       },
       orderBy: { price: 'asc' },
     });
 
     const mapped: PackageForRetrieval[] = pkgs.map((p) => {
+      const methods = [p.branchBookingMethod, ...p.branchBookingMethods.map(link => link.branchBookingMethod)]
+        .filter(method => method?.isEnabled && method.branch.isActive && method.bookingMethod.isActive);
+      const method = methods.find(method => !branchId || method?.branchId === branchId);
       const combinedSymptoms = Array.from(
         new Set([...(p.symptoms || []), ...(p.specialty?.symptoms || [])]),
       );
@@ -214,6 +269,8 @@ export class SemanticSearchService {
         durationMin: p.durationMin,
         specialtyId: p.specialtyId,
         specialtyName: p.specialty?.name || 'Đa khoa',
+        targetGender: p.targetGender, minAge: p.minAge, maxAge: p.maxAge,
+        branchId: method?.branchId, bookingMethodCode: method?.bookingMethod.code,
       };
     });
 
@@ -230,7 +287,7 @@ export class SemanticSearchService {
   private async recordTelemetryAsync(query: string, hasResults: boolean): Promise<void> {
     if (!query || query.trim().length < 2) return;
     const normalizedQ = query.trim().toLowerCase();
-    const dateKey = new Date().toISOString().slice(0, 10);
+    const dateKey = vietnamDateKey(new Date());
 
     // 1. Ghi nhận vào Redis Ranking ZSET (theo ngày và toàn thời gian)
     if (this.redis.isEnabled()) {
@@ -250,26 +307,5 @@ export class SemanticSearchService {
       }
     }
 
-    // 2. Ghi nhận vào PostgreSQL SearchLog (Upsert với Composite Key theo dateKey)
-    try {
-      await this.prisma.searchLog.upsert({
-        where: {
-          keyword_dateKey_hasResults: {
-            keyword: normalizedQ,
-            dateKey,
-            hasResults,
-          },
-        },
-        update: { count: { increment: 1 } },
-        create: {
-          keyword: normalizedQ,
-          dateKey,
-          count: 1,
-          hasResults,
-        },
-      });
-    } catch (err: any) {
-      this.logger.debug(`[SemanticSearch] DB search log error: ${err?.message}`);
-    }
   }
 }

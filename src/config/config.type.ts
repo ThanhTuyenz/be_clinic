@@ -27,6 +27,7 @@ export type AuthConfig = {
 };
 
 export type MailerConfig = {
+  enabled: boolean;
   port: number;
   host?: string;
   user?: string;

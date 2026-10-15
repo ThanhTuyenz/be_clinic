@@ -24,6 +24,7 @@ export enum UserStatus {
 
 export enum UserRole {
   Admin = 'admin',
+  ChainManager = 'chain_manager',
   BranchManager = 'branch_manager',
   Doctor = 'doctor',
   Receptionist = 'receptionist',

@@ -8,7 +8,7 @@ import {
   MessageBody,
   ConnectedSocket,
 } from '@nestjs/websockets';
-import { Logger } from '@nestjs/common';
+import { HttpException, Logger } from '@nestjs/common';
 import { Server, Socket } from 'socket.io';
 import { TelehealthService } from './telehealth.service.js';
 import { JwtService } from '@nestjs/jwt';
@@ -46,15 +46,15 @@ export class TelehealthGateway
   }
 
   handleConnection(client: Socket) {
-    const token = this.getSocketToken(client);
     try {
+      const token = this.getSocketToken(client);
       const payload = this.jwt.verify<{ id: string }>(token, {
         secret: this.config.getOrThrow<string>('auth.secret'),
       });
       client.data.userId = payload.id;
     } catch {
       client.disconnect(true);
-      throw new UnauthorizedException('Phiên telehealth không hợp lệ.');
+      return;
     }
     this.logger.debug(`Client connected to Telehealth namespace: ${client.id}`);
   }
@@ -80,6 +80,14 @@ export class TelehealthGateway
     }
   }
 
+  notifyRoomEnded(appointmentId: string, endedByRole: string) {
+    this.server.to(appointmentId).emit('telehealth:call-ended', {
+      appointmentId,
+      endedByRole,
+      timestamp: new Date().toISOString(),
+    });
+  }
+
   /**
    * Tham gia vào phòng tư vấn của cuộc hẹn
    */
@@ -88,29 +96,31 @@ export class TelehealthGateway
     @MessageBody() dto: JoinTelehealthRoomDto,
     @ConnectedSocket() client: Socket,
   ) {
-    const peer = await this.telehealthService.getSocketPeer(dto.appointmentId, client.data.userId, client.id);
+    try {
+      const peer = await this.telehealthService.getSocketPeer(dto.appointmentId, client.data.userId, client.id);
 
-    client.join(dto.appointmentId);
+      await client.join(dto.appointmentId);
 
-    const { room, otherPeer } = this.telehealthService.joinRoom(dto.appointmentId, peer);
+      const { room, otherPeer } = this.telehealthService.joinRoom(dto.appointmentId, peer);
 
-    // Báo lại cho chính người vừa vào thông tin trạng thái phòng
-    client.emit('telehealth:joined-success', {
-      appointmentId: dto.appointmentId,
-      status: room.status,
-      myPeer: peer,
-      otherPeer,
-    });
-
-    // Nếu đã có người kia ở sẵn trong phòng, thông báo cho người đó biết có người mới vào
-    if (otherPeer?.socketId) {
-      this.server.to(otherPeer.socketId).emit('telehealth:peer-joined', {
-        newPeer: peer,
+      client.emit('telehealth:joined-success', {
+        appointmentId: dto.appointmentId,
         status: room.status,
+        myPeer: peer,
+        otherPeer,
       });
-    }
 
-    return { success: true };
+      if (otherPeer?.socketId) {
+        this.server.to(otherPeer.socketId).emit('telehealth:peer-joined', {
+          newPeer: peer,
+          status: room.status,
+        });
+      }
+
+      return { success: true };
+    } catch (error) {
+      return { success: false, message: error instanceof HttpException ? error.message : 'Không thể vào phòng tư vấn. Vui lòng thử lại.' };
+    }
   }
 
   /**
@@ -206,23 +216,25 @@ export class TelehealthGateway
     @ConnectedSocket() client: Socket,
   ) {
     const participant = this.telehealthService.getPeerForSocket(client.id);
-    if (!participant || participant.appointmentId !== payload.appointmentId) return;
+    if (!participant || participant.appointmentId !== payload.appointmentId) {
+      return { success: false, message: 'Bạn không ở trong phòng tư vấn này.' };
+    }
     this.logger.log(
       `[Telehealth] Call ended for appointment ${payload.appointmentId} by ${payload.endedByRole}`,
     );
 
-    // Báo cho toàn phòng biết cuộc gọi đã kết thúc
-    this.server.to(payload.appointmentId).emit('telehealth:call-ended', {
-      appointmentId: payload.appointmentId,
-      endedByRole: participant.role,
-      timestamp: new Date().toISOString(),
-    });
-
-    await this.telehealthService.endRoomSession(payload.appointmentId, {
-      diagnosis: payload.diagnosis,
-      prescriptionNotes: payload.prescriptionNotes,
-      endedByUserId: participant.userId,
-      endReason: 'SOCKET',
-    }, participant.role);
+    try {
+      await this.telehealthService.endRoomSession(payload.appointmentId, {
+        diagnosis: payload.diagnosis,
+        prescriptionNotes: payload.prescriptionNotes,
+        endedByUserId: participant.userId,
+        endReason: 'SOCKET',
+      }, participant.role);
+      this.notifyRoomEnded(payload.appointmentId, participant.role);
+      return { success: true };
+    } catch (error) {
+      this.logger.error('Không thể lưu phiên tư vấn khi kết thúc cuộc gọi.', error instanceof Error ? error.stack : undefined);
+      return { success: false, message: 'Không thể lưu phiên tư vấn. Vui lòng thử kết thúc lại.' };
+    }
   }
 }

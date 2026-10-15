@@ -3,6 +3,8 @@ import { PrismaService } from '../../infrastructure/database/prisma/prisma.servi
 import { RedisService } from '../../infrastructure/redis/redis.service.js'
 import { EmbeddingService } from '../../infrastructure/embedding/embedding.service.js'
 
+import { calculateEffectivePermissions } from '../../common/constants/permissions.constant.js'
+
 const DEFAULT_ACTIVE_DAYS = [1, 2, 3, 4, 5, 6, 0]
 const DEFAULT_PACKAGE_DURATION_MIN = 30
 
@@ -65,6 +67,7 @@ export class SystemCatalogService {
     if (this.redis.isEnabled()) {
       try {
         await this.redis.deletePattern('cache:public:*');
+        await this.redis.deletePattern('rec:cache:search_candidates:*');
         await this.redis.deletePattern('rec:v2:home:*');
         await this.redis.deletePattern('rec:v2:profile:*');
       } catch (err: any) {
@@ -74,7 +77,9 @@ export class SystemCatalogService {
   }
 
   async syncAllPackageVectors(userId: string) {
-    await this.manager(userId)
+    const user = await this.manager(userId)
+    this.assertCatalogOwner(user, 'service-packages')
+    this.assertCrudPermission(user, 'service-packages', 'update')
     if (!this.redis.isEnabled()) {
       return { message: 'Redis is disabled', total: 0, synced: 0 }
     }
@@ -94,11 +99,13 @@ export class SystemCatalogService {
       select: {
         id: true,
         role: true,
+        customPermissions: true,
+        isDeleted: true,
         branchAssignments: { select: { branchId: true } },
       },
     })
-    if (!user || !['ADMIN', 'BRANCH_MANAGER'].includes(user.role))
-      throw new ForbiddenException('Chỉ quản trị viên hoặc quản lý chi nhánh được thao tác')
+    if (!user || user.isDeleted || !['ADMIN', 'CHAIN_MANAGER', 'BRANCH_MANAGER'].includes(user.role))
+      throw new ForbiddenException('Chỉ nhân sự quản trị hoặc quản lý được thao tác')
     return user
   }
 
@@ -129,23 +136,53 @@ export class SystemCatalogService {
     return models[resource]
   }
 
+  private assertCrudPermission(user: { role: string; customPermissions?: unknown }, resource: string, action: 'read' | 'create' | 'update' | 'delete') {
+    const prefixes: Record<string, string> = { branches: 'branch', rooms: 'room', specialties: 'specialty', 'service-packages': 'service', 'booking-methods': 'booking_method', 'branch-specialties': 'specialty', 'room-specialties': 'room' }
+    const prefix = prefixes[resource]
+    if (!prefix) throw new BadRequestException('Danh mục không hợp lệ')
+    const permission = prefix + ':' + action
+    if (!calculateEffectivePermissions(user.role, user.customPermissions).includes(permission as any)) throw new ForbiddenException('Bạn không có quyền ' + action + ' cho danh mục này')
+  }
+
+  private assertCatalogOwner(user: { role: string }, resource: string) {
+    if (resource === 'booking-methods') {
+      if (user.role !== 'CHAIN_MANAGER') throw new ForbiddenException('Chỉ quản lý toàn chuỗi được cấu hình hình thức đặt khám')
+    } else if (user.role === 'ADMIN' || (user.role !== 'CHAIN_MANAGER' && ['specialties', 'service-packages'].includes(resource))) {
+      throw new ForbiddenException('Chỉ quản lý toàn chuỗi được thay đổi danh mục dùng chung')
+    }
+  }
+
+  private async assertAssignmentScope(user: { role: string; branchAssignments: { branchId: string }[] }, resource: string, body: any) {
+    if (user.role !== 'BRANCH_MANAGER') return
+    const branchIds = user.branchAssignments.map((b) => b.branchId)
+    if (['branch-specialties', 'rooms'].includes(resource) && !branchIds.includes(body.branchId)) {
+      throw new ForbiddenException('Bạn chỉ có quyền thao tác trên chi nhánh mình phụ trách')
+    }
+    if (resource === 'room-specialties') {
+      const room = await this.prisma.clinicRoom.findFirst({ where: { id: body.roomId, branchId: { in: branchIds } }, select: { id: true } })
+      if (!room) throw new ForbiddenException('Phòng khám không thuộc chi nhánh bạn phụ trách')
+    }
+  }
+
   async list(userId: string, resource: string, q = '') {
     const user = await this.prisma.user.findUnique({
       where: { id: userId },
       select: {
         role: true,
+        customPermissions: true,
         isDeleted: true,
         branchAssignments: { select: { branchId: true } },
       },
     })
     if (!user || user.isDeleted) throw new ForbiddenException('Không có quyền truy cập')
+    this.assertCrudPermission(user, resource, 'read')
     const branchIds = user.branchAssignments?.map((b) => b.branchId) || []
     const isBranchManager = user.role === 'BRANCH_MANAGER'
     const term = q.trim()
     const model = this.model(resource)
 
     if (resource === 'booking-methods') {
-      const baseWhere: any = isBranchManager ? { branchId: { in: branchIds.length ? branchIds : ['__none__'] } } : {}
+      const baseWhere: any = isBranchManager ? { branchId: { in: branchIds } } : {}
       const where = term
         ? { ...baseWhere, bookingMethod: { name: { contains: term, mode: 'insensitive' } } }
         : baseWhere
@@ -157,7 +194,7 @@ export class SystemCatalogService {
       return { items: rows.map(({ bookingMethod, ...row }: any) => ({ ...row, bookingMethodId: bookingMethod.id, type: bookingMethod.code, code: bookingMethod.code, displayName: bookingMethod.name, description: bookingMethod.description, route: bookingMethod.route })) }
     }
     if (resource === 'branch-specialties') {
-      const baseWhere: any = isBranchManager ? { branchId: { in: branchIds.length ? branchIds : ['__none__'] } } : {}
+      const baseWhere: any = isBranchManager ? { branchId: { in: branchIds } } : {}
       const where = term
         ? { ...baseWhere, OR: [{ branch: { name: { contains: term, mode: 'insensitive' } } }, { specialty: { name: { contains: term, mode: 'insensitive' } } }] }
         : baseWhere
@@ -169,7 +206,7 @@ export class SystemCatalogService {
       return { items: rows }
     }
     if (resource === 'room-specialties') {
-      const baseWhere: any = isBranchManager ? { room: { branchId: { in: branchIds.length ? branchIds : ['__none__'] } } } : {}
+      const baseWhere: any = isBranchManager ? { room: { branchId: { in: branchIds } } } : {}
       const where = term
         ? { ...baseWhere, OR: [{ room: { name: { contains: term, mode: 'insensitive' } } }, { specialty: { name: { contains: term, mode: 'insensitive' } } }, { room: { branch: { name: { contains: term, mode: 'insensitive' } } } }] }
         : baseWhere
@@ -184,9 +221,9 @@ export class SystemCatalogService {
 
     if (isBranchManager) {
       if (resource === 'branches') {
-        where.id = { in: branchIds.length ? branchIds : ['__none__'] }
+        where.id = { in: branchIds }
       } else if (resource === 'rooms') {
-        where.branchId = { in: branchIds.length ? branchIds : ['__none__'] }
+        where.branchId = { in: branchIds }
       }
     }
 
@@ -222,6 +259,9 @@ export class SystemCatalogService {
 
   async create(userId: string, resource: string, body: any) {
     const user = await this.manager(userId)
+    this.assertCrudPermission(user, resource, 'create')
+    this.assertCatalogOwner(user, resource)
+    await this.assertAssignmentScope(user, resource, body)
     if (user.role === 'BRANCH_MANAGER' && resource === 'branches') {
       throw new ForbiddenException('Quản lý chi nhánh không có quyền tạo chi nhánh mới')
     }
@@ -265,6 +305,8 @@ export class SystemCatalogService {
   }
   async update(userId: string, resource: string, id: string, body: any) {
     const user = await this.manager(userId)
+    this.assertCrudPermission(user, resource, 'update')
+    this.assertCatalogOwner(user, resource)
     if (user.role === 'BRANCH_MANAGER' && resource === 'branches') {
       const branchIds = user.branchAssignments?.map((b) => b.branchId) || []
       if (!branchIds.includes(id)) {
@@ -275,6 +317,8 @@ export class SystemCatalogService {
     const key = resource === 'specialties' ? Number(id) : id
     const existing = await model.findUnique({ where: { id: key } })
     if (!existing) throw new NotFoundException('Không tìm thấy dữ liệu')
+    await this.assertAssignmentScope(user, resource, existing)
+    await this.assertAssignmentScope(user, resource, { ...existing, ...body })
     if (resource === 'booking-methods') {
       const name = String(body.displayName || body.name || '').trim()
       const isEnabled = body.isEnabled !== undefined ? Boolean(body.isEnabled) : existing.isEnabled
@@ -407,12 +451,16 @@ export class SystemCatalogService {
   }
   async remove(userId: string, resource: string, id: string) {
     const user = await this.manager(userId)
+    this.assertCrudPermission(user, resource, 'delete')
+    this.assertCatalogOwner(user, resource)
     if (user.role === 'BRANCH_MANAGER' && resource === 'branches') {
       throw new ForbiddenException('Quản lý chi nhánh không có quyền ngừng hoạt động chi nhánh')
     }
     const model = this.model(resource)
     const key = resource === 'specialties' ? Number(id) : id
-    if (!await model.findUnique({ where: { id: key } })) throw new NotFoundException('Không tìm thấy dữ liệu')
+    const existing = await model.findUnique({ where: { id: key } })
+    if (!existing) throw new NotFoundException('Không tìm thấy dữ liệu')
+    await this.assertAssignmentScope(user, resource, existing)
     if (resource === 'service-packages' && this.redis.isEnabled()) {
       try {
         await this.embeddingService.invalidatePackageVector(id)
@@ -425,6 +473,8 @@ export class SystemCatalogService {
 
   async batchBranchSpecialties(userId: string, body: { branchId: string; specialtyIds: number[] }) {
     const user = await this.manager(userId)
+    this.assertCatalogOwner(user, 'branch-specialties')
+    this.assertCrudPermission(user, 'branch-specialties', 'update')
     const { branchId, specialtyIds } = body
     if (!branchId) throw new BadRequestException('Vui lòng chọn cơ sở')
     if (user.role === 'BRANCH_MANAGER') {
@@ -451,11 +501,14 @@ export class SystemCatalogService {
       }
     })
 
+    await this.invalidatePublicCache()
     return { success: true, branchId, count: ids.length }
   }
 
   async batchRoomSpecialties(userId: string, body: { specialtyId: number; roomIds: string[] }) {
     const user = await this.manager(userId)
+    this.assertCatalogOwner(user, 'room-specialties')
+    this.assertCrudPermission(user, 'room-specialties', 'update')
     const specialtyId = Number(body.specialtyId)
     if (!Number.isInteger(specialtyId)) throw new BadRequestException('Vui lòng chọn chuyên khoa')
     const roomIds = Array.isArray(body.roomIds) ? body.roomIds.map(String).filter(Boolean) : []
@@ -472,7 +525,7 @@ export class SystemCatalogService {
     await this.prisma.$transaction(async (tx) => {
       // Deactivate unselected rooms for this specialty
       await tx.clinicRoomSpecialty.updateMany({
-        where: { specialtyId, roomId: { notIn: roomIds } },
+        where: { specialtyId, roomId: { notIn: roomIds }, ...(user.role === 'BRANCH_MANAGER' ? { room: { branchId: { in: user.branchAssignments.map((b) => b.branchId) } } } : {}) },
         data: { isActive: false },
       })
       for (const rId of roomIds) {
@@ -484,7 +537,39 @@ export class SystemCatalogService {
       }
     })
 
+    await this.invalidatePublicCache()
     return { success: true, specialtyId, count: roomIds.length }
+  }
+
+  async setBranchPackage(userId: string, id: string, body: { branchId: string; branchBookingMethodIds: string[] }) {
+    const user = await this.manager(userId)
+    if (user.role === 'ADMIN') throw new ForbiddenException('Quản trị kỹ thuật không điều phối gói khám tại chi nhánh')
+    this.assertCrudPermission(user, 'service-packages', 'update')
+    const branchId = String(body.branchId || '')
+    if (!branchId) throw new BadRequestException('Vui lòng chọn chi nhánh')
+    await this.assertAssignmentScope(user, 'branch-specialties', { branchId })
+    if (!Array.isArray(body.branchBookingMethodIds)) throw new BadRequestException('Danh sách hình thức đặt khám không hợp lệ')
+    const ids = [...new Set(body.branchBookingMethodIds.map(String))]
+    await this.prisma.$transaction(async (tx) => {
+      const pkg = await tx.servicePackage.findUnique({ where: { id }, select: { isActive: true, branchBookingMethodId: true } })
+      if (!pkg) throw new NotFoundException('Không tìm thấy gói khám')
+      const currentLinks = await tx.servicePackageBranchBookingMethod.findMany({ where: { servicePackageId: id, branchBookingMethod: { branchId } }, select: { branchBookingMethodId: true } })
+      const currentIds = new Set(currentLinks.map((l) => l.branchBookingMethodId))
+      if (pkg.branchBookingMethodId) currentIds.add(pkg.branchBookingMethodId)
+      if (!pkg.isActive && ids.some((methodId) => !currentIds.has(methodId))) throw new BadRequestException('Gói khám đã ngừng hoạt động trên hệ thống')
+      const methods = await tx.branchBookingMethod.findMany({ where: { id: { in: ids }, branchId }, select: { id: true, isEnabled: true, bookingMethod: { select: { isActive: true } } } })
+      if (methods.length !== ids.length || methods.some((m) => !currentIds.has(m.id) && (!m.isEnabled || !m.bookingMethod.isActive))) throw new BadRequestException('Hình thức đặt khám không hợp lệ hoặc không thuộc chi nhánh')
+      // Preserve the legacy deployment before replacing only this branch's links.
+      if (pkg.branchBookingMethodId) {
+        await tx.servicePackageBranchBookingMethod.upsert({ where: { servicePackageId_branchBookingMethodId: { servicePackageId: id, branchBookingMethodId: pkg.branchBookingMethodId } }, update: {}, create: { servicePackageId: id, branchBookingMethodId: pkg.branchBookingMethodId } })
+      }
+      await tx.servicePackageBranchBookingMethod.deleteMany({ where: { servicePackageId: id, branchBookingMethod: { branchId } } })
+      if (ids.length) await tx.servicePackageBranchBookingMethod.createMany({ data: ids.map((branchBookingMethodId) => ({ servicePackageId: id, branchBookingMethodId })) })
+      const primary = await tx.servicePackageBranchBookingMethod.findFirst({ where: { servicePackageId: id }, select: { branchBookingMethodId: true }, orderBy: { id: 'asc' } })
+      await tx.servicePackage.update({ where: { id }, data: { branchBookingMethodId: primary?.branchBookingMethodId || null } })
+    })
+    await this.invalidatePublicCache()
+    return { success: true }
   }
 
   private async payload(resource: string, b: any, creating: boolean) {

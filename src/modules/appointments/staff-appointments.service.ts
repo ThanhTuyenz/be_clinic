@@ -75,8 +75,9 @@ export class StaffAppointmentsService {
       workflowStatus: row.status,
       symptoms: row.symptomsDescription || '',
       visitQueueNumber: row.queueNumber,
-      clinicRoom: room?.id || '',
-      clinicRoomName: room?.name || room?.code || '',
+      // Telehealth uses the doctor's time slot, not its physical room.
+      clinicRoom: isTelehealth ? '' : room?.id || '',
+      clinicRoomName: isTelehealth ? '' : room?.name || room?.code || '',
       patient: {
         id: row.patientProfile.id,
         patientCode: row.patientProfile.patientCode || row.patientProfile.nationalId || row.patientProfile.id,
@@ -224,7 +225,7 @@ export class StaffAppointmentsService {
 
   async doctorAppointments(userId: string, query: { date?: string; status?: string } = {}) {
     const user = await this.prisma.user.findUnique({ where: { id: userId }, select: { role: true, doctor: { select: { id: true } } } })
-    if (!user || (user.role !== 'ADMIN' && user.role !== 'DOCTOR')) throw new ForbiddenException('Không có quyền xem lịch bác sĩ')
+    if (!user || (user.role !== 'CHAIN_MANAGER' && user.role !== 'DOCTOR')) throw new ForbiddenException('Không có quyền xem lịch bác sĩ')
     const requestedStatus = String(query.status || '').trim().toUpperCase()
     const statusAliases: Record<string, string> = {
       PENDING: 'HOLD',
@@ -232,7 +233,7 @@ export class StaffAppointmentsService {
       EXAMINED: 'COMPLETED',
     }
     const status = statusAliases[requestedStatus] || requestedStatus
-    const allowedStatuses = ['HOLD', 'CONFIRMED', 'CHECKED_IN', 'COMPLETED', 'CANCELLED', 'NO_SHOW']
+    const allowedStatuses = ['HOLD', 'CONFIRMED', 'CHECKED_IN', 'IN_EXAMINATION', 'COMPLETED', 'CANCELLED', 'NO_SHOW']
     if (status && status !== 'ALL' && !allowedStatuses.includes(status)) {
       throw new BadRequestException('Trạng thái lọc không hợp lệ')
     }
@@ -247,9 +248,13 @@ export class StaffAppointmentsService {
     }
     const rows = await this.prisma.appointment.findMany({
       where: {
-        ...(user.role === 'DOCTOR' ? { scheduleSlot: { schedule: { doctorId: user.doctor?.id || '__none__' } } } : {}),
+        ...((user.role === 'DOCTOR' || dateRange) ? {
+          scheduleSlot: { schedule: {
+            ...(user.role === 'DOCTOR' ? { doctorId: user.doctor?.id || '__none__' } : {}),
+            ...(dateRange ? { workDate: dateRange } : {}),
+          } },
+        } : {}),
         ...(status && status !== 'ALL' ? { status: status as any } : {}),
-        ...(dateRange ? { scheduleSlot: { schedule: { workDate: dateRange } } } : {}),
       },
       include: this.appointmentInclude(),
       orderBy: [
@@ -264,7 +269,7 @@ export class StaffAppointmentsService {
 
   async receptionAppointments(userId: string, query: Record<string, string | undefined>) {
     const role = await this.roleOf(userId)
-    if (!['ADMIN', 'BRANCH_MANAGER', 'RECEPTIONIST'].includes(role)) throw new ForbiddenException('Không có quyền xem danh sách tiếp nhận')
+    if (!['CHAIN_MANAGER', 'BRANCH_MANAGER', 'RECEPTIONIST'].includes(role)) throw new ForbiddenException('Không có quyền xem danh sách tiếp nhận')
     const parseStartUtc = (s?: string) => {
       if (!s) return undefined
       const parts = s.split('-').map(Number)
@@ -444,12 +449,12 @@ export class StaffAppointmentsService {
       if (!user.patientProfiles.some((profile) => profile.id === patientId)) {
         throw new ForbiddenException('Không có quyền xem bệnh sử này')
       }
-    } else if (!['ADMIN', 'BRANCH_MANAGER', 'RECEPTIONIST'].includes(user.role)) {
+    } else if (!['CHAIN_MANAGER', 'BRANCH_MANAGER', 'RECEPTIONIST'].includes(user.role)) {
       throw new ForbiddenException('Không có quyền xem bệnh sử')
     }
 
     // Với nhân viên y tế (Bác sĩ, Lễ tân, Admin): Gom toàn bộ lịch sử khám theo CCCD / Mã bệnh nhân
-    const isStaff = ['ADMIN', 'BRANCH_MANAGER', 'RECEPTIONIST', 'DOCTOR'].includes(user.role)
+    const isStaff = ['CHAIN_MANAGER', 'BRANCH_MANAGER', 'RECEPTIONIST', 'DOCTOR'].includes(user.role)
     const whereAppointment = isStaff && targetProfile?.nationalId
       ? { OR: [{ patientProfileId: patientId }, { patientProfile: { nationalId: targetProfile.nationalId } }] }
       : isStaff && targetProfile?.patientCode
@@ -511,7 +516,7 @@ export class StaffAppointmentsService {
     })
     if (!user) throw new ForbiddenException('Tài khoản không hợp lệ')
     const role = user.role
-    if (!['ADMIN', 'BRANCH_MANAGER', 'RECEPTIONIST', 'DOCTOR'].includes(role)) throw new ForbiddenException('Không có quyền cập nhật lịch khám')
+    if (!['CHAIN_MANAGER', 'BRANCH_MANAGER', 'RECEPTIONIST', 'DOCTOR'].includes(role)) throw new ForbiddenException('Không có quyền cập nhật lịch khám')
     const current = await this.prisma.appointment.findUnique({
       where: { id: appointmentId },
       include: {
@@ -693,7 +698,7 @@ export class StaffAppointmentsService {
 
   async createReception(userId: string, input: Record<string, any>) {
     const role = await this.roleOf(userId)
-    if (!['ADMIN', 'BRANCH_MANAGER', 'RECEPTIONIST'].includes(role)) throw new ForbiddenException('Không có quyền đặt lịch tại quầy')
+    if (!['CHAIN_MANAGER', 'BRANCH_MANAGER', 'RECEPTIONIST'].includes(role)) throw new ForbiddenException('Không có quyền đặt lịch tại quầy')
     const doctor = await this.prisma.doctor.findUnique({ where: { id: String(input.doctorId || '') } })
     if (!doctor) throw new NotFoundException('Không tìm thấy bác sĩ')
     const workDate = new Date(`${String(input.appointmentDate || '')}T00:00:00`)
@@ -825,7 +830,7 @@ export class StaffAppointmentsService {
 
   async nextQueueNumber(userId: string, date: string, clinicRoom?: string, excludeId?: string) {
     const role = await this.roleOf(userId)
-    if (!['ADMIN', 'BRANCH_MANAGER', 'RECEPTIONIST'].includes(role)) {
+    if (!['CHAIN_MANAGER', 'BRANCH_MANAGER', 'RECEPTIONIST'].includes(role)) {
       throw new ForbiddenException('Không có quyền cấp số thứ tự')
     }
     const workDate = new Date(`${date}T00:00:00`)
@@ -851,7 +856,7 @@ export class StaffAppointmentsService {
 
   async recordPayment(userId: string, appointmentId: string, input: { method?: string; amount?: number; note?: string }) {
     const role = await this.roleOf(userId)
-    if (!['ADMIN', 'BRANCH_MANAGER', 'RECEPTIONIST'].includes(role)) {
+    if (!['CHAIN_MANAGER', 'BRANCH_MANAGER', 'RECEPTIONIST'].includes(role)) {
       throw new ForbiddenException('Không có quyền ghi nhận thanh toán')
     }
     const invoice = await this.prisma.invoice.findUnique({
@@ -900,7 +905,7 @@ export class StaffAppointmentsService {
       include: { scheduleSlot: { include: { schedule: { select: { doctorId: true } } } } },
     })
     if (!appointment) throw new NotFoundException('Không tìm thấy lịch khám')
-    if (!user || (user.role !== 'ADMIN' && (user.role !== 'DOCTOR' || user.doctor?.id !== appointment.scheduleSlot?.schedule?.doctorId))) {
+    if (!user || (user.role !== 'CHAIN_MANAGER' && (user.role !== 'DOCTOR' || user.doctor?.id !== appointment.scheduleSlot?.schedule?.doctorId))) {
       throw new ForbiddenException('Không được hoàn tất lịch khám này')
     }
     const row = await this.prisma.$transaction(async (tx) => {

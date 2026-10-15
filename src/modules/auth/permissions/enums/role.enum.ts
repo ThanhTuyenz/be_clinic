@@ -9,6 +9,7 @@ export enum PermissionRole {
 export function mapUserRoleToPermissionRole(userRole: UserRole): PermissionRole {
   switch (userRole) {
     case UserRole.Admin:
+    case UserRole.ChainManager:
     case UserRole.BranchManager:
       return PermissionRole.ADMIN;
     case UserRole.Doctor:

@@ -2,6 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { GoogleGenAI } from '@google/genai';
 import { RedisService } from '../redis/redis.service.js';
+import { matchesSearchConstraints, parseSearchIntent, searchTextScore } from '../../common/utils/search-query.js';
 
 export interface PackageForRetrieval {
   id: string;
@@ -14,8 +15,10 @@ export interface PackageForRetrieval {
   specialtyId: number | null;
   specialtyName: string;
   targetGender?: string; // ALL, MALE, FEMALE
-  minAge?: number;
-  maxAge?: number;
+  minAge?: number | null;
+  maxAge?: number | null;
+  branchId?: string;
+  bookingMethodCode?: string;
 }
 
 export interface ScoredPackage {
@@ -29,7 +32,8 @@ export class EmbeddingService {
   private readonly logger = new Logger(EmbeddingService.name);
   private aiClient: GoogleGenAI | null = null;
   private readonly embeddingModel: string;
-  private readonly VECTOR_TTL_SECONDS = 30 * 24 * 3600; // 30 ngày
+  private readonly queryVectors = new Map<string, { expiresAt: number; vector: number[] }>();
+  private readonly pendingQueryVectors = new Map<string, Promise<number[] | null>>();
 
   constructor(
     private readonly config: ConfigService,
@@ -239,8 +243,10 @@ export class EmbeddingService {
       const float32 = new Float32Array(queryVector);
       const vectorBuffer = Buffer.from(float32.buffer);
 
-      const fetchK = Math.min(Math.max(topK * 2, 25), 150);
-      const query = `*=>[KNN ${fetchK} @vector $BLOB AS score]`;
+      if (candidates.length === 0) return [];
+      const fetchK = Math.min(topK, candidates.length);
+      const ids = candidates.map(({ id }) => id.replace(/[^a-zA-Z0-9]/g, '\\$&')).join('|');
+      const query = `(@packageId:{${ids}})=>[KNN ${fetchK} @vector $BLOB AS score]`;
 
       const tStart = performance.now();
       const rawResult = await this.redis.call(
@@ -258,6 +264,9 @@ export class EmbeddingService {
         '2',
         'packageId',
         'score',
+        'LIMIT',
+        '0',
+        fetchK,
         'DIALECT',
         '2',
       );
@@ -281,7 +290,7 @@ export class EmbeddingService {
         }
       }
 
-      if (resultsList.length === 0) return null;
+      if (resultsList.length === 0) return rawResult[0] === 0 ? [] : null;
 
       const candidateMap = new Map<string, PackageForRetrieval>();
       for (const c of candidates) {
@@ -300,7 +309,10 @@ export class EmbeddingService {
             const attrs = item[j + 1];
             for (let k = 0; k < attrs.length; k += 2) {
               if (attrs[k] === 'packageId') packageId = String(attrs[k + 1]);
-              if (attrs[k] === 'score') dist = parseFloat(attrs[k + 1]) || 1.0;
+              if (attrs[k] === 'score') {
+                const parsed = Number(attrs[k + 1]);
+                dist = Number.isFinite(parsed) ? parsed : 1;
+              }
             }
           }
         }
@@ -329,183 +341,67 @@ export class EmbeddingService {
     }
   }
 
-  /**
-   * Tìm kiếm kết hợp (Hybrid Search):
-   * 1. Khớp từ khóa / triệu chứng thực tế từ Database: Tên gói (Name), Tag triệu chứng (Symptoms), Chuyên khoa (Specialty), Mô tả (Description)
-   * 2. Với từ khóa ngắn (<= 4 từ): Chỉ trả về kết quả khi có Text/Symptom Match thực tế từ DB (Không dùng vector noise)
-   * 3. Với câu văn dài (> 4 từ): Kết hợp Vector Embedding với ngưỡng tương đồng cao (>= 88%)
-   */
-  async searchByNaturalLanguage(
-    queryText: string,
-    packages: PackageForRetrieval[],
-    topK = 10,
-  ): Promise<ScoredPackage[]> {
-    if (!queryText || !queryText.trim() || packages.length === 0) return [];
-    const q = queryText.trim();
-    const qNorm = this.normalizeVietnamese(q);
-    const tokens = qNorm.split(/\s+/).filter((t) => t.length >= 2);
-    const isShortQuery = tokens.length <= 4;
-
-    // 1. Tính điểm Text / Keyword / Tag matching dựa trên 100% dữ liệu Database
-    const textScoreMap = new Map<string, number>();
-
-    for (const pkg of packages) {
-      const nameRaw = pkg.name || '';
-      const nameNorm = this.normalizeVietnamese(nameRaw);
-      const specRaw = pkg.specialtyName || '';
-      const specNorm = this.normalizeVietnamese(specRaw);
-      const symptomsList = (pkg.symptoms || [])
-        .map((s) => ({
-          raw: (s || '').trim(),
-          norm: this.normalizeVietnamese(s || ''),
-        }))
-        .filter((s) => s.norm.length >= 2);
-      const descRaw = pkg.description || '';
-      const descNorm = this.normalizeVietnamese(descRaw);
-
-      let maxScore = 0;
-
-      // 1.1. Khớp Tên gói khám (Trọng số cao nhất)
-      const nameScore = this.matchTextScore(q, qNorm, nameRaw, nameNorm);
-      if (nameScore > 0) {
-        maxScore = Math.max(maxScore, nameScore * 1.3);
+  /** Query embeddings are bounded, deduplicated and have a short request budget. */
+  private async embedSearchQuery(text: string): Promise<number[] | null> {
+    const cached = this.queryVectors.get(text);
+    if (cached && cached.expiresAt > Date.now()) return cached.vector;
+    const pending = this.pendingQueryVectors.get(text);
+    if (pending) return pending;
+    if (!this.aiClient) return null;
+    const request = (async () => {
+      try {
+        const response = await this.aiClient!.models.embedContent({
+          model: this.embeddingModel,
+          contents: text,
+          config: { httpOptions: { timeout: 4000, retryOptions: { attempts: 1 } } },
+        });
+        const vector = response.embeddings?.[0]?.values;
+        if (!vector?.length) return null;
+        if (this.queryVectors.size >= 200) this.queryVectors.delete(this.queryVectors.keys().next().value!);
+        this.queryVectors.set(text, { vector, expiresAt: Date.now() + 300_000 });
+        return vector;
+      } catch {
+        this.logger.debug('Search embedding unavailable; using text matches.');
+        return null;
       }
-
-      // 1.2. Khớp Tag / Triệu chứng lâm sàng thực tế từ Database
-      for (const sym of symptomsList) {
-        const symScore = this.matchTextScore(q, qNorm, sym.raw, sym.norm);
-        if (symScore > 0) {
-          maxScore = Math.max(maxScore, symScore * 1.2);
-        }
-      }
-
-      // 1.3. Khớp Chuyên khoa
-      const specScore = this.matchTextScore(q, qNorm, specRaw, specNorm);
-      if (specScore > 0) {
-        maxScore = Math.max(maxScore, specScore * 1.0);
-      }
-
-      // 1.4. Khớp Mô tả chi tiết
-      const descScore = this.matchTextScore(q, qNorm, descRaw, descNorm);
-      if (descScore > 0) {
-        maxScore = Math.max(maxScore, descScore * 0.7);
-      }
-
-      if (maxScore > 0) {
-        textScoreMap.set(pkg.id, maxScore);
-      }
-    }
-
-    // 2. Tìm kiếm Vector Ngữ nghĩa (RediSearch / Cosine Similarity)
-    const vectorScoreMap = new Map<string, number>();
-    try {
-      const queryVector = await this.embedText(q);
-      if (queryVector) {
-        const redisSearchResults = await this.searchWithRedisSearch(queryVector, packages, packages.length);
-        if (redisSearchResults && redisSearchResults.length > 0) {
-          for (const item of redisSearchResults) {
-            if (item.score >= 0.70) {
-              vectorScoreMap.set(item.package.id, item.score);
-            }
-          }
-        }
-      }
-    } catch {}
-
-    // 3. Kết hợp điểm số & Lọc kết quả (Hybrid Scoring & Thresholding)
-    const scoredList: ScoredPackage[] = [];
-
-    for (const pkg of packages) {
-      const textScore = textScoreMap.get(pkg.id) || 0;
-      const vectorScore = vectorScoreMap.get(pkg.id) || 0;
-
-      // Điều kiện hợp lệ: Phải có Text match thực tế (textScore > 0) HOẶC Vector ngữ nghĩa cao (>= 0.82)
-      if (textScore <= 0 && vectorScore < 0.82) continue;
-
-      const finalScore = Number((textScore * 1.5 + vectorScore * 1.2).toFixed(3));
-
-      scoredList.push({
-        package: pkg,
-        score: finalScore,
-      });
-    }
-
-    // Sắp xếp điểm từ cao xuống thấp
-    scoredList.sort((a, b) => b.score - a.score);
-
-    return scoredList.slice(0, topK);
+    })();
+    this.pendingQueryVectors.set(text, request);
+    try { return await request; }
+    finally { this.pendingQueryVectors.delete(text); }
   }
 
-  /**
-   * So khớp văn bản hỗ trợ cả tiếng Việt có dấu, không dấu và các gốc từ triệu chứng y khoa
-   */
-  private matchTextScore(
-    queryRaw: string,
-    queryNorm: string,
-    targetRaw: string,
-    targetNorm: string,
-  ): number {
-    if (!queryRaw || !targetRaw) return 0;
-
-    const qRaw = queryRaw.toLowerCase().trim();
-    const qNorm = queryNorm.toLowerCase().trim();
-    const tRaw = targetRaw.toLowerCase().trim();
-    const tNorm = targetNorm.toLowerCase().trim();
-
-    if (!qNorm || !tNorm) return 0;
-
-    // 1. Khớp chính xác 100%
-    if (tRaw === qRaw || tNorm === qNorm) {
-      return 5.0;
+  /** Phrase matching first; semantic-only matches require similarity >= 0.82. */
+  async searchByNaturalLanguage(queryText: string, packages: PackageForRetrieval[], topK = 10, options: { strictSemantic?: boolean } = {}): Promise<ScoredPackage[]> {
+    const intent = parseSearchIntent(queryText);
+    if ((!intent.text && !intent.hasConstraints) || packages.length === 0) return [];
+    const candidates = packages.filter(pkg => matchesSearchConstraints(intent, pkg));
+    if (candidates.length === 0) return [];
+    const textScores = new Map<string, number>();
+    for (const pkg of candidates) {
+      const score = intent.text ? Math.max(
+        searchTextScore(intent.text, pkg.name) * 1.3,
+        searchTextScore(intent.text, pkg.specialtyName) * 1.1,
+        ...(pkg.symptoms || []).map(symptom => searchTextScore(intent.text, symptom) * 1.2),
+        searchTextScore(intent.text, pkg.description) * 0.7,
+      ) : 1;
+      if (score > 0) textScores.set(pkg.id, score);
     }
-
-    // 2. Chứa nguyên cụm từ tìm kiếm
-    if (tRaw.includes(qRaw)) {
-      return 4.0; // Có dấu khớp nguyên cụm
+    const vectorScores = new Map<string, number>();
+    // Short queries and explicit negation require a real phrase match.
+    if (intent.text.split(' ').length > 4 && intent.excluded.length === 0 && textScores.size === 0) {
+      const vector = await this.embedSearchQuery(intent.text);
+      if (vector) {
+        const hits = await this.searchWithRedisSearch(vector, candidates, Math.min(20, candidates.length));
+        if (hits === null && options.strictSemantic) throw new Error('Semantic index unavailable');
+        for (const hit of hits || []) if (hit.score >= 0.82) vectorScores.set(hit.package.id, hit.score);
+      } else if (options.strictSemantic) throw new Error('Search embedding unavailable');
     }
-    if (tNorm.includes(qNorm)) {
-      return 3.5; // Không dấu khớp nguyên cụm
-    }
-
-    // 3. Nếu query dài chứa trọn vẹn target (target là cụm từ y khoa >= 4 ký tự)
-    if (tRaw.length >= 4 && qRaw.includes(tRaw)) {
-      return 3.5;
-    }
-    if (tNorm.length >= 4 && qNorm.includes(tNorm)) {
-      return 3.0;
-    }
-
-    // 4. Độ tương đồng Token Overlap (Dynamic Jaccard Token Matching)
-    const hasDiacritics = /[àáạảãâầấậẩẫăằắặẳẵèéẹẻẽêềếệểễìíịỉĩòóọỏõôồốộổỗơờớợởỡùúụủũưừứựửữỳýỵỷỹđ]/i.test(qRaw);
-    const qTokens = (hasDiacritics ? qRaw : qNorm).split(/[\s,.-]+/).filter((t) => t.length >= 2);
-    const tTokens = (hasDiacritics ? tRaw : tNorm).split(/[\s,.-]+/).filter((t) => t.length >= 2);
-
-    if (qTokens.length === 0 || tTokens.length === 0) return 0;
-
-    const targetTokensCopy = [...tTokens];
-    let matchedCount = 0;
-
-    for (const qTok of qTokens) {
-      const foundIdx = targetTokensCopy.findIndex((tTok) => tTok.startsWith(qTok) || tTok === qTok);
-      if (foundIdx !== -1) {
-        matchedCount++;
-        targetTokensCopy.splice(foundIdx, 1);
-      }
-    }
-
-    const ratio = matchedCount / qTokens.length;
-
-    // Tỷ lệ khớp từ: Nếu khớp từ 50% số từ trở lên (ví dụ: gõ 2 từ khớp 1 từ, 3 từ khớp 2 từ)
-    if (ratio >= 0.5) {
-      return Number((ratio * 3.0).toFixed(2));
-    }
-
-    // Trường hợp tìm kiếm 1 từ đơn (ví dụ: gõ "ho", "xoang", "sốt", "mắt", "răng")
-    if (qTokens.length === 1 && matchedCount === 1) {
-      return 2.5;
-    }
-
-    return 0;
+    return candidates.flatMap(pkg => {
+      const textScore = textScores.get(pkg.id) || 0;
+      const vectorScore = vectorScores.get(pkg.id) || 0;
+      if (textScore === 0 && vectorScore < 0.82) return [];
+      return [{ package: pkg, score: Number((textScore * 1.5 + vectorScore * 1.2).toFixed(3)) }];
+    }).sort((a, b) => b.score - a.score || a.package.price - b.package.price).slice(0, topK);
   }
 
   private fallbackKeywordMatcher(
@@ -521,7 +417,11 @@ export class EmbeddingService {
       const symNorm = (pkg.symptoms || []).map((s) => this.normalizeVietnamese(s)).join(' ');
       const targetText = `${nameNorm} ${specNorm} ${descNorm} ${symNorm}`;
 
-      const score = this.matchTextScore(query, qNorm, `${pkg.name} ${pkg.specialtyName}`, targetText);
+      // Profile retrieval ranks broad histories; unlike search, it need not match the entire history.
+      const tokens = [...new Set(parseSearchIntent(qNorm).text.split(' ').filter(Boolean))];
+      const targetTokens = new Set(targetText.split(/\W+/));
+      const score = searchTextScore(parseSearchIntent(query).text, targetText) ||
+        tokens.filter(token => targetTokens.has(token)).length / Math.max(tokens.length, 1);
       return { package: pkg, score };
     });
 

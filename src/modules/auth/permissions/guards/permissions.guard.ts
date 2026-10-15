@@ -29,7 +29,9 @@ export class PermissionsGuard implements CanActivate {
       [context.getHandler(), context.getClass()],
     );
 
-    if (skipPermissions) {
+    const explicitPermissions = this.reflector.getAllAndOverride<(AppPermission | string)[]>(REQUIRE_PERMISSIONS_KEY, [context.getHandler(), context.getClass()]);
+    // Explicit requirements on a method take precedence over a controller's skip marker.
+    if (skipPermissions && !explicitPermissions?.length) {
       return true;
     }
 
@@ -52,12 +54,6 @@ export class PermissionsGuard implements CanActivate {
     }
 
     const userRole = String(user.role).toUpperCase();
-
-    // 3. Admin luôn có toàn quyền trên toàn hệ thống
-    if (userRole === 'ADMIN') {
-      (request.user as any).effectivePermissions = Object.values(AppPermission);
-      return true;
-    }
 
     // 4. Kiểm tra quyền nguyên tử theo chuẩn RBAC (@RequirePermissions)
     const requiredPermissions = this.reflector.getAllAndOverride<(AppPermission | string)[]>(

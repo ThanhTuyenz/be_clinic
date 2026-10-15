@@ -407,6 +407,10 @@ export class MailsService implements IMailsService {
     html: string
     attachments?: Array<{ filename: string; content: Buffer; cid?: string; contentType?: string }>
   }): Promise<void> {
+    if (this.config.enabled === false) {
+      this.logger.debug('Email sending disabled by MAILER_ENABLED=false')
+      return
+    }
     if (!this.config.user || !this.config.password) {
       throw new InternalServerErrorException(
         'MAILER_USER hoặc MAILER_PASSWORD chưa được cấu hình',

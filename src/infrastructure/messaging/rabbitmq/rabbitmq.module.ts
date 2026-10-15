@@ -4,9 +4,10 @@ import { MailsModule } from '../../mail/mails.module.js';
 import { RecommendationModule } from '../../../modules/recommendations/recommendation.module.js';
 import { HttpSmsModule } from '../../httpsms/httpsms.module.js';
 import { RabbitMqService } from './rabbitmq.service.js';
+import { PaymentsModule } from '../../../modules/payments/payments.module.js';
 
 @Module({
-  imports: [BookingModule, MailsModule, RecommendationModule, HttpSmsModule],
+  imports: [BookingModule, PaymentsModule, MailsModule, RecommendationModule, HttpSmsModule],
   providers: [RabbitMqService],
   exports: [RabbitMqService],
 })

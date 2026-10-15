@@ -30,9 +30,7 @@ export class RolesGuard implements CanActivate {
     }
 
     const userRole = String(user.role).toUpperCase();
-    if (userRole === 'ADMIN') {
-      return true;
-    }
+
 
     // 1. Kiểm tra khớp Role cơ bản
     if (requiredRoles.some((r) => r.toUpperCase() === userRole)) {

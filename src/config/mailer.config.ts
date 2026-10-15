@@ -49,6 +49,7 @@ export default registerAs<MailerConfig>('mailer', () => {
   validateConfig(process.env, EnvironmentVariablesValidator);
 
   return {
+    enabled: process.env.MAILER_ENABLED !== 'false',
     port: process.env.MAILER_PORT ? parseInt(process.env.MAILER_PORT, 10) : 587,
     host: process.env.MAILER_HOST,
     user: process.env.MAILER_USER,

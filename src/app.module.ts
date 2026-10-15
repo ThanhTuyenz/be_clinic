@@ -39,6 +39,8 @@ import { HttpSmsModule } from './infrastructure/httpsms/httpsms.module.js'
 import { MediaModule } from './infrastructure/media/media.module.js'
 import { NotificationModule } from './modules/notifications/notification.module.js'
 import { TelehealthModule } from './modules/telehealth/telehealth.module.js'
+import { SearchAnalyticsModule } from './modules/search-analytics/search-analytics.module.js'
+import { IntegrationsModule } from './modules/integrations/integrations.module.js'
 
 @Module({
   imports: [
@@ -63,6 +65,8 @@ import { TelehealthModule } from './modules/telehealth/telehealth.module.js'
     ]),
     ScheduleModule.forRoot(),
     PrismaModule,
+    IntegrationsModule,
+    SearchAnalyticsModule,
     // RedisModule,
     JwtAuthCoreModule,
     AuthModule,

@@ -5,7 +5,7 @@ import dotenv from 'dotenv';
 import path from 'node:path';
 import fs from 'node:fs';
 import bcrypt from 'bcrypt';
-import { createHash } from 'node:crypto';
+import { seedDashboardData, demoDate } from './seed-dashboard-data.mjs';
 
 // 1. Cấu hình biến môi trường & kết nối database
 const envFile = process.env.ENV_FILE || '.env.development';
@@ -30,12 +30,10 @@ const doctorsData = loadData('doctors.json');
 const patientsData = loadData('patients.json');
 const healthPackagesData = loadData('services.json');
 const vouchersData = loadData('vouchers.json');
-const appointmentsData = loadData('appointments.json');
 
 // Tiện ích hỗ trợ ngày giờ
 function dateOnly(daysFromNow) {
-  const now = new Date();
-  return new Date(Date.UTC(now.getFullYear(), now.getMonth(), now.getDate() + daysFromNow));
+  return demoDate(daysFromNow);
 }
 
 function time(hour, minute = 0) {
@@ -112,6 +110,7 @@ async function main() {
   console.log('1. Khởi tạo tài khoản quản trị & nhân viên tiếp đón...');
   const baseStaffAccounts = [
     { email: 'admin@vitacare.local', fullName: 'Quản trị hệ thống', role: 'ADMIN' },
+    { email: 'chain-manager@vitacare.local', fullName: 'Quản lý toàn chuỗi', role: 'CHAIN_MANAGER' },
     { email: 'manager@vitacare.local', fullName: 'Quản lý cơ sở', role: 'BRANCH_MANAGER' },
     { email: 'receptionist@vitacare.local', fullName: 'Tiếp nhận Đỗ Lan', role: 'RECEPTIONIST' },
   ];
@@ -719,233 +718,9 @@ async function main() {
     }
   }
 
-  // 9. Khởi tạo Lịch hẹn mẫu chuẩn phục vụ Test/Demo đồ án (từ appointments.json)
-  console.log('9. Nạp các lịch hẹn mẫu với kịch bản đầy đủ cho Demo đồ án (từ appointments.json)...');
-  for (const appt of appointmentsData) {
-    const profile = patientProfilesMap.get(appt.patientCode);
-    const doctor = doctorsMap.get(appt.doctorEmail);
-    const branch = branchesMap.get(appt.branchCode);
-    if (!profile || !branch) continue;
-
-    const workDate = dateOnly(appt.dayOffset);
-    let scheduleSlotId = null;
-    let actualBranchId = branch.id;
-
-    if (doctor) {
-      let schedule = await prisma.doctorSchedule.findFirst({
-        where: { doctorId: doctor.id, branchId: branch.id, workDate },
-        include: { slots: { orderBy: { startTime: 'asc' } } },
-      });
-      if (!schedule) {
-        schedule = await prisma.doctorSchedule.findFirst({
-          where: { doctorId: doctor.id, workDate },
-          include: { slots: { orderBy: { startTime: 'asc' } } },
-        });
-      }
-      if (schedule && schedule.slots.length > 0) {
-        const slotIdx = (appt.queueNumber ? appt.queueNumber - 1 : 0) % schedule.slots.length;
-        scheduleSlotId = schedule.slots[slotIdx].id;
-        actualBranchId = schedule.branchId;
-      }
-    }
-
-    const bookingMethodCode =
-      appt.bookingMethodCode || (appt.packageCodeSuffix ? 'HEALTH_PACKAGE' : 'CONSULTATION');
-    let servicePackageId = null;
-    if (appt.packageCodeSuffix) {
-      const pkg = await prisma.servicePackage.findFirst({
-        where: { code: `PKG-${appt.packageCodeSuffix}-${branch.code}` },
-      });
-      servicePackageId = pkg?.id ?? null;
-    }
-    if (!servicePackageId && ['SPECIALTY_EXAM', 'AFTER_HOURS'].includes(bookingMethodCode)) {
-      const doctorSpecialty = doctor
-        ? await prisma.doctorSpecialty.findFirst({
-            where: { doctorId: doctor.id, isPrimary: true },
-            select: { specialtyId: true },
-          })
-        : null;
-      const packageForMethod = await prisma.servicePackage.findFirst({
-        where: {
-          specialtyId: doctorSpecialty?.specialtyId,
-          branchBookingMethod: {
-            branchId: actualBranchId,
-            bookingMethod: { code: bookingMethodCode, isActive: true },
-          },
-          isActive: true,
-        },
-        select: { id: true },
-      });
-      servicePackageId = packageForMethod?.id ?? null;
-    }
-    const branchBookingMethod = await prisma.branchBookingMethod.findFirst({
-      where: {
-        branchId: actualBranchId,
-        isEnabled: true,
-        bookingMethod: { code: bookingMethodCode, isActive: true },
-      },
-      select: { bookingMethodId: true },
-    });
-    if (!branchBookingMethod) {
-      throw new Error(
-        `Không tìm thấy booking method ${bookingMethodCode} tại chi nhánh ${actualBranchId} cho ${appt.bookingCode}`,
-      );
-    }
-    if (!servicePackageId && ['SPECIALTY_EXAM', 'AFTER_HOURS', 'HEALTH_PACKAGE'].includes(bookingMethodCode)) {
-      throw new Error(`Appointment package bị thiếu cho method ${bookingMethodCode}: ${appt.bookingCode}`);
-    }
-    if (servicePackageId && !['SPECIALTY_EXAM', 'AFTER_HOURS', 'HEALTH_PACKAGE'].includes(bookingMethodCode)) {
-      throw new Error(`Appointment package không hợp lệ với method ${bookingMethodCode}: ${appt.bookingCode}`);
-    }
-    if (!servicePackageId && !['CONSULTATION', 'ONLINE_CONSULTATION'].includes(bookingMethodCode)) {
-      throw new Error(`Appointment không package có method không hợp lệ: ${appt.bookingCode}`);
-    }
-
-    const checkedInAt = (appt.status === 'CHECKED_IN' || appt.status === 'COMPLETED')
-      ? workDate
-      : null;
-
-    // 9a. Tạo đơn tổng BookingOrder
-    const orderCode = `ORD-${appt.bookingCode}`;
-    const bookingOrder = await prisma.bookingOrder.upsert({
-      where: { orderCode },
-      update: {
-        totalAmount: appt.price,
-        status: appt.paymentStatus === 'PAID' ? 'PAID' : 'CANCELLED',
-      },
-      create: {
-        accountId: profile.accountId,
-        orderCode,
-        groupType: 'SINGLE',
-        totalAmount: appt.price,
-        status: appt.paymentStatus === 'PAID' ? 'PAID' : 'CANCELLED',
-        note: appt.symptomsDescription,
-      },
-    });
-
-    const appointment = await prisma.appointment.upsert({
-      where: { bookingCode: appt.bookingCode },
-      update: {
-        bookingOrderId: bookingOrder.id,
-        patientProfileId: profile.id,
-        branchId: actualBranchId,
-        bookingMethodId: branchBookingMethod.bookingMethodId,
-        scheduleSlotId,
-        servicePackageId,
-        servicePrice: appt.price,
-        status: appt.status,
-        queueNumber: appt.queueNumber,
-        checkedInAt,
-        symptomsDescription: appt.symptomsDescription,
-      },
-      create: {
-        bookingOrderId: bookingOrder.id,
-        bookingCode: appt.bookingCode,
-        patientProfileId: profile.id,
-        branchId: actualBranchId,
-        bookingMethodId: branchBookingMethod.bookingMethodId,
-        scheduleSlotId,
-        servicePackageId,
-        servicePrice: appt.price,
-        status: appt.status,
-        queueNumber: appt.queueNumber,
-        checkedInAt,
-        symptomsDescription: appt.symptomsDescription,
-      },
-    });
-
-    // 9b. Tạo mã QR Token vé khám cho bệnh nhân
-    const tokenHash = createHash('sha256').update(`${appointment.id}-${appt.bookingCode}-vitacare`).digest('hex');
-    const expiresAt = new Date(workDate.getTime() + 7 * 24 * 60 * 60 * 1000);
-    await prisma.appointmentQrToken.upsert({
-      where: { appointmentId: appointment.id },
-      update: { tokenHash, expiresAt, usedAt: (appt.status === 'CHECKED_IN' || appt.status === 'COMPLETED') ? workDate : null },
-      create: { appointmentId: appointment.id, tokenHash, expiresAt, usedAt: (appt.status === 'CHECKED_IN' || appt.status === 'COMPLETED') ? workDate : null },
-    });
-
-    // 9c. Tạo lịch sử chuyển trạng thái (Timeline)
-    await prisma.appointmentStatusHistory.deleteMany({ where: { appointmentId: appointment.id } });
-    await prisma.appointmentStatusHistory.create({
-      data: {
-        appointmentId: appointment.id,
-        fromStatus: 'HOLD',
-        toStatus: 'CONFIRMED',
-        actorId: profile.accountId,
-        reason: 'Khách hàng hoàn tất xác nhận đặt lịch',
-      },
-    });
-    if (appt.status === 'CHECKED_IN' || appt.status === 'COMPLETED') {
-      await prisma.appointmentStatusHistory.create({
-        data: {
-          appointmentId: appointment.id,
-          fromStatus: 'CONFIRMED',
-          toStatus: 'CHECKED_IN',
-          reason: 'Tiếp tân quét mã QR xác nhận tiếp đón tại quầy',
-        },
-      });
-    }
-    if (appt.status === 'COMPLETED') {
-      await prisma.appointmentStatusHistory.create({
-        data: {
-          appointmentId: appointment.id,
-          fromStatus: 'CHECKED_IN',
-          toStatus: 'COMPLETED',
-          reason: 'Bác sĩ hoàn tất ca khám và lưu hồ sơ bệnh án',
-        },
-      });
-    }
-
-    // 9d. Tạo Hóa đơn, Mục hóa đơn & Giao dịch thanh toán
-    const invoiceStatus = appt.paymentStatus === 'PAID' ? 'PAID' : 'CANCELLED';
-    const paidAt = appt.paymentStatus === 'PAID' ? workDate : null;
-    const invoice = await prisma.invoice.upsert({
-      where: { appointmentId: appointment.id },
-      update: {
-        bookingOrderId: bookingOrder.id,
-        totalAmount: appt.price,
-        subtotal: appt.price,
-        status: invoiceStatus,
-        paidAt,
-        issuedBranchId: actualBranchId,
-      },
-      create: {
-        appointmentId: appointment.id,
-        bookingOrderId: bookingOrder.id,
-        totalAmount: appt.price,
-        subtotal: appt.price,
-        status: invoiceStatus,
-        paidAt,
-        issuedBranchId: actualBranchId,
-      },
-    });
-
-    await prisma.invoiceItem.deleteMany({ where: { invoiceId: invoice.id } });
-    await prisma.invoiceItem.create({
-      data: {
-        invoiceId: invoice.id,
-        description: appt.packageCodeSuffix ? `Phí gói khám ${appt.packageCodeSuffix}` : `Phí khám chuyên khoa ${doctor?.user?.fullName ?? ''}`,
-        quantity: 1,
-        unitPrice: appt.price,
-        amount: appt.price,
-      },
-    });
-
-    if (appt.paymentStatus === 'PAID') {
-      await prisma.paymentTransaction.deleteMany({ where: { invoiceId: invoice.id } });
-      await prisma.paymentTransaction.create({
-        data: {
-          invoiceId: invoice.id,
-          provider: 'PAYOS',
-          providerTransactionId: `TXN-${appt.bookingCode}`,
-          idempotencyKey: `IDEM-${appt.bookingCode}`,
-          method: 'ONLINE',
-          amount: appt.price,
-          status: 'SUCCESS',
-          paidAt: workDate,
-        },
-      });
-    }
-  }
+  // 9. Dữ liệu vận hành đồng bộ cho tất cả vai trò, theo ngày seed tại Việt Nam.
+  console.log('9. Nạp lịch hẹn, doanh thu, tài khoản và nhật ký dashboard...');
+  await seedDashboardData(prisma, { passwordHash: defaultPassword });
 
   // 10. Khởi tạo Danh sách Voucher ưu đãi (từ vouchers.json)
   console.log('10. Nạp danh sách voucher ưu đãi chuẩn...');
@@ -1031,7 +806,11 @@ async function main() {
   console.log('✓ TOÀN BỘ DATA CHUẨN ĐÃ ĐƯỢC NẠP THÀNH CÔNG 100%!');
   console.log('✓ Tài khoản kiểm thử (Mật khẩu chung: VitaCare@123):');
   console.log('  - Quản trị viên: admin@vitacare.local');
-  console.log('  - Quản lý chi nhánh: manager@vitacare.local');
+  console.log('  - Quản lý toàn chuỗi: chain-manager@vitacare.local');
+  console.log('  - Quản lý Trung tâm: manager@vitacare.local');
+  console.log('  - Quản lý Cơ sở Đông: manager.east@vitacare.local');
+  console.log('  - Lễ tân Cơ sở Đông: receptionist.east@vitacare.local');
+  console.log('  - Tài khoản khóa: manager.locked / receptionist.locked / doctor.locked / patient.locked @vitacare.local');
   console.log('  - Tiếp tân quầy: receptionist@vitacare.local');
   console.log('  - Bác sĩ Tim mạch: doctor.cardio@vitacare.local (BS. CKI Nguyễn Minh Tâm)');
   console.log('  - Bác sĩ Nhi: doctor.pediatrics@vitacare.local (ThS. BS Trần Thu Hà)');

@@ -54,9 +54,10 @@ export class RecommendationController {
   @ApiOperation({ summary: 'Tìm kiếm gói khám bằng ngôn ngữ tự nhiên / triệu chứng y khoa' })
   async semanticSearch(
     @Query() query: SemanticSearchQueryDto,
+    @Req() req: RecommendationRequest,
   ) {
     this.logger.log(`[API GET] /semantic-search?q="${query.q}"${query.branchId ? ` (branchId: ${query.branchId})` : ''}`);
-    return this.recommendationService.semanticSearchPackages(query.q, query.branchId);
+    return this.recommendationService.semanticSearchPackages(query.q, query.branchId, { sessionId: query.sessionId, accountId: req.user?.id });
   }
 
   @Post('patient-profile/:profileId/refresh')

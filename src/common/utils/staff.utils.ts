@@ -54,7 +54,7 @@ export function resolveBranchId(
   requestedBranchId?: string,
 ): string | undefined {
   const branchIds = user.branchAssignments.map((b) => b.branchId)
-  if (user.role === 'ADMIN') {
+  if (user.role === 'CHAIN_MANAGER') {
     return requestedBranchId && requestedBranchId !== 'all' ? requestedBranchId : undefined
   }
   if (requestedBranchId && requestedBranchId !== 'all' && branchIds.includes(requestedBranchId)) {

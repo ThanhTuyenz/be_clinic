@@ -7,6 +7,9 @@ import { SystemCatalogService } from './system-catalog.service.js'
 @ApiTags('System catalog') @ApiBearerAuth('access-token') @SkipPermissions() @Controller('admin/catalog')
 export class SystemCatalogController {
   constructor(private readonly service:SystemCatalogService){}
+  @Patch('branch-packages/:id') setBranchPackage(@Req() req: Request, @Param('id') id: string, @Body() body: { branchId: string; branchBookingMethodIds: string[] }) {
+    return this.service.setBranchPackage(req.user!.id, id, body)
+  }
   @Get(':resource') list(@Req() req:Request,@Param('resource') resource:string,@Query('q') q=''){return this.service.list(req.user!.id,resource,q)}
   @Post('branch-specialties/batch') batchBranchSpecialties(@Req() req: Request, @Body() body: { branchId: string; specialtyIds: number[] }) {
     return this.service.batchBranchSpecialties(req.user!.id, body)

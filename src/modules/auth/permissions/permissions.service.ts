@@ -29,7 +29,7 @@ export class PermissionsService {
    * Tự động cache trong Redis 5 phút để tối ưu hiệu năng
    */
   async getUserPermissions(userId: string): Promise<UserPermissionsResult> {
-    const cacheKey = `auth:user_perms:${userId}`;
+    const cacheKey = `auth:v4:user_perms:${userId}`;
     if (this.redis.isEnabled()) {
       const cached = await this.redis.get<UserPermissionsResult>(cacheKey);
       if (cached) return cached;
@@ -72,7 +72,7 @@ export class PermissionsService {
    */
   invalidateCache(userId: string): void {
     if (this.redis.isEnabled()) {
-      this.redis.delete(`auth:user_perms:${userId}`).catch((err) => {
+      this.redis.delete(`auth:v4:user_perms:${userId}`).catch((err) => {
         this.logger.warn(`Failed to invalidate permission cache for user ${userId}: ${err.message}`);
       });
       this.logger.log(`Invalidated permission cache for user ${userId}`);

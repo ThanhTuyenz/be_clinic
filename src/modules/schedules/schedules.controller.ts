@@ -5,10 +5,11 @@ import { JwtAuthGuard } from '../auth/jwt-auth-core/guards/jwt-auth.guard.js';
 import { RolesGuard } from '../../common/guards/roles.guard.js';
 import { Roles } from '../../common/decorators/roles.decorator.js';
 import { SkipPermissions } from 'src/common/decorators';
+import { RequirePermissions } from '../../common/decorators/require-permissions.decorator.js';
+import { AppPermission } from '../../common/constants/permissions.constant.js';
 import { SchedulesService } from './schedules.service.js';
 
 @ApiTags('Schedules')
-@SkipPermissions()
 @Controller('schedules')
 export class SchedulesController {
   constructor(private readonly schedulesService: SchedulesService) {}
@@ -22,7 +23,7 @@ export class SchedulesController {
   }
 
   @Get()
-  @SkipPermissions()
+  @RequirePermissions(AppPermission.SCHEDULE_READ)
   @ApiOperation({ summary: 'Danh sách ca làm việc (có thể lọc theo doctorId, branchId, ngày, withSlots, availableOnly)' })
   findAll(
     @Query('doctorId') doctorId?: string,
@@ -43,45 +44,50 @@ export class SchedulesController {
   }
 
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles('ADMIN', 'BRANCH_MANAGER', 'DOCTOR')
+  @Roles('CHAIN_MANAGER', 'BRANCH_MANAGER', 'DOCTOR')
   @ApiBearerAuth()
   @Post()
+  @RequirePermissions(AppPermission.SCHEDULE_CREATE)
   @ApiOperation({ summary: 'Tạo ca trực mới + tự động sinh slot' })
   create(@Body() body: any) {
     return this.schedulesService.create(body);
   }
 
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles('ADMIN', 'BRANCH_MANAGER', 'DOCTOR')
+  @Roles('CHAIN_MANAGER', 'BRANCH_MANAGER', 'DOCTOR')
   @ApiBearerAuth()
   @Post('batch')
+  @RequirePermissions(AppPermission.SCHEDULE_CREATE)
   @ApiOperation({ summary: 'Phân ca định kỳ / hàng loạt theo các thứ trong tuần' })
   createBatch(@Body() body: any) {
     return this.schedulesService.createBatch(body);
   }
 
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles('ADMIN', 'BRANCH_MANAGER', 'DOCTOR')
+  @Roles('CHAIN_MANAGER', 'BRANCH_MANAGER', 'DOCTOR')
   @ApiBearerAuth()
   @Post('copy-week')
+  @RequirePermissions(AppPermission.SCHEDULE_CREATE)
   @ApiOperation({ summary: 'Sao chép toàn bộ lịch trực từ tuần này sang tuần sau' })
   copyWeek(@Body() body: any) {
     return this.schedulesService.copyWeek(body);
   }
 
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles('ADMIN', 'BRANCH_MANAGER', 'DOCTOR')
+  @Roles('CHAIN_MANAGER', 'BRANCH_MANAGER', 'DOCTOR')
   @ApiBearerAuth()
   @Patch(':id')
+  @RequirePermissions(AppPermission.SCHEDULE_UPDATE)
   @ApiOperation({ summary: 'Cập nhật ca trực (tái sinh slot nếu thay đổi thời gian/capacity)' })
   update(@Param('id') id: string, @Body() body: any) {
     return this.schedulesService.update(id, body);
   }
 
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles('ADMIN', 'BRANCH_MANAGER', 'DOCTOR')
+  @Roles('CHAIN_MANAGER', 'BRANCH_MANAGER', 'DOCTOR')
   @ApiBearerAuth()
   @Delete(':id')
+  @RequirePermissions(AppPermission.SCHEDULE_DELETE)
   @ApiOperation({ summary: 'Xóa ca trực (cascade xóa slot)' })
   remove(@Param('id') id: string) {
     return this.schedulesService.remove(id);

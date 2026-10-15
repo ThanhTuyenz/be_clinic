@@ -10,7 +10,11 @@ import {
   Patch,
   Post,
   Query,
+  Req,
+  ForbiddenException,
 } from '@nestjs/common';
+import type { Request } from 'express';
+import { PermissionsService } from '../permissions/permissions.service';
 import {
   ApiBearerAuth,
   ApiOperation,
@@ -34,13 +38,17 @@ import { RolePermissionDto } from './dtos/role-permission.dto';
 export class UsersController {
   constructor(
     @Inject(Services.USERS) private readonly usersService: IUsersService,
+    private readonly permissions: PermissionsService,
   ) { }
 
   @Post()
-  @RequirePermissions(AppPermission.USER_MANAGE)
+  @RequirePermissions(AppPermission.USER_CREATE)
   @ApiBearerAuth('access-token')
   @ApiOperation({ summary: 'Tạo mới người dùng (admin)' })
-  create(@Body() createUserDto: CreateUserDto) {
+  async create(@Req() request: Request, @Body() createUserDto: CreateUserDto) {
+    if (['admin', 'chain_manager', 'branch_manager'].includes(String(createUserDto.role).toLowerCase()) || createUserDto.roleId !== undefined || createUserDto.customPermissions !== undefined) {
+      await this.requireAdditional(request.user!.id, AppPermission.ROLE_MANAGE);
+    }
     return this.usersService.createUser(createUserDto);
   }
 
@@ -63,16 +71,24 @@ export class UsersController {
   }
 
   @Patch(':id')
-  @RequirePermissions(AppPermission.USER_MANAGE)
+  @RequirePermissions(AppPermission.USER_UPDATE)
   @ApiBearerAuth('access-token')
   @ApiParam({ name: 'id', description: 'UUID người dùng' })
   @ApiOperation({ summary: 'Cập nhật người dùng (admin)' })
-  update(@Param('id') id: string, @Body() updateUserDto: UpdateUserAdminDto) {
+  async update(@Req() request: Request, @Param('id') id: string, @Body() updateUserDto: UpdateUserAdminDto) {
+    if (updateUserDto.customPermissions !== undefined || updateUserDto.roleId !== undefined) {
+      await this.requireAdditional(request.user!.id, AppPermission.ROLE_MANAGE);
+    }
+    if (updateUserDto.role !== undefined) {
+      const existing = await this.usersService.findOneUser({ id });
+      if (String(existing?.role).toLowerCase() !== String(updateUserDto.role).toLowerCase()) await this.requireAdditional(request.user!.id, AppPermission.ROLE_MANAGE);
+    }
+    if (updateUserDto.isDeleted !== undefined) await this.requireAdditional(request.user!.id, AppPermission.USER_DELETE);
     return this.usersService.updateUser(id, updateUserDto);
   }
 
   @Delete(':id')
-  @RequirePermissions(AppPermission.USER_MANAGE)
+  @RequirePermissions(AppPermission.USER_DELETE)
   @ApiBearerAuth('access-token')
   @HttpCode(HttpStatus.NO_CONTENT)
   @ApiParam({ name: 'id', description: 'UUID người dùng' })
@@ -82,7 +98,7 @@ export class UsersController {
   }
 
   @Patch(':id/role')
-  @RequirePermissions(AppPermission.USER_MANAGE)
+  @RequirePermissions(AppPermission.ROLE_MANAGE)
   @ApiBearerAuth('access-token')
   @ApiParam({ name: 'id', description: 'UUID người dùng' })
   @ApiOperation({ summary: 'Gán role cho người dùng (admin)' })
@@ -91,7 +107,7 @@ export class UsersController {
   }
 
   @Delete(':id/role')
-  @RequirePermissions(AppPermission.USER_MANAGE)
+  @RequirePermissions(AppPermission.ROLE_MANAGE)
   @ApiBearerAuth('access-token')
   @HttpCode(HttpStatus.NO_CONTENT)
   @ApiParam({ name: 'id', description: 'UUID người dùng' })
@@ -101,7 +117,7 @@ export class UsersController {
   }
 
   @Post(':id/permissions')
-  @RequirePermissions(AppPermission.USER_MANAGE)
+  @RequirePermissions(AppPermission.ROLE_MANAGE)
   @ApiBearerAuth('access-token')
   @ApiParam({ name: 'id', description: 'UUID người dùng' })
   @ApiOperation({ summary: 'Gán quyền tùy chỉnh cho người dùng (admin)' })
@@ -113,12 +129,16 @@ export class UsersController {
   }
 
   @Delete(':id/permissions')
-  @RequirePermissions(AppPermission.USER_MANAGE)
+  @RequirePermissions(AppPermission.ROLE_MANAGE)
   @ApiBearerAuth('access-token')
   @HttpCode(HttpStatus.NO_CONTENT)
   @ApiParam({ name: 'id', description: 'UUID người dùng' })
   @ApiOperation({ summary: 'Xóa quyền tùy chỉnh của người dùng (admin)' })
   async removeCustomPermissions(@Param('id') id: string): Promise<void> {
     await this.usersService.updateUser(id, { customPermissions: null });
+  }
+  private async requireAdditional(userId: string, permission: AppPermission) {
+    const result = await this.permissions.getUserPermissions(userId);
+    if (!result.effectivePermissions.includes(permission)) throw new ForbiddenException('Bạn không có quyền thay đổi vai trò, phân quyền hoặc trạng thái xóa tài khoản');
   }
 }

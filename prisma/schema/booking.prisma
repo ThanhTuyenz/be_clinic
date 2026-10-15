@@ -36,6 +36,10 @@ model Appointment {
   servicePrice                 Decimal?           @map("service_price") @db.Decimal(12, 2)
   symptomsDescription          String?            @map("symptoms_description")
   bookedViaAi                  Boolean            @default(false) @map("booked_via_ai")
+  searchId                     String?            @map("search_id") @db.Uuid
+  sourceViewId                 String?            @map("source_view_id") @db.Uuid
+  search                       SearchRequest?     @relation(fields: [searchId], references: [id], onDelete: SetNull)
+  sourceView                   AnalyticsInteraction? @relation(fields: [sourceViewId], references: [id], onDelete: SetNull)
   status                       AppointmentStatus  @default(HOLD)
   holdExpiresAt                DateTime?          @map("hold_expires_at") @db.Timestamptz(3)
   queueNumber                  Int?               @map("queue_number")
@@ -62,6 +66,8 @@ model Appointment {
   telehealthSession            TelehealthSession?
 
   @@index([bookingOrderId])
+  @@index([searchId])
+  @@index([sourceViewId])
   @@index([bookingMethodId])
   @@index([patientProfileId, status])
   @@index([patientProfileId, createdAt])

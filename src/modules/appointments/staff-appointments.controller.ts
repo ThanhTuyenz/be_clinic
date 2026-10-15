@@ -10,6 +10,8 @@ import {
   ApiTags,
 } from '@nestjs/swagger';
 import { SkipPermissions } from 'src/common/decorators';
+import { RequirePermissions } from '../../common/decorators/require-permissions.decorator.js';
+import { AppPermission } from '../../common/constants/permissions.constant.js';
 import { CreateReceptionAppointmentSwaggerDto, UpdateAppointmentStatusSwaggerDto } from './dtos/appointment.swagger.dto.js';
 import { StaffAppointmentsService } from './staff-appointments.service.js';
 
@@ -47,6 +49,7 @@ export class StaffAppointmentsController {
   }
 
   @Get('patients')
+  @RequirePermissions(AppPermission.PATIENT_READ)
   @ApiOperation({ summary: 'Danh sách bệnh nhân cho bộ phận tiếp nhận' })
   @ApiQuery({ name: 'page', required: false, type: Number })
   @ApiQuery({ name: 'pageSize', required: false, type: Number })
@@ -59,6 +62,7 @@ export class StaffAppointmentsController {
   }
 
   @Get('patient-history')
+  @RequirePermissions(AppPermission.CLINICAL_READ)
   @ApiOperation({ summary: 'Lịch sử khám của một bệnh nhân' })
   @ApiQuery({ name: 'patientId' })
   listPatientHistoryReception(@Req() req: Request) {
@@ -127,6 +131,7 @@ export class StaffAppointmentsController {
   }
 
   @Post('doctor-leave/impact-analysis')
+  @RequirePermissions(AppPermission.SCHEDULE_UPDATE)
   @ApiOperation({ summary: 'Phân tích ảnh hưởng khi bác sĩ nghỉ phép' })
   doctorLeaveImpact(
     @Req() request: Request,
@@ -136,6 +141,7 @@ export class StaffAppointmentsController {
   }
 
   @Post('doctor-leave/smart-reschedule')
+  @RequirePermissions(AppPermission.SCHEDULE_UPDATE)
   @ApiOperation({ summary: 'Thực hiện dời lịch thông minh tự động' })
   smartReschedule(
     @Req() request: Request,

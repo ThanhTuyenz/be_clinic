@@ -67,6 +67,11 @@ export class HomeRecommendationQueryDto {
 }
 
 export class SemanticSearchQueryDto {
+  @IsOptional()
+  @IsString()
+  @MinLength(16)
+  @MaxLength(100)
+  sessionId?: string;
   @IsString()
   @IsNotEmpty({ message: 'Từ khóa tìm kiếm không được để trống' })
   @MinLength(2, { message: 'Từ khóa tìm kiếm phải có ít nhất 2 ký tự' })
