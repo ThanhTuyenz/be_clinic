@@ -7,7 +7,6 @@
     "symptoms": ["Kiểm tra sức khỏe định kỳ", "Mệt mỏi suy nhược", "Sụt cân không rõ nguyên nhân"],
     "price": 1290000,
     "durationMin": 45,
-    "sessionType": "ALL_DAY",
     "imageUrl": "https://images.unsplash.com/photo-1576091160399-112ba8d25d1d?w=800&auto=format&fit=crop&q=80"
   },
   {
@@ -18,7 +17,6 @@
     "symptoms": ["Đau tức ngực", "Hồi hộp đánh trống ngực", "Khó thở khi gắng sức", "Huyết áp không ổn định"],
     "price": 990000,
     "durationMin": 40,
-    "sessionType": "ALL_DAY",
     "imageUrl": "https://images.unsplash.com/photo-1628348068343-c6a848d2b6dd?w=800&auto=format&fit=crop&q=80"
   },
   {
@@ -29,7 +27,6 @@
     "symptoms": ["Khám phụ khoa định kỳ", "Rối loạn kinh nguyệt", "Tầm soát u xơ u nang"],
     "price": 1490000,
     "durationMin": 50,
-    "sessionType": "ALL_DAY",
     "imageUrl": "https://images.unsplash.com/photo-1579684385127-1ef15d508118?w=800&auto=format&fit=crop&q=80"
   },
   {
@@ -40,7 +37,6 @@
     "symptoms": ["Mắt nhìn mờ", "Mỏi mắt chảy nước mắt", "Cần đo cắt kính cận loạn"],
     "price": 350000,
     "durationMin": 30,
-    "sessionType": "ALL_DAY",
     "imageUrl": "https://images.unsplash.com/photo-1559839734-2b71ea197ec2?w=800&auto=format&fit=crop&q=80"
   },
   {
@@ -51,7 +47,6 @@
     "symptoms": ["Thị lực giảm sút ở người lớn tuổi", "Nhìn lóa quầng sáng", "Đau nhức hốc mắt"],
     "price": 650000,
     "durationMin": 35,
-    "sessionType": "ALL_DAY",
     "imageUrl": "https://images.unsplash.com/photo-1579154204601-01588f351e67?w=800&auto=format&fit=crop&q=80"
   },
   {
@@ -62,7 +57,6 @@
     "symptoms": ["Đau rát họng nuốt vướng", "Nghẹt mũi chảy mũi kéo dài", "Ù tai", "Khàn giọng"],
     "price": 450000,
     "durationMin": 30,
-    "sessionType": "ALL_DAY",
     "imageUrl": "https://images.unsplash.com/photo-1622253692010-333f2da6031d?w=800&auto=format&fit=crop&q=80"
   }
 ]

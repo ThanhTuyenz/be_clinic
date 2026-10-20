@@ -71,15 +71,15 @@ function createShiftSlots(startHour, startMinute, endHour, endMinute, slotMin = 
 const SHIFT_DEFINITIONS = [
   {
     name: 'Sáng',
-    startTime: time(8, 0),
-    endTime: time(12, 0),
-    slots: createShiftSlots(8, 0, 12, 0, 30, 10),
+    startTime: time(7, 30),
+    endTime: time(11, 30),
+    slots: createShiftSlots(7, 30, 11, 30, 30, 10),
   },
   {
     name: 'Chiều',
     startTime: time(13, 30),
-    endTime: time(17, 30),
-    slots: createShiftSlots(13, 30, 17, 30, 30, 10),
+    endTime: time(17, 0),
+    slots: createShiftSlots(13, 30, 17, 0, 30, 10),
   },
 ];
 
@@ -156,13 +156,13 @@ async function main() {
   // 3. Khởi tạo Phương thức đặt khám
   console.log('3. Cấu hình các phương thức đặt khám...');
   const bookingMethodSeeds = [
-    ['SPECIALTY_EXAM', 'Khám Chuyên Khoa', 'Hơn 12 chuyên khoa mũi nhọn (Tim mạch, Mắt, Nhi, Da liễu...)', '/dat-lich?type=specialty', 1],
+    ['SPECIALTY_EXAM', 'Khám Trong Giờ', 'Đặt lịch khám trong giờ hoạt động của phòng khám theo chuyên khoa phù hợp', '/dat-lich?type=specialty', 1],
     ['CONSULTATION', 'Khám Cùng Bác Sĩ', 'Chủ động chọn bác sĩ CKI - CKII theo học hàm và kinh nghiệm', '/dat-lich?type=doctor', 2],
     ['ONLINE_CONSULTATION', 'Tư Vấn Online', 'Gọi video 1:1 cùng bác sĩ, đọc kết quả xét nghiệm từ xa', '/dat-lich?type=online-consultation', 3],
     ['FOLLOWUP_EXAM', 'Tái Khám', 'Đặt lịch tái khám với bác sĩ đã điều trị để theo dõi sức khỏe định kỳ', '/dat-lich?flow=followup', 4],
     ['FAMILY_BOOKING', 'Khám Gia Đình', 'Chăm sóc ông bà, cha mẹ và con nhỏ trên cùng một tài khoản', '/dat-lich?type=family', 5],
-    ['AFTER_HOURS', 'Khám Ngoài Giờ', '17:30 - 20:30 tiện lợi cho người bận rộn, không lo chờ đợi', '/dat-lich?type=after-hours', 6],
-    ['HEALTH_PACKAGE', 'Gói Khám Sức Khỏe', 'Đăng ký gói khám sức khỏe tổng quát và chuyên sâu.', '/dich-vu?view=health-packages', 7],
+    ['AFTER_HOURS', 'Khám Ngoài Giờ', 'Khám vào thứ Bảy và Chủ nhật theo lịch tiếp nhận của cơ sở', '/dat-lich?type=after-hours', 6],
+    ['HEALTH_PACKAGE', 'Gói Khám Sức Khỏe', 'Đăng ký gói khám sức khỏe tổng quát và chuyên sâu.', '/dat-lich?type=health-package', 7],
   ];
 
   const bookingMethodsMap = new Map();
@@ -326,32 +326,19 @@ async function main() {
       });
     }
 
-    // Gán bác sĩ vào cả 2 chi nhánh để hỗ trợ lịch luân phiên
-    for (const [idx, branch] of [...branchesMap.values()].entries()) {
-      await prisma.userBranchAssignment.upsert({
-        where: { userId_branchId: { userId: user.id, branchId: branch.id } },
-        update: { isPrimary: idx === 0 },
-        create: { userId: user.id, branchId: branch.id, isPrimary: idx === 0 },
-      });
-    }
+    const targetBranch = branchesMap.get(docData.branchCode);
+    if (!targetBranch) throw new Error('Chi nhánh bác sĩ không hợp lệ: ' + docData.email);
+    const targetRoom = roomsByBranchAndCode.get(`${targetBranch.code}:${docData.roomCode}`);
+    if (!targetRoom) throw new Error('Phòng khám bác sĩ không thuộc chi nhánh: ' + docData.email);
+    await prisma.userBranchAssignment.upsert({
+      where: { userId_branchId: { userId: user.id, branchId: targetBranch.id } },
+      update: { isPrimary: true },
+      create: { userId: user.id, branchId: targetBranch.id, isPrimary: true },
+    });
 
-    // Tạo lịch làm việc từ -7 ngày trước đến +21 ngày tới
-    // Mỗi ngày bác sĩ CHỈ trực DUY NHẤT tại 1 chi nhánh, đúng phòng khám đã chỉ định
-    for (let dayOffset = -7; dayOffset <= 21; dayOffset += 1) {
+    // Lịch cố định tại một chi nhánh, đủ 30 ngày đặt trước và cả cuối tuần.
+    for (let dayOffset = -7; dayOffset <= 30; dayOffset += 1) {
       const workDate = dateOnly(dayOffset);
-      const dayOfWeek = workDate.getUTCDay(); // 0 = Chủ nhật, 1 = Thứ 2, ..., 6 = Thứ 7
-      if (dayOfWeek === 0) continue; // Nghỉ Chủ nhật
-
-      // Phân bổ luân phiên theo rotationPattern:
-      // EVEN: T2, T4, T6 tại Trung tâm (P1xx) | T3, T5, T7 tại Cơ sở Đông (P2xx)
-      // ODD:  T2, T4, T6 tại Cơ sở Đông (P2xx) | T3, T5, T7 tại Trung tâm (P1xx)
-      const isMonWedFri = [1, 3, 5].includes(dayOfWeek);
-      const isCentral = docData.rotationPattern === 'EVEN' ? isMonWedFri : !isMonWedFri;
-      const targetBranch = isCentral ? branchesMap.get('VC-CENTRAL') : branchesMap.get('VC-EAST');
-      const targetRoomCode = isCentral ? docData.centralRoomCode : docData.eastRoomCode;
-      const roomKey = `${targetBranch.code}:${targetRoomCode}`;
-      const targetRoom = roomsByBranchAndCode.get(roomKey);
-
       for (const shift of SHIFT_DEFINITIONS) {
         const schedule = await prisma.doctorSchedule.upsert({
           where: {
@@ -604,6 +591,7 @@ async function main() {
             isActive: true,
           },
           create: {
+            receptionSchedules: { create: (service.methodCode === 'AFTER_HOURS' ? [6, 0] : [0, 1, 2, 3, 4, 5, 6]).map((dayOfWeek) => ({ branchId: branch.id, dayOfWeek, sessions: ['MORNING', 'AFTERNOON'] })) },
             code: service.code,
             name: service.name,
             slug,
@@ -639,12 +627,12 @@ async function main() {
             symptoms: Array.isArray(pkg.symptoms) ? pkg.symptoms : ['Kiểm tra sức khỏe định kỳ', 'Tầm soát ung thư sớm'],
             imageUrl: pkg.imageUrl || null,
             durationMin: pkg.durationMin || 45,
-            sessionType: pkg.sessionType || 'ALL_DAY',
             price: pkg.price,
             branchBookingMethodId: healthPackageMethod.id,
             isActive: true,
           },
           create: {
+            receptionSchedules: { create: Array.from({ length: 7 }, (_, dayOfWeek) => ({ branchId: branch.id, dayOfWeek, sessions: ['MORNING', 'AFTERNOON'] })) },
             code: fullCode,
             name: fullName,
             slug,
@@ -653,7 +641,6 @@ async function main() {
             symptoms: Array.isArray(pkg.symptoms) ? pkg.symptoms : ['Kiểm tra sức khỏe định kỳ', 'Tầm soát ung thư sớm'],
             imageUrl: pkg.imageUrl || null,
             durationMin: pkg.durationMin || 45,
-            sessionType: pkg.sessionType || 'ALL_DAY',
             price: pkg.price,
             branchBookingMethodId: healthPackageMethod.id,
             isActive: true,
@@ -802,6 +789,7 @@ async function main() {
     }
   }
 
+  await clearSeedCaches();
   console.log('\n====================================================');
   console.log('✓ TOÀN BỘ DATA CHUẨN ĐÃ ĐƯỢC NẠP THÀNH CÔNG 100%!');
   console.log('✓ Tài khoản kiểm thử (Mật khẩu chung: VitaCare@123):');
@@ -818,6 +806,34 @@ async function main() {
   console.log('  - Bệnh nhân phụ: patient01 -> patient05@vitacare.local');
   console.log('  - Voucher: CHAOBANMOI, MEDPRO10, TRIAN2026, KHAMONLINE');
   console.log('====================================================\n');
+}
+
+async function clearSeedCaches() {
+  if (process.env.REDIS_ENABLED !== 'true') return;
+  const { default: Redis } = await import('ioredis');
+  const redis = new Redis(process.env.REDIS_URL || 'redis://localhost:6379', {
+    db: Number(process.env.REDIS_DB || 0), lazyConnect: true, maxRetriesPerRequest: 1,
+    retryStrategy: () => null, connectTimeout: 5000,
+  });
+  redis.on('error', () => {});
+  try {
+    await redis.connect();
+    const prefix = process.env.REDIS_KEY_PREFIX ?? 'vitacare:';
+    let removed = 0;
+    for (const pattern of ['cache:public:*', 'rec:cache:*', 'rec:v2:*', 'pkg_vss:*', 'vector:pkg:*', 'user:status:*']) {
+      let cursor = '0';
+      do {
+        const [next, keys] = await redis.scan(cursor, 'MATCH', prefix + pattern, 'COUNT', 200);
+        cursor = next;
+        if (keys.length) removed += await redis.del(...keys);
+      } while (cursor !== '0');
+    }
+    console.log(`✓ Đã dọn ${removed} cache và chỉ mục dữ liệu cũ trong Redis.`);
+  } catch {
+    console.warn('Không kết nối được Redis để dọn cache sau seed.');
+  } finally {
+    redis.disconnect();
+  }
 }
 
 main()

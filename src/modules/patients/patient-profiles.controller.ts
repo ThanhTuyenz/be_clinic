@@ -1,12 +1,12 @@
 import { Body, Controller, Get, Param, Patch, Post, Req } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
 import type { Request } from 'express';
-import { RequirePermissions } from '../../common/decorators/require-permissions.decorator.js';
 import { AppPermission } from '../../common/constants/permissions.constant.js';
+import { RequirePermissions } from '../../common/decorators/require-permissions.decorator.js';
 import {
-  CreatePatientProfileDto,
-  PatientProfileResponseDto,
-  UpdatePatientProfileDto,
+CreatePatientProfileDto,
+PatientProfileResponseDto,
+UpdatePatientProfileDto,
 } from './patient-profiles.dto.js';
 import { PatientProfilesService } from './patient-profiles.service.js';
 

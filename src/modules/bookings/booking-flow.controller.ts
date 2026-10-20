@@ -11,7 +11,7 @@ import { BookingSlotsDto } from './dtos/booking-slots.dto.js';
 @SkipPermissions()
 @Controller('booking')
 export class BookingFlowController {
-  constructor(private readonly flowService: BookingFlowService) {}
+  constructor(private readonly flowService: BookingFlowService) { }
 
   /**
    * API 1: Khởi tạo dữ liệu theo luồng (Bootstrap API)
@@ -27,10 +27,9 @@ export class BookingFlowController {
     return this.flowService.getBookingInit(dto);
   }
 
-  /**
-   * API 2: Tính toán lịch & khung giờ khả dụng (Availability API)
-   * GET /api/v1/booking/slots?branchId=...&specialtyId=...&doctorId=...&date=2026-10-05
-   */
+
+  //  List khugn gio kha dung
+
   @Get('slots')
   @ApiOperation({
     summary: 'Tính toán lịch & khung giờ khả dụng (Availability API)',

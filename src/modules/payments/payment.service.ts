@@ -1,18 +1,16 @@
 import {
-  BadRequestException,
-  Injectable,
-  InternalServerErrorException,
-  Logger,
-  NotFoundException,
-  Optional,
-  Inject,
-  forwardRef,
+BadRequestException,
+Injectable,
+InternalServerErrorException,
+Logger,
+NotFoundException
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { PayOS, WebhookData } from '@payos/node';
+import { PayOS } from '@payos/node';
 import { PrismaService } from '../../infrastructure/database/prisma/prisma.service.js';
 import { BookingService } from '../bookings/booking.service.js';
 import { PaymentLinkResponse } from './dtos/payment.dto.js';
+import { PaymentSettlementService } from './payment-settlement.service.js';
 
 @Injectable()
 export class PaymentService {
@@ -24,9 +22,8 @@ export class PaymentService {
   constructor(
     private readonly configService: ConfigService,
     private readonly prisma: PrismaService,
-    @Optional()
-    @Inject(forwardRef(() => BookingService))
-    private readonly bookingService?: BookingService,
+    private readonly bookingService: BookingService,
+    private readonly settlement: PaymentSettlementService,
   ) {
     const clientId = this.configService.get<string>('PAYOS_CLIENT_ID');
     const apiKey = this.configService.get<string>('PAYOS_API_KEY');
@@ -160,6 +157,22 @@ export class PaymentService {
       throw new BadRequestException('Đã hết thời gian giữ chỗ. Vui lòng đặt lịch lại.');
     }
 
+    const pendingLink = invoice.payments.find(payment => payment.status === 'PENDING' && payment.provider === 'PAYOS');
+    const savedLink = pendingLink?.rawPayload as Record<string, unknown> | null;
+    if (pendingLink?.providerTransactionId && typeof savedLink?.checkoutUrl === 'string') {
+      return {
+        orderCode: Number(pendingLink.providerTransactionId), amount: Number(pendingLink.amount),
+        description: typeof savedLink.description === 'string' ? savedLink.description : '',
+        checkoutUrl: savedLink.checkoutUrl,
+        qrCode: typeof savedLink.qrCode === 'string' ? savedLink.qrCode : '',
+        paymentLinkId: typeof savedLink.paymentLinkId === 'string' ? savedLink.paymentLinkId : '',
+        accountNumber: typeof savedLink.accountNumber === 'string' ? savedLink.accountNumber : '',
+        accountName: typeof savedLink.accountName === 'string' ? savedLink.accountName : '',
+        bin: typeof savedLink.bin === 'string' ? savedLink.bin : '',
+        holdExpiresAt: holdExpiresAt.toISOString(),
+      };
+    }
+
     const orderCode = this.generateOrderCode();
     const description = this.sanitizeDescription(
       customDescription || `KHAM ${orderCode}`,
@@ -192,8 +205,6 @@ export class PaymentService {
       const paymentLink: any = typeof (payos as any).createPaymentLink === 'function'
         ? await (payos as any).createPaymentLink(paymentLinkData)
         : await payos.paymentRequests.create(paymentLinkData);
-
-
 
       // 3. Lưu vết OrderCode và Payment Link vào database
       await this.prisma.$transaction(async (tx) => {
@@ -267,18 +278,17 @@ export class PaymentService {
     const payos = this.getPayOSInstance();
     try {
       if (typeof (payos as any).verifyPaymentWebhookData === 'function') {
-        return (payos as any).verifyPaymentWebhookData(webhookBody);
+        return await (payos as any).verifyPaymentWebhookData(webhookBody);
       }
       if (payos.webhooks && typeof payos.webhooks.verify === 'function') {
         return await payos.webhooks.verify(webhookBody);
       }
-      return webhookBody.data;
+      throw new Error('PayOS SDK không hỗ trợ xác thực webhook');
     } catch (error: any) {
       this.logger.warn(`Xác thực Webhook PayOS thất bại: ${error.message}`);
       throw new BadRequestException('Dữ liệu webhook PayOS không hợp lệ hoặc sai chữ ký checksum');
     }
   }
-
 
   /**
    * Xử lý cập nhật trạng thái sau khi thanh toán thành công
@@ -318,56 +328,10 @@ export class PaymentService {
       throw new BadRequestException('Số tiền webhook không khớp giao dịch đang chờ');
     }
 
-    // Nếu có BookingService, tận dụng flow webhook chuẩn đầy đủ
-    if (this.bookingService) {
-      await this.bookingService.handlePaymentWebhook('PAYOS', {
-        paymentId: payment.id,
-        providerTransactionId: String(orderCode),
-        status: 'SUCCESS',
-        payload: {
-          orderCode,
-          reference,
-          raw: rawPayload,
-        },
-      });
-      return;
-    }
-
-    // Fallback: Cập nhật trực tiếp DB
-    await this.prisma.$transaction(async (tx) => {
-      await tx.paymentTransaction.update({
-        where: { id: payment.id },
-        data: {
-          status: 'SUCCESS',
-          paidAt: new Date(),
-          rawPayload: {
-            ...(payment.rawPayload as object),
-            bankReference: reference,
-          },
-        },
-      });
-
-      if (payment.invoiceId) {
-        await tx.invoice.update({
-          where: { id: payment.invoiceId },
-          data: {
-            status: 'PAID',
-            paidAt: new Date(),
-          },
-        });
-      }
-
-      if (payment.invoice?.appointment?.id) {
-        await tx.appointment.update({
-          where: { id: payment.invoice.appointment.id },
-          data: {
-            status: 'CONFIRMED',
-          },
-        });
-      }
+    await this.settlement.handlePaymentWebhook('PAYOS', {
+      paymentId: payment.id, providerTransactionId: String(orderCode), status: 'SUCCESS',
+      payload: { orderCode, reference, raw: rawPayload },
     });
-
-    this.logger.log(`Đã cập nhật thành công trạng thái đơn cho OrderCode: ${orderCode}`);
   }
 
   /**
@@ -402,14 +366,12 @@ export class PaymentService {
 
     const appointmentId = payment.invoice.appointment?.id || payment.invoice.bookingOrder?.id;
 
-    if (this.bookingService) {
-      await this.bookingService.handlePaymentWebhook('PAYOS_SIMULATE', {
+    await this.settlement.handlePaymentWebhook('PAYOS_SIMULATE', {
         paymentId: payment.id,
         providerTransactionId: payment.providerTransactionId || `sim-${Date.now()}`,
         status: 'SUCCESS',
         payload: { mock: true, paymentId: payment.id },
       });
-    }
 
     return {
       success: true,
@@ -461,6 +423,17 @@ export class PaymentService {
       return null;
     }
 
+    if (accountId) {
+      const ownedPayment = await this.prisma.paymentTransaction.findFirst({
+        where: { providerTransactionId: String(orderCode), invoice: { OR: [
+          { appointment: { patientProfile: { accountId } } },
+          { bookingOrder: { accountId } },
+        ] } },
+        select: { id: true },
+      });
+      if (!ownedPayment) throw new NotFoundException('Không tìm thấy giao dịch thanh toán');
+    }
+
     try {
       this.logger.log(`[PayOS Sync] Đang truy vấn trạng thái từ PayOS Gateway cho orderCode: ${orderCode}`);
       const paymentInfo: any = typeof (payos as any).getPaymentLinkInformation === 'function'
@@ -480,6 +453,10 @@ export class PaymentService {
         };
       }
 
+      if (paymentInfo.status === 'CANCELLED' && accountId && this.bookingService) {
+        await this.bookingService.cancelUnpaidPayment(String(orderCode), accountId);
+      }
+
       return {
         success: true,
         status: paymentInfo.status,
@@ -490,6 +467,133 @@ export class PaymentService {
       this.logger.error(`[PayOS Sync] Lỗi khi gọi getPaymentLinkInformation: ${err.message}`);
       return null;
     }
+  }
+
+  async paymentStatus(appointmentIdOrOrderId: string, accountId: string) {
+    const row = await this.prisma.appointment.findFirst({
+      where: {
+        id: appointmentIdOrOrderId,
+        OR: [
+          { patientProfile: { accountId } },
+          { bookingOrder: { accountId } },
+        ],
+      },
+      select: {
+        id: true,
+        bookingOrderId: true,
+        status: true,
+        holdExpiresAt: true,
+        bookingCode: true,
+        bookingMethod: { select: { code: true, name: true } },
+        telehealthSession: { select: { id: true } },
+        queueNumber: true,
+        bookingOrder: { select: { invoice: { select: { payments: { select: { status: true }, orderBy: { createdAt: 'desc' }, take: 1 } } } } },
+        invoice: { select: { payments: { select: { status: true }, orderBy: { createdAt: 'desc' }, take: 1 } } },
+        qrToken: { select: { id: true } },
+        branch: { select: { id: true, name: true, address: true } },
+        scheduleSlot: {
+          select: {
+            schedule: {
+              select: {
+                room: { select: { id: true, code: true, name: true } },
+                branch: { select: { id: true, name: true, address: true } },
+              },
+            },
+          },
+        },
+      },
+    });
+
+    if (!row) {
+      // Thử tìm theo bookingOrderId
+      const order = await (this.prisma as any).bookingOrder.findFirst({
+        where: { id: appointmentIdOrOrderId, accountId },
+        select: {
+          id: true,
+          orderCode: true,
+          groupType: true,
+          status: true,
+          totalAmount: true,
+          invoice: { select: { payments: { select: { status: true }, orderBy: { createdAt: 'desc' }, take: 1 } } },
+          appointments: {
+            select: {
+              id: true,
+              bookingCode: true,
+              status: true,
+              queueNumber: true,
+              patientProfile: { select: { id: true, fullName: true } },
+              qrToken: { select: { id: true } },
+            },
+          },
+        },
+      });
+      if (!order) throw new NotFoundException('Không tìm thấy lịch hẹn hoặc đơn đặt lịch');
+      const firstAppt = order.appointments[0];
+      return {
+        bookingOrderId: order.id,
+        appointmentId: firstAppt?.id || order.id,
+        orderCode: order.orderCode,
+        groupType: order.groupType,
+        status: order.status,
+        paymentStatus: order.invoice?.payments[0]?.status ?? null,
+        totalAmount: Number(order.totalAmount),
+        appointments: order.appointments.map((a: any) => ({
+          appointmentId: a.id,
+          bookingCode: a.bookingCode,
+          status: a.status,
+          queueNumber: a.queueNumber,
+          patient: { id: a.patientProfile?.id, fullName: a.patientProfile?.fullName },
+          hasQr: Boolean(a.qrToken),
+        })),
+      };
+    }
+
+    const doctorSlot = row.scheduleSlot;
+    const isTelehealth = Boolean(row.telehealthSession || row.bookingMethod?.code === 'ONLINE_CONSULTATION');
+    const room = doctorSlot?.schedule.room;
+    const branch = doctorSlot?.schedule.branch ?? row.branch;
+    const estimatedQueueNumber = row.queueNumber;
+
+    let siblingAppts: any[] = [];
+    if (row.bookingOrderId) {
+      const siblings = await (this.prisma as any).appointment.findMany({
+        where: { bookingOrderId: row.bookingOrderId },
+        select: {
+          id: true,
+          bookingCode: true,
+          status: true,
+          queueNumber: true,
+          patientProfile: { select: { id: true, fullName: true } },
+          qrToken: { select: { id: true } },
+        },
+        orderBy: { createdAt: 'asc' },
+      });
+      siblingAppts = siblings.map((a: any) => ({
+        appointmentId: a.id,
+        bookingCode: a.bookingCode,
+        status: a.status,
+        queueNumber: a.queueNumber,
+        patient: { id: a.patientProfile?.id, fullName: a.patientProfile?.fullName },
+        hasQr: Boolean(a.qrToken),
+      }));
+    }
+
+    return {
+      appointmentId: row.id,
+      bookingOrderId: row.bookingOrderId,
+      status: row.status,
+      holdExpiresAt: row.holdExpiresAt,
+      paymentStatus: row.invoice?.payments[0]?.status ?? row.bookingOrder?.invoice?.payments[0]?.status ?? null,
+      hasQr: Boolean(row.qrToken),
+      bookingCode: row.bookingCode,
+      isTelehealth,
+      bookingMethod: row.bookingMethod,
+      queueNumber: isTelehealth ? null : row.queueNumber,
+      estimatedQueueNumber: isTelehealth ? null : row.queueNumber ?? estimatedQueueNumber,
+      room: !isTelehealth && room ? { id: room.id, code: room.code, name: room.name } : null,
+      branch: branch ? { id: branch.id, name: branch.name, address: branch.address } : null,
+      appointments: siblingAppts.length > 0 ? siblingAppts : undefined,
+    };
   }
 
   // Bộ nhớ cache tạm danh sách ngân hàng

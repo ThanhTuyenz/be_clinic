@@ -18,6 +18,13 @@ try {
   assert.equal(managers.length, 2);
   assert(managers.every(u => u.branchAssignments.length === 1));
   assert.equal(new Set(managers.map(u => u.branchAssignments[0].branchId)).size, 2);
+  const doctors = await prisma.doctor.findMany({ select: { id: true, user: { select: { branchAssignments: { select: { branchId: true, isPrimary: true } } } } } });
+  assert(doctors.every(d => d.user.branchAssignments.length === 1 && d.user.branchAssignments[0].isPrimary), 'Each doctor must work at exactly one primary branch');
+  const doctorBranch = new Map(doctors.map(d => [d.id, d.user.branchAssignments[0].branchId]));
+  const schedules = await prisma.doctorSchedule.findMany({ select: { doctorId: true, branchId: true } });
+  assert(schedules.every(s => doctorBranch.get(s.doctorId) === s.branchId), 'Every shift must belong to the doctor assigned branch');
+  const afterHours = await prisma.servicePackage.findMany({ where: { branchBookingMethod: { bookingMethod: { code: 'AFTER_HOURS' } } }, select: { receptionSchedules: { select: { dayOfWeek: true } } } });
+  assert(afterHours.length > 0 && afterHours.every(p => p.receptionSchedules.length === 2 && p.receptionSchedules.every(day => [0, 6].includes(day.dayOfWeek))), 'After-hours packages only accept Saturday and Sunday');
   for (const [email] of demoStaff) assert(users.some(u => u.email === email));
   const profiles = await prisma.patientProfile.findMany({ select: { fullName: true, phoneNumber: true, dateOfBirth: true,
     gender: true, nationalId: true, healthInsuranceNumber: true, address: true, guardianName: true, guardianPhone: true,

@@ -34,7 +34,7 @@ export class PaymentReconciliationService {
   }
 
   // Runs independently of mobile/web and RabbitMQ connectivity.
-  @Interval(10_000)
+  @Interval(30_000)
   async reconcilePendingPayments(): Promise<void> {
     if (!this.enabled() || this.running) return;
     this.running = true;
@@ -43,7 +43,7 @@ export class PaymentReconciliationService {
         where: {
           provider: 'PAYOS',
           providerTransactionId: { not: null },
-          createdAt: { gte: new Date(Date.now() - 24 * 60 * 60 * 1000) },
+          createdAt: { gte: new Date(Date.now() - 24 * 60 * 60 * 1000), lte: new Date(Date.now() - 30_000) },
           invoice: { status: 'UNPAID' },
           OR: [
             { status: 'PENDING' },

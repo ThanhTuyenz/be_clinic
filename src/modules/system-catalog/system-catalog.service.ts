@@ -1,11 +1,13 @@
+import { assertReceptionMethods, parseReceptionDays, parseBranchReceptionSchedules } from '../bookings/helpers/package-reception.helper.js'
+import { UpdatePackageReceptionDto } from './dtos/update-package-reception.dto.js'
 import { BadRequestException, ForbiddenException, Injectable, InternalServerErrorException, NotFoundException } from '@nestjs/common'
+import { Prisma } from '@prisma/client'
 import { PrismaService } from '../../infrastructure/database/prisma/prisma.service.js'
 import { RedisService } from '../../infrastructure/redis/redis.service.js'
 import { EmbeddingService } from '../../infrastructure/embedding/embedding.service.js'
 
 import { calculateEffectivePermissions } from '../../common/constants/permissions.constant.js'
 
-const DEFAULT_ACTIVE_DAYS = [1, 2, 3, 4, 5, 6, 0]
 const DEFAULT_PACKAGE_DURATION_MIN = 30
 
 function generatePackageCode(): string {
@@ -191,7 +193,7 @@ export class SystemCatalogService {
         include: { branch: { select: { id: true, name: true } }, bookingMethod: true },
         orderBy: [{ branch: { name: 'asc' } }, { sortOrder: 'asc' }],
       })
-      return { items: rows.map(({ bookingMethod, ...row }: any) => ({ ...row, bookingMethodId: bookingMethod.id, type: bookingMethod.code, code: bookingMethod.code, displayName: bookingMethod.name, description: bookingMethod.description, route: bookingMethod.route })) }
+      return { items: rows.map(({ bookingMethod, ...row }: any) => ({ ...row, bookingMethodId: bookingMethod.id, type: bookingMethod.code, code: bookingMethod.code, displayName: bookingMethod.name, bookingMethodIsActive: bookingMethod.isActive, description: bookingMethod.description, route: bookingMethod.route })) }
     }
     if (resource === 'branch-specialties') {
       const baseWhere: any = isBranchManager ? { branchId: { in: branchIds } } : {}
@@ -229,6 +231,7 @@ export class SystemCatalogService {
 
     const include = resource === 'service-packages'
       ? {
+          receptionSchedules: { select: { branchId: true, dayOfWeek: true, sessions: true } },
           branchBookingMethod: { include: { branch: { select: { id: true, name: true } }, bookingMethod: { select: { id: true, code: true, name: true } } } },
           specialty: { select: { id: true, name: true } },
           branchBookingMethods: {
@@ -349,18 +352,12 @@ export class SystemCatalogService {
       if (body.branchIds !== undefined || body.applyAllBranches !== undefined) {
         const branchIds: string[] = body.applyAllBranches
           ? (await this.prisma.branch.findMany({ where: { isActive: true }, select: { id: true } })).map((b) => b.id)
-          : Array.isArray(body.branchIds)
-          ? body.branchIds
-          : []
-
-        await this.prisma.branchSpecialty.deleteMany({
-          where: { specialtyId, branchId: { notIn: branchIds } },
-        })
-        for (const bId of branchIds) {
+          : Array.isArray(body.branchIds) ? body.branchIds : []
+        await this.prisma.branchSpecialty.deleteMany({ where: { specialtyId, branchId: { notIn: branchIds } } })
+        for (const branchId of branchIds) {
           await this.prisma.branchSpecialty.upsert({
-            where: { branchId_specialtyId: { branchId: bId, specialtyId } },
-            update: { isActive: true },
-            create: { branchId: bId, specialtyId, isActive: true },
+            where: { branchId_specialtyId: { branchId, specialtyId } },
+            update: { isActive: true }, create: { branchId, specialtyId, isActive: true },
           })
         }
       }
@@ -368,72 +365,54 @@ export class SystemCatalogService {
     }
     if (resource === 'service-packages') {
       const data: any = await this.payload(resource, body, false)
-
-      const branchIds: string[] = body.applyAllBranches
-        ? (await this.prisma.branch.findMany({ where: { isActive: true }, select: { id: true } })).map((b) => b.id)
-        : Array.isArray(body.branchIds) && body.branchIds.length > 0
-        ? body.branchIds
-        : body.branchId ? [body.branchId] : []
-
-      const methodCodes: string[] = Array.isArray(body.bookingMethodCodes) && body.bookingMethodCodes.length > 0
-        ? body.bookingMethodCodes.map((c: string) => String(c).trim().toUpperCase())
-        : body.branchBookingMethodId
-        ? [(await this.prisma.branchBookingMethod.findUnique({ where: { id: body.branchBookingMethodId }, include: { bookingMethod: true } }))?.bookingMethod.code].filter(Boolean) as string[]
-        : []
-
-      if (branchIds.length > 0 && methodCodes.length > 0) {
-        const bbmIds: string[] = []
-        for (const branchId of branchIds) {
-          for (const methodCode of methodCodes) {
-            let bbm = await this.prisma.branchBookingMethod.findFirst({
-              where: { branchId, isEnabled: true, bookingMethod: { code: methodCode, isActive: true } },
-            })
-            if (!bbm) {
-              const bm = await this.prisma.bookingMethod.findFirst({ where: { code: methodCode, isActive: true } })
-              if (bm) {
-                bbm = await this.prisma.branchBookingMethod.upsert({
-                  where: { branchId_bookingMethodId: { branchId, bookingMethodId: bm.id } },
-                  update: { isEnabled: true },
-                  create: { branchId, bookingMethodId: bm.id, isEnabled: true },
-                })
-              }
-            }
-            if (bbm) bbmIds.push(bbm.id)
-          }
+      const updated = await this.prisma.$transaction(async (tx) => {
+        const existing = await tx.servicePackage.findUnique({ where: { id }, select: {
+          branchBookingMethodId: true, branchBookingMethods: { select: { branchBookingMethodId: true } },
+        } })
+        if (!existing) throw new NotFoundException('Không tìm thấy gói khám')
+        const ids = body.branchBookingMethodIds !== undefined ? body.branchBookingMethodIds : [...new Set([
+          ...existing.branchBookingMethods.map((link) => link.branchBookingMethodId),
+          ...(existing.branchBookingMethodId ? [existing.branchBookingMethodId] : []),
+        ])]
+        const methods = await this.packageDeployments(tx, ids, data.specialtyId)
+        const branchIds = [...new Set(methods.map((method) => method.branchId))]
+        const receptionSchedules = parseBranchReceptionSchedules(body.branchReceptionSchedules, branchIds)
+        const retained = await tx.packageReceptionSchedule.findMany({ where: { servicePackageId: id, branchId: { in: branchIds } }, select: { branchId: true, dayOfWeek: true, sessions: true } })
+        const replaced = new Set((body.branchReceptionSchedules || []).map((entry: any) => entry.branchId))
+        assertReceptionMethods(methods, [...retained.filter((day) => !replaced.has(day.branchId)), ...(receptionSchedules || [])])
+        if (body.branchBookingMethodIds !== undefined) {
+          await tx.packageReceptionSchedule.deleteMany({ where: { servicePackageId: id, branchId: { notIn: branchIds } } })
+          await tx.servicePackageBranchBookingMethod.deleteMany({ where: { servicePackageId: id } })
+          if (methods.length) await tx.servicePackageBranchBookingMethod.createMany({ data: methods.map((method) => ({ servicePackageId: id, branchBookingMethodId: method.id })) })
+          data.branchBookingMethodId = methods[0]?.id || null
         }
-        await this.prisma.servicePackageBranchBookingMethod.deleteMany({
-          where: { servicePackageId: id, branchBookingMethodId: { notIn: bbmIds } },
-        })
-        for (const bbmId of bbmIds) {
-          await this.prisma.servicePackageBranchBookingMethod.upsert({
-            where: { servicePackageId_branchBookingMethodId: { servicePackageId: id, branchBookingMethodId: bbmId } },
-            update: {},
-            create: { servicePackageId: id, branchBookingMethodId: bbmId },
+
+        if (receptionSchedules !== undefined) {
+          const scheduleBranchIds = body.branchReceptionSchedules.map((entry: any) => entry.branchId)
+          await tx.packageReceptionSchedule.deleteMany({ where: { servicePackageId: id, branchId: { in: scheduleBranchIds } } })
+          if (receptionSchedules.length) await tx.packageReceptionSchedule.createMany({
+            data: receptionSchedules.map((day) => ({ servicePackageId: id, ...day })),
           })
         }
-        if (bbmIds.length > 0) {
-          data.branchBookingMethodId = bbmIds[0]
-        }
-      }
 
-      const updated = await this.prisma.servicePackage.update({
-        where: { id },
-        data,
-        include: {
-          branchBookingMethod: {
-            include: { branch: true, bookingMethod: true },
-          },
-          specialty: true,
-          branchBookingMethods: {
-            include: {
-              branchBookingMethod: {
-                include: { branch: true, bookingMethod: true },
+        return tx.servicePackage.update({
+          where: { id },
+          data,
+          include: {
+            branchBookingMethod: {
+              include: { branch: true, bookingMethod: true },
+            },
+            specialty: true,
+            branchBookingMethods: {
+              include: {
+                branchBookingMethod: {
+                  include: { branch: true, bookingMethod: true },
+                },
               },
             },
           },
-        },
+        })
       })
-      await this.ensureBranchSpecialty(body)
       if (this.redis.isEnabled()) {
         try {
           await this.embeddingService.invalidatePackageVector(id)
@@ -541,7 +520,7 @@ export class SystemCatalogService {
     return { success: true, specialtyId, count: roomIds.length }
   }
 
-  async setBranchPackage(userId: string, id: string, body: { branchId: string; branchBookingMethodIds: string[] }) {
+  async setBranchPackage(userId: string, id: string, body: { branchId: string; branchBookingMethodIds: string[]; schedules?: UpdatePackageReceptionDto['schedules'] }) {
     const user = await this.manager(userId)
     if (user.role === 'ADMIN') throw new ForbiddenException('Quản trị kỹ thuật không điều phối gói khám tại chi nhánh')
     this.assertCrudPermission(user, 'service-packages', 'update')
@@ -550,23 +529,65 @@ export class SystemCatalogService {
     await this.assertAssignmentScope(user, 'branch-specialties', { branchId })
     if (!Array.isArray(body.branchBookingMethodIds)) throw new BadRequestException('Danh sách hình thức đặt khám không hợp lệ')
     const ids = [...new Set(body.branchBookingMethodIds.map(String))]
+    const days = body.schedules === undefined ? undefined : parseReceptionDays(body.schedules)
+    if (!ids.length && days?.length) throw new BadRequestException('Vui lòng chọn hình thức khám trước khi thiết lập lịch tiếp nhận')
     await this.prisma.$transaction(async (tx) => {
-      const pkg = await tx.servicePackage.findUnique({ where: { id }, select: { isActive: true, branchBookingMethodId: true } })
+      const pkg = await tx.servicePackage.findUnique({ where: { id }, select: { isActive: true, specialtyId: true, branchBookingMethodId: true } })
       if (!pkg) throw new NotFoundException('Không tìm thấy gói khám')
       const currentLinks = await tx.servicePackageBranchBookingMethod.findMany({ where: { servicePackageId: id, branchBookingMethod: { branchId } }, select: { branchBookingMethodId: true } })
       const currentIds = new Set(currentLinks.map((l) => l.branchBookingMethodId))
       if (pkg.branchBookingMethodId) currentIds.add(pkg.branchBookingMethodId)
       if (!pkg.isActive && ids.some((methodId) => !currentIds.has(methodId))) throw new BadRequestException('Gói khám đã ngừng hoạt động trên hệ thống')
-      const methods = await tx.branchBookingMethod.findMany({ where: { id: { in: ids }, branchId }, select: { id: true, isEnabled: true, bookingMethod: { select: { isActive: true } } } })
+      if (pkg.specialtyId && ids.some((methodId) => !currentIds.has(methodId))) {
+        const specialties = await tx.branchSpecialty.findMany({ where: { branchId, specialtyId: pkg.specialtyId, isActive: true }, select: { branchId: true } })
+        if (!specialties.length) throw new BadRequestException('Chi nhánh chưa triển khai chuyên khoa của gói khám')
+      }
+      const methods = await tx.branchBookingMethod.findMany({ where: { id: { in: ids }, branchId }, select: { id: true, branchId: true, isEnabled: true, bookingMethod: { select: { code: true, isActive: true } } } })
       if (methods.length !== ids.length || methods.some((m) => !currentIds.has(m.id) && (!m.isEnabled || !m.bookingMethod.isActive))) throw new BadRequestException('Hình thức đặt khám không hợp lệ hoặc không thuộc chi nhánh')
+      if (methods.some((method) => !['SPECIALTY_EXAM', 'AFTER_HOURS', 'HEALTH_PACKAGE'].includes(method.bookingMethod.code))) throw new BadRequestException('Hình thức khám không hỗ trợ gói khám')
+      if (days?.length && !pkg.isActive) throw new BadRequestException('Gói khám đã ngừng hoạt động')
+      const schedules = days !== undefined ? days.map((day) => ({ ...day, branchId }))
+        : await tx.packageReceptionSchedule.findMany({ where: { servicePackageId: id, branchId }, select: { branchId: true, dayOfWeek: true, sessions: true } })
+      assertReceptionMethods(methods, schedules)
       // Preserve the legacy deployment before replacing only this branch's links.
       if (pkg.branchBookingMethodId) {
         await tx.servicePackageBranchBookingMethod.upsert({ where: { servicePackageId_branchBookingMethodId: { servicePackageId: id, branchBookingMethodId: pkg.branchBookingMethodId } }, update: {}, create: { servicePackageId: id, branchBookingMethodId: pkg.branchBookingMethodId } })
       }
       await tx.servicePackageBranchBookingMethod.deleteMany({ where: { servicePackageId: id, branchBookingMethod: { branchId } } })
+      if (!ids.length || days !== undefined) await tx.packageReceptionSchedule.deleteMany({ where: { servicePackageId: id, branchId } })
+      if (days?.length) await tx.packageReceptionSchedule.createMany({ data: days.map((day) => ({ servicePackageId: id, branchId, ...day })) })
       if (ids.length) await tx.servicePackageBranchBookingMethod.createMany({ data: ids.map((branchBookingMethodId) => ({ servicePackageId: id, branchBookingMethodId })) })
       const primary = await tx.servicePackageBranchBookingMethod.findFirst({ where: { servicePackageId: id }, select: { branchBookingMethodId: true }, orderBy: { id: 'asc' } })
       await tx.servicePackage.update({ where: { id }, data: { branchBookingMethodId: primary?.branchBookingMethodId || null } })
+    })
+    await this.invalidatePublicCache()
+    return { success: true }
+  }
+
+  async setReceptionSchedules(userId: string, id: string, body: UpdatePackageReceptionDto) {
+    const user = await this.manager(userId)
+    if (!['CHAIN_MANAGER', 'BRANCH_MANAGER'].includes(user.role)) throw new ForbiddenException('Chỉ quản lý được cấu hình lịch tiếp nhận gói khám')
+    this.assertCrudPermission(user, 'service-packages', 'update')
+    await this.assertAssignmentScope(user, 'branch-specialties', { branchId: body.branchId })
+    const days = parseReceptionDays(body.schedules)
+    await this.prisma.$transaction(async (tx) => {
+      const pkg = await tx.servicePackage.findUnique({
+        where: { id }, select: {
+          isActive: true, branchBookingMethodId: true,
+          branchBookingMethod: { select: { branchId: true, bookingMethod: { select: { code: true } } } },
+          branchBookingMethods: { select: { branchBookingMethod: { select: { branchId: true, bookingMethod: { select: { code: true } } } } } },
+        },
+      })
+      if (!pkg) throw new NotFoundException('Không tìm thấy gói khám')
+      if (days.length && !pkg.isActive) throw new BadRequestException('Gói khám đã ngừng hoạt động')
+      const deployed = pkg.branchBookingMethod?.branchId === body.branchId
+        || pkg.branchBookingMethods.some((link) => link.branchBookingMethod.branchId === body.branchId)
+      if (!deployed) throw new BadRequestException('Gói khám chưa được áp dụng tại chi nhánh này')
+      assertReceptionMethods([...(pkg.branchBookingMethod ? [pkg.branchBookingMethod] : []), ...pkg.branchBookingMethods.map((link) => link.branchBookingMethod)], days.map((day) => ({ ...day, branchId: body.branchId })))
+      await tx.packageReceptionSchedule.deleteMany({ where: { servicePackageId: id, branchId: body.branchId } })
+      if (days.length) await tx.packageReceptionSchedule.createMany({
+        data: days.map((day) => ({ servicePackageId: id, branchId: body.branchId, ...day })),
+      })
     })
     await this.invalidatePublicCache()
     return { success: true }
@@ -637,10 +658,6 @@ export class SystemCatalogService {
         specialtyId: b.specialtyId ? Number(b.specialtyId) : null,
         price: Number(b.price) || 0,
         durationMin: Number(b.durationMin) || DEFAULT_PACKAGE_DURATION_MIN,
-        sessionType: b.sessionType || 'ALL_DAY',
-        activeDaysOfWeek: Array.isArray(b.activeDaysOfWeek) && b.activeDaysOfWeek.length > 0
-          ? b.activeDaysOfWeek.map(Number)
-          : DEFAULT_ACTIVE_DAYS,
         isActive: b.isActive ?? true,
       }
     }
@@ -648,132 +665,75 @@ export class SystemCatalogService {
     throw new BadRequestException('Danh mục không hợp lệ')
   }
 
-  private async ensureBranchSpecialty(body: any) {
-    const branchId = String(body.branchId || ''), specialtyId = Number(body.specialtyId)
-    if (!branchId || !Number.isInteger(specialtyId)) return
-    await this.prisma.branchSpecialty.upsert({
-      where: { branchId_specialtyId: { branchId, specialtyId } },
-      update: { isActive: true },
-      create: { branchId, specialtyId, isActive: true },
-    })
+  private async packageDeployments(tx: Prisma.TransactionClient, value: unknown, specialtyId?: number | null) {
+    if (!Array.isArray(value) || value.some((id) => typeof id !== 'string' || !id)) throw new BadRequestException('Vui lòng chọn hình thức khám tại từng chi nhánh')
+    const ids = [...new Set<string>(value)]
+    const methods = await tx.branchBookingMethod.findMany({ where: { id: { in: ids } }, select: {
+      id: true, branchId: true, isEnabled: true, branch: { select: { isActive: true } }, bookingMethod: { select: { code: true, isActive: true } },
+    } })
+    if (methods.length !== ids.length || methods.some((method) => !method.isEnabled || !method.branch.isActive || !method.bookingMethod.isActive
+      || !['SPECIALTY_EXAM', 'AFTER_HOURS', 'HEALTH_PACKAGE'].includes(method.bookingMethod.code))) throw new BadRequestException('Hình thức khám không tồn tại, đã ngừng hoạt động hoặc không hỗ trợ gói khám')
+    if (specialtyId && methods.length) {
+      const branchIds = [...new Set(methods.map((method) => method.branchId))]
+      const specialties = await tx.branchSpecialty.findMany({ where: { branchId: { in: branchIds }, specialtyId, isActive: true }, select: { branchId: true } })
+      if (specialties.length !== branchIds.length) throw new BadRequestException('Chi nhánh chưa triển khai chuyên khoa của gói khám. Vui lòng cấu hình chuyên khoa trước.')
+    }
+    return ids.map((id) => methods.find((method) => method.id === id)!)
   }
 
   private async createServicePackages(b: any) {
     if (!String(b.name || '').trim()) throw new BadRequestException('Tên gói khám không được để trống')
 
-    // 1. Xác định danh sách cơ sở áp dụng
-    let branches: { id: string; code: string; name: string }[] = []
-    if (b.applyAllBranches || (Array.isArray(b.branchIds) && b.branchIds.includes('ALL')) || (!b.branchIds?.length && !b.branchId)) {
-      branches = await this.prisma.branch.findMany({ where: { isActive: true }, select: { id: true, code: true, name: true } })
-    } else if (Array.isArray(b.branchIds) && b.branchIds.length > 0) {
-      branches = await this.prisma.branch.findMany({ where: { id: { in: b.branchIds }, isActive: true }, select: { id: true, code: true, name: true } })
-    } else if (b.branchId) {
-      branches = await this.prisma.branch.findMany({ where: { id: b.branchId, isActive: true }, select: { id: true, code: true, name: true } })
-    }
+    const pkg = await this.prisma.$transaction(async (tx) => {
+      const bbmList = await this.packageDeployments(tx, b.branchBookingMethodIds, b.specialtyId ? Number(b.specialtyId) : null)
+      if (!bbmList.length) throw new BadRequestException('Vui lòng chọn ít nhất một hình thức khám tại chi nhánh')
+      const receptionSchedules = parseBranchReceptionSchedules(b.branchReceptionSchedules, [...new Set(bbmList.map((method) => method.branchId))])
+      assertReceptionMethods(bbmList, receptionSchedules || [])
 
-    if (branches.length === 0) {
-      throw new BadRequestException('Vui lòng chọn ít nhất một cơ sở y tế')
-    }
-
-    // 2. Xác định danh sách hình thức đặt khám áp dụng
-    let methodCodes: string[] = []
-    if (Array.isArray(b.bookingMethodCodes) && b.bookingMethodCodes.length > 0) {
-      methodCodes = b.bookingMethodCodes.map((c: string) => String(c).trim().toUpperCase())
-    } else if (Array.isArray(b.branchBookingMethodIds) && b.branchBookingMethodIds.length > 0) {
-      const rows = await this.prisma.branchBookingMethod.findMany({
-        where: { id: { in: b.branchBookingMethodIds } },
-        include: { bookingMethod: true },
-      })
-      methodCodes = [...new Set(rows.map((r) => r.bookingMethod.code))]
-    } else if (b.branchBookingMethodId) {
-      const row = await this.prisma.branchBookingMethod.findUnique({
-        where: { id: b.branchBookingMethodId },
-        include: { bookingMethod: true },
-      })
-      if (row) methodCodes = [row.bookingMethod.code]
-    } else if (b.bookingMethodCode) {
-      methodCodes = [String(b.bookingMethodCode).trim().toUpperCase()]
-    }
-
-    if (methodCodes.length === 0) {
-      methodCodes = ['HEALTH_PACKAGE', 'SPECIALTY_EXAM']
-    }
-
-    const bbmList: any[] = []
-    for (const branch of branches) {
-      for (const methodCode of methodCodes) {
-        let bbm = await this.prisma.branchBookingMethod.findFirst({
-          where: { branchId: branch.id, isEnabled: true, bookingMethod: { code: methodCode, isActive: true } },
-        })
-        if (!bbm) {
-          const bm = await this.prisma.bookingMethod.findFirst({ where: { code: methodCode, isActive: true } })
-          if (bm) {
-            bbm = await this.prisma.branchBookingMethod.upsert({
-              where: { branchId_bookingMethodId: { branchId: branch.id, bookingMethodId: bm.id } },
-              update: { isEnabled: true },
-              create: { branchId: branch.id, bookingMethodId: bm.id, isEnabled: true },
-            })
-          }
-        }
-        if (bbm) bbmList.push(bbm)
+      let pkgCode = String(b.code || '').trim() || generatePackageCode()
+      let exists = await tx.servicePackage.findUnique({ where: { code: pkgCode } })
+      let attempt = 1
+      while (exists && attempt <= 5) {
+        pkgCode = generatePackageCode()
+        exists = await tx.servicePackage.findUnique({ where: { code: pkgCode } })
+        attempt++
       }
-    }
 
-    if (bbmList.length === 0) {
-      throw new BadRequestException('Không thể liên kết gói khám với cơ sở và hình thức đã chọn. Vui lòng kiểm tra lại cấu hình chi nhánh.')
-    }
-
-    let pkgCode = String(b.code || '').trim() || generatePackageCode()
-    let exists = await this.prisma.servicePackage.findUnique({ where: { code: pkgCode } })
-    let attempt = 1
-    while (exists && attempt <= 5) {
-      pkgCode = generatePackageCode()
-      exists = await this.prisma.servicePackage.findUnique({ where: { code: pkgCode } })
-      attempt++
-    }
-
-    // TẠO ĐÚNG 1 BẢN GHI ServicePackage DUY NHẤT và liên kết các cơ sở/hình thức
-    const pkg = await this.prisma.servicePackage.create({
-      data: {
-        name: String(b.name).trim(),
-        code: pkgCode,
-        description: b.description || null,
-        symptoms: Array.isArray(b.symptoms) ? b.symptoms.map(String).map((s: string) => s.trim().toLowerCase()).filter(Boolean) : [],
-        branchBookingMethodId: bbmList[0]?.id || null,
-        specialtyId: b.specialtyId ? Number(b.specialtyId) : null,
-        price: Number(b.price) || 0,
-        durationMin: Number(b.durationMin) || DEFAULT_PACKAGE_DURATION_MIN,
-        sessionType: b.sessionType || 'ALL_DAY',
-        activeDaysOfWeek: Array.isArray(b.activeDaysOfWeek) && b.activeDaysOfWeek.length > 0
-          ? b.activeDaysOfWeek.map(Number)
-          : DEFAULT_ACTIVE_DAYS,
-        isActive: b.isActive ?? true,
-        branchBookingMethods: {
-          create: bbmList.map((bbm) => ({
-            branchBookingMethodId: bbm.id,
-          })),
-        },
-      },
-      include: {
-        branchBookingMethod: {
-          include: { branch: true, bookingMethod: true },
-        },
-        branchBookingMethods: {
-          include: {
-            branchBookingMethod: {
-              include: { branch: true, bookingMethod: true },
-            },
+      // TẠO ĐÚNG 1 BẢN GHI ServicePackage DUY NHẤT và liên kết các cơ sở/hình thức
+      return tx.servicePackage.create({
+        data: {
+          name: String(b.name).trim(),
+          code: pkgCode,
+          imageUrl: b.imageUrl || null,
+          description: b.description || null,
+          symptoms: Array.isArray(b.symptoms) ? b.symptoms.map(String).map((s: string) => s.trim().toLowerCase()).filter(Boolean) : [],
+          branchBookingMethodId: bbmList[0]?.id || null,
+          ...(receptionSchedules?.length ? { receptionSchedules: { create: receptionSchedules } } : {}),
+          specialtyId: b.specialtyId ? Number(b.specialtyId) : null,
+          price: Number(b.price) || 0,
+          durationMin: Number(b.durationMin) || DEFAULT_PACKAGE_DURATION_MIN,
+          isActive: b.isActive ?? true,
+          branchBookingMethods: {
+            create: bbmList.map((bbm) => ({
+              branchBookingMethodId: bbm.id,
+            })),
           },
         },
-        specialty: true,
-      },
+        include: {
+          branchBookingMethod: {
+            include: { branch: true, bookingMethod: true },
+          },
+          branchBookingMethods: {
+            include: {
+              branchBookingMethod: {
+                include: { branch: true, bookingMethod: true },
+              },
+            },
+          },
+          specialty: true,
+        },
     })
-
-    for (const branch of branches) {
-      if (b.specialtyId) {
-        await this.ensureBranchSpecialty({ branchId: branch.id, specialtyId: b.specialtyId })
-      }
-    }
+    })
 
     // Tự động sinh ngay vector embedding và lưu vào Redis
     void this.syncPackageVector(pkg)

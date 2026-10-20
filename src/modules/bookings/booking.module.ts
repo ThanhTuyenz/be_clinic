@@ -1,25 +1,30 @@
 import { Module } from '@nestjs/common';
-import { MailsModule } from '../../infrastructure/mail/mails.module.js';
+import { RecommendationModule } from '../recommendations/recommendation.module.js';
 import { VouchersModule } from '../vouchers/vouchers.module.js';
-import { NotificationModule } from '../notifications/notification.module.js';
-import { BookingController, CheckInController } from './booking.controller.js';
 import { BookingFlowController } from './booking-flow.controller.js';
-import { BookingService } from './booking.service.js';
 import { BookingFlowService } from './booking-flow.service.js';
+import { BookingController } from './booking.controller.js';
+import { BookingService } from './booking.service.js';
+
+import { ReceptionBookingController } from './reception-booking.controller.js';
+import { ReceptionBookingService } from './reception-booking.service.js';
+
+import { PatientsModule } from '../patients/patients.module.js';
 
 @Module({
   imports: [
-    MailsModule,
+    PatientsModule,
+    RecommendationModule,
     VouchersModule,
-    NotificationModule,
   ],
   controllers: [
     BookingController,
-    CheckInController,
+    ReceptionBookingController,
     BookingFlowController,
   ],
   providers: [
     BookingService,
+    ReceptionBookingService,
     BookingFlowService,
   ],
   exports: [BookingService, BookingFlowService],

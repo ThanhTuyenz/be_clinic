@@ -144,30 +144,22 @@ export async function seedDashboardData(prisma, { passwordHash }) {
   let appointmentCount = 0;
   for (let offset = -60; offset <= 7; offset++) {
     const date = demoDate(offset, now);
-    // Clinics close on Sundays, except when today is Sunday: show an explicit demo duty shift.
-    if (date.getUTCDay() === 0 && offset !== 0) continue;
     for (const [branchIndex, branch] of branches.entries()) {
-      const eligible = doctors.filter(d => {
-        const fixture = fixturesByEmail.get(d.user.email);
-        if (!fixture) return false;
-        const central = fixture.rotationPattern === 'EVEN'
-          ? [1, 3, 5].includes(date.getUTCDay()) : ![1, 3, 5].includes(date.getUTCDay());
-        return central === (branch.code === 'VC-CENTRAL');
-      });
+      const eligible = doctors.filter(d => fixturesByEmail.get(d.user.email)?.branchCode === branch.code);
       if (!eligible.length) throw new Error('Không có bác sĩ cho ' + branch.code);
       // Today includes one sample per assigned doctor, plus all reception scenarios.
       const count = offset === 0 ? Math.max(12, eligible.length) : offset < 0 ? 4 : 3;
       for (let i = 0; i < count; i++) {
         const doctor = eligible[i % eligible.length];
         const fixture = fixturesByEmail.get(doctor.user.email);
-        const roomCode = branch.code === 'VC-CENTRAL' ? fixture.centralRoomCode : fixture.eastRoomCode;
+        const roomCode = fixture.roomCode;
         const room = rooms.find(r => r.branchId === branch.id && r.code === roomCode);
         if (!room) throw new Error('Thiếu phòng ' + roomCode);
         const schedule = await prisma.doctorSchedule.upsert({
           where: { doctorId_branchId_workDate_startTime: { doctorId: doctor.id, branchId: branch.id, workDate: date, startTime: hour(8) } },
           update: {},
           create: { doctorId: doctor.id, branchId: branch.id, roomId: room.id, workDate: date,
-            startTime: hour(8), endTime: hour(12), slotDurationMin: 30, capacityPerSlot: 10 },
+            startTime: hour(8), endTime: hour(11, 30), slotDurationMin: 30, capacityPerSlot: 10 },
         });
         const slot = await prisma.doctorScheduleSlot.upsert({
           where: { scheduleId_startTime: { scheduleId: schedule.id, startTime: hour(8, (i % 4) * 30) } },

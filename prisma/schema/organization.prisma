@@ -45,6 +45,7 @@ model Branch {
   appointments    Appointment[]
   issuedInvoices  Invoice[]
   bookingMethods  BranchBookingMethod[]
+  packageReceptionSchedules PackageReceptionSchedule[]
   specialties     BranchSpecialty[]
   aiTriageInsights AITriageInsight[]
 

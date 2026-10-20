@@ -87,51 +87,16 @@ export class PackagesService {
     const bookingMethodCode =
       type === 'health-package' ? 'HEALTH_PACKAGE' : type === 'specialty' ? 'SPECIALTY_EXAM' : undefined;
 
-    if (bookingMethodCode) {
-      conditions.push({
-        OR: [
-          {
-            branchBookingMethods: {
-              some: {
-                branchBookingMethod: {
-                  ...(effectiveBranchId ? { branchId: effectiveBranchId } : {}),
-                  isEnabled: true,
-                  bookingMethod: { code: bookingMethodCode, isActive: true },
-                },
-              },
-            },
-          },
-          {
-            branchBookingMethod: {
-              ...(effectiveBranchId ? { branchId: effectiveBranchId } : {}),
-              isEnabled: true,
-              bookingMethod: { code: bookingMethodCode, isActive: true },
-            },
-          },
-        ],
-      });
-    } else if (effectiveBranchId) {
-      conditions.push({
-        OR: [
-          {
-            branchBookingMethods: {
-              some: {
-                branchBookingMethod: {
-                  branchId: effectiveBranchId,
-                  isEnabled: true,
-                },
-              },
-            },
-          },
-          {
-            branchBookingMethod: {
-              branchId: effectiveBranchId,
-              isEnabled: true,
-            },
-          },
-        ],
-      });
-    }
+    const deploymentWhere = {
+      ...(effectiveBranchId ? { branchId: effectiveBranchId } : {}),
+      isEnabled: true,
+      branch: { isActive: true },
+      bookingMethod: { isActive: true, ...(bookingMethodCode ? { code: bookingMethodCode } : {}) },
+    };
+    conditions.push({ OR: [
+      { branchBookingMethods: { some: { branchBookingMethod: deploymentWhere } } },
+      { branchBookingMethod: deploymentWhere },
+    ] });
 
     let orderBy: any = [{ specialty: { name: 'asc' } }, { price: 'asc' }];
     if (sortBy === 'price-asc') {
@@ -155,16 +120,16 @@ export class PackagesService {
       symptoms: true,
       price: true,
       durationMin: true,
-      sessionType: true,
-      activeDaysOfWeek: true,
+      receptionSchedules: { select: { branchId: true, dayOfWeek: true, sessions: true } },
       specialtyId: true,
       specialty: { select: { id: true, name: true, slug: true } },
       branchBookingMethod: {
         select: {
           id: true,
           branchId: true,
-          bookingMethod: { select: { id: true, code: true, name: true } },
-          branch: { select: { id: true, code: true, slug: true, name: true } },
+          isEnabled: true,
+          bookingMethod: { select: { id: true, code: true, name: true, isActive: true } },
+          branch: { select: { id: true, code: true, slug: true, name: true, isActive: true } },
         },
       },
       branchBookingMethods: {
@@ -173,8 +138,9 @@ export class PackagesService {
             select: {
               id: true,
               branchId: true,
-              bookingMethod: { select: { id: true, code: true, name: true } },
-              branch: { select: { id: true, code: true, slug: true, name: true } },
+              isEnabled: true,
+              bookingMethod: { select: { id: true, code: true, name: true, isActive: true } },
+              branch: { select: { id: true, code: true, slug: true, name: true, isActive: true } },
             },
           },
         },
@@ -194,18 +160,20 @@ export class PackagesService {
 
 
     const formattedData = rows.map(({ branchBookingMethod, branchBookingMethods, ...item }) => {
-      const bbm =
-        branchBookingMethods?.find(
-          (l) => !effectiveBranchId || l.branchBookingMethod.branchId === effectiveBranchId,
-        )?.branchBookingMethod || branchBookingMethod;
+      const deployments = [...(branchBookingMethod ? [branchBookingMethod] : []), ...(branchBookingMethods || []).map((link) => link.branchBookingMethod)]
+        .filter((method) => method.isEnabled && method.bookingMethod.isActive && method.branch.isActive
+          && (!effectiveBranchId || method.branchId === effectiveBranchId)
+          && (!bookingMethodCode || method.bookingMethod.code === bookingMethodCode));
+      const bbm = deployments[0];
 
       return {
         ...item,
         price: Number(item.price),
-        branchId: bbm?.branchId || effectiveBranchId,
+        branchId: bbm?.branchId,
         branchSlug: bbm?.branch?.slug ?? null,
         branchBookingMethodId: bbm?.id,
         bookingMethod: bbm?.bookingMethod,
+        bookingMethods: [...new Map(deployments.map((method) => [method.id, { branchId: method.branchId, ...method.bookingMethod }])).values()],
       };
     });
 
@@ -300,11 +268,13 @@ export class PackagesService {
                 address: true,
                 phoneNumber: true,
                 operatingHours: true,
+                isActive: true,
               },
             },
-            bookingMethod: { select: { id: true, code: true, name: true, route: true } },
+            bookingMethod: { select: { id: true, code: true, name: true, route: true, isActive: true } },
           },
         },
+        receptionSchedules: { select: { branchId: true, dayOfWeek: true, sessions: true } },
         branchBookingMethods: {
           include: {
             branchBookingMethod: {
@@ -318,9 +288,10 @@ export class PackagesService {
                     address: true,
                     phoneNumber: true,
                     operatingHours: true,
+                    isActive: true,
                   },
                 },
-                bookingMethod: { select: { id: true, code: true, name: true, route: true } },
+                bookingMethod: { select: { id: true, code: true, name: true, route: true, isActive: true } },
               },
             },
           },
@@ -330,17 +301,9 @@ export class PackagesService {
 
     if (!pkg) throw new NotFoundException('Không tìm thấy gói khám hoặc dịch vụ này');
 
-    // Extract unique branches
-    const branchMap = new Map<string, any>();
-    if (pkg.branchBookingMethod?.branch) {
-      branchMap.set(pkg.branchBookingMethod.branch.id, pkg.branchBookingMethod.branch);
-    }
-    for (const bbm of pkg.branchBookingMethods || []) {
-      if (bbm.branchBookingMethod?.branch) {
-        branchMap.set(bbm.branchBookingMethod.branch.id, bbm.branchBookingMethod.branch);
-      }
-    }
-    const branchList = Array.from(branchMap.values());
+    const deployments = [...(pkg.branchBookingMethod ? [pkg.branchBookingMethod] : []), ...pkg.branchBookingMethods.map((link) => link.branchBookingMethod)]
+      .filter((method) => method.isEnabled && method.bookingMethod.isActive && method.branch.isActive);
+    const branchList = [...new Map(deployments.map((method) => [method.branchId, method.branch])).values()];
 
     const doctors =
       pkg.specialty?.doctors?.map((d) => ({
@@ -351,12 +314,12 @@ export class PackagesService {
         biography: d.doctor.biography,
         avatarUrl: d.doctor.avatarUrl,
         consultationFee: Number(d.doctor.consultationFee) || 0,
-        ratingAverage: Number(d.doctor.ratingAverage) || 5.0,
+        ratingAverage: Number(d.doctor.ratingAverage),
         ratingCount: d.doctor.ratingCount || 0,
         isPrimary: d.isPrimary,
       })) || [];
 
-    const bbm = pkg.branchBookingMethods?.[0]?.branchBookingMethod || pkg.branchBookingMethod;
+    const bbm = deployments[0];
 
     return {
       id: pkg.id,
@@ -369,8 +332,7 @@ export class PackagesService {
       symptoms: pkg.symptoms || [],
       price: Number(pkg.price),
       durationMin: pkg.durationMin,
-      sessionType: pkg.sessionType,
-      activeDaysOfWeek: pkg.activeDaysOfWeek,
+      receptionSchedules: pkg.receptionSchedules,
       specialtyId: pkg.specialtyId,
       specialty: pkg.specialty
         ? {
@@ -385,6 +347,7 @@ export class PackagesService {
       branch: bbm?.branch,
       bookingMethod: bbm?.bookingMethod,
       branches: branchList,
+      bookingMethods: [...new Map(deployments.map((method) => [method.id, { branchId: method.branchId, ...method.bookingMethod }])).values()],
       doctors,
     };
   }
@@ -420,43 +383,8 @@ export class PackagesService {
    * Tìm kiếm gói dịch vụ tổng quát (specialtyId NULL)
    */
   async getGeneralServices(branchId?: string, q?: string) {
-    const term = q?.trim();
-    const effectiveBranchId = await resolveBranchId(this.prisma, branchId);
-    const packages = await this.prisma.servicePackage.findMany({
-      where: {
-        specialtyId: null,
-        isActive: true,
-        branchBookingMethod: {
-          isEnabled: true,
-          bookingMethod: { isActive: true },
-          ...(effectiveBranchId ? { branchId: effectiveBranchId } : {}),
-        },
-        ...(term ? { name: { contains: term, mode: 'insensitive' } } : {}),
-      },
-      orderBy: { name: 'asc' },
-      take: 60,
-      select: {
-        id: true,
-        code: true,
-        name: true,
-        description: true,
-        price: true,
-        durationMin: true,
-        branchBookingMethod: {
-          select: {
-            id: true,
-            branchId: true,
-            bookingMethod: { select: { id: true, code: true, name: true } },
-          },
-        },
-      },
-    });
-    return packages.map(({ branchBookingMethod, ...pkg }) => ({
-      ...pkg,
-      price: Number(pkg.price),
-      branchId: branchBookingMethod?.branchId,
-      branchBookingMethodId: branchBookingMethod?.id,
-      bookingMethod: branchBookingMethod?.bookingMethod,
-    }));
+    const result = await this.getPackages({ branchId, search: q, type: 'health-package', needPagination: false });
+    return result.data.filter((pkg) => pkg.specialtyId === null).slice(0, 60);
+
   }
 }

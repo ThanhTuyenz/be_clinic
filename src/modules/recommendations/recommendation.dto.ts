@@ -1,4 +1,4 @@
-import { IsEnum, IsNotEmpty, IsNumber, IsOptional, IsString, MaxLength, MinLength } from 'class-validator';
+import { IsIn, IsNotEmpty, IsNumber, IsOptional, IsString, MaxLength, MinLength } from 'class-validator';
 
 export type RecommendationPriority = 'HIGH' | 'MEDIUM' | 'LOW';
 
@@ -39,7 +39,7 @@ export class TrackBehaviorDto {
   @IsNotEmpty({ message: 'sessionId không được để trống' })
   sessionId: string;
 
-  @IsEnum(TrackingActionType, { message: 'actionType không hợp lệ' })
+  @IsIn([TrackingActionType.VIEW_PACKAGE], { message: 'Client chỉ được ghi nhận lượt xem gói khám' })
   actionType: TrackingActionType;
 
   @IsNumber()
@@ -50,10 +50,6 @@ export class TrackBehaviorDto {
   @IsOptional()
   targetPackageId?: string;
 
-  @IsString()
-  @IsOptional()
-  @MaxLength(500)
-  searchQuery?: string;
 }
 
 export class HomeRecommendationQueryDto {

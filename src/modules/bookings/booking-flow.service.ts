@@ -1,35 +1,109 @@
+import { clinicPeriod } from '../../common/constants/clinic-sessions.js';
+import { bookingMethodAcceptsSlot, packageAcceptsSlot } from './helpers/package-reception.helper.js';
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../infrastructure/database/prisma/prisma.service.js';
 import { BookingInitDto } from './dtos/booking-init.dto.js';
 import { BookingSlotsDto } from './dtos/booking-slots.dto.js';
 
+const BOOKING_DOCTOR_SELECT = {
+  id: true,
+  academicRank: true,
+  experienceYears: true,
+  biography: true,
+  avatarUrl: true,
+  consultationFee: true,
+  onlineConsultationFee: true,
+  ratingAverage: true,
+  ratingCount: true,
+  isFeatured: true,
+  user: { select: { fullName: true } },
+  specialties: {
+    select: {
+      isPrimary: true,
+      specialty: { select: { id: true, name: true, slug: true } },
+    },
+  },
+} satisfies Prisma.DoctorSelect;
+
+const PACKAGE_DEPLOYMENT_SELECT = {
+  branchId: true,
+  isEnabled: true,
+  branch: { select: { id: true, code: true, slug: true, name: true, address: true, isActive: true } },
+  bookingMethod: { select: { id: true, code: true, name: true, isActive: true } },
+} satisfies Prisma.BranchBookingMethodSelect;
+
+type BookingDoctor = Prisma.DoctorGetPayload<{ select: typeof BOOKING_DOCTOR_SELECT }>;
+
+const BOOKING_SLOT_PACKAGE_SELECT = {
+  id: true,
+  specialtyId: true,
+  receptionSchedules: { select: { branchId: true, dayOfWeek: true, sessions: true } },
+  branchBookingMethod: { select: { branchId: true, isEnabled: true, bookingMethod: { select: { code: true, isActive: true } } } },
+  branchBookingMethods: { select: { branchBookingMethod: { select: { branchId: true, isEnabled: true, bookingMethod: { select: { code: true, isActive: true } } } } } },
+} satisfies Prisma.ServicePackageSelect;
+
+type BookingSlotPackage = Prisma.ServicePackageGetPayload<{ select: typeof BOOKING_SLOT_PACKAGE_SELECT }>;
+
+const BOOKING_SLOT_INCLUDE = {
+  schedule: {
+    select: {
+      id: true,
+      workDate: true,
+      branchId: true,
+      branch: { select: { id: true, code: true, slug: true, name: true } },
+      room: { select: { id: true, code: true, name: true } },
+      doctor: {
+        select: {
+          id: true,
+          academicRank: true,
+          consultationFee: true,
+          onlineConsultationFee: true,
+          avatarUrl: true,
+          experienceYears: true,
+          user: { select: { fullName: true } },
+        },
+      },
+    },
+  },
+} satisfies Prisma.DoctorScheduleSlotInclude;
+
+type BookingSlot = Prisma.DoctorScheduleSlotGetPayload<{ include: typeof BOOKING_SLOT_INCLUDE }>;
+type BookingTimeSlot = {
+  startTime: string;
+  endTime: string;
+  label: string;
+  period: 'MORNING' | 'AFTERNOON' | 'EVENING';
+  totalCapacity: number;
+  occupiedCount: number;
+  remainingSlots: number;
+  isFull: boolean;
+  representativeSlotId: string;
+  doctors: Array<{
+    slotId: string;
+    doctorId: string;
+    doctorName: string;
+    academicRank?: string | null;
+    avatarUrl?: string | null;
+    experienceYears?: number | null;
+    consultationFee: number;
+    onlineConsultationFee: number;
+    roomId?: string | null;
+    roomName?: string | null;
+    remainingSlots: number;
+  }>;
+};
+
 @Injectable()
 export class BookingFlowService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(private readonly prisma: PrismaService) { }
 
-  /**
-   * Phân giải identifier (UUID, slug hoặc code) thành branchId chuẩn
-   */
-  private async resolveBranchId(identifier?: string): Promise<string | undefined> {
-    if (!identifier) return undefined;
-    if (/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(identifier)) {
-      return identifier;
-    }
-    const branch = await this.prisma.branch.findFirst({
-      where: { OR: [{ slug: identifier }, { code: identifier }], isActive: true },
-      select: { id: true },
-    });
-    return branch?.id ?? identifier;
-  }
+  // API 1: dữ liệu theo từng luồng đặt khám (Facade / BFF)
 
-  /**
-   * API 1: Bootstrap dữ liệu theo từng luồng đặt khám (Facade / BFF)
-   * GET /api/v1/booking/init?flow=...&branchId=...
-   */
   async getBookingInit(dto: BookingInitDto) {
     const rawFlow = (dto.flow || 'all').toLowerCase().trim();
     const effectiveBranchId = await this.resolveBranchId(dto.branchId);
-    const parsedSpecialtyId = dto.specialtyId ? Number(dto.specialtyId) : undefined;
+    const parsedSpecialtyId = await this.resolveSpecialtyId(dto.specialtyId);
 
     const methodCodeMap: Record<string, string> = {
       specialty: 'SPECIALTY_EXAM',
@@ -42,29 +116,21 @@ export class BookingFlowService {
       'goi-kham': 'HEALTH_PACKAGE',
       'after-hours': 'AFTER_HOURS',
       'ngoai-gio': 'AFTER_HOURS',
-      followup: 'SPECIALTY_EXAM',
+      followup: 'CONSULTATION',
     };
     const requiredMethodCode = methodCodeMap[rawFlow];
 
-    const branchWhere: any = {
+    const branchWhere: Prisma.BranchWhereInput = {
       isActive: true,
-      ...(requiredMethodCode
-        ? {
-            bookingMethods: {
-              some: {
-                isEnabled: true,
-                bookingMethod: { code: requiredMethodCode, isActive: true },
-              },
-            },
-          }
-        : {
-            bookingMethods: {
-              some: {
-                isEnabled: true,
-                bookingMethod: { isActive: true },
-              },
-            },
-          }),
+      bookingMethods: {
+        some: {
+          isEnabled: true,
+          bookingMethod: {
+            ...(requiredMethodCode ? { code: requiredMethodCode } : {}),
+            isActive: true,
+          },
+        },
+      },
     };
 
     // 1. Dữ liệu dùng chung: Danh sách cơ sở, Phương thức đặt khám & Tất cả gói dịch vụ/khám sức khỏe
@@ -125,16 +191,10 @@ export class BookingFlowService {
           description: true,
           price: true,
           durationMin: true,
-          sessionType: true,
-          activeDaysOfWeek: true,
+          receptionSchedules: { select: { branchId: true, dayOfWeek: true, sessions: true } },
           specialtyId: true,
           branchBookingMethod: {
-            select: {
-              branchId: true,
-              isEnabled: true,
-              branch: { select: { id: true, code: true, slug: true, name: true, address: true } },
-              bookingMethod: { select: { id: true, code: true, name: true, isActive: true } },
-            },
+            select: PACKAGE_DEPLOYMENT_SELECT,
           },
           branchBookingMethods: {
             where: {
@@ -145,12 +205,7 @@ export class BookingFlowService {
             },
             select: {
               branchBookingMethod: {
-                select: {
-                  branchId: true,
-                  isEnabled: true,
-                  branch: { select: { id: true, code: true, slug: true, name: true, address: true } },
-                  bookingMethod: { select: { id: true, code: true, name: true, isActive: true } },
-                },
+                select: PACKAGE_DEPLOYMENT_SELECT,
               },
             },
           },
@@ -158,15 +213,17 @@ export class BookingFlowService {
       }),
     ]);
 
-    const formattedPackages = allServicePackages
+    const formatPackages = (methodCode: string) => allServicePackages
       .map(({ branchBookingMethod, branchBookingMethods, ...pkg }) => {
         const primaryBbm =
-          branchBookingMethod?.isEnabled && branchBookingMethod?.bookingMethod?.isActive
+          branchBookingMethod?.isEnabled && branchBookingMethod.branch.isActive && branchBookingMethod?.bookingMethod?.isActive
+          && branchBookingMethod.bookingMethod.code === methodCode
             ? branchBookingMethod
             : null;
         const validLinks = (branchBookingMethods || [])
           .map((b) => b.branchBookingMethod)
-          .filter((bbm) => bbm && bbm.isEnabled && bbm.bookingMethod?.isActive);
+          .filter((bbm) => bbm && bbm.isEnabled && bbm.branch.isActive && bbm.bookingMethod?.isActive
+            && bbm.bookingMethod.code === methodCode);
 
         const branchesList = [
           ...(primaryBbm?.branch ? [primaryBbm.branch] : []),
@@ -175,7 +232,8 @@ export class BookingFlowService {
 
         // Deduplicate branches by id
         const uniqueBranches = Array.from(new Map(branchesList.map((b) => [b.id, b])).values());
-        const effectiveBbm = primaryBbm || validLinks[0] || null;
+        const deployments = [...(primaryBbm ? [primaryBbm] : []), ...validLinks];
+        const effectiveBbm = deployments.find((method) => !effectiveBranchId || method.branchId === effectiveBranchId) || null;
 
         return {
           ...pkg,
@@ -188,19 +246,24 @@ export class BookingFlowService {
       })
       .filter((pkg) => pkg.branches.length > 0);
 
-    const specialtyPackages = formattedPackages.filter((p) =>
+    const specialtyPackages = formatPackages(requiredMethodCode || 'SPECIALTY_EXAM').filter((p) =>
       p.specialtyId !== null &&
       (parsedSpecialtyId === undefined || p.specialtyId === parsedSpecialtyId) &&
       (!effectiveBranchId || p.branches.some((branch) => branch.id === effectiveBranchId)),
     );
-    const generalHealthPackages = formattedPackages.filter((p) => p.specialtyId === null || p.bookingMethod?.code === 'HEALTH_PACKAGE');
+    const generalHealthPackages = formatPackages('HEALTH_PACKAGE').filter((p) => !effectiveBranchId || p.branches.some((branch) => branch.id === effectiveBranchId));
 
     const selectedBranch = effectiveBranchId
       ? branches.find((b) => b.id === effectiveBranchId) || null
       : null;
+    const commonData = { branches, selectedBranch, bookingMethods };
+    const packageData = {
+      services: specialtyPackages,
+      healthPackages: generalHealthPackages,
+    };
 
     // 2. Tùy biến gom dữ liệu chuẩn theo luồng (flow)
-    if (rawFlow === 'doctor' || rawFlow === 'bac-si' || rawFlow === 'online-consultation' || rawFlow === 'online') {
+    if (rawFlow === 'doctor' || rawFlow === 'bac-si' || rawFlow === 'online-consultation' || rawFlow === 'online' || rawFlow === 'followup') {
       const doctors = await this.prisma.doctor.findMany({
         where: {
           isActive: true,
@@ -213,68 +276,34 @@ export class BookingFlowService {
         },
         orderBy: [{ isFeatured: 'desc' }, { ratingAverage: 'desc' }, { user: { fullName: 'asc' } }],
         select: {
-          id: true,
-          academicRank: true,
-          experienceYears: true,
-          biography: true,
-          avatarUrl: true,
-          consultationFee: true,
-          onlineConsultationFee: true,
-          ratingAverage: true,
-          ratingCount: true,
-          isFeatured: true,
+          ...BOOKING_DOCTOR_SELECT,
           user: {
             select: {
               fullName: true,
               branchAssignments: {
                 select: {
                   isPrimary: true,
-                  branch: { select: { id: true, code: true, slug: true, name: true, address: true } },
+                  branch: { select: { id: true, code: true, slug: true, name: true, address: true, isActive: true } },
                 },
               },
-            },
-          },
-          specialties: {
-            select: {
-              isPrimary: true,
-              specialty: { select: { id: true, name: true, slug: true } },
             },
           },
         },
       });
 
-      const formattedDoctors = doctors.map((d) => {
-        const primarySpec = d.specialties.find((s) => s.isPrimary)?.specialty || d.specialties[0]?.specialty;
-        const primaryBranch = d.user?.branchAssignments.find((b) => b.isPrimary)?.branch || d.user?.branchAssignments[0]?.branch;
-        const fullName = d.user?.fullName || 'Bác sĩ';
+      const formattedDoctors = doctors.filter((d) => d.user.branchAssignments.length === 1 && d.user.branchAssignments[0].branch.isActive).map((d) => {
+        const primaryBranch = d.user.branchAssignments[0].branch;
         return {
-          id: d.id,
-          fullName,
-          displayName: fullName,
-          academicRank: d.academicRank,
-          experienceYears: d.experienceYears,
-          biography: d.biography,
-          avatarUrl: d.avatarUrl,
-          consultationFee: Number(d.consultationFee) || 0,
-          onlineConsultationFee: Number(d.onlineConsultationFee ?? d.consultationFee) || 0,
-          ratingAverage: Number(d.ratingAverage) || 5.0,
-          ratingCount: d.ratingCount,
-          isFeatured: d.isFeatured,
+          ...this.formatBookingDoctor(d),
           branchId: primaryBranch?.id || '',
-          specialtyID: primarySpec ? String(primarySpec.id) : '',
-          specialtyName: primarySpec?.name || '',
-          specialties: d.specialties.map((s) => ({
-            id: s.specialty.id,
-            name: s.specialty.name,
-            slug: s.specialty.slug,
-            isPrimary: s.isPrimary,
-          })),
           branches: d.user?.branchAssignments.map((b) => b.branch) || [],
         };
       });
 
       // Lấy danh sách các chuyên khoa đại diện cho các bác sĩ này
-      const specialtyMap = new Map<number, any>();
+      const specialtyMap = new Map<number, {
+        id: number; name: string; slug: string | null; doctorCount: number;
+      }>();
       for (const doc of formattedDoctors) {
         for (const spec of doc.specialties) {
           if (!specialtyMap.has(spec.id)) {
@@ -293,9 +322,7 @@ export class BookingFlowService {
       return {
         flow: 'doctor',
         bookingMethodCode: requiredMethodCode || 'CONSULTATION',
-        branches,
-        selectedBranch,
-        bookingMethods,
+        ...commonData,
         doctors: formattedDoctors,
         specialties: Array.from(specialtyMap.values()),
         services: [],
@@ -308,38 +335,20 @@ export class BookingFlowService {
       const specialties = await this.prisma.specialty.findMany({
         where: {
           isActive: true,
-          ...(effectiveBranchId
-            ? {
-                branches: {
+          branches: {
+            some: {
+              ...(effectiveBranchId ? { branchId: effectiveBranchId } : {}),
+              isActive: true,
+              branch: {
+                bookingMethods: {
                   some: {
-                    branchId: effectiveBranchId,
-                    isActive: true,
-                    branch: {
-                      bookingMethods: {
-                        some: {
-                          isEnabled: true,
-                          bookingMethod: { code: specialtyMethodCode, isActive: true },
-                        },
-                      },
-                    },
+                    isEnabled: true,
+                    bookingMethod: { code: specialtyMethodCode, isActive: true },
                   },
                 },
-              }
-            : {
-                branches: {
-                  some: {
-                    isActive: true,
-                    branch: {
-                      bookingMethods: {
-                        some: {
-                          isEnabled: true,
-                          bookingMethod: { code: specialtyMethodCode, isActive: true },
-                        },
-                      },
-                    },
-                  },
-                },
-              }),
+              },
+            },
+          },
         },
         orderBy: [{ sortOrder: 'asc' }, { id: 'asc' }],
         select: {
@@ -399,17 +408,14 @@ export class BookingFlowService {
       return {
         flow: 'specialty',
         bookingMethodCode: requiredMethodCode || 'SPECIALTY_EXAM',
-        branches,
-        selectedBranch,
-        bookingMethods,
+        ...commonData,
         specialties: specialties.map(({ _count, branches: bList, ...s }) => ({
           ...s,
           doctorCount: _count?.doctors ?? 0,
           serviceCount: _count?.servicePackages ?? 0,
           branches: bList.map((b) => b.branch),
         })),
-        services: specialtyPackages,
-        healthPackages: generalHealthPackages.length > 0 ? generalHealthPackages : formattedPackages,
+        ...packageData,
       };
     }
 
@@ -417,11 +423,8 @@ export class BookingFlowService {
       return {
         flow: 'health-package',
         bookingMethodCode: 'HEALTH_PACKAGE',
-        branches,
-        selectedBranch,
-        bookingMethods,
-        services: specialtyPackages,
-        healthPackages: generalHealthPackages.length > 0 ? generalHealthPackages : formattedPackages,
+        ...commonData,
+        ...packageData,
       };
     }
 
@@ -458,164 +461,66 @@ export class BookingFlowService {
         },
         take: 50,
         orderBy: [{ isFeatured: 'desc' }, { ratingAverage: 'desc' }],
-        select: {
-          id: true,
-          academicRank: true,
-          experienceYears: true,
-          biography: true,
-          avatarUrl: true,
-          consultationFee: true,
-          onlineConsultationFee: true,
-          ratingAverage: true,
-          ratingCount: true,
-          isFeatured: true,
-          user: { select: { fullName: true } },
-          specialties: {
-            select: {
-              isPrimary: true,
-              specialty: { select: { id: true, name: true, slug: true } },
-            },
-          },
-        },
+        select: BOOKING_DOCTOR_SELECT,
       }),
     ]);
 
     return {
       flow: 'facility',
       bookingMethodCode: requiredMethodCode || 'SPECIALTY_EXAM',
-      branches,
-      selectedBranch,
-      bookingMethods,
+      ...commonData,
       specialties: specialties.map(({ _count, ...s }) => ({
         ...s,
         doctorCount: _count?.doctors ?? 0,
         serviceCount: _count?.servicePackages ?? 0,
       })),
-      doctors: featuredDoctors.map((d) => {
-        const primarySpec = d.specialties.find((s) => s.isPrimary)?.specialty || d.specialties[0]?.specialty;
-        const fullName = d.user?.fullName || 'Bác sĩ';
-        return {
-          id: d.id,
-          fullName,
-          displayName: fullName,
-          academicRank: d.academicRank,
-          experienceYears: d.experienceYears,
-          biography: d.biography,
-          avatarUrl: d.avatarUrl,
-          consultationFee: Number(d.consultationFee) || 0,
-          onlineConsultationFee: Number(d.onlineConsultationFee ?? d.consultationFee) || 0,
-          ratingAverage: Number(d.ratingAverage) || 5.0,
-          ratingCount: d.ratingCount,
-          isFeatured: d.isFeatured,
-          specialtyID: primarySpec ? String(primarySpec.id) : '',
-          specialtyName: primarySpec?.name || '',
-          specialties: d.specialties.map((s) => ({
-            id: s.specialty.id,
-            name: s.specialty.name,
-            slug: s.specialty.slug,
-            isPrimary: s.isPrimary,
-          })),
-        };
-      }),
-      services: specialtyPackages,
-      healthPackages: generalHealthPackages.length > 0 ? generalHealthPackages : formattedPackages,
+      doctors: featuredDoctors.map(doctor => this.formatBookingDoctor(doctor)),
+      ...packageData,
     };
   }
 
-  /**
-   * API 2: Tính toán lịch & khung giờ khả dụng (Availability API)
-   * GET /api/v1/booking/slots?branchId=...&specialtyId=...&doctorId=...&date=2026-10-05
-   */
+// khung giừo khả dụng
   async getBookingSlots(dto: BookingSlotsDto) {
     const effectiveBranchId = await this.resolveBranchId(dto.branchId);
-    const parsedSpecialtyId = dto.specialtyId ? Number(dto.specialtyId) : undefined;
+    const parsedSpecialtyId = await this.resolveSpecialtyId(dto.specialtyId);
     const doctorId = dto.doctorId || undefined;
     const daysForward = Math.min(Math.max(Number(dto.days) || 30, 7), 60);
-
-    // 1. Phân giải thông tin gói dịch vụ (nếu bệnh nhân đặt theo gói)
-    let servicePackage: any = null;
-    if (dto.servicePackageId) {
-      const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(dto.servicePackageId);
-      servicePackage = await this.prisma.servicePackage.findFirst({
-        where: isUuid
-          ? { id: dto.servicePackageId, isActive: true }
-          : { OR: [{ slug: dto.servicePackageId }, { code: dto.servicePackageId }], isActive: true },
-        select: {
-          id: true,
-          specialtyId: true,
-          sessionType: true,
-          activeDaysOfWeek: true,
-          branchBookingMethod: { select: { branchId: true } },
-          branchBookingMethods: { select: { branchBookingMethod: { select: { branchId: true } } } },
-        },
-      });
-      if (
-        servicePackage &&
-        effectiveBranchId &&
-        servicePackage.branchBookingMethod?.branchId !== effectiveBranchId &&
-        !servicePackage.branchBookingMethods.some(
-          (link) => link.branchBookingMethod.branchId === effectiveBranchId,
-        )
-      ) {
-        throw new NotFoundException('Gói khám không được áp dụng tại cơ sở đã chọn');
-      }
-    }
-
+    const servicePackage = await this.resolveBookingSlotPackage(dto.servicePackageId, effectiveBranchId, dto.bookingMethodCode);
     const packageSpecialtyId = servicePackage?.specialtyId ?? undefined;
-    if (
-      parsedSpecialtyId !== undefined &&
-      packageSpecialtyId !== undefined &&
-      parsedSpecialtyId !== packageSpecialtyId
-    ) {
+    if (parsedSpecialtyId !== undefined && packageSpecialtyId !== undefined && parsedSpecialtyId !== packageSpecialtyId) {
       throw new BadRequestException('Dịch vụ khám không thuộc chuyên khoa đã chọn');
     }
     const targetSpecialtyId = parsedSpecialtyId ?? packageSpecialtyId;
-    const sessionType = (servicePackage as any)?.sessionType || 'ALL_DAY';
-    const activeDays: number[] = (servicePackage as any)?.activeDaysOfWeek?.length
-      ? (servicePackage as any).activeDaysOfWeek
-      : [0, 1, 2, 3, 4, 5, 6];
+    const bookingDates = this.getBookingDateRange(daysForward);
+    const { minDate, maxDate } = bookingDates;
+    const slotWhere: Prisma.DoctorScheduleSlotWhereInput = {
+      isActive: true,
+      slotStatus: 'AVAILABLE',
+    };
+    const scheduleWhere: Prisma.DoctorScheduleWhereInput = {
+      status: 'OPEN',
+      ...(dto.bookingMethodCode ? { branch: { bookingMethods: { some: { isEnabled: true, bookingMethod: { code: dto.bookingMethodCode, isActive: true } } } } } : {}),
+      ...(effectiveBranchId ? { branchId: effectiveBranchId } : {}),
+      ...(doctorId ? { doctorId } : {}),
+      doctor: {
+        isActive: true,
+        ...(targetSpecialtyId ? { specialties: { some: { specialtyId: targetSpecialtyId } } } : {}),
+      },
+    };
 
-    // 2. Tính khoảng ngày hợp lệ trong tương lai (30 ngày)
-    const nowUtc = new Date();
-    const vnOffsetMs = 7 * 60 * 60 * 1000;
-    const nowVn = new Date(nowUtc.getTime() + vnOffsetMs);
-    const todayVnStr = nowVn.toISOString().slice(0, 10);
-    const currentVnTimeStr = nowVn.toISOString().slice(11, 16);
-    const currentHour = nowVn.getUTCHours();
-    const currentMinute = nowVn.getUTCMinutes();
-    const isPastCutoff = currentHour > 16 || (currentHour === 16 && currentMinute >= 30);
-    const [y, m, d] = todayVnStr.split('-').map(Number);
-
-    // Quy tắc đặt lịch trực tuyến của phòng khám:
-    // 1. Không nhận đặt lịch trực tuyến trong ngày (hôm nay).
-    // 2. Để khám vào ngày mai, phải hoàn tất đặt lịch trước 16h30 hôm nay.
-    // -> Nếu đã qua 16h30 hôm nay: minLeadDays = 2 (ngày sớm nhất là ngày mốt).
-    // -> Nếu trước 16h30 hôm nay: minLeadDays = 1 (ngày sớm nhất là ngày mai).
-    const minLeadDays = isPastCutoff ? 2 : 1;
-    const minDate = new Date(Date.UTC(y, m - 1, d + minLeadDays));
-    const maxDate = new Date(Date.UTC(y, m - 1, d + daysForward));
-
-    // 3. Tìm danh sách tất cả các ngày có lịch khám khả dụng (Available Dates)
     const activeSchedules = await this.prisma.doctorSchedule.findMany({
       where: {
-        status: 'OPEN',
+        ...scheduleWhere,
         workDate: { gte: minDate, lte: maxDate },
-        ...(effectiveBranchId ? { branchId: effectiveBranchId } : {}),
-        ...(doctorId ? { doctorId } : {}),
-        ...(targetSpecialtyId
-          ? { doctor: { specialties: { some: { specialtyId: targetSpecialtyId } } } }
-          : {}),
         slots: {
-          some: {
-            isActive: true,
-            slotStatus: 'AVAILABLE',
-          },
+          some: slotWhere,
         },
       },
       select: {
         workDate: true,
+        branchId: true,
         slots: {
-          where: { isActive: true, slotStatus: 'AVAILABLE' },
+          where: slotWhere,
           select: { startTime: true, capacity: true, occupiedCount: true },
         },
       },
@@ -625,20 +530,11 @@ export class BookingFlowService {
     const availableDateSet = new Set<string>();
     for (const schedule of activeSchedules) {
       const scheduleDateStr = schedule.workDate.toISOString().slice(0, 10);
-      const dayOfWeek = schedule.workDate.getUTCDay();
-      if (!activeDays.includes(dayOfWeek)) continue;
-
-      // Lọc theo sessionType
-      const hasValidSlot = schedule.slots.some((s) => {
-        if (s.capacity - s.occupiedCount <= 0) return false;
-        const timeStr = s.startTime.toISOString().slice(11, 16);
-
-        if (sessionType === 'MORNING') return timeStr < '12:00';
-        if (sessionType === 'AFTERNOON') return timeStr >= '12:00' && timeStr < '17:00';
-        if (sessionType === 'EVENING') return timeStr >= '17:00';
-        if (sessionType === 'OFFICE_HOURS') return timeStr < '17:00';
-        return true;
-      });
+      const hasValidSlot = schedule.slots.some((slot) =>
+        slot.capacity > slot.occupiedCount && bookingMethodAcceptsSlot(dto.bookingMethodCode, { schedule }) && (!servicePackage || packageAcceptsSlot(
+          servicePackage.receptionSchedules, schedule.branchId, schedule.workDate, slot.startTime,
+        )),
+      );
 
       if (hasValidSlot) {
         availableDateSet.add(scheduleDateStr);
@@ -659,114 +555,120 @@ export class BookingFlowService {
       };
     }
 
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(targetDateStr)) {
-      throw new BadRequestException('Ngày khám phải có định dạng YYYY-MM-DD');
-    }
-    const [targetYear, targetMonth, targetDay] = targetDateStr.split('-').map(Number);
-    const requestedDate = new Date(Date.UTC(targetYear, targetMonth - 1, targetDay));
-    if (
-      Number.isNaN(requestedDate.getTime()) ||
-      requestedDate.toISOString().slice(0, 10) !== targetDateStr ||
-      requestedDate < minDate ||
-      requestedDate > maxDate
-    ) {
-      throw new BadRequestException('Ngày khám nằm ngoài khoảng thời gian cho phép');
-    }
+    const { requestedDate, endOfTargetDate } = bookingDates.resolveDate(targetDateStr);
 
-    const [ty, tm, td] = targetDateStr.split('-').map(Number);
-    const startOfTargetDate = new Date(Date.UTC(ty, tm - 1, td, 0, 0, 0, 0));
-    const endOfTargetDate = new Date(Date.UTC(ty, tm - 1, td, 23, 59, 59, 999));
-
-    // Truy vấn tất cả khung giờ của ngày này
     const slots = await this.prisma.doctorScheduleSlot.findMany({
       where: {
-        isActive: true,
-        slotStatus: 'AVAILABLE',
+        ...slotWhere,
         schedule: {
-          status: 'OPEN',
-          workDate: { gte: startOfTargetDate, lte: endOfTargetDate },
-          ...(effectiveBranchId ? { branchId: effectiveBranchId } : {}),
-          ...(doctorId ? { doctorId } : {}),
-          ...(targetSpecialtyId
-            ? { doctor: { specialties: { some: { specialtyId: targetSpecialtyId } } } }
-            : {}),
+          ...scheduleWhere,
+          workDate: { gte: requestedDate, lte: endOfTargetDate },
         },
       },
-      include: {
-        schedule: {
-          select: {
-            id: true,
-            branchId: true,
-            branch: { select: { id: true, code: true, slug: true, name: true } },
-            room: { select: { id: true, code: true, name: true } },
-            doctor: {
-              select: {
-                id: true,
-                academicRank: true,
-                consultationFee: true,
-                onlineConsultationFee: true,
-                avatarUrl: true,
-                experienceYears: true,
-                user: { select: { fullName: true } },
-              },
-            },
-          },
-        },
-      },
+      include: BOOKING_SLOT_INCLUDE,
       orderBy: [{ startTime: 'asc' }],
     });
 
-    // 5. Tự động gộp theo khung giờ (startTime - endTime) và tính sẵn số chỗ trống
-    const isTargetToday = targetDateStr === todayVnStr;
-    const timeSlotMap = new Map<
-      string,
-      {
-        startTime: string;
-        endTime: string;
-        label: string;
-        period: 'MORNING' | 'AFTERNOON' | 'EVENING';
-        totalCapacity: number;
-        occupiedCount: number;
-        remainingSlots: number;
-        isFull: boolean;
-        representativeSlotId: string;
-        doctors: Array<{
-          slotId: string;
-          doctorId: string;
-          doctorName: string;
-          academicRank?: string | null;
-          avatarUrl?: string | null;
-          experienceYears?: number | null;
-          consultationFee: number;
-          roomId?: string | null;
-          roomName?: string | null;
-          remainingSlots: number;
-        }>;
-      }
-    >();
+    return {
+      date: targetDateStr,
+      availableDates,
+      ...this.formatBookingSlots(slots, servicePackage, dto.bookingMethodCode),
+    };
+  }
 
+  /**
+   * Phân giải identifier (UUID, slug hoặc code) thành branchId chuẩn
+   */
+  private async resolveBranchId(identifier?: string): Promise<string | undefined> {
+    if (!identifier) return undefined;
+    if (/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(identifier)) {
+      return identifier;
+    }
+    const branch = await this.prisma.branch.findFirst({
+      where: { OR: [{ slug: identifier }, { code: identifier }], isActive: true },
+      select: { id: true },
+    });
+    return branch?.id ?? identifier;
+  }
+
+  private async resolveSpecialtyId(identifier?: string): Promise<number | undefined> {
+    if (!identifier) return undefined;
+    const value = identifier.trim();
+    if (/^\d+$/.test(value) && Number.isSafeInteger(Number(value)) && Number(value) > 0) return Number(value);
+    const specialty = await this.prisma.specialty.findFirst({
+      where: { slug: { equals: value, mode: 'insensitive' }, isActive: true }, select: { id: true },
+    });
+    if (!specialty) throw new NotFoundException('Không tìm thấy chuyên khoa phù hợp.');
+    return specialty.id;
+  }
+
+  private formatBookingDoctor(d: BookingDoctor) {
+    const primarySpec = d.specialties.find((s) => s.isPrimary)?.specialty || d.specialties[0]?.specialty;
+    const fullName = d.user?.fullName || 'Bác sĩ';
+    return {
+      id: d.id,
+      fullName,
+      displayName: fullName,
+      academicRank: d.academicRank,
+      experienceYears: d.experienceYears,
+      biography: d.biography,
+      avatarUrl: d.avatarUrl,
+      consultationFee: Number(d.consultationFee) || 0,
+      onlineConsultationFee: Number(d.onlineConsultationFee ?? d.consultationFee) || 0,
+      ratingAverage: Number(d.ratingAverage) || 5.0,
+      ratingCount: d.ratingCount,
+      isFeatured: d.isFeatured,
+      specialtyID: primarySpec ? String(primarySpec.id) : '',
+      specialtyName: primarySpec?.name || '',
+      specialties: d.specialties.map((s) => ({
+        id: s.specialty.id,
+        name: s.specialty.name,
+        slug: s.specialty.slug,
+        isPrimary: s.isPrimary,
+      })),
+    };
+  }
+
+  private getBookingDateRange(daysForward: number) {
+    const nowVn = new Date(Date.now() + 7 * 60 * 60 * 1000);
+    const [year, month, day] = nowVn.toISOString().slice(0, 10).split('-').map(Number);
+    // Không đặt trong ngày; từ 16:30 chỉ nhận lịch từ ngày mốt.
+    const minLeadDays = nowVn.getUTCHours() > 16 || (nowVn.getUTCHours() === 16 && nowVn.getUTCMinutes() >= 30) ? 2 : 1;
+    const minDate = new Date(Date.UTC(year, month - 1, day + minLeadDays));
+    const maxDate = new Date(Date.UTC(year, month - 1, day + daysForward));
+
+    return {
+      minDate,
+      maxDate,
+      resolveDate(value: string) {
+        const [year, month, day] = value.split('-').map(Number);
+        const requestedDate = new Date(Date.UTC(year, month - 1, day));
+        if (Number.isNaN(requestedDate.getTime()) || requestedDate.toISOString().slice(0, 10) !== value || requestedDate < minDate || requestedDate > maxDate) {
+          throw new BadRequestException('Ngày khám nằm ngoài khoảng thời gian cho phép');
+        }
+        return {
+          requestedDate,
+          endOfTargetDate: new Date(requestedDate.getTime() + 24 * 60 * 60 * 1000 - 1),
+        };
+      },
+    };
+  }
+
+  private formatBookingSlots(slots: BookingSlot[], servicePackage: BookingSlotPackage | null, bookingMethodCode?: string) {
+    const timeSlotMap = new Map<string, BookingTimeSlot>();
     for (const slot of slots) {
+      if (!bookingMethodAcceptsSlot(bookingMethodCode, slot)) continue;
       const start = slot.startTime.toISOString().slice(11, 16);
       const end = slot.endTime.toISOString().slice(11, 16);
 
-      // Nếu là hôm nay và khung giờ đã qua -> Bỏ qua
-      if (isTargetToday && start <= currentVnTimeStr) continue;
-
-      // Lọc theo sessionType của gói khám
-      if (sessionType === 'MORNING' && start >= '12:00') continue;
-      if (sessionType === 'AFTERNOON' && (start < '12:00' || start >= '17:00')) continue;
-      if (sessionType === 'EVENING' && start < '17:00') continue;
-      if (sessionType === 'OFFICE_HOURS' && start >= '17:00') continue;
+      if (servicePackage && !packageAcceptsSlot(
+        servicePackage.receptionSchedules, slot.schedule.branchId, slot.schedule.workDate, slot.startTime,
+      )) continue;
 
       const key = `${start}-${end}`;
       const remainingForThisDoc = Math.max(0, slot.capacity - slot.occupiedCount);
 
-      let period: 'MORNING' | 'AFTERNOON' | 'EVENING' = 'MORNING';
-      if (start >= '12:00' && start < '17:00') {
-        period = 'AFTERNOON';
-      } else if (start >= '17:00') {
-        period = 'EVENING';
-      }
+      const period = clinicPeriod(start);
 
       const docInfo = {
         slotId: slot.id,
@@ -782,7 +684,8 @@ export class BookingFlowService {
         remainingSlots: remainingForThisDoc,
       };
 
-      if (!timeSlotMap.has(key)) {
+      const existing = timeSlotMap.get(key);
+      if (!existing) {
         timeSlotMap.set(key, {
           startTime: start,
           endTime: end,
@@ -796,7 +699,6 @@ export class BookingFlowService {
           doctors: [docInfo],
         });
       } else {
-        const existing = timeSlotMap.get(key)!;
         existing.totalCapacity += slot.capacity;
         existing.occupiedCount += slot.occupiedCount;
         existing.remainingSlots += remainingForThisDoc;
@@ -809,19 +711,37 @@ export class BookingFlowService {
       a.startTime.localeCompare(b.startTime),
     );
 
-    // Tính tổng kết ca sáng/chiều/tối
-    const summary = {
-      morning: calculatedSlots.filter((s) => s.period === 'MORNING' && !s.isFull).length,
-      afternoon: calculatedSlots.filter((s) => s.period === 'AFTERNOON' && !s.isFull).length,
-      evening: calculatedSlots.filter((s) => s.period === 'EVENING' && !s.isFull).length,
-    };
+    const summary = { morning: 0, afternoon: 0, evening: 0 };
+    const periodKeys = { MORNING: 'morning', AFTERNOON: 'afternoon', EVENING: 'evening' } as const;
+    let totalAvailableSlots = 0;
+    for (const slot of calculatedSlots) {
+      if (slot.isFull) continue;
+      totalAvailableSlots += 1;
+      summary[periodKeys[slot.period]] += 1;
+    }
+    return { totalAvailableSlots, summary, slots: calculatedSlots };
+  }
 
+  private async resolveBookingSlotPackage(identifier?: string, branchId?: string, bookingMethodCode?: string): Promise<BookingSlotPackage | null> {
+    if (!identifier) return null;
+    const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(identifier);
+    const servicePackage = await this.prisma.servicePackage.findFirst({
+      where: uuid
+        ? { id: identifier, isActive: true }
+        : { OR: [{ slug: identifier }, { code: identifier }], isActive: true },
+      select: BOOKING_SLOT_PACKAGE_SELECT,
+    });
+    if (!servicePackage) throw new NotFoundException('Gói khám không khả dụng');
+    const deployments = [servicePackage.branchBookingMethod, ...servicePackage.branchBookingMethods.map(link => link.branchBookingMethod)]
+      .filter(method => method?.isEnabled && (!bookingMethodCode || (method.bookingMethod?.isActive && method.bookingMethod.code === bookingMethodCode)));
+    const allowedBranches = new Set(deployments.map(method => method.branchId));
+    if (!allowedBranches.size || (branchId && !allowedBranches.has(branchId))) {
+      throw new NotFoundException('Gói khám không được áp dụng tại cơ sở đã chọn');
+    }
     return {
-      date: targetDateStr,
-      availableDates,
-      totalAvailableSlots: calculatedSlots.filter((s) => !s.isFull).length,
-      summary,
-      slots: calculatedSlots,
+      ...servicePackage,
+      receptionSchedules: servicePackage.receptionSchedules.filter(day => allowedBranches.has(day.branchId)),
     };
   }
+
 }

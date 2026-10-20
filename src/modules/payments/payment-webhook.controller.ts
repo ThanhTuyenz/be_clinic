@@ -2,15 +2,15 @@ import { Body, Controller, Headers, Param, Post, Req } from '@nestjs/common';
 import { ApiOperation, ApiTags } from '@nestjs/swagger';
 import type { Request } from 'express';
 import { Public } from '../../common/decorators/public.decorator.js';
-import { BookingService } from '../bookings/booking.service.js';
 import { PaymentWebhookDto } from './dtos/payment-webhook.dto.js';
+import { PaymentSettlementService } from './payment-settlement.service.js';
 import { PaymentWebhookSignatureService } from './payment-webhook-signature.service.js';
 
 @ApiTags('Payments')
 @Controller('payments')
 export class PaymentWebhookController {
   constructor(
-    private readonly bookingService: BookingService,
+    private readonly settlement: PaymentSettlementService,
     private readonly signatures: PaymentWebhookSignatureService,
   ) {}
 
@@ -24,6 +24,6 @@ export class PaymentWebhookController {
     @Body() dto: PaymentWebhookDto,
   ) {
     this.signatures.verify(provider, request.rawBody, signature);
-    return this.bookingService.handlePaymentWebhook(provider, dto);
+    return this.settlement.handlePaymentWebhook(provider, dto);
   }
 }

@@ -1,9 +1,9 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { IsNotEmpty, IsOptional, IsString, MaxLength } from 'class-validator';
+import { IsNotEmpty, IsOptional, IsString, IsUUID, MaxLength } from 'class-validator';
 
 export class RescheduleAppointmentDto {
-  @ApiProperty({ description: 'ID slot bác sĩ mới (UUID hoặc virtual_scheduleId_HH:MM)' })
-  @IsString()
+  @ApiProperty({ description: 'ID slot bác sĩ mới đã được tạo sẵn', format: 'uuid' })
+  @IsUUID()
   @IsNotEmpty({ message: 'Vui lòng chọn khung giờ khám mới' })
   newScheduleSlotId: string;
 

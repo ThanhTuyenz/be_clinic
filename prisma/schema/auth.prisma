@@ -1,6 +1,4 @@
 // ============================================================
-// Auth: User & OAuth (Session, OTP & Reset Tokens managed in Redis)
-// ============================================================
 
 model User {
   id                       String                     @id @default(uuid()) @db.Uuid

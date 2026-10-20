@@ -68,9 +68,10 @@ export class VouchersService {
     rawCode: string,
     subtotal: number,
     accountId?: string,
+    client: Prisma.TransactionClient = this.prisma,
   ): Promise<VoucherCalculationResult> {
     const code = rawCode.trim().toUpperCase();
-    const voucher = await this.prisma.voucher.findUnique({
+    const voucher = await client.voucher.findUnique({
       where: { code },
     });
 
@@ -99,7 +100,7 @@ export class VouchersService {
     }
 
     if (accountId && voucher.userUsageLimit > 0) {
-      const userUsageCount = await this.prisma.voucherUsage.count({
+      const userUsageCount = await client.voucherUsage.count({
         where: { voucherId: voucher.id, accountId },
       });
       if (userUsageCount >= voucher.userUsageLimit) {
@@ -160,6 +161,19 @@ export class VouchersService {
         appointmentId: details.appointmentId,
         bookingOrderId: details.bookingOrderId,
       },
+    });
+  }
+}
+
+export async function releaseVoucherUsage(
+  tx: Prisma.TransactionClient,
+  reference: { appointmentId: string } | { bookingOrderId: string },
+) {
+  const usages = await tx.voucherUsage.findMany({ where: reference, select: { id: true, voucherId: true } });
+  for (const usage of usages) {
+    const removed = await tx.voucherUsage.deleteMany({ where: { id: usage.id } });
+    if (removed.count === 1) await tx.voucher.updateMany({
+      where: { id: usage.voucherId, usedCount: { gt: 0 } }, data: { usedCount: { decrement: 1 } },
     });
   }
 }

@@ -1,12 +1,16 @@
 import { Module } from '@nestjs/common';
-import { MailsModule } from '../../infrastructure/mail/mails.module.js';
-import { RecommendationModule } from '../recommendations/recommendation.module.js';
 import { HttpSmsModule } from '../../infrastructure/httpsms/httpsms.module.js';
+import { MailsModule } from '../../infrastructure/mail/mails.module.js';
 import { NotificationModule } from '../notifications/notification.module.js';
+import { RecommendationModule } from '../recommendations/recommendation.module.js';
 import { AppointmentReminderTask } from './appointment-reminder.task.js';
-import { ReceptionController } from './reception.controller.js';
-import { StaffAppointmentsController } from './staff-appointments.controller.js';
-import { StaffAppointmentsService } from './staff-appointments.service.js';
+import { AppointmentsController } from './appointments.controller.js';
+import { AppointmentsService } from './appointments.service.js';
+
+import { PatientAppointmentsController } from './patient-appointments.controller.js';
+import { PatientAppointmentsService } from './patient-appointments.service.js';
+
+import { AppointmentConfirmationService } from './appointment-confirmation.service.js';
 
 @Module({
   imports: [
@@ -16,13 +20,15 @@ import { StaffAppointmentsService } from './staff-appointments.service.js';
     NotificationModule,
   ],
   controllers: [
-    StaffAppointmentsController,
-    ReceptionController,
+    AppointmentsController,
+    PatientAppointmentsController,
   ],
   providers: [
-    StaffAppointmentsService,
+    AppointmentsService,
+    AppointmentConfirmationService,
+    PatientAppointmentsService,
     AppointmentReminderTask,
   ],
-  exports: [StaffAppointmentsService],
+  exports: [AppointmentConfirmationService],
 })
-export class AppointmentsModule {}
+export class AppointmentsModule { }

@@ -1,4 +1,4 @@
-import { HttpException, HttpStatus, Injectable, NotFoundException, Inject } from '@nestjs/common';
+import { BadRequestException, HttpException, HttpStatus, Injectable, NotFoundException, Inject } from '@nestjs/common';
 import { Prisma, User as PrismaUser } from '@prisma/client';
 import { EntityCondition } from '../../../common/utils/types/entity-condition.type.js';
 import { NullableType } from '../../../common/utils/types/nullable.type.js';
@@ -33,80 +33,81 @@ export class UsersService implements IUsersService {
     if (phoneNumber && (await this.prisma.user.findFirst({ where: { phoneNumber } }))) {
       throw new HttpException('Số điện thoại này đã được sử dụng', HttpStatus.CONFLICT);
     }
-    const row = await this.prisma.user.create({
-      data: {
-        email,
-        password: dto.password ? await hashPassword(dto.password) : null,
-        fullName: dto.fullName,
-        phoneNumber: phoneNumber ?? null,
-        avatarUrl: avatarUrl ?? null,
-        role: this.toPrismaRole(dto.role ?? UserRole.Patient),
-        status: this.toPrismaStatus(dto.status ?? UserStatus.Active),
-        provider: this.toPrismaProvider(dto.provider ?? 'email'),
-        socialId: dto.socialId ?? null,
-        zaloId: dto.zaloId ?? null,
-        roleId: dto.roleId ?? null,
-        customPermissions: dto.customPermissions as unknown as Prisma.InputJsonValue | undefined,
-        hash: dto.hash ?? null,
-      },
-    });
-
-    const targetBranchIds: string[] = Array.isArray(dto.branchIds) && dto.branchIds.length > 0
-      ? dto.branchIds
-      : (dto.branchId ? [dto.branchId] : []);
-    const primaryId = dto.primaryBranchId || targetBranchIds[0];
-
-    for (const bId of targetBranchIds) {
-      if (!bId) continue;
-      await this.prisma.userBranchAssignment.upsert({
-        where: { userId_branchId: { userId: row.id, branchId: bId } },
-        update: { isPrimary: bId === primaryId },
-        create: { userId: row.id, branchId: bId, isPrimary: bId === primaryId },
-      });
-    }
-
-    if (row.role === 'DOCTOR') {
-      const docRec = await this.prisma.doctor.upsert({
-        where: { userId: row.id },
-        update: {
-          academicRank: dto.academicRank || 'BS. CKI',
-          licenseNumber: dto.licenseNumber || null,
-          experienceYears: Number(dto.experienceYears) || 0,
-          consultationFee: Number(dto.consultationFee) || 0,
-          slotDuration: Number(dto.slotDuration) || 30,
-          isFeatured: Boolean(dto.isFeatured),
-          biography: dto.biography || null,
+    return this.prisma.$transaction(async (tx) => {
+      const targetBranchIds: string[] = [...new Set(dto.branchIds !== undefined ? dto.branchIds : (dto.branchId ? [dto.branchId] : []))];
+      if (this.toPrismaRole(dto.role ?? UserRole.Patient) === 'DOCTOR') await this.validateDoctorBranch(tx, targetBranchIds, dto.primaryBranchId);
+      const row = await tx.user.create({
+        data: {
+          email,
+          password: dto.password ? await hashPassword(dto.password) : null,
+          fullName: dto.fullName,
+          phoneNumber: phoneNumber ?? null,
           avatarUrl: avatarUrl ?? null,
-        },
-        create: {
-          userId: row.id,
-          academicRank: dto.academicRank || 'BS. CKI',
-          licenseNumber: dto.licenseNumber || null,
-          experienceYears: Number(dto.experienceYears) || 0,
-          consultationFee: Number(dto.consultationFee) || 0,
-          slotDuration: Number(dto.slotDuration) || 30,
-          isFeatured: Boolean(dto.isFeatured),
-          biography: dto.biography || null,
-          avatarUrl: avatarUrl ?? null,
+          role: this.toPrismaRole(dto.role ?? UserRole.Patient),
+          status: this.toPrismaStatus(dto.status ?? UserStatus.Active),
+          provider: this.toPrismaProvider(dto.provider ?? 'email'),
+          socialId: dto.socialId ?? null,
+          zaloId: dto.zaloId ?? null,
+          roleId: dto.roleId ?? null,
+          customPermissions: dto.customPermissions as unknown as Prisma.InputJsonValue | undefined,
+          hash: dto.hash ?? null,
         },
       });
-      if (dto.specialtyId && Number(dto.specialtyId)) {
-        await this.prisma.doctorSpecialty.upsert({
-          where: { doctorId_specialtyId: { doctorId: docRec.id, specialtyId: Number(dto.specialtyId) } },
-          update: { isPrimary: true },
-          create: { doctorId: docRec.id, specialtyId: Number(dto.specialtyId), isPrimary: true },
+
+      const primaryId = dto.primaryBranchId || targetBranchIds[0];
+
+      for (const bId of targetBranchIds) {
+        if (!bId) continue;
+        await tx.userBranchAssignment.upsert({
+          where: { userId_branchId: { userId: row.id, branchId: bId } },
+          update: { isPrimary: bId === primaryId },
+          create: { userId: row.id, branchId: bId, isPrimary: bId === primaryId },
         });
       }
-    }
 
-    const userWithRelations = await this.prisma.user.findUnique({
-      where: { id: row.id },
-      include: {
-        doctor: { include: { specialties: { include: { specialty: true } } } },
-        branchAssignments: { include: { branch: true } },
-      },
-    });
-    return userWithRelations ? this.toEntity(userWithRelations) : this.toEntity(row);
+      if (row.role === 'DOCTOR') {
+        const docRec = await tx.doctor.upsert({
+          where: { userId: row.id },
+          update: {
+            academicRank: dto.academicRank || 'BS. CKI',
+            licenseNumber: dto.licenseNumber || null,
+            experienceYears: Number(dto.experienceYears) || 0,
+            consultationFee: Number(dto.consultationFee) || 0,
+            slotDuration: Number(dto.slotDuration) || 30,
+            isFeatured: Boolean(dto.isFeatured),
+            biography: dto.biography || null,
+            avatarUrl: avatarUrl ?? null,
+          },
+          create: {
+            userId: row.id,
+            academicRank: dto.academicRank || 'BS. CKI',
+            licenseNumber: dto.licenseNumber || null,
+            experienceYears: Number(dto.experienceYears) || 0,
+            consultationFee: Number(dto.consultationFee) || 0,
+            slotDuration: Number(dto.slotDuration) || 30,
+            isFeatured: Boolean(dto.isFeatured),
+            biography: dto.biography || null,
+            avatarUrl: avatarUrl ?? null,
+          },
+        });
+        if (dto.specialtyId && Number(dto.specialtyId)) {
+          await tx.doctorSpecialty.upsert({
+            where: { doctorId_specialtyId: { doctorId: docRec.id, specialtyId: Number(dto.specialtyId) } },
+            update: { isPrimary: true },
+            create: { doctorId: docRec.id, specialtyId: Number(dto.specialtyId), isPrimary: true },
+          });
+        }
+      }
+
+      const userWithRelations = await tx.user.findUnique({
+        where: { id: row.id },
+        include: {
+          doctor: { include: { specialties: { include: { specialty: true } } } },
+          branchAssignments: { include: { branch: true } },
+        },
+      });
+      return userWithRelations ? this.toEntity(userWithRelations) : this.toEntity(row);
+    }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
   }
 
   async findOneUser(options: EntityCondition<User>): Promise<NullableType<User>> {
@@ -186,75 +187,84 @@ export class UsersService implements IUsersService {
     if (next.isBlocked === true) next.blockedAt = existing.blockedAt ?? new Date();
     if (next.isBlocked === false) next.blockedAt = null;
     if (next.isDeleted === true) next.status = UserStatus.Inactive;
-    const row = await this.prisma.user.update({ where: { id }, data: await this.toUpdateData(next, existing) });
-    this.permissionsService.invalidateCache(id);
-    // Invalidate user status cache trong JwtAuthGuard khi isBlocked/isDeleted thay đổi
-    if (payload.isBlocked !== undefined || payload.isDeleted !== undefined) {
-      await this.invalidateUserStatusCache(id);
-    }
-
     const p = payload as any;
-    if (p.branchIds !== undefined || p.branchId !== undefined) {
-      const targetBranchIds: string[] = Array.isArray(p.branchIds)
-        ? p.branchIds
-        : (p.branchId ? [p.branchId] : []);
-      const primaryId = p.primaryBranchId || targetBranchIds[0];
+    const row = await this.prisma.$transaction(async (tx) => {
+      const stored = await tx.user.findUnique({ where: { id }, select: { role: true, branchAssignments: { select: { branchId: true } } } });
+      if (!stored) throw new NotFoundException('Không tìm thấy người dùng');
+      const targetIds = [...new Set<string>(p.branchIds !== undefined ? p.branchIds : p.branchId !== undefined ? (p.branchId ? [p.branchId] : []) : stored.branchAssignments.map((branch) => branch.branchId))];
+      if (this.toPrismaRole(payload.role ?? stored.role) === 'DOCTOR') {
+        await this.validateDoctorBranch(tx, targetIds, p.primaryBranchId);
+        if (stored.branchAssignments.length === 1 && stored.branchAssignments[0].branchId !== targetIds[0]) {
+          const future = await tx.doctorSchedule.count({ where: { doctor: { userId: id }, branchId: { not: targetIds[0] }, status: 'OPEN', workDate: { gte: new Date(new Date(Date.now() + 7 * 60 * 60 * 1000).toISOString().slice(0, 10)) } } });
+          if (future) throw new BadRequestException('Bác sĩ còn ca làm việc tại chi nhánh cũ. Vui lòng xử lý lịch trước khi chuyển chi nhánh.');
+        }
+      }
+      const row = await tx.user.update({ where: { id }, data: await this.toUpdateData(next, existing) });
+      if (p.branchIds !== undefined || p.branchId !== undefined) {
+        const targetBranchIds: string[] = Array.isArray(p.branchIds)
+          ? p.branchIds
+          : (p.branchId ? [p.branchId] : []);
+        const primaryId = p.primaryBranchId || targetBranchIds[0];
 
-      if (targetBranchIds.length > 0) {
-        await this.prisma.userBranchAssignment.deleteMany({
-          where: { userId: row.id, branchId: { notIn: targetBranchIds } },
+        if (targetBranchIds.length > 0) {
+          await tx.userBranchAssignment.deleteMany({
+            where: { userId: row.id, branchId: { notIn: targetBranchIds } },
+          });
+          for (const bId of targetBranchIds) {
+            if (!bId) continue;
+            await tx.userBranchAssignment.upsert({
+              where: { userId_branchId: { userId: row.id, branchId: bId } },
+              update: { isPrimary: bId === primaryId },
+              create: { userId: row.id, branchId: bId, isPrimary: bId === primaryId },
+            });
+          }
+        }
+      }
+
+      if (String(row.role).toUpperCase() === 'DOCTOR') {
+        const docRec = await tx.doctor.upsert({
+          where: { userId: row.id },
+          update: {
+            ...(p.academicRank !== undefined ? { academicRank: p.academicRank } : {}),
+            ...(p.licenseNumber !== undefined ? { licenseNumber: p.licenseNumber } : {}),
+            ...(p.experienceYears !== undefined ? { experienceYears: Number(p.experienceYears) || 0 } : {}),
+            ...(p.consultationFee !== undefined ? { consultationFee: Number(p.consultationFee) || 0 } : {}),
+            ...(p.slotDuration !== undefined ? { slotDuration: Number(p.slotDuration) || 30 } : {}),
+            ...(p.isFeatured !== undefined ? { isFeatured: Boolean(p.isFeatured) } : {}),
+            ...(p.biography !== undefined ? { biography: p.biography } : {}),
+            ...(p.avatarUrl !== undefined ? { avatarUrl: p.avatarUrl || null } : {}),
+          },
+          create: {
+            userId: row.id,
+            academicRank: p.academicRank || 'BS. CKI',
+            licenseNumber: p.licenseNumber || null,
+            experienceYears: Number(p.experienceYears) || 0,
+            consultationFee: Number(p.consultationFee) || 0,
+            slotDuration: Number(p.slotDuration) || 30,
+            isFeatured: Boolean(p.isFeatured),
+            biography: p.biography || null,
+            avatarUrl: p.avatarUrl || null,
+          },
         });
-        for (const bId of targetBranchIds) {
-          if (!bId) continue;
-          await this.prisma.userBranchAssignment.upsert({
-            where: { userId_branchId: { userId: row.id, branchId: bId } },
-            update: { isPrimary: bId === primaryId },
-            create: { userId: row.id, branchId: bId, isPrimary: bId === primaryId },
+
+        if (p.specialtyId && Number(p.specialtyId)) {
+          await tx.doctorSpecialty.deleteMany({
+            where: { doctorId: docRec.id, specialtyId: { not: Number(p.specialtyId) } },
+          });
+          await tx.doctorSpecialty.upsert({
+            where: { doctorId_specialtyId: { doctorId: docRec.id, specialtyId: Number(p.specialtyId) } },
+            update: { isPrimary: true },
+            create: { doctorId: docRec.id, specialtyId: Number(p.specialtyId), isPrimary: true },
           });
         }
       }
-    }
 
-    if (String(row.role).toUpperCase() === 'DOCTOR') {
-      const docRec = await this.prisma.doctor.upsert({
-        where: { userId: row.id },
-        update: {
-          ...(p.academicRank !== undefined ? { academicRank: p.academicRank } : {}),
-          ...(p.licenseNumber !== undefined ? { licenseNumber: p.licenseNumber } : {}),
-          ...(p.experienceYears !== undefined ? { experienceYears: Number(p.experienceYears) || 0 } : {}),
-          ...(p.consultationFee !== undefined ? { consultationFee: Number(p.consultationFee) || 0 } : {}),
-          ...(p.slotDuration !== undefined ? { slotDuration: Number(p.slotDuration) || 30 } : {}),
-          ...(p.isFeatured !== undefined ? { isFeatured: Boolean(p.isFeatured) } : {}),
-          ...(p.biography !== undefined ? { biography: p.biography } : {}),
-          ...(p.avatarUrl !== undefined ? { avatarUrl: p.avatarUrl || null } : {}),
-        },
-        create: {
-          userId: row.id,
-          academicRank: p.academicRank || 'BS. CKI',
-          licenseNumber: p.licenseNumber || null,
-          experienceYears: Number(p.experienceYears) || 0,
-          consultationFee: Number(p.consultationFee) || 0,
-          slotDuration: Number(p.slotDuration) || 30,
-          isFeatured: Boolean(p.isFeatured),
-          biography: p.biography || null,
-          avatarUrl: p.avatarUrl || null,
-        },
-      });
-
-      if (p.specialtyId && Number(p.specialtyId)) {
-        await this.prisma.doctorSpecialty.deleteMany({
-          where: { doctorId: docRec.id, specialtyId: { not: Number(p.specialtyId) } },
-        });
-        await this.prisma.doctorSpecialty.upsert({
-          where: { doctorId_specialtyId: { doctorId: docRec.id, specialtyId: Number(p.specialtyId) } },
-          update: { isPrimary: true },
-          create: { doctorId: docRec.id, specialtyId: Number(p.specialtyId), isPrimary: true },
-        });
-      }
-    }
+      return row;
+    }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
+    this.permissionsService.invalidateCache(id);
+    if (payload.isBlocked !== undefined || payload.isDeleted !== undefined) await this.invalidateUserStatusCache(id);
 
     await this.recordHistory(row, HISTORY_ACTIONS.USER_UPDATED, 'Cập nhật người dùng');
-    this.permissionsService.invalidateCache(id);
     const updatedWithRelations = await this.prisma.user.findUnique({
       where: { id: row.id },
       include: {
@@ -346,6 +356,12 @@ export class UsersService implements IUsersService {
     delete (entity as any).hash;
     (entity as any).effectivePermissions = calculateEffectivePermissions(row.role, row.customPermissions);
     return entity;
+  }
+
+  private async validateDoctorBranch(tx: Prisma.TransactionClient, ids: string[], primaryId?: string | null) {
+    if (ids.length !== 1 || !ids[0] || (primaryId && primaryId !== ids[0])) throw new BadRequestException('Mỗi bác sĩ phải được phân công đúng một chi nhánh.');
+    const branch = await tx.branch.findFirst({ where: { id: ids[0], isActive: true }, select: { id: true } });
+    if (!branch) throw new BadRequestException('Chi nhánh làm việc không tồn tại hoặc đã ngừng hoạt động.');
   }
 
   private toPrismaRole(value: UserRole | string): any { return String(value).toUpperCase(); }

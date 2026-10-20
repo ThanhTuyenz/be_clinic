@@ -1,18 +1,19 @@
 import {
-  Body,
-  Controller,
-  Get,
-  HttpCode,
-  HttpStatus,
-  Logger,
-  Post,
-  Req,
+Body,
+Controller,
+Get,
+HttpCode,
+HttpStatus,
+Logger,
+Param,
+Post,
+Req,
 } from '@nestjs/common';
 import type { Request } from 'express';
 
 import { ApiBearerAuth, ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
-import { Public } from '../../common/decorators/public.decorator.js';
 import { SkipPermissions } from 'src/common/decorators';
+import { Public } from '../../common/decorators/public.decorator.js';
 import { CreatePaymentDto, PayosWebhookDto } from './dtos/payment.dto.js';
 import { PaymentService } from './payment.service.js';
 
@@ -50,6 +51,13 @@ export class PaymentController {
   async simulateSuccess(@Body('paymentId') paymentId: string, @Req() req: Request) {
     const accountId = req.user!.id;
     return await this.paymentService.simulateSuccess(accountId, paymentId);
+  }
+
+  @Get('appointments/:id/status')
+  @ApiBearerAuth('access-token')
+  @ApiOperation({ summary: 'Kiểm tra trạng thái thanh toán và lịch hẹn của người dùng' })
+  paymentStatus(@Req() req: Request, @Param('id') id: string) {
+    return this.paymentService.paymentStatus(id, req.user!.id);
   }
 
   @Post('sync')

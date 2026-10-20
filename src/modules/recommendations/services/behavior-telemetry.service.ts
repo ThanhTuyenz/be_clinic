@@ -4,6 +4,8 @@ import { RedisService } from '../../../infrastructure/redis/redis.service.js';
 import { TrackBehaviorDto, TrackingActionType } from '../recommendation.dto.js';
 import { TELEMETRY_CONFIG } from '../constants/recommendation.constants.js';
 
+type BehaviorEvent = Omit<TrackBehaviorDto, 'sessionId'> & { sessionId?: string; searchQuery?: string };
+
 @Injectable()
 export class BehaviorTelemetryService {
   private readonly logger = new Logger(BehaviorTelemetryService.name);
@@ -14,7 +16,7 @@ export class BehaviorTelemetryService {
   ) { }
 
   // hành vi người dùng
-  async trackUserBehavior(dto: TrackBehaviorDto, userId?: string): Promise<{ success: boolean }> {
+  async trackUserBehavior(dto: BehaviorEvent, userId?: string): Promise<{ success: boolean }> {
     if (!this.redis.isEnabled()) return { success: true };
 
     try {
@@ -25,8 +27,8 @@ export class BehaviorTelemetryService {
         this.recordPersonalInterests(userKeys, dto, resolvedSpecialtyId),
         this.recordGlobalAnalytics(dto, resolvedSpecialtyId),
         this.persistDatabaseAnalytics(dto),
-        this.invalidateHomeRecommendationCache(dto.sessionId, userId),
       ]);
+      await this.invalidateHomeRecommendationCache(dto.sessionId, userId);
     } catch (err: any) {
       this.logger.debug(`[Telemetry] Failed to process telemetry: ${err?.message}`);
     }
@@ -34,12 +36,37 @@ export class BehaviorTelemetryService {
     return { success: true };
   }
 
+  /** Only a committed, unpaid HOLD cancellation is an abandoned booking. */
+  async recordAbandonedBooking(appointmentId: string): Promise<void> {
+    if (!this.redis.isEnabled()) return;
+    const appointment = await this.prisma.appointment.findFirst({
+      where: {
+        id: appointmentId, status: 'CANCELLED', servicePackageId: { not: null },
+        statusHistories: { some: { fromStatus: 'HOLD', toStatus: 'CANCELLED', reason: { in: ['PAYMENT_HOLD_TIMEOUT', 'PAYMENT_CANCELLED'] } } },
+      },
+      select: {
+        id: true, bookingOrderId: true, servicePackageId: true,
+        patientProfile: { select: { accountId: true } },
+        bookingOrder: { select: { accountId: true, invoice: { select: { payments: { where: { paidAt: { not: null } }, select: { id: true }, take: 1 } } } } },
+        invoice: { select: { payments: { where: { paidAt: { not: null } }, select: { id: true }, take: 1 } } },
+        sourceView: { select: { sessionId: true } },
+      },
+    });
+    if (!appointment?.servicePackageId || appointment.invoice?.payments.length || appointment.bookingOrder?.invoice?.payments.length) return;
+    const userId = appointment.bookingOrder?.accountId || appointment.patientProfile.accountId || undefined;
+    const sessionId = appointment.sourceView?.sessionId;
+    if (!userId && !sessionId) return;
+    const key = `rec:dropoff:${appointment.bookingOrderId || appointment.id}:${appointment.servicePackageId}`;
+    const recorded = await this.redis.getClient()?.set(key, '1', 'EX', TELEMETRY_CONFIG.BEHAVIOR_TTL_SECONDS, 'NX');
+    if (!recorded) return;
+    await this.trackUserBehavior({ sessionId, actionType: TrackingActionType.DROP_OFF, targetPackageId: appointment.servicePackageId }, userId);
+  }
+
   /**
    * Phân giải chuyên khoa từ targetPackageId nếu client chưa truyền targetSpecialtyId
    */
-  private async resolveSpecialtyId(dto: TrackBehaviorDto): Promise<number | undefined> {
-    if (dto.targetSpecialtyId) return dto.targetSpecialtyId;
-    if (!dto.targetPackageId) return undefined;
+  private async resolveSpecialtyId(dto: BehaviorEvent): Promise<number | undefined> {
+    if (!dto.targetPackageId) return dto.targetSpecialtyId;
 
     try {
       const pkg = await this.prisma.servicePackage.findUnique({
@@ -56,8 +83,8 @@ export class BehaviorTelemetryService {
   /**
    * Lấy danh sách Redis keys đại diện cho hồ sơ hành vi của người dùng (User / Guest)
    */
-  private getUserTelemetryKeys(sessionId: string, userId?: string): string[] {
-    const keys = [`rec:guest_interest:${sessionId}`];
+  private getUserTelemetryKeys(sessionId?: string, userId?: string): string[] {
+    const keys = sessionId ? [`rec:guest_interest:${sessionId}`] : [];
     if (userId) {
       keys.push(`rec:user_interest:${userId}`);
     }
@@ -69,7 +96,7 @@ export class BehaviorTelemetryService {
    */
   private async recordPersonalInterests(
     userKeys: string[],
-    dto: TrackBehaviorDto,
+    dto: BehaviorEvent,
     specialtyId?: number,
   ): Promise<void> {
     const scoreToAdd = TELEMETRY_CONFIG.ACTION_SCORES[dto.actionType] ?? 0;
@@ -102,6 +129,7 @@ export class BehaviorTelemetryService {
       if (dto.actionType === TrackingActionType.DROP_OFF && dto.targetPackageId) {
         pipeline.hset(key, 'drop_off_pkg', dto.targetPackageId);
         pipeline.hset(key, 'drop_off_at', eventAt);
+        pipeline.hset(key, 'drop_off_verified', '1');
       }
 
       // Gia hạn TTL cho dữ liệu hành vi (14 ngày)
@@ -113,7 +141,7 @@ export class BehaviorTelemetryService {
   /**
    * Cập nhật các bảng thống kê tần suất toàn hệ thống (Global Analytics Sorted Sets)
    */
-  private async recordGlobalAnalytics(dto: TrackBehaviorDto, specialtyId?: number): Promise<void> {
+  private async recordGlobalAnalytics(dto: BehaviorEvent, specialtyId?: number): Promise<void> {
     const client = this.redis.getClient();
     if (!client) return;
 
@@ -122,7 +150,7 @@ export class BehaviorTelemetryService {
     if (specialtyId) {
       pipeline.zincrby('rec:global:popular_specialties', 1, specialtyId.toString());
     }
-    if (dto.targetPackageId) {
+    if (dto.actionType === TrackingActionType.VIEW_PACKAGE && dto.targetPackageId) {
       pipeline.zincrby('rec:global:package_views', 1, dto.targetPackageId);
       pipeline.zincrby('rec:global:popular_packages', 1, dto.targetPackageId);
     }
@@ -134,7 +162,7 @@ export class BehaviorTelemetryService {
   /**
    * Ghi log thống kê tìm kiếm và cập nhật lượt xem gói vào cơ sở dữ liệu PostgreSQL
    */
-  private async persistDatabaseAnalytics(dto: TrackBehaviorDto): Promise<void> {
+  private async persistDatabaseAnalytics(dto: BehaviorEvent): Promise<void> {
     // 1. Cập nhật lượt xem gói khám
     if (dto.actionType === TrackingActionType.VIEW_PACKAGE && dto.targetPackageId) {
       try {
@@ -212,7 +240,7 @@ export class BehaviorTelemetryService {
               lastSearchAt = eventAt;
               lastSearchQuery = String(val);
             }
-          } else if (field === 'drop_off_pkg' && val) {
+          } else if (field === 'drop_off_pkg' && val && hashData.drop_off_verified === '1') {
             const eventAt = Number(hashData.drop_off_at || 0);
             if (eventAt >= dropOffAt) {
               dropOffAt = eventAt;

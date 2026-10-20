@@ -1,10 +1,24 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { parseDate as parseDateUtil } from '../../common/utils/staff.utils.js';
+import { CLINIC_SESSION_WINDOWS } from '../../common/constants/clinic-sessions.js';
 import { PrismaService } from '../../infrastructure/database/prisma/prisma.service.js';
 
 @Injectable()
 export class SchedulesService {
   constructor(private readonly prisma: PrismaService) {}
+
+  private async resolveAssignedDoctor(doctorId: string, branchId: string) {
+    const doctor = await this.prisma.doctor.findFirst({
+      where: { isActive: true, OR: [{ id: doctorId }, { userId: doctorId }] },
+      select: { id: true, user: { select: { branchAssignments: { select: { branchId: true, branch: { select: { isActive: true } } } } } } },
+    });
+    if (!doctor) throw new BadRequestException('Không tìm thấy thông tin hồ sơ bác sĩ');
+    const assignments = doctor.user.branchAssignments;
+    if (assignments.length !== 1 || assignments[0].branchId !== branchId || !assignments[0].branch.isActive) {
+      throw new BadRequestException('Chỉ được phân lịch tại chi nhánh làm việc duy nhất của bác sĩ.');
+    }
+    return doctor;
+  }
 
   // ─────────────────────────────────────────────────────────────
   // Sinh slot tự động cho một ca trực
@@ -269,8 +283,8 @@ export class SchedulesService {
     const doctorId = String(body.doctorId || '').trim();
     const branchId = String(body.branchId || '').trim();
     const workDateStr = String(body.workDate || '').trim();
-    const startTimeStr = String(body.startTime || '08:00').trim();
-    const endTimeStr = String(body.endTime || '12:00').trim();
+    const startTimeStr = String(body.startTime || CLINIC_SESSION_WINDOWS.MORNING.start).trim();
+    const endTimeStr = String(body.endTime || CLINIC_SESSION_WINDOWS.MORNING.end).trim();
     const roomId = body.roomId ? String(body.roomId).trim() : null;
     const slotDurationMin = Number(body.slotDurationMin) || 30;
     const capacityPerSlot = Number(body.capacityPerSlot) || 1;
@@ -279,13 +293,7 @@ export class SchedulesService {
       throw new BadRequestException('Vui lòng chọn bác sĩ, chi nhánh và ngày làm việc');
     }
 
-    const doc = await this.prisma.doctor.findFirst({
-      where: { OR: [{ id: doctorId }, { userId: doctorId }] },
-      select: { id: true },
-    });
-    if (!doc) {
-      throw new BadRequestException('Không tìm thấy thông tin hồ sơ bác sĩ');
-    }
+    const doc = await this.resolveAssignedDoctor(doctorId, branchId);
     const realDoctorId = doc.id;
 
     const workDate = new Date(`${workDateStr}T00:00:00.000Z`);
@@ -345,6 +353,11 @@ export class SchedulesService {
   async update(id: string, body: any) {
     const existing = await this.prisma.doctorSchedule.findUnique({ where: { id } });
     if (!existing) throw new NotFoundException('Không tìm thấy lịch làm việc');
+
+    if (!['CLOSED', 'CANCELLED'].includes(body.status ?? existing.status)) {
+      await this.resolveAssignedDoctor(existing.doctorId, existing.branchId);
+    }
+    if (body.branchId !== undefined && body.branchId !== existing.branchId) throw new BadRequestException('Không thể chuyển ca làm việc sang chi nhánh khác.');
 
     const data: any = {};
     if (body.roomId !== undefined) data.roomId = body.roomId || null;
@@ -437,13 +450,7 @@ export class SchedulesService {
       throw new BadRequestException('Vui lòng cung cấp đầy đủ thông tin: Bác sĩ, Chi nhánh, Ngày bắt đầu, Ngày kết thúc và các thứ trong tuần.');
     }
 
-    const doc = await this.prisma.doctor.findFirst({
-      where: { OR: [{ id: rawDoctorId }, { userId: rawDoctorId }] },
-      select: { id: true },
-    });
-    if (!doc) {
-      throw new BadRequestException('Không tìm thấy thông tin hồ sơ bác sĩ');
-    }
+    const doc = await this.resolveAssignedDoctor(rawDoctorId, branchId);
     const doctorId = doc.id;
 
     const shiftList: { startTime: string; endTime: string }[] =
@@ -451,8 +458,8 @@ export class SchedulesService {
         ? body.shifts
         : [
             {
-              startTime: String(body.startTime || '08:00').trim(),
-              endTime: String(body.endTime || '12:00').trim(),
+              startTime: String(body.startTime || CLINIC_SESSION_WINDOWS.MORNING.start).trim(),
+              endTime: String(body.endTime || CLINIC_SESSION_WINDOWS.MORNING.end).trim(),
             },
           ];
 

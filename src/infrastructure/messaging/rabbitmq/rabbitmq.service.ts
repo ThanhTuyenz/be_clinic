@@ -2,14 +2,15 @@ import { Injectable, Logger, OnModuleDestroy, OnModuleInit } from '@nestjs/commo
 import { ConfigService } from '@nestjs/config';
 import * as amqp from 'amqplib';
 import QRCode from 'qrcode';
-import { PrismaService } from '../../database/prisma/prisma.service.js';
+import { RabbitMqConfig } from '../../../config/config.type.js';
+import { checkInToken } from '../../../modules/appointments/helpers/check-in-token.js';
 import { BookingService } from '../../../modules/bookings/booking.service.js';
 import { PaymentReconciliationService } from '../../../modules/payments/payment-reconciliation.service.js';
-import { MailsService } from '../../mail/mails.service.js';
 import { RecommendationService } from '../../../modules/recommendations/recommendation.service.js';
-import { HttpSmsService } from '../../httpsms/httpsms.service.js';
+import { PrismaService } from '../../database/prisma/prisma.service.js';
 import { EmbeddingService } from '../../embedding/embedding.service.js';
-import { RabbitMqConfig } from '../../../config/config.type.js';
+import { HttpSmsService } from '../../httpsms/httpsms.service.js';
+import { MailsService } from '../../mail/mails.service.js';
 import { RABBITMQ_TOPOLOGY as topology } from './rabbitmq.constants.js';
 
 @Injectable()
@@ -334,7 +335,7 @@ export class RabbitMqService implements OnModuleInit, OnModuleDestroy {
     // Sinh mã QR Code base64 Data URL (dùng chung định dạng VITACARE_CHECKIN với Web & Kiosk/Lễ tân)
     let qrCodeDataUrl: string | null = null;
     try {
-      const rawToken = this.bookingService.checkInToken(appt.id);
+      const rawToken = checkInToken(appt.id, this.config.get<string>('auth.secret'));
       const qrPayload = `VITACARE_CHECKIN:${rawToken}`;
       qrCodeDataUrl = await QRCode.toDataURL(qrPayload, {
         width: 250,

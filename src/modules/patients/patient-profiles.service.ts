@@ -1,12 +1,13 @@
 import { BadRequestException, ConflictException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../infrastructure/database/prisma/prisma.service.js';
-import {
-  CreatePatientProfileDto,
-  PatientProfileResponseDto,
-  UpdatePatientProfileDto,
-} from './patient-profiles.dto.js';
 import { RecommendationService } from '../recommendations/recommendation.service.js';
+import { resolvePatientCode } from './patient-code.js';
+import {
+CreatePatientProfileDto,
+PatientProfileResponseDto,
+UpdatePatientProfileDto,
+} from './patient-profiles.dto.js';
 
 @Injectable()
 export class PatientProfilesService {
@@ -62,40 +63,7 @@ export class PatientProfilesService {
           dto.provinceName?.trim()
         ].filter(Boolean).join(', ');
 
-        // 2. Tìm xem số CCCD hoặc BHYT này đã từng được cấp Mã bệnh nhân trong hệ thống chưa
-        let patientCode: string | null = null;
-        if (cleanedNationalId || cleanedHealthInsuranceNumber) {
-          const matchedProfile = await tx.patientProfile.findFirst({
-            where: {
-              OR: [
-                ...(cleanedNationalId ? [{ nationalId: cleanedNationalId }] : []),
-                ...(cleanedHealthInsuranceNumber ? [{ healthInsuranceNumber: cleanedHealthInsuranceNumber }] : []),
-              ],
-              patientCode: { not: null },
-            },
-            select: { patientCode: true },
-          });
-          if (matchedProfile?.patientCode) {
-            patientCode = matchedProfile.patientCode;
-          }
-        }
-
-        // 3. Nếu chưa từng có trong hệ thống, sinh mã mới tăng dần theo năm (BN26xxxxx)
-        if (!patientCode) {
-          const yy = String(new Date().getFullYear()).slice(-2);
-          const prefix = `BN${yy}`;
-          const lastProfile = await tx.patientProfile.findFirst({
-            where: { patientCode: { startsWith: prefix } },
-            orderBy: { patientCode: 'desc' },
-            select: { patientCode: true },
-          });
-          let seq = 1;
-          if (lastProfile?.patientCode && lastProfile.patientCode.startsWith(prefix)) {
-            const num = parseInt(lastProfile.patientCode.replace(prefix, ''), 10);
-            if (!Number.isNaN(num)) seq = num + 1;
-          }
-          patientCode = `${prefix}${String(seq).padStart(5, '0')}`;
-        }
+        const patientCode = await resolvePatientCode(tx, cleanedNationalId, cleanedHealthInsuranceNumber);
 
         return tx.patientProfile.create({
           data: {

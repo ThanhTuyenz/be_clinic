@@ -3,13 +3,27 @@ import type { Request } from 'express'
 import { ApiBearerAuth, ApiOperation, ApiQuery, ApiTags } from '@nestjs/swagger'
 import { RequirePermissions } from 'src/common/decorators/require-permissions.decorator'
 import { AppPermission } from 'src/common/constants/permissions.constant'
+import { ReceptionSummaryService } from './reception-summary.service.js'
 import { AdminDashboardService } from './admin-dashboard.service.js'
 
 @ApiTags('Admin dashboard & Analytics')
 @ApiBearerAuth('access-token')
 @Controller('stats')
 export class AdminDashboardController {
-  constructor(private readonly dashboard: AdminDashboardService) {}
+  constructor(private readonly dashboard: AdminDashboardService, private readonly reception: ReceptionSummaryService) {}
+
+  @Get('reception-summary')
+  @RequirePermissions(AppPermission.APPOINTMENT_READ)
+  @ApiOperation({ summary: 'Thống kê tiếp nhận và thu ngân theo phạm vi chi nhánh' })
+  @ApiQuery({ name: 'date', required: false, description: 'YYYY-MM-DD' })
+  @ApiQuery({ name: 'branchId', required: false, description: 'UUID chi nhánh (hoặc all dành cho quản lý chuỗi)' })
+  receptionSummary(
+    @Req() request: Request,
+    @Query('date') date?: string,
+    @Query('branchId') branchId?: string,
+  ) {
+    return this.reception.getReceptionSummary(request.user!.id, { date, branchId })
+  }
 
   @Get('dashboard')
   @RequirePermissions(AppPermission.APPOINTMENT_READ)

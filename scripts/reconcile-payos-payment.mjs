@@ -46,17 +46,7 @@ try {
       if (!['PENDING', 'FAILED'].includes(latest.status) || latest.invoice.status !== 'UNPAID') throw new Error('Payment/invoice requires manual review');
       const demoAmount = Number(process.env.PAYOS_TEST_AMOUNT || 1000);
       if (Number(latest.amount) !== Number(latest.invoice.totalAmount) && Number(latest.amount) !== demoAmount) throw new Error('Payment amount differs from invoice and configured demo amount');
-      if (appt.status === 'CANCELLED') {
-        if (appt.statusHistories[0]?.reason !== 'PAYMENT_HOLD_TIMEOUT') throw new Error('Only a timeout cancellation can be recovered');
-        const reserved = appt.scheduleSlotId ? await tx.$executeRaw`
-          UPDATE doctor_schedule_slots
-          SET occupied_count = occupied_count + 1, updated_at = NOW()
-          WHERE id = ${appt.scheduleSlotId}::uuid AND is_active = TRUE AND occupied_count < capacity
-        ` : 0;
-        if (reserved !== 1) throw new Error('Slot is no longer available; no data changed, manual review required');
-      } else if (appt.status !== 'HOLD') {
-        throw new Error('Unexpected appointment status; no data changed');
-      }
+      if (appt.status !== 'HOLD') throw new Error('Only an active HOLD can be confirmed. Paid cancelled bookings require the backend refund flow; never reacquire capacity.');
       const secret = process.env.AUTH_JWT_SECRET;
       if (!secret) throw new Error('AUTH_JWT_SECRET is required to issue the appointment pass');
       let queueNumber = appt.queueNumber;

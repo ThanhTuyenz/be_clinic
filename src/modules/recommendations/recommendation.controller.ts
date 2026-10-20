@@ -41,7 +41,7 @@ export class RecommendationController {
 
   @Post('track')
   @Public()
-  @ApiOperation({ summary: 'Ghi nhận telemetry hành vi người dùng (Tìm kiếm, Xem gói, Bỏ dở) vào Redis' })
+  @ApiOperation({ summary: 'Ghi nhận lượt xem gói khám; tìm kiếm và bỏ dở được xác định tại backend' })
   async trackBehavior(@Body() dto: TrackBehaviorDto, @Req() req: RecommendationRequest) {
     const userId = req?.user?.id;
     return this.recommendationService.trackUserBehavior(dto, userId);

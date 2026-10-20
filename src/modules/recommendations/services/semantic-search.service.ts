@@ -5,6 +5,8 @@ import { RedisService } from '../../../infrastructure/redis/redis.service.js';
 import { EmbeddingService, PackageForRetrieval } from '../../../infrastructure/embedding/embedding.service.js';
 import { SearchAnalyticsService } from '../../search-analytics/search-analytics.service.js';
 import { vietnamDateKey } from '../../search-analytics/analytics-time.js';
+import { BehaviorTelemetryService } from './behavior-telemetry.service.js';
+import { TrackingActionType } from '../recommendation.dto.js';
 
 export interface SemanticSearchResult {
   query: string;
@@ -53,6 +55,7 @@ export class SemanticSearchService {
     private readonly redis: RedisService,
     private readonly embeddingService: EmbeddingService,
     private readonly analytics: SearchAnalyticsService,
+    private readonly behaviorTelemetry: BehaviorTelemetryService,
   ) { }
 
   /**
@@ -69,6 +72,13 @@ export class SemanticSearchService {
     }
     result.searchId = await this.analytics.recordSearch(query, context, result, performance.now() - start)
       .catch(() => { this.logger.warn('Không thể lưu lượt tìm kiếm'); return undefined; });
+    if (!result.partial && query.trim().length >= 2 && (context.sessionId || context.accountId)) {
+      const specialties = [...new Set(result.packages.map(pkg => pkg.specialtyId).filter((id): id is number => typeof id === 'number'))];
+      await this.behaviorTelemetry.trackUserBehavior({
+        sessionId: context.sessionId, actionType: TrackingActionType.SEARCH, searchQuery: query.trim(),
+        targetSpecialtyId: specialties.length === 1 ? specialties[0] : undefined,
+      }, context.accountId).catch(() => this.logger.debug('Không thể cập nhật hành vi tìm kiếm'));
+    }
     return result;
   }
 

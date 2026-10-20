@@ -3,11 +3,16 @@ import type { Request } from 'express'
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger'
 import { SkipPermissions } from 'src/common/decorators'
 import { SystemCatalogService } from './system-catalog.service.js'
+import { UpdatePackageReceptionDto } from './dtos/update-package-reception.dto.js'
 
 @ApiTags('System catalog') @ApiBearerAuth('access-token') @SkipPermissions() @Controller('admin/catalog')
 export class SystemCatalogController {
   constructor(private readonly service:SystemCatalogService){}
-  @Patch('branch-packages/:id') setBranchPackage(@Req() req: Request, @Param('id') id: string, @Body() body: { branchId: string; branchBookingMethodIds: string[] }) {
+  @Patch('branch-packages/:id/reception-schedules')
+  setReceptionSchedules(@Req() req: Request, @Param('id') id: string, @Body() body: UpdatePackageReceptionDto) {
+    return this.service.setReceptionSchedules(req.user!.id, id, body)
+  }
+  @Patch('branch-packages/:id') setBranchPackage(@Req() req: Request, @Param('id') id: string, @Body() body: { branchId: string; branchBookingMethodIds: string[]; schedules?: UpdatePackageReceptionDto['schedules'] }) {
     return this.service.setBranchPackage(req.user!.id, id, body)
   }
   @Get(':resource') list(@Req() req:Request,@Param('resource') resource:string,@Query('q') q=''){return this.service.list(req.user!.id,resource,q)}

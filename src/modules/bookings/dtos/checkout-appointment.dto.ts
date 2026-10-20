@@ -26,9 +26,9 @@ export class AppointmentItemDto {
   @IsString()
   bookingMethodCode: string;
 
-  @ApiPropertyOptional({ description: 'ID slot bác sĩ (uuid hoặc virtual_scheduleId_HH:MM)' })
+  @ApiPropertyOptional({ description: 'ID slot bác sĩ đã được tạo sẵn', format: 'uuid' })
   @IsOptional()
-  @IsString()
+  @IsUUID()
   scheduleSlotId?: string;
 
   @ApiPropertyOptional({ format: 'uuid' })
@@ -60,11 +60,11 @@ export class CheckoutAppointmentDto extends AppointmentItemDto {
 export class BatchCheckoutDto {
   @ApiProperty({
     type: [AppointmentItemDto],
-    description: 'Danh sách thành viên cần đặt lịch (1–10 người)',
+    description: 'Danh sách thành viên cần đặt lịch (1–5 người, cùng ngày và cơ sở)',
   })
   @IsArray()
   @ArrayMinSize(1)
-  @ArrayMaxSize(10)
+  @ArrayMaxSize(5)
   @ValidateNested({ each: true })
   @Type(() => AppointmentItemDto)
   items: AppointmentItemDto[];
