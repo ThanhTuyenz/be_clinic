@@ -1,4 +1,4 @@
-import { Controller, Inject, Get, Post, Body, UseGuards, Req, Res, HttpStatus, HttpCode } from '@nestjs/common';
+import { Controller, Inject, Get, Post, Body, UseGuards, Req, Res, HttpStatus, HttpCode, Logger } from '@nestjs/common';
 import type { Response, Request } from 'express';
 import { ConfigService } from '@nestjs/config';
 import { Routes, Services } from '../../../common/utils/constants.js';
@@ -18,6 +18,8 @@ import { LoginResponseType } from '../auth-local/types/index.js';
 @SkipPermissions()
 @Controller(Routes.AUTH)
 export class AuthGoogleController {
+  private readonly logger = new Logger(AuthGoogleController.name);
+
   constructor(
     @Inject(Services.AUTH) private readonly authService: IAuthService,
     private readonly authGoogleService: AuthGoogleService,
@@ -47,9 +49,28 @@ export class AuthGoogleController {
   @Post('google')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Đăng nhập Google bằng IdToken trực tiếp từ Client' })
-  async googleTokenLogin(@Body() loginDto: AuthGoogleLoginDto) {
-    const socialData = await this.authGoogleService.getProfileByToken(loginDto);
-    return this.authService.validateSocialLogin(AuthProvidersEnum.google, socialData);
+  async googleTokenLogin(
+    @Body() loginDto: AuthGoogleLoginDto,
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    const timings: string[] = [];
+    const measure = async <T>(stage: string, task: () => Promise<T>): Promise<T> => {
+      const started = performance.now();
+      try {
+        return await task();
+      } finally {
+        const duration = Math.round(performance.now() - started);
+        timings.push(`${stage};dur=${duration}`);
+        if (duration >= 2000) this.logger.warn(`[GoogleLogin] ${stage}: ${duration}ms`);
+      }
+    };
+    try {
+      const socialData = await measure('google_verify', () => this.authGoogleService.getProfileByToken(loginDto));
+      return await measure('vitacare_session', () => this.authService.validateSocialLogin(AuthProvidersEnum.google, socialData));
+    } finally {
+      // Durations only; no Google token, email or session identifiers.
+      res.setHeader('Server-Timing', timings.join(', '));
+    }
   }
 
   private handleGoogleRedirect(req: Request & { user?: LoginResponseType }, res: Response) {

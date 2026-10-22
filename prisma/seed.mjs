@@ -820,7 +820,7 @@ async function clearSeedCaches() {
     await redis.connect();
     const prefix = process.env.REDIS_KEY_PREFIX ?? 'vitacare:';
     let removed = 0;
-    for (const pattern of ['cache:public:*', 'rec:cache:*', 'rec:v2:*', 'pkg_vss:*', 'vector:pkg:*', 'user:status:*']) {
+    for (const pattern of ['cache:public:*', 'rec:cache:*', 'rec:v2:*', 'rec:v3:*', 'rec:v4:*', 'rec:v5:*', 'pkg_vss:*', 'vector:pkg:*', 'user:status:*']) {
       let cursor = '0';
       do {
         const [next, keys] = await redis.scan(cursor, 'MATCH', prefix + pattern, 'COUNT', 200);

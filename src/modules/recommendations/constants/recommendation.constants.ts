@@ -1,8 +1,15 @@
 import { TrackingActionType } from '../recommendation.dto.js';
+import { Prisma } from '@prisma/client';
+
+export const RECOMMENDATION_PACKAGE_INCLUDE = {
+  specialty: { select: { id: true, name: true, slug: true, description: true, symptoms: true } },
+} satisfies Prisma.ServicePackageInclude;
+
+export type RecommendationPackage = Prisma.ServicePackageGetPayload<{ include: typeof RECOMMENDATION_PACKAGE_INCLUDE }>;
 
 export interface CandidatePoolItem {
-  pkg: any;
-  origin: 'PROFILE' | 'BEHAVIOR' | 'BOTH' | 'POPULAR';
+  pkg: RecommendationPackage;
+  origin: 'PROFILE' | 'BEHAVIOR' | 'POPULAR';
   behaviorSourceType?: 'SEARCH_INTENT' | 'DROP_OFF' | 'RECENT_VIEW';
   isFollowUp?: boolean;
 }
@@ -29,15 +36,16 @@ export const TELEMETRY_CONFIG = {
   // Giới hạn trích xuất ứng viên hành vi
   MAX_TOP_SPECIALTIES: 3,
   MAX_PACKAGES_PER_SPECIALTY: 3,
-  CANDIDATE_POOL_TARGET: 8,
-  SEMANTIC_SEARCH_LIMIT: 4,
+  CANDIDATE_POOL_TARGET: 20,
+  SEMANTIC_SEARCH_LIMIT: 20,
 
-  // Cấu hình điều phối trang chủ (Two-Tower Orchestrator)
-  HOME_CANDIDATE_POOL_MIN: 12,
-  HOME_CANDIDATE_POOL_MAX: 18,
-  HOME_FINAL_PACKAGES_LIMIT: 12,
-  HOME_CACHE_TTL_PERSONALIZED: 24 * 60 * 60, // 24 giờ (Cache được xóa tự động tức thì khi có hành vi mới hoặc cập nhật hồ sơ)
-  HOME_CACHE_TTL_FALLBACK: 24 * 60 * 60,     // 24 giờ cho khách vãng lai
+  // Mỗi nguồn xếp hạng tối đa 20 ứng viên; danh sách cuối tối đa 10 gói.
+  CACHE_PREFIX: 'rec:v5:openai',
+  SOURCE_PACKAGES_LIMIT: 10,
+  HOME_FINAL_PACKAGES_LIMIT: 10,
+  POPULARITY_WINDOW_DAYS: 90,
+  BEHAVIOR_CACHE_TTL_SECONDS: 24 * 60 * 60,
+  RULE_CACHE_TTL_SECONDS: 5 * 60, // Thử lại AI sau lỗi tạm thời, không giữ fallback 7 ngày.
   PROFILE_CACHE_TTL_SECONDS: 7 * 24 * 60 * 60, // 7 ngày cho hồ sơ bệnh án
   RECENCY_SUPPRESSION_DAYS: 90,
   FOLLOW_UP_DEFAULT_DAYS: 180,

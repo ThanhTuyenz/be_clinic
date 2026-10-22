@@ -14,14 +14,14 @@ export interface RecommendedPackageItemDto {
   priority: RecommendationPriority;
   badge: string;
   clinicalReason: string;
-  sourceType?: 'DROP_OFF' | 'SEARCH_INTENT' | 'RECENT_VIEW' | 'PROFILE_AI' | 'POPULAR';
+  sourceType?: 'DROP_OFF' | 'SEARCH_INTENT' | 'RECENT_VIEW' | 'PROFILE_AI' | 'POPULAR' | 'BOTH';
 }
 
 export interface ProfileRecommendationResponseDto {
   profileId: string;
   profileName?: string;
   updatedAt: string;
-  source: 'AI_GEMINI' | 'RULE_FALLBACK' | 'REDIS_CACHE';
+  source: 'AI_OPENAI' | 'RULE_FALLBACK' | 'REDIS_CACHE';
   event?: string;
   triggerEvent?: string;
   triggerReason?: string;
@@ -80,9 +80,11 @@ export class SemanticSearchQueryDto {
 }
 
 export interface HomeRecommendationResponseDto {
+  trackingToken?: string;
   profileId?: string;
   profileName?: string;
   updatedAt: string;
+  // HYBRID describes a backend merge of independent rankings, never a shared LLM prompt.
   source: 'HYBRID' | 'AI_PROFILE' | 'BEHAVIOR' | 'FALLBACK';
   event?: string;
   triggerEvent?: string;

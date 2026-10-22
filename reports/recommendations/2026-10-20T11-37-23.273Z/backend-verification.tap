@@ -1,0 +1,47 @@
+TAP version 13
+# Subtest: signed recommendations record real positions/source and deduplicate impressions, clicks and retries
+ok 1 - signed recommendations record real positions/source and deduplicate impressions, clicks and retries
+  ---
+  duration_ms: 3.3402
+  type: 'test'
+  ...
+# Subtest: clients cannot forge package, position, signature, owner, session or expired recommendation receipts
+ok 2 - clients cannot forge package, position, signature, owner, session or expired recommendation receipts
+  ---
+  duration_ms: 1.8862
+  type: 'test'
+  ...
+# Subtest: recommendation attribution checks same account/session/package, branch and 24 hour click window
+ok 3 - recommendation attribution checks same account/session/package, branch and 24 hour click window
+  ---
+  duration_ms: 0.7647
+  type: 'test'
+  ...
+# Subtest: metrics distinguish held checkouts from successful bookings and preserve zero-data null rates
+ok 4 - metrics distinguish held checkouts from successful bookings and preserve zero-data null rates
+  ---
+  duration_ms: 0.8408
+  type: 'test'
+  ...
+# Subtest: aggregate metrics require chain management roles and an active role guard
+ok 5 - aggregate metrics require chain management roles and an active role guard
+  ---
+  duration_ms: 0.3616
+  type: 'test'
+  ...
+# [Nest] 760  - 10/20/2026, 6:37:25 PM     LOG [PrismaService] Đã đóng kết nối PostgreSQL Pool an toàn.
+# Subtest: PostgreSQL measurement joins count conversions once, exclude HOLD/CANCELLED and see paid invoices
+ok 6 - PostgreSQL measurement joins count conversions once, exclude HOLD/CANCELLED and see paid invoices
+  ---
+  duration_ms: 286.5405
+  type: 'test'
+  ...
+1..6
+# tests 6
+# suites 0
+# pass 6
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 2102.1198

@@ -29,6 +29,8 @@ model AnalyticsInteraction {
   sessionId   String   @map("session_id") @db.VarChar(100)
   accountId   String?  @map("account_id") @db.Uuid
   searchId    String?  @map("search_id") @db.Uuid
+  recommendationId String? @map("recommendation_id") @db.Uuid
+  recommendationSource String? @map("recommendation_source") @db.VarChar(20)
   eventType   String   @map("event_type") @db.VarChar(20)
   targetType  String   @map("target_type") @db.VarChar(20)
   targetId    String   @map("target_id") @db.Uuid
@@ -42,6 +44,7 @@ model AnalyticsInteraction {
   @@index([eventType, occurredAt])
   @@index([branchId, eventType, occurredAt])
   @@index([searchId, eventType])
+  @@index([recommendationId, eventType, targetId], map: "analytics_recommendation_event_target_idx")
   @@index([sessionId, targetId, createdAt])
   @@map("analytics_interactions")
 }

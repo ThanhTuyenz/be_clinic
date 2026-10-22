@@ -24,7 +24,7 @@ export class RecommendationController {
 
   @Get('home')
   @Public()
-  @ApiOperation({ summary: 'Lấy danh sách gói khám đề xuất tổng hợp Trang Chủ (Hybrid: Hồ sơ AI + Hành vi lướt web)' })
+  @ApiOperation({ summary: 'Gộp gợi ý từ hai nguồn hồ sơ và hành vi được phân tích, cache độc lập' })
   async getHomeRecommendations(
     @Query() query: HomeRecommendationQueryDto,
     @Req() req: RecommendationRequest,

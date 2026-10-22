@@ -15,17 +15,22 @@ const assert = require('node:assert/strict');
 const { AiRankingService } = require('../src/modules/recommendations/services/ai-ranking.service.ts');
 
 function fixture(generate) {
-  const service = new AiRankingService({ get: (key) => key === 'gemini.apiKey' ? 'test-key' : 'gemini-2.5-flash' });
+  const service = new AiRankingService({ get: (key) => key === 'openai.apiKey' ? 'test-key' : 'gpt-6-luna' });
   const logs = [];
   service.logger = { warn: (entry) => logs.push(entry), log: (entry) => logs.push(entry) };
-  service.aiClient = { models: { generateContent: generate } };
+  service.aiClient = { responses: { create: async (request, options) => {
+    const result = await generate(request, options);
+    let text = result.text;
+    try { const parsed = JSON.parse(text); if (Array.isArray(parsed)) text = JSON.stringify({ symptoms: parsed }); } catch {}
+    return { status: 'completed', output_text: text };
+  } } };
   return { service, logs };
 }
 
 test('returns normalized unique suggestions from a structured response', async () => {
-  const { service } = fixture(async (request) => {
-    assert.equal(request.config.responseMimeType, 'application/json');
-    assert.equal(request.config.httpOptions.timeout, 12000);
+  const { service } = fixture(async (request, options) => {
+    assert.equal(request.text.format.type, 'json_schema');
+    assert.equal(options.timeout, 12000);
     return { text: '[" Đau  bụng ", "đau bụng", "buồn nôn", ""]' };
   });
   assert.deepEqual(await service.suggestSymptomsForPackage('Khám tiêu hóa', 'Tiêu hóa'), { symptoms: ['đau bụng', 'buồn nôn'] });
@@ -44,7 +49,7 @@ test('invalid names are rejected before calling AI', async () => {
 });
 
 test('empty or malformed AI output is an explicit error, not an empty success', async () => {
-  for (const text of ['', 'not JSON', '{"symptoms":[]}', '[{"name":"đau đầu"}]']) {
+  for (const text of ['', 'not JSON', '{"wrong":[]}', '[{"name":"đau đầu"}]']) {
     const { service } = fixture(async () => ({ text }));
     await assert.rejects(service.suggestSymptomsForPackage('Gói khám'), (error) => error.getStatus() === 502);
   }

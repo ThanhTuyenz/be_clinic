@@ -1,0 +1,41 @@
+﻿caseId,candidateCount,aiSource,relevantCount,baselineP3,aiP3,aiHit3,aiMrr3,aiNdcg3,expectedSpecialties
+TC-01,8,Lần chính,6,0,0.3333333333333333,1,1,0.46927872602275644,Tim mạch
+TC-02,8,Lần chính,6,0.3333333333333333,0.6666666666666666,1,1,0.7039180890341347,Tim mạch
+TC-03,8,Lần chính,12,0.3333333333333333,0.6666666666666666,1,1,0.7653606369886217,Nội tiết – Đái tháo đường; Nội tổng quát
+TC-04,8,Lần chính,18,0,0.6666666666666666,1,1,0.7653606369886217,Tiêu hóa – Gan mật; Nội tiết – Đái tháo đường; Nội tổng quát
+TC-05,8,Lần chính,6,0,0,0,0,0,Tiêu hóa – Gan mật
+TC-06,8,Lần chính,6,1,1,1,1,1,Tiêu hóa – Gan mật
+TC-07,8,Lần chính,6,0.3333333333333333,0.6666666666666666,1,1,0.7653606369886217,Hô hấp
+TC-08,8,Lần chính,6,0,0,0,0,0,Hô hấp
+TC-09,8,Lần chính,6,0,0,0,0,0,Sản – Phụ khoa
+TC-10,8,Lần chính,6,0,0,0,0,0,Sản – Phụ khoa
+TC-11,8,Lần chính,6,1,1,1,1,1,Ngoại Chấn thương Chỉnh hình
+TC-12,8,Lần chính,12,0.3333333333333333,0.6666666666666666,1,1,0.7653606369886217,Ngoại Chấn thương Chỉnh hình; Thần kinh
+TC-13,8,Lần chính,6,0,0.3333333333333333,1,1,0.46927872602275644,Thần kinh
+TC-14,8,Lần chính,6,0,0,0,0,0,Thần kinh
+TC-15,8,Lần chính,6,0,0,0,0,0,Mắt
+TC-16,8,Lần chính,6,0,0.3333333333333333,1,1,0.46927872602275644,Mắt
+TC-17,8,Lần chính,6,0.3333333333333333,0.6666666666666666,1,1,0.7653606369886217,Tai Mũi Họng
+TC-18,8,Lần chính,6,0,0.6666666666666666,1,1,0.7653606369886217,Tai Mũi Họng
+TC-19,8,Lần chính,6,1,1,1,1,1,Da liễu
+TC-20,8,Lần chính,6,0,0,0,0,0,Da liễu
+TC-21,8,Lần chính,6,0,0.3333333333333333,1,0.3333333333333333,0.23463936301137822,Nội tổng quát
+TC-22,8,Lần chính,12,0,0,0,0,0,Nội tổng quát; Sản – Phụ khoa
+TC-23,8,Lần chính,18,0,0,0,0,0,Tim mạch; Nội tiết – Đái tháo đường; Nội tổng quát
+TC-24,8,Lần chính,18,0,0,0,0,0,Tim mạch; Nội tiết – Đái tháo đường; Mắt
+TC-25,8,Lần chính,12,0,0.6666666666666666,1,1,0.7653606369886217,Tiêu hóa – Gan mật; Nội tổng quát
+TC-26,8,Lần chính,12,0,0,0,0,0,Ngoại tổng quát; Nội tổng quát
+TC-27,8,Lần chính,12,0,0,0,0,0,Nội tổng quát; Sản – Phụ khoa
+TC-28,8,Lần chính,6,0.6666666666666666,1,1,1,1,Tim mạch
+TC-29,8,Lần chính,6,0,0.6666666666666666,1,1,0.7039180890341347,Mắt
+TC-30,8,Lần chính,6,0.3333333333333333,1,1,1,1,Tai Mũi Họng
+BEH-TC-01,4,Lần chính,6,1,1,1,1,1,Tim mạch
+BEH-TC-04,0,Không có AI,18,0,,,,,Tiêu hóa – Gan mật; Nội tiết – Đái tháo đường; Nội tổng quát
+BEH-TC-07,4,Lần chính,6,1,0.6666666666666666,1,1,0.7653606369886217,Hô hấp
+BEH-TC-10,0,Không có AI,6,0,,,,,Sản – Phụ khoa
+BEH-TC-13,4,Lần chính,6,0,0,0,0,0,Thần kinh
+BEH-TC-16,0,Không có AI,6,0,,,,,Mắt
+BEH-TC-19,0,Không có AI,6,0,,,,,Da liễu
+BEH-TC-22,0,Không có AI,12,0,,,,,Nội tổng quát; Sản – Phụ khoa
+BEH-TC-25,0,Không có AI,12,0,,,,,Tiêu hóa – Gan mật; Nội tổng quát
+BEH-TC-28,4,Lần chính,6,1,0.6666666666666666,1,1,0.7653606369886217,Tim mạch

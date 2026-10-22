@@ -7,6 +7,7 @@ import appConfig from './config/app.config.js'
 import authConfig from './config/auth.config.js'
 import googleConfig from './config/google.config.js'
 import geminiConfig from './config/gemini.config.js'
+import openaiConfig from './config/openai.config.js'
 import mailerConfig from './config/mailer.config.js'
 import rabbitMqConfig from './config/rabbitmq.config.js'
 import redisConfig from './infrastructure/redis/redis.config.js'
@@ -47,7 +48,7 @@ import { IntegrationsModule } from './modules/integrations/integrations.module.j
     ConfigModule.forRoot({
       isGlobal: true,
       cache: true,
-      load: [appConfig, authConfig, mailerConfig, googleConfig, geminiConfig, rabbitMqConfig, redisConfig, httpsmsConfig],
+      load: [appConfig, authConfig, mailerConfig, googleConfig, geminiConfig, openaiConfig, rabbitMqConfig, redisConfig, httpsmsConfig],
       envFilePath: [`.env.${process.env.NODE_ENV || 'development'}`, '.env'],
     }),
 

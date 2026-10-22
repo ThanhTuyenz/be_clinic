@@ -2,7 +2,7 @@ import { Injectable, Logger, ServiceUnavailableException } from '@nestjs/common'
 import { containsSearchPhrase, matchesSearchConstraints, normalizeSearch, parseSearchIntent, searchTextScore } from '../../../common/utils/search-query.js';
 import { PrismaService } from '../../../infrastructure/database/prisma/prisma.service.js';
 import { RedisService } from '../../../infrastructure/redis/redis.service.js';
-import { EmbeddingService, PackageForRetrieval } from '../../../infrastructure/embedding/embedding.service.js';
+import { EmbeddingService, mapPackageForRetrieval, PackageForRetrieval } from '../../../infrastructure/embedding/embedding.service.js';
 import { SearchAnalyticsService } from '../../search-analytics/search-analytics.service.js';
 import { vietnamDateKey } from '../../search-analytics/analytics-time.js';
 import { BehaviorTelemetryService } from './behavior-telemetry.service.js';
@@ -263,23 +263,8 @@ export class SemanticSearchService {
       const methods = [p.branchBookingMethod, ...p.branchBookingMethods.map(link => link.branchBookingMethod)]
         .filter(method => method?.isEnabled && method.branch.isActive && method.bookingMethod.isActive);
       const method = methods.find(method => !branchId || method?.branchId === branchId);
-      const combinedSymptoms = Array.from(
-        new Set([...(p.symptoms || []), ...(p.specialty?.symptoms || [])]),
-      );
-      const fullDescription = [p.description, p.specialty?.description]
-        .filter(Boolean)
-        .join(' - ');
       return {
-        id: p.id,
-        code: p.code,
-        name: p.name,
-        description: fullDescription,
-        symptoms: combinedSymptoms,
-        price: Number(p.price),
-        durationMin: p.durationMin,
-        specialtyId: p.specialtyId,
-        specialtyName: p.specialty?.name || 'Đa khoa',
-        targetGender: p.targetGender, minAge: p.minAge, maxAge: p.maxAge,
+        ...mapPackageForRetrieval(p),
         branchId: method?.branchId, bookingMethodCode: method?.bookingMethod.code,
       };
     });

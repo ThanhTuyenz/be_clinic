@@ -1,5 +1,6 @@
 import { BadRequestException, ConflictException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
+import { isISO8601 } from 'class-validator';
 import { PrismaService } from '../../infrastructure/database/prisma/prisma.service.js';
 import { RecommendationService } from '../recommendations/recommendation.service.js';
 import { resolvePatientCode } from './patient-code.js';
@@ -16,6 +17,21 @@ export class PatientProfilesService {
     private readonly recommendationService: RecommendationService,
   ) {}
 
+  private parseDateOfBirth(value: string): Date {
+    const input = typeof value === 'string' ? value.trim() : '';
+    if (!/^\d{4}-\d{2}-\d{2}(?:T.+)?$/.test(input) || !isISO8601(input, { strict: true, strictSeparator: true })) {
+      throw new BadRequestException('Ngày sinh không hợp lệ. Vui lòng chọn lại ngày sinh.');
+    }
+    // Birth dates are calendar dates; preserve the supplied day even for ISO timestamps.
+    const dateOnly = input.slice(0, 10);
+    const date = new Date(`${dateOnly}T00:00:00.000Z`);
+    const today = new Date(Date.now() + 7 * 60 * 60 * 1000).toISOString().slice(0, 10);
+    if (!Number.isFinite(date.getTime()) || date.toISOString().slice(0, 10) !== dateOnly || dateOnly > today) {
+      throw new BadRequestException('Ngày sinh không hợp lệ hoặc lớn hơn ngày hiện tại.');
+    }
+    return date;
+  }
+
   async list(accountId: string): Promise<PatientProfileResponseDto[]> {
     return this.prisma.patientProfile.findMany({
       where: { accountId },
@@ -24,7 +40,7 @@ export class PatientProfilesService {
   }
 
   async create(accountId: string, dto: CreatePatientProfileDto): Promise<PatientProfileResponseDto> {
-    const dob = new Date(`${dto.dateOfBirth}T00:00:00.000Z`);
+    const dob = this.parseDateOfBirth(dto.dateOfBirth);
     const ageDiffMs = Date.now() - dob.getTime();
     const age = Math.abs(new Date(ageDiffMs).getUTCFullYear() - 1970);
     if (age >= 15 && !dto.nationalId?.trim()) {
@@ -71,7 +87,7 @@ export class PatientProfilesService {
             accountId,
             patientCode,
             fullName: dto.fullName.trim(),
-            dateOfBirth: new Date(`${dto.dateOfBirth}T00:00:00.000Z`),
+            dateOfBirth: dob,
             nationalId: cleanedNationalId,
             healthInsuranceNumber: cleanedHealthInsuranceNumber,
             address: computedAddress || null,
@@ -91,13 +107,14 @@ export class PatientProfilesService {
   }
 
   async update(actorId: string, id: string, dto: UpdatePatientProfileDto, isStaff = false): Promise<PatientProfileResponseDto> {
+    const dob = dto.dateOfBirth !== undefined ? this.parseDateOfBirth(dto.dateOfBirth) : undefined;
     const profile = isStaff
       ? await this.prisma.patientProfile.findUnique({ where: { id } })
       : await this.prisma.patientProfile.findFirst({ where: { id, accountId: actorId } });
     if (!profile) throw new NotFoundException('Không tìm thấy hồ sơ bệnh nhân');
 
     const accountId = profile.accountId;
-    const effectiveDob = dto.dateOfBirth ? new Date(`${dto.dateOfBirth}T00:00:00.000Z`) : profile.dateOfBirth;
+    const effectiveDob = dob ?? profile.dateOfBirth;
     const effectiveNationalId = dto.nationalId !== undefined ? dto.nationalId?.trim() || null : profile.nationalId;
     const effectiveHealthInsurance = dto.healthInsuranceNumber !== undefined ? dto.healthInsuranceNumber?.trim() || null : profile.healthInsuranceNumber;
 
@@ -157,7 +174,7 @@ export class PatientProfilesService {
           ...dto,
           patientCode: syncedPatientCode,
           ...(dto.fullName && { fullName: dto.fullName.trim() }),
-          ...(dto.dateOfBirth && { dateOfBirth: new Date(`${dto.dateOfBirth}T00:00:00.000Z`) }),
+          ...(dob !== undefined && { dateOfBirth: dob }),
           ...(dto.nationalId !== undefined && { nationalId: effectiveNationalId }),
           ...(dto.healthInsuranceNumber !== undefined && { healthInsuranceNumber: effectiveHealthInsurance }),
           ...(computedAddress ? { address: computedAddress } : {}),

@@ -1,0 +1,2 @@
+ALTER INDEX "analytics_interactions_recommendation_id_event_type_target_id_i"
+RENAME TO "analytics_recommendation_event_target_idx";

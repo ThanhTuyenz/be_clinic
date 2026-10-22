@@ -1,6 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { GoogleGenAI } from '@google/genai';
+import OpenAI from 'openai';
+import { createHash } from 'node:crypto';
 import { RedisService } from '../redis/redis.service.js';
 import { matchesSearchConstraints, parseSearchIntent, searchTextScore } from '../../common/utils/search-query.js';
 
@@ -27,10 +28,27 @@ export interface ScoredPackage {
   matchedKeywords?: string[];
 }
 
+type PackageEmbeddingSource = Omit<PackageForRetrieval, 'price' | 'description' | 'specialtyName'> & {
+  price: unknown;
+  description?: string | null;
+  specialty?: { name: string; description?: string | null; symptoms?: string[] } | null;
+};
+
+/** Shared by catalog sync, background jobs and recommendation retrieval. */
+export function mapPackageForRetrieval(pkg: PackageEmbeddingSource): PackageForRetrieval {
+  return {
+    id: pkg.id, code: pkg.code, name: pkg.name, price: Number(pkg.price), durationMin: pkg.durationMin,
+    specialtyId: pkg.specialtyId, specialtyName: pkg.specialty?.name || 'Đa khoa',
+    description: [pkg.description, pkg.specialty?.description].filter(Boolean).join(' - '),
+    symptoms: [...new Set([...(pkg.symptoms || []), ...(pkg.specialty?.symptoms || [])])],
+    targetGender: pkg.targetGender, minAge: pkg.minAge, maxAge: pkg.maxAge,
+  };
+}
+
 @Injectable()
 export class EmbeddingService {
   private readonly logger = new Logger(EmbeddingService.name);
-  private aiClient: GoogleGenAI | null = null;
+  private aiClient: OpenAI | null = null;
   private readonly embeddingModel: string;
   private readonly queryVectors = new Map<string, { expiresAt: number; vector: number[] }>();
   private readonly pendingQueryVectors = new Map<string, Promise<number[] | null>>();
@@ -40,40 +58,57 @@ export class EmbeddingService {
     private readonly redis: RedisService,
   ) {
     this.embeddingModel =
-      this.config.get<string>('gemini.embeddingModel') ||
-      process.env.GEMINI_EMBEDDING_MODEL ||
-      'gemini-embedding-001';
+      this.config.get<string>('openai.embeddingModel') ||
+      process.env.OPENAI_EMBEDDING_MODEL ||
+      'text-embedding-3-small';
 
-    const apiKey = this.config.get<string>('gemini.apiKey') || process.env.GEMINI_API_KEY;
+    const apiKey = this.config.get<string>('openai.apiKey') || process.env.OPENAI_API_KEY;
     if (apiKey) {
       try {
-        this.aiClient = new GoogleGenAI({ apiKey });
+        this.aiClient = new OpenAI({ apiKey, timeout: 10000, maxRetries: 0 });
       } catch (err: any) {
-        this.logger.warn(`Failed to initialize GoogleGenAI in EmbeddingService: ${err?.message}`);
+        this.logger.warn('Failed to initialize OpenAI embedding client');
       }
     }
   }
 
+  readonly vectorDimensions = 1536;
+
+  get vectorKeyPrefix(): string { return `pkg_vss:openai:v2:${this.embeddingModel}:${this.vectorDimensions}:`; }
+  get vectorIndexName(): string { return `idx:packages_vss:openai:v2:${this.embeddingModel}:${this.vectorDimensions}`; }
+
+  async ensureVectorIndex(): Promise<void> {
+    const client = this.redis.getClient();
+    if (!client) throw new Error('Redis must be enabled to synchronize package vectors');
+    try { await client.call('FT.INFO', this.vectorIndexName); return; }
+    catch (error: any) {
+      if (!/unknown index|no such index/i.test(error?.message || '')) throw error;
+    }
+    const prefix = `${client.options.keyPrefix || ''}${this.vectorKeyPrefix}`;
+    try {
+      await client.call('FT.CREATE', this.vectorIndexName, 'ON', 'HASH', 'PREFIX', 1, prefix,
+        'SCHEMA', 'packageId', 'TAG', 'vector', 'VECTOR', 'HNSW', 6, 'TYPE', 'FLOAT32',
+        'DIM', this.vectorDimensions, 'DISTANCE_METRIC', 'COSINE');
+    } catch (error: any) {
+      if (!/index already exists/i.test(error?.message || '')) throw error;
+    }
+  }
+
   /**
-   * Tạo vector embedding từ một đoạn văn bản sử dụng Google Gemini Embedding
+   * Tạo vector embedding từ một đoạn văn bản sử dụng OpenAI Embedding
    */
   async embedText(text: string): Promise<number[] | null> {
     if (!this.aiClient || !text.trim()) return null;
 
     try {
-      const response = await this.aiClient.models.embedContent({
-        model: this.embeddingModel,
-        contents: text.trim().slice(0, 2048),
+      const response = await this.aiClient.embeddings.create({
+        model: this.embeddingModel, input: text.trim().slice(0, 2048),
+        dimensions: this.vectorDimensions, encoding_format: 'float',
       });
-
-      const values =
-        (response as any)?.embedding?.values ||
-        (response as any)?.embeddings?.[0]?.values;
-      if (Array.isArray(values) && values.length > 0) {
-        return values;
-      }
+      const values = response.data[0]?.embedding;
+      if (values?.length === this.vectorDimensions && values.every(Number.isFinite)) return values;
     } catch (err: any) {
-      this.logger.warn(`Embedding generation failed with model ${this.embeddingModel} for text "${text.slice(0, 50)}...": ${err?.message}`);
+      this.logger.warn(`OpenAI embedding failed: status=${err?.status || 'unknown'}`);
     }
     return null;
   }
@@ -114,7 +149,7 @@ export class EmbeddingService {
    */
   buildPatientEmbeddingText(profile: {
     fullName?: string;
-    age: number;
+    age: number | null;
     gender: string;
     bmi: number | null;
     medicalHistory?: string;
@@ -124,17 +159,20 @@ export class EmbeddingService {
     const bmiText = profile.bmi ? `Chỉ số thể trạng BMI: ${profile.bmi}.` : '';
     const med = profile.medicalHistory?.trim()
       ? `Tiền sử bệnh mạn tính: ${profile.medicalHistory}.`
-      : 'Không có tiền sử bệnh nền.';
+      : 'Chưa ghi nhận tiền sử bệnh nền.';
     const allergy = profile.allergies?.trim() ? `Tiền sử dị ứng: ${profile.allergies}.` : '';
 
-    return `Bệnh nhân ${genderVi}, ${profile.age} tuổi. ${bmiText} ${med} ${allergy}`.trim();
+    const ageText = profile.age === null ? 'chưa ghi nhận độ tuổi' : `${profile.age} tuổi`;
+    return `Bệnh nhân ${genderVi}, ${ageText}. ${bmiText} ${med} ${allergy}`.trim();
   }
 
   /**
    * Lấy hoặc tạo mới vector embedding cho một gói khám trong RediSearch Hash (Key: pkg_vss:<id>)
    */
   async getOrComputePackageVector(pkg: PackageForRetrieval): Promise<number[] | null> {
-    const hashKey = `pkg_vss:${pkg.id}`;
+    const hashKey = `${this.vectorKeyPrefix}${pkg.id}`;
+    const text = this.buildPackageEmbeddingText(pkg);
+    const fingerprint = createHash('sha256').update(text).digest('hex');
 
     // 1. Kiểm tra Redis Hash xem đã có vector nhị phân chưa
     if (this.redis.isEnabled()) {
@@ -142,10 +180,10 @@ export class EmbeddingService {
         const client = this.redis.getClient();
         if (client) {
           const vectorBuf = await client.hgetBuffer(hashKey, 'vector');
-          if (vectorBuf && vectorBuf.length > 0) {
+          if (vectorBuf?.length === this.vectorDimensions * 4 && await client.hget(hashKey, 'fingerprint') === fingerprint) {
             const float32 = new Float32Array(
-              vectorBuf.buffer,
-              vectorBuf.byteOffset,
+              Uint8Array.from(vectorBuf).buffer,
+              0,
               vectorBuf.byteLength / 4,
             );
             return Array.from(float32);
@@ -156,9 +194,8 @@ export class EmbeddingService {
       }
     }
 
-    // 2. Cache miss: Gọi Google text-embedding
-    this.logger.log(`[Embedding] Generating vector for package "${pkg.name}" (${pkg.code}) via Gemini...`);
-    const text = this.buildPackageEmbeddingText(pkg);
+    // 2. Cache miss: Gọi OpenAI text-embedding
+    this.logger.log(`[Embedding] Generating vector for package "${pkg.name}" (${pkg.code}) via OpenAI...`);
     const vector = await this.embedText(text);
     if (vector && this.redis.isEnabled()) {
       try {
@@ -169,6 +206,7 @@ export class EmbeddingService {
           await client.hset(
             hashKey,
             'packageId', pkg.id,
+            'fingerprint', fingerprint,
             'code', pkg.code,
             'name', pkg.name,
             'specialtyName', pkg.specialtyName || 'Đa khoa',
@@ -192,7 +230,7 @@ export class EmbeddingService {
   async invalidatePackageVector(packageId: string): Promise<void> {
     if (this.redis.isEnabled()) {
       try {
-        await this.redis.delete(`pkg_vss:${packageId}`, `vector:pkg:${packageId}`);
+        await this.redis.delete(`${this.vectorKeyPrefix}${packageId}`, `vector:pkg:${packageId}`);
         this.logger.log(`[Embedding] Invalidated Redis vector hash for package ${packageId}`);
       } catch (err: any) {
         this.logger.warn(`Failed to delete Redis vector hash for package ${packageId}: ${err?.message}`);
@@ -251,7 +289,7 @@ export class EmbeddingService {
       const tStart = performance.now();
       const rawResult = await this.redis.call(
         'FT.SEARCH',
-        'idx:packages_vss',
+        this.vectorIndexName,
         query,
         'PARAMS',
         '2',
@@ -350,12 +388,7 @@ export class EmbeddingService {
     if (!this.aiClient) return null;
     const request = (async () => {
       try {
-        const response = await this.aiClient!.models.embedContent({
-          model: this.embeddingModel,
-          contents: text,
-          config: { httpOptions: { timeout: 4000, retryOptions: { attempts: 1 } } },
-        });
-        const vector = response.embeddings?.[0]?.values;
+        const vector = await this.embedText(text);
         if (!vector?.length) return null;
         if (this.queryVectors.size >= 200) this.queryVectors.delete(this.queryVectors.keys().next().value!);
         this.queryVectors.set(text, { vector, expiresAt: Date.now() + 300_000 });

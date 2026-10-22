@@ -1,0 +1,3284 @@
+{
+  "source": "D:\\Khóa luận\\Project-Clinic\\be_clinic\\reports\\thesis\\benchmark-2026-10-20T18-35-14.149Z\\raw-results.json",
+  "auditedAt": "2026-10-20T18:39:51.155Z",
+  "mode": "Current index replay, new query embeddings; original benchmark remains unchanged",
+  "cases": [
+    {
+      "caseId": "TC-05",
+      "expectedSpecialties": [
+        "Tiêu hóa – Gan mật"
+      ],
+      "profile": {
+        "age": 42,
+        "gender": "MALE",
+        "bmi": 23,
+        "medicalHistory": "Đau thượng vị âm ỉ sau ăn, ợ chua, viêm loét dạ dày tá tràng có HP",
+        "allergies": "Không"
+      },
+      "originalCandidateIds": [
+        "831a683a-ced9-4fff-8cf8-3aa5dcbecbb2",
+        "92b68e42-83ea-4776-b6e6-7f5b762d5bfc",
+        "ac59f70b-6a9e-4ea9-b196-9a637766d87a",
+        "dd3d0531-8692-4d81-aef6-3c1855b05c26",
+        "63e1e755-dfda-4844-9abd-75da6c039692",
+        "e4296f04-6b09-4fa6-8abf-9520c4c5d8c8",
+        "9dfe5c99-f5f9-4363-98bd-bfb3b4e37e76",
+        "0d34468e-e533-4f09-9664-a910caa6698c",
+        "2ab40f78-01eb-4d24-8795-d20de0ad1734",
+        "1baecddc-67aa-4dd7-9edc-974cb0acff7f",
+        "a7a139ab-0959-4c21-9160-8c3ed0be3b5c",
+        "0cd7d237-4411-44fa-ad82-c007438b39ff",
+        "1c33d90f-4f36-4f2f-a908-d0cddefdaa23",
+        "96688ca5-680c-4089-aca0-5ba22ed4111e",
+        "9f1673ee-8a96-4282-a85f-89bd436d16a2",
+        "0ed0b73e-0db8-47c6-bc3c-856c0f4387e5",
+        "776b3b70-2310-4031-b95f-b0515c718e62",
+        "aad110db-ef55-4b53-bf8c-55933dbf54ef",
+        "291517d9-383c-46e0-ae55-601dd7d62c37",
+        "42fc927c-b34e-4634-b455-49941f36c4f8"
+      ],
+      "relatedInCatalog": 6,
+      "relatedAfterEligibility": 6,
+      "relatedAfterFollowUpExclusion": 4,
+      "screeningCount": 58,
+      "excluded": [
+        {
+          "id": "52841df1-71fe-4556-bcd4-70ccf15c0056",
+          "name": "Tái khám Tiêu hóa – Gan mật (VitaCare Trung tâm)",
+          "reason": "FOLLOW_UP_WITHOUT_COMPLETED_HISTORY"
+        },
+        {
+          "id": "d3c69dd8-4783-43fc-8b8b-458c7088afe9",
+          "name": "Tái khám Tiêu hóa – Gan mật (VitaCare Cơ sở Đông)",
+          "reason": "FOLLOW_UP_WITHOUT_COMPLETED_HISTORY"
+        }
+      ],
+      "bestRelevantRank": 27,
+      "bestRelevantScore": 0.3989703808515415,
+      "cutoffScore": 0.4121221396699671,
+      "candidateLimit": 20,
+      "exactTopKSpecialties": [
+        "Ngoại tổng quát",
+        null,
+        "Tim mạch",
+        "Thần kinh",
+        "Nội tổng quát"
+      ],
+      "annRelevantCount": 0,
+      "annIds": [
+        "831a683a-ced9-4fff-8cf8-3aa5dcbecbb2",
+        "92b68e42-83ea-4776-b6e6-7f5b762d5bfc",
+        "ac59f70b-6a9e-4ea9-b196-9a637766d87a",
+        "dd3d0531-8692-4d81-aef6-3c1855b05c26",
+        "63e1e755-dfda-4844-9abd-75da6c039692",
+        "e4296f04-6b09-4fa6-8abf-9520c4c5d8c8",
+        "9dfe5c99-f5f9-4363-98bd-bfb3b4e37e76",
+        "0d34468e-e533-4f09-9664-a910caa6698c",
+        "2ab40f78-01eb-4d24-8795-d20de0ad1734",
+        "1baecddc-67aa-4dd7-9edc-974cb0acff7f",
+        "a7a139ab-0959-4c21-9160-8c3ed0be3b5c",
+        "0cd7d237-4411-44fa-ad82-c007438b39ff",
+        "1c33d90f-4f36-4f2f-a908-d0cddefdaa23",
+        "96688ca5-680c-4089-aca0-5ba22ed4111e",
+        "9f1673ee-8a96-4282-a85f-89bd436d16a2",
+        "0ed0b73e-0db8-47c6-bc3c-856c0f4387e5",
+        "776b3b70-2310-4031-b95f-b0515c718e62",
+        "aad110db-ef55-4b53-bf8c-55933dbf54ef",
+        "291517d9-383c-46e0-ae55-601dd7d62c37",
+        "42fc927c-b34e-4634-b455-49941f36c4f8"
+      ],
+      "annMatchesOriginalCandidates": true,
+      "annMatchesExactTopK": true,
+      "cause": "VECTOR_RANK_BELOW_TOP_20",
+      "rankedCandidates": [
+        {
+          "id": "831a683a-ced9-4fff-8cf8-3aa5dcbecbb2",
+          "code": "CONSULT-CENTRAL-007-AFTER",
+          "name": "Khám Ngoại tổng quát ngoài giờ (VitaCare Trung tâm)",
+          "specialty": "Ngoại tổng quát",
+          "score": 0.4532261967397363,
+          "relevant": false,
+          "rank": 1
+        },
+        {
+          "id": "92b68e42-83ea-4776-b6e6-7f5b762d5bfc",
+          "code": "CONSULT-EAST-007-AFTER",
+          "name": "Khám Ngoại tổng quát ngoài giờ (VitaCare Cơ sở Đông)",
+          "specialty": "Ngoại tổng quát",
+          "score": 0.448529050206804,
+          "relevant": false,
+          "rank": 2
+        },
+        {
+          "id": "ac59f70b-6a9e-4ea9-b196-9a637766d87a",
+          "code": "CONSULT-CENTRAL-007-STANDARD",
+          "name": "Khám Ngoại tổng quát trong giờ (VitaCare Trung tâm)",
+          "specialty": "Ngoại tổng quát",
+          "score": 0.44475792099702244,
+          "relevant": false,
+          "rank": 3
+        },
+        {
+          "id": "dd3d0531-8692-4d81-aef6-3c1855b05c26",
+          "code": "PKG-EYE-CATARACT-VC-CENTRAL",
+          "name": "Gói tầm soát cườm nước & Bệnh lý võng mạc (VitaCare Trung tâm)",
+          "specialty": null,
+          "score": 0.43836728726304863,
+          "relevant": false,
+          "rank": 4
+        },
+        {
+          "id": "63e1e755-dfda-4844-9abd-75da6c039692",
+          "code": "CONSULT-EAST-007-STANDARD",
+          "name": "Khám Ngoại tổng quát trong giờ (VitaCare Cơ sở Đông)",
+          "specialty": "Ngoại tổng quát",
+          "score": 0.4382889172757966,
+          "relevant": false,
+          "rank": 5
+        },
+        {
+          "id": "e4296f04-6b09-4fa6-8abf-9520c4c5d8c8",
+          "code": "CONSULT-CENTRAL-002-AFTER",
+          "name": "Khám Tim mạch ngoài giờ (VitaCare Trung tâm)",
+          "specialty": "Tim mạch",
+          "score": 0.4378386766469496,
+          "relevant": false,
+          "rank": 6
+        },
+        {
+          "id": "9dfe5c99-f5f9-4363-98bd-bfb3b4e37e76",
+          "code": "CONSULT-CENTRAL-002-STANDARD",
+          "name": "Khám Tim mạch trong giờ (VitaCare Trung tâm)",
+          "specialty": "Tim mạch",
+          "score": 0.43702573059404387,
+          "relevant": false,
+          "rank": 7
+        },
+        {
+          "id": "0d34468e-e533-4f09-9664-a910caa6698c",
+          "code": "PKG-EYE-CATARACT-VC-EAST",
+          "name": "Gói tầm soát cườm nước & Bệnh lý võng mạc (VitaCare Cơ sở Đông)",
+          "specialty": null,
+          "score": 0.43349676682405985,
+          "relevant": false,
+          "rank": 8
+        },
+        {
+          "id": "2ab40f78-01eb-4d24-8795-d20de0ad1734",
+          "code": "PKG-GENERAL-BASIC-VC-CENTRAL",
+          "name": "Gói khám sức khỏe tổng quát cơ bản (VitaCare Trung tâm)",
+          "specialty": null,
+          "score": 0.4306963473514376,
+          "relevant": false,
+          "rank": 9
+        },
+        {
+          "id": "1baecddc-67aa-4dd7-9edc-974cb0acff7f",
+          "code": "CONSULT-EAST-002-STANDARD",
+          "name": "Khám Tim mạch trong giờ (VitaCare Cơ sở Đông)",
+          "specialty": "Tim mạch",
+          "score": 0.4288093844135743,
+          "relevant": false,
+          "rank": 10
+        },
+        {
+          "id": "a7a139ab-0959-4c21-9160-8c3ed0be3b5c",
+          "code": "PKG-GENERAL-BASIC-VC-EAST",
+          "name": "Gói khám sức khỏe tổng quát cơ bản (VitaCare Cơ sở Đông)",
+          "specialty": null,
+          "score": 0.42795669324455204,
+          "relevant": false,
+          "rank": 11
+        },
+        {
+          "id": "0cd7d237-4411-44fa-ad82-c007438b39ff",
+          "code": "CONSULT-EAST-002-AFTER",
+          "name": "Khám Tim mạch ngoài giờ (VitaCare Cơ sở Đông)",
+          "specialty": "Tim mạch",
+          "score": 0.42707341319130165,
+          "relevant": false,
+          "rank": 12
+        },
+        {
+          "id": "1c33d90f-4f36-4f2f-a908-d0cddefdaa23",
+          "code": "CONSULT-CENTRAL-006-STANDARD",
+          "name": "Khám Thần kinh trong giờ (VitaCare Trung tâm)",
+          "specialty": "Thần kinh",
+          "score": 0.4240597213403593,
+          "relevant": false,
+          "rank": 13
+        },
+        {
+          "id": "96688ca5-680c-4089-aca0-5ba22ed4111e",
+          "code": "CONSULT-CENTRAL-006-AFTER",
+          "name": "Khám Thần kinh ngoài giờ (VitaCare Trung tâm)",
+          "specialty": "Thần kinh",
+          "score": 0.4203305837203802,
+          "relevant": false,
+          "rank": 14
+        },
+        {
+          "id": "9f1673ee-8a96-4282-a85f-89bd436d16a2",
+          "code": "PKG-ENT-ENDOSCOPY-VC-CENTRAL",
+          "name": "Gói nội soi tầm soát bệnh lý Tai Mũi Họng (VitaCare Trung tâm)",
+          "specialty": null,
+          "score": 0.4176327440141899,
+          "relevant": false,
+          "rank": 15
+        },
+        {
+          "id": "0ed0b73e-0db8-47c6-bc3c-856c0f4387e5",
+          "code": "CONSULT-CENTRAL-001-AFTER",
+          "name": "Khám Nội tổng quát ngoài giờ (VitaCare Trung tâm)",
+          "specialty": "Nội tổng quát",
+          "score": 0.416220511564309,
+          "relevant": false,
+          "rank": 16
+        },
+        {
+          "id": "776b3b70-2310-4031-b95f-b0515c718e62",
+          "code": "CONSULT-EAST-006-STANDARD",
+          "name": "Khám Thần kinh trong giờ (VitaCare Cơ sở Đông)",
+          "specialty": "Thần kinh",
+          "score": 0.4152362933645727,
+          "relevant": false,
+          "rank": 17
+        },
+        {
+          "id": "aad110db-ef55-4b53-bf8c-55933dbf54ef",
+          "code": "PKG-CARDIO-SCREENING-VC-CENTRAL",
+          "name": "Gói tầm soát nguy cơ tim mạch (VitaCare Trung tâm)",
+          "specialty": null,
+          "score": 0.41382067655430815,
+          "relevant": false,
+          "rank": 18
+        },
+        {
+          "id": "291517d9-383c-46e0-ae55-601dd7d62c37",
+          "code": "CONSULT-EAST-001-AFTER",
+          "name": "Khám Nội tổng quát ngoài giờ (VitaCare Cơ sở Đông)",
+          "specialty": "Nội tổng quát",
+          "score": 0.41360754795170135,
+          "relevant": false,
+          "rank": 19
+        },
+        {
+          "id": "42fc927c-b34e-4634-b455-49941f36c4f8",
+          "code": "CONSULT-EAST-006-AFTER",
+          "name": "Khám Thần kinh ngoài giờ (VitaCare Cơ sở Đông)",
+          "specialty": "Thần kinh",
+          "score": 0.4121221396699671,
+          "relevant": false,
+          "rank": 20
+        },
+        {
+          "id": "221621e8-7d99-493c-a522-0eb3f67ad6ce",
+          "code": "PKG-ENT-ENDOSCOPY-VC-EAST",
+          "name": "Gói nội soi tầm soát bệnh lý Tai Mũi Họng (VitaCare Cơ sở Đông)",
+          "specialty": null,
+          "score": 0.4110216541515969,
+          "relevant": false,
+          "rank": 21
+        },
+        {
+          "id": "892c0ba9-dc77-4023-bbde-b3059ecf447d",
+          "code": "CONSULT-EAST-001-STANDARD",
+          "name": "Khám Nội tổng quát trong giờ (VitaCare Cơ sở Đông)",
+          "specialty": "Nội tổng quát",
+          "score": 0.409576570650076,
+          "relevant": false,
+          "rank": 22
+        },
+        {
+          "id": "bb0a1a88-7f18-4c86-bff8-0c2204de9d25",
+          "code": "PKG-CARDIO-SCREENING-VC-EAST",
+          "name": "Gói tầm soát nguy cơ tim mạch (VitaCare Cơ sở Đông)",
+          "specialty": null,
+          "score": 0.4085181141707091,
+          "relevant": false,
+          "rank": 23
+        },
+        {
+          "id": "3961cff9-ccd0-4a0e-b5ee-830f1587631e",
+          "code": "CONSULT-CENTRAL-001-STANDARD",
+          "name": "Khám Nội tổng quát trong giờ (VitaCare Trung tâm)",
+          "specialty": "Nội tổng quát",
+          "score": 0.40630936073066665,
+          "relevant": false,
+          "rank": 24
+        },
+        {
+          "id": "5a0c3de8-ca28-4687-93ef-fb81db2d8d2e",
+          "code": "CONSULT-CENTRAL-004-STANDARD",
+          "name": "Khám Hô hấp trong giờ (VitaCare Trung tâm)",
+          "specialty": "Hô hấp",
+          "score": 0.40390795068946345,
+          "relevant": false,
+          "rank": 25
+        },
+        {
+          "id": "ffee2b55-2c43-4c9d-8f87-1884d9893ff2",
+          "code": "CONSULT-CENTRAL-004-AFTER",
+          "name": "Khám Hô hấp ngoài giờ (VitaCare Trung tâm)",
+          "specialty": "Hô hấp",
+          "score": 0.40212105668164666,
+          "relevant": false,
+          "rank": 26
+        },
+        {
+          "id": "93df1ec7-5263-47f5-87d2-510c48c9615c",
+          "code": "CONSULT-CENTRAL-003-STANDARD",
+          "name": "Khám Tiêu hóa – Gan mật trong giờ (VitaCare Trung tâm)",
+          "specialty": "Tiêu hóa – Gan mật",
+          "score": 0.3989703808515415,
+          "relevant": true,
+          "rank": 27
+        },
+        {
+          "id": "43ec6111-aed5-4a36-9c9f-a9aeb498d98f",
+          "code": "CONSULT-EAST-004-STANDARD",
+          "name": "Khám Hô hấp trong giờ (VitaCare Cơ sở Đông)",
+          "specialty": "Hô hấp",
+          "score": 0.39632449391997987,
+          "relevant": false,
+          "rank": 28
+        },
+        {
+          "id": "333532b6-0415-45aa-9aba-98e0926fc6b3",
+          "code": "CONSULT-CENTRAL-003-AFTER",
+          "name": "Khám Tiêu hóa – Gan mật ngoài giờ (VitaCare Trung tâm)",
+          "specialty": "Tiêu hóa – Gan mật",
+          "score": 0.39596006061185174,
+          "relevant": true,
+          "rank": 29
+        },
+        {
+          "id": "43b172ac-2816-4854-8636-b7c15d68fb91",
+          "code": "CONSULT-EAST-004-AFTER",
+          "name": "Khám Hô hấp ngoài giờ (VitaCare Cơ sở Đông)",
+          "specialty": "Hô hấp",
+          "score": 0.3909550194519708,
+          "relevant": false,
+          "rank": 30
+        },
+        {
+          "id": "22eb1dd6-22f9-43bf-a81f-97e1d759ba01",
+          "code": "CONSULT-EAST-003-STANDARD",
+          "name": "Khám Tiêu hóa – Gan mật trong giờ (VitaCare Cơ sở Đông)",
+          "specialty": "Tiêu hóa – Gan mật",
+          "score": 0.3901033658580504,
+          "relevant": true,
+          "rank": 31
+        },
+        {
+          "id": "2174f979-dcdb-4e65-8c7f-f92f38766b06",
+          "code": "CONSULT-CENTRAL-008-STANDARD",
+          "name": "Khám Ngoại Chấn thương Chỉnh hình trong giờ (VitaCare Trung tâm)",
+          "specialty": "Ngoại Chấn thương Chỉnh hình",
+          "score": 0.3864203658873166,
+          "relevant": false,
+          "rank": 32
+        },
+        {
+          "id": "7e58d57d-8c61-40da-893e-f2905ed2bd32",
+          "code": "CONSULT-EAST-003-AFTER",
+          "name": "Khám Tiêu hóa – Gan mật ngoài giờ (VitaCare Cơ sở Đông)",
+          "specialty": "Tiêu hóa – Gan mật",
+          "score": 0.38475709240803885,
+          "relevant": true,
+          "rank": 33
+        },
+        {
+          "id": "5041f659-e6ab-4570-a575-96d16fe59102",
+          "code": "CONSULT-CENTRAL-014-STANDARD",
+          "name": "Khám Da liễu trong giờ (VitaCare Trung tâm)",
+          "specialty": "Da liễu",
+          "score": 0.38469130595457374,
+          "relevant": false,
+          "rank": 34
+        },
+        {
+          "id": "6cb7e7ba-21d8-4ad4-8bc4-7d293f0b5814",
+          "code": "CONSULT-CENTRAL-008-AFTER",
+          "name": "Khám Ngoại Chấn thương Chỉnh hình ngoài giờ (VitaCare Trung tâm)",
+          "specialty": "Ngoại Chấn thương Chỉnh hình",
+          "score": 0.38263294929066305,
+          "relevant": false,
+          "rank": 35
+        },
+        {
+          "id": "edab22a3-8aa7-4a0f-99c9-8a0327d5791e",
+          "code": "CONSULT-EAST-008-STANDARD",
+          "name": "Khám Ngoại Chấn thương Chỉnh hình trong giờ (VitaCare Cơ sở Đông)",
+          "specialty": "Ngoại Chấn thương Chỉnh hình",
+          "score": 0.3794272389156771,
+          "relevant": false,
+          "rank": 36
+        },
+        {
+          "id": "2a282121-ac4a-4020-b92f-fc2ccd1a6d55",
+          "code": "CONSULT-EAST-005-AFTER",
+          "name": "Khám Nội tiết – Đái tháo đường ngoài giờ (VitaCare Cơ sở Đông)",
+          "specialty": "Nội tiết – Đái tháo đường",
+          "score": 0.37644351605718546,
+          "relevant": false,
+          "rank": 37
+        },
+        {
+          "id": "3327c83c-50bc-4774-9679-a44ae4c90ec6",
+          "code": "CONSULT-CENTRAL-005-STANDARD",
+          "name": "Khám Nội tiết – Đái tháo đường trong giờ (VitaCare Trung tâm)",
+          "specialty": "Nội tiết – Đái tháo đường",
+          "score": 0.37638393176110974,
+          "relevant": false,
+          "rank": 38
+        },
+        {
+          "id": "b066db1b-4483-4773-a2da-4ff8f2d09541",
+          "code": "CONSULT-EAST-008-AFTER",
+          "name": "Khám Ngoại Chấn thương Chỉnh hình ngoài giờ (VitaCare Cơ sở Đông)",
+          "specialty": "Ngoại Chấn thương Chỉnh hình",
+          "score": 0.375933291948655,
+          "relevant": false,
+          "rank": 39
+        },
+        {
+          "id": "ab9485a9-7f3f-4f38-a4c6-6d5f97ee67fc",
+          "code": "CONSULT-CENTRAL-014-AFTER",
+          "name": "Khám Da liễu ngoài giờ (VitaCare Trung tâm)",
+          "specialty": "Da liễu",
+          "score": 0.3743646550145106,
+          "relevant": false,
+          "rank": 40
+        },
+        {
+          "id": "b021f546-11c8-4051-a9d9-c90cf1233234",
+          "code": "CONSULT-EAST-005-STANDARD",
+          "name": "Khám Nội tiết – Đái tháo đường trong giờ (VitaCare Cơ sở Đông)",
+          "specialty": "Nội tiết – Đái tháo đường",
+          "score": 0.37345973370562296,
+          "relevant": false,
+          "rank": 41
+        },
+        {
+          "id": "19cf95d3-9b68-4bea-90ad-9272ecf381a3",
+          "code": "CONSULT-EAST-014-STANDARD",
+          "name": "Khám Da liễu trong giờ (VitaCare Cơ sở Đông)",
+          "specialty": "Da liễu",
+          "score": 0.3733469510465391,
+          "relevant": false,
+          "rank": 42
+        },
+        {
+          "id": "5fe001d6-fba4-4ac6-be67-9741b7767f9a",
+          "code": "CONSULT-CENTRAL-012-STANDARD",
+          "name": "Khám Tai Mũi Họng trong giờ (VitaCare Trung tâm)",
+          "specialty": "Tai Mũi Họng",
+          "score": 0.37091611703825295,
+          "relevant": false,
+          "rank": 43
+        },
+        {
+          "id": "59517969-678a-4feb-9c70-66c678eea80b",
+          "code": "CONSULT-CENTRAL-005-AFTER",
+          "name": "Khám Nội tiết – Đái tháo đường ngoài giờ (VitaCare Trung tâm)",
+          "specialty": "Nội tiết – Đái tháo đường",
+          "score": 0.37086691504020936,
+          "relevant": false,
+          "rank": 44
+        },
+        {
+          "id": "428d5352-035c-478d-b2a1-7a8333e18395",
+          "code": "CONSULT-CENTRAL-012-AFTER",
+          "name": "Khám Tai Mũi Họng ngoài giờ (VitaCare Trung tâm)",
+          "specialty": "Tai Mũi Họng",
+          "score": 0.36587303426270446,
+          "relevant": false,
+          "rank": 45
+        },
+        {
+          "id": "e3fec979-0712-496b-a7a1-4b2a588b736b",
+          "code": "CONSULT-EAST-012-STANDARD",
+          "name": "Khám Tai Mũi Họng trong giờ (VitaCare Cơ sở Đông)",
+          "specialty": "Tai Mũi Họng",
+          "score": 0.36518023280333817,
+          "relevant": false,
+          "rank": 46
+        },
+        {
+          "id": "05c6f446-24bf-49a0-a45d-532f023d5cb6",
+          "code": "CONSULT-EAST-014-AFTER",
+          "name": "Khám Da liễu ngoài giờ (VitaCare Cơ sở Đông)",
+          "specialty": "Da liễu",
+          "score": 0.3604964597741362,
+          "relevant": false,
+          "rank": 47
+        },
+        {
+          "id": "407a01fb-62bc-44d3-9efc-0cce9341f43e",
+          "code": "CONSULT-CENTRAL-013-AFTER",
+          "name": "Khám Răng Hàm Mặt ngoài giờ (VitaCare Trung tâm)",
+          "specialty": "Răng Hàm Mặt",
+          "score": 0.35915398221697364,
+          "relevant": false,
+          "rank": 48
+        },
+        {
+          "id": "01bac664-f8f7-41da-8cac-722248bda32d",
+          "code": "CONSULT-CENTRAL-013-STANDARD",
+          "name": "Khám Răng Hàm Mặt trong giờ (VitaCare Trung tâm)",
+          "specialty": "Răng Hàm Mặt",
+          "score": 0.3584893595441633,
+          "relevant": false,
+          "rank": 49
+        },
+        {
+          "id": "b6a71197-0853-44b0-ac4b-144a996928ea",
+          "code": "CONSULT-EAST-012-AFTER",
+          "name": "Khám Tai Mũi Họng ngoài giờ (VitaCare Cơ sở Đông)",
+          "specialty": "Tai Mũi Họng",
+          "score": 0.35833541825883714,
+          "relevant": false,
+          "rank": 50
+        },
+        {
+          "id": "9feaff07-5d06-4e13-bee9-b24de59809c4",
+          "code": "PKG-EYE-COMPREHENSIVE-VC-EAST",
+          "name": "Gói khám Mắt toàn diện & Đo thị lực khúc xạ (VitaCare Cơ sở Đông)",
+          "specialty": null,
+          "score": 0.34886289588617087,
+          "relevant": false,
+          "rank": 51
+        },
+        {
+          "id": "40c3230c-fd8c-4b24-84c8-c6f9ca09273e",
+          "code": "PKG-EYE-COMPREHENSIVE-VC-CENTRAL",
+          "name": "Gói khám Mắt toàn diện & Đo thị lực khúc xạ (VitaCare Trung tâm)",
+          "specialty": null,
+          "score": 0.3487382996310988,
+          "relevant": false,
+          "rank": 52
+        },
+        {
+          "id": "12db4bef-550d-4b63-b200-402125cd6cc8",
+          "code": "CONSULT-EAST-013-AFTER",
+          "name": "Khám Răng Hàm Mặt ngoài giờ (VitaCare Cơ sở Đông)",
+          "specialty": "Răng Hàm Mặt",
+          "score": 0.3471786397178882,
+          "relevant": false,
+          "rank": 53
+        },
+        {
+          "id": "4495b49b-2661-4d45-8133-22df948351aa",
+          "code": "CONSULT-EAST-013-STANDARD",
+          "name": "Khám Răng Hàm Mặt trong giờ (VitaCare Cơ sở Đông)",
+          "specialty": "Răng Hàm Mặt",
+          "score": 0.3467179065841667,
+          "relevant": false,
+          "rank": 54
+        },
+        {
+          "id": "a915b49d-afa7-4433-8008-77a5d8ca7345",
+          "code": "CONSULT-CENTRAL-011-STANDARD",
+          "name": "Khám Mắt trong giờ (VitaCare Trung tâm)",
+          "specialty": "Mắt",
+          "score": 0.32549939002149464,
+          "relevant": false,
+          "rank": 55
+        },
+        {
+          "id": "c4904b23-0e0b-4efe-9642-8fb4f01b5ada",
+          "code": "CONSULT-CENTRAL-011-AFTER",
+          "name": "Khám Mắt ngoài giờ (VitaCare Trung tâm)",
+          "specialty": "Mắt",
+          "score": 0.3228097270266383,
+          "relevant": false,
+          "rank": 56
+        },
+        {
+          "id": "aa33b0dd-daaa-421c-bd22-5b2e3874d864",
+          "code": "CONSULT-EAST-011-STANDARD",
+          "name": "Khám Mắt trong giờ (VitaCare Cơ sở Đông)",
+          "specialty": "Mắt",
+          "score": 0.3198142704228613,
+          "relevant": false,
+          "rank": 57
+        },
+        {
+          "id": "f72d158b-2ea1-4f81-a446-5366551bff10",
+          "code": "CONSULT-EAST-011-AFTER",
+          "name": "Khám Mắt ngoài giờ (VitaCare Cơ sở Đông)",
+          "specialty": "Mắt",
+          "score": 0.3194924762373237,
+          "relevant": false,
+          "rank": 58
+        }
+      ]
+    },
+    {
+      "caseId": "TC-20",
+      "expectedSpecialties": [
+        "Da liễu"
+      ],
+      "profile": {
+        "age": 41,
+        "gender": "FEMALE",
+        "bmi": 22.3,
+        "medicalHistory": "Mề đay mạn tính vô căn, dị ứng thời tiết nổi sẩn phù ngứa toàn thân",
+        "allergies": "Thời tiết lạnh"
+      },
+      "originalCandidateIds": [
+        "8460c883-2b3b-4f67-a70c-8407096e08d1",
+        "0a490d61-f463-4ef5-8fd1-d07423238a69",
+        "831a683a-ced9-4fff-8cf8-3aa5dcbecbb2",
+        "92b68e42-83ea-4776-b6e6-7f5b762d5bfc",
+        "ac59f70b-6a9e-4ea9-b196-9a637766d87a",
+        "2ab40f78-01eb-4d24-8795-d20de0ad1734",
+        "9dfe5c99-f5f9-4363-98bd-bfb3b4e37e76",
+        "dd3d0531-8692-4d81-aef6-3c1855b05c26",
+        "1c33d90f-4f36-4f2f-a908-d0cddefdaa23",
+        "63e1e755-dfda-4844-9abd-75da6c039692",
+        "a7a139ab-0959-4c21-9160-8c3ed0be3b5c",
+        "9f1673ee-8a96-4282-a85f-89bd436d16a2",
+        "0d34468e-e533-4f09-9664-a910caa6698c",
+        "e4296f04-6b09-4fa6-8abf-9520c4c5d8c8",
+        "96688ca5-680c-4089-aca0-5ba22ed4111e",
+        "1baecddc-67aa-4dd7-9edc-974cb0acff7f",
+        "221621e8-7d99-493c-a522-0eb3f67ad6ce",
+        "776b3b70-2310-4031-b95f-b0515c718e62",
+        "0ed0b73e-0db8-47c6-bc3c-856c0f4387e5",
+        "0cd7d237-4411-44fa-ad82-c007438b39ff"
+      ],
+      "relatedInCatalog": 6,
+      "relatedAfterEligibility": 6,
+      "relatedAfterFollowUpExclusion": 4,
+      "screeningCount": 64,
+      "excluded": [
+        {
+          "id": "1e9ab80f-0fd7-465d-ad7e-814252fcf923",
+          "name": "Tái khám Da liễu (VitaCare Cơ sở Đông)",
+          "reason": "FOLLOW_UP_WITHOUT_COMPLETED_HISTORY"
+        },
+        {
+          "id": "f8064680-bde1-425e-b20e-65b7ad01f91f",
+          "name": "Tái khám Da liễu (VitaCare Trung tâm)",
+          "reason": "FOLLOW_UP_WITHOUT_COMPLETED_HISTORY"
+        }
+      ],
+      "bestRelevantRank": 49,
+      "bestRelevantScore": 0.34174288425751237,
+      "cutoffScore": 0.38975614066293673,
+      "candidateLimit": 20,
+      "exactTopKSpecialties": [
+        null,
+        "Ngoại tổng quát",
+        "Tim mạch",
+        "Thần kinh",
+        "Nội tổng quát"
+      ],
+      "annRelevantCount": 0,
+      "annIds": [
+        "8460c883-2b3b-4f67-a70c-8407096e08d1",
+        "0a490d61-f463-4ef5-8fd1-d07423238a69",
+        "831a683a-ced9-4fff-8cf8-3aa5dcbecbb2",
+        "92b68e42-83ea-4776-b6e6-7f5b762d5bfc",
+        "ac59f70b-6a9e-4ea9-b196-9a637766d87a",
+        "2ab40f78-01eb-4d24-8795-d20de0ad1734",
+        "9dfe5c99-f5f9-4363-98bd-bfb3b4e37e76",
+        "dd3d0531-8692-4d81-aef6-3c1855b05c26",
+        "1c33d90f-4f36-4f2f-a908-d0cddefdaa23",
+        "63e1e755-dfda-4844-9abd-75da6c039692",
+        "a7a139ab-0959-4c21-9160-8c3ed0be3b5c",
+        "9f1673ee-8a96-4282-a85f-89bd436d16a2",
+        "0d34468e-e533-4f09-9664-a910caa6698c",
+        "e4296f04-6b09-4fa6-8abf-9520c4c5d8c8",
+        "96688ca5-680c-4089-aca0-5ba22ed4111e",
+        "1baecddc-67aa-4dd7-9edc-974cb0acff7f",
+        "221621e8-7d99-493c-a522-0eb3f67ad6ce",
+        "776b3b70-2310-4031-b95f-b0515c718e62",
+        "0ed0b73e-0db8-47c6-bc3c-856c0f4387e5",
+        "0cd7d237-4411-44fa-ad82-c007438b39ff"
+      ],
+      "annMatchesOriginalCandidates": true,
+      "annMatchesExactTopK": true,
+      "cause": "VECTOR_RANK_BELOW_TOP_20",
+      "rankedCandidates": [
+        {
+          "id": "8460c883-2b3b-4f67-a70c-8407096e08d1",
+          "code": "PKG-WOMEN-WELLNESS-VC-CENTRAL",
+          "name": "Gói kiểm tra sức khỏe phụ nữ toàn diện (VitaCare Trung tâm)",
+          "specialty": null,
+          "score": 0.45502117639025574,
+          "relevant": false,
+          "rank": 1
+        },
+        {
+          "id": "0a490d61-f463-4ef5-8fd1-d07423238a69",
+          "code": "PKG-WOMEN-WELLNESS-VC-EAST",
+          "name": "Gói kiểm tra sức khỏe phụ nữ toàn diện (VitaCare Cơ sở Đông)",
+          "specialty": null,
+          "score": 0.44350223283619494,
+          "relevant": false,
+          "rank": 2
+        },
+        {
+          "id": "831a683a-ced9-4fff-8cf8-3aa5dcbecbb2",
+          "code": "CONSULT-CENTRAL-007-AFTER",
+          "name": "Khám Ngoại tổng quát ngoài giờ (VitaCare Trung tâm)",
+          "specialty": "Ngoại tổng quát",
+          "score": 0.4235430161297364,
+          "relevant": false,
+          "rank": 3
+        },
+        {
+          "id": "92b68e42-83ea-4776-b6e6-7f5b762d5bfc",
+          "code": "CONSULT-EAST-007-AFTER",
+          "name": "Khám Ngoại tổng quát ngoài giờ (VitaCare Cơ sở Đông)",
+          "specialty": "Ngoại tổng quát",
+          "score": 0.416108534138943,
+          "relevant": false,
+          "rank": 4
+        },
+        {
+          "id": "ac59f70b-6a9e-4ea9-b196-9a637766d87a",
+          "code": "CONSULT-CENTRAL-007-STANDARD",
+          "name": "Khám Ngoại tổng quát trong giờ (VitaCare Trung tâm)",
+          "specialty": "Ngoại tổng quát",
+          "score": 0.4152227248288592,
+          "relevant": false,
+          "rank": 5
+        },
+        {
+          "id": "2ab40f78-01eb-4d24-8795-d20de0ad1734",
+          "code": "PKG-GENERAL-BASIC-VC-CENTRAL",
+          "name": "Gói khám sức khỏe tổng quát cơ bản (VitaCare Trung tâm)",
+          "specialty": null,
+          "score": 0.41252112544711883,
+          "relevant": false,
+          "rank": 6
+        },
+        {
+          "id": "9dfe5c99-f5f9-4363-98bd-bfb3b4e37e76",
+          "code": "CONSULT-CENTRAL-002-STANDARD",
+          "name": "Khám Tim mạch trong giờ (VitaCare Trung tâm)",
+          "specialty": "Tim mạch",
+          "score": 0.41008275848787856,
+          "relevant": false,
+          "rank": 7
+        },
+        {
+          "id": "dd3d0531-8692-4d81-aef6-3c1855b05c26",
+          "code": "PKG-EYE-CATARACT-VC-CENTRAL",
+          "name": "Gói tầm soát cườm nước & Bệnh lý võng mạc (VitaCare Trung tâm)",
+          "specialty": null,
+          "score": 0.4094572764984436,
+          "relevant": false,
+          "rank": 8
+        },
+        {
+          "id": "1c33d90f-4f36-4f2f-a908-d0cddefdaa23",
+          "code": "CONSULT-CENTRAL-006-STANDARD",
+          "name": "Khám Thần kinh trong giờ (VitaCare Trung tâm)",
+          "specialty": "Thần kinh",
+          "score": 0.40928852644577945,
+          "relevant": false,
+          "rank": 9
+        },
+        {
+          "id": "63e1e755-dfda-4844-9abd-75da6c039692",
+          "code": "CONSULT-EAST-007-STANDARD",
+          "name": "Khám Ngoại tổng quát trong giờ (VitaCare Cơ sở Đông)",
+          "specialty": "Ngoại tổng quát",
+          "score": 0.40601393931319885,
+          "relevant": false,
+          "rank": 10
+        },
+        {
+          "id": "a7a139ab-0959-4c21-9160-8c3ed0be3b5c",
+          "code": "PKG-GENERAL-BASIC-VC-EAST",
+          "name": "Gói khám sức khỏe tổng quát cơ bản (VitaCare Cơ sở Đông)",
+          "specialty": null,
+          "score": 0.4050129588229374,
+          "relevant": false,
+          "rank": 11
+        },
+        {
+          "id": "9f1673ee-8a96-4282-a85f-89bd436d16a2",
+          "code": "PKG-ENT-ENDOSCOPY-VC-CENTRAL",
+          "name": "Gói nội soi tầm soát bệnh lý Tai Mũi Họng (VitaCare Trung tâm)",
+          "specialty": null,
+          "score": 0.403610356704492,
+          "relevant": false,
+          "rank": 12
+        },
+        {
+          "id": "0d34468e-e533-4f09-9664-a910caa6698c",
+          "code": "PKG-EYE-CATARACT-VC-EAST",
+          "name": "Gói tầm soát cườm nước & Bệnh lý võng mạc (VitaCare Cơ sở Đông)",
+          "specialty": null,
+          "score": 0.40358677174505025,
+          "relevant": false,
+          "rank": 13
+        },
+        {
+          "id": "e4296f04-6b09-4fa6-8abf-9520c4c5d8c8",
+          "code": "CONSULT-CENTRAL-002-AFTER",
+          "name": "Khám Tim mạch ngoài giờ (VitaCare Trung tâm)",
+          "specialty": "Tim mạch",
+          "score": 0.4026157650781293,
+          "relevant": false,
+          "rank": 14
+        },
+        {
+          "id": "96688ca5-680c-4089-aca0-5ba22ed4111e",
+          "code": "CONSULT-CENTRAL-006-AFTER",
+          "name": "Khám Thần kinh ngoài giờ (VitaCare Trung tâm)",
+          "specialty": "Thần kinh",
+          "score": 0.4018673966722281,
+          "relevant": false,
+          "rank": 15
+        },
+        {
+          "id": "1baecddc-67aa-4dd7-9edc-974cb0acff7f",
+          "code": "CONSULT-EAST-002-STANDARD",
+          "name": "Khám Tim mạch trong giờ (VitaCare Cơ sở Đông)",
+          "specialty": "Tim mạch",
+          "score": 0.40068326045659186,
+          "relevant": false,
+          "rank": 16
+        },
+        {
+          "id": "221621e8-7d99-493c-a522-0eb3f67ad6ce",
+          "code": "PKG-ENT-ENDOSCOPY-VC-EAST",
+          "name": "Gói nội soi tầm soát bệnh lý Tai Mũi Họng (VitaCare Cơ sở Đông)",
+          "specialty": null,
+          "score": 0.39670656351899775,
+          "relevant": false,
+          "rank": 17
+        },
+        {
+          "id": "776b3b70-2310-4031-b95f-b0515c718e62",
+          "code": "CONSULT-EAST-006-STANDARD",
+          "name": "Khám Thần kinh trong giờ (VitaCare Cơ sở Đông)",
+          "specialty": "Thần kinh",
+          "score": 0.3955432129042145,
+          "relevant": false,
+          "rank": 18
+        },
+        {
+          "id": "0ed0b73e-0db8-47c6-bc3c-856c0f4387e5",
+          "code": "CONSULT-CENTRAL-001-AFTER",
+          "name": "Khám Nội tổng quát ngoài giờ (VitaCare Trung tâm)",
+          "specialty": "Nội tổng quát",
+          "score": 0.39470813641330343,
+          "relevant": false,
+          "rank": 19
+        },
+        {
+          "id": "0cd7d237-4411-44fa-ad82-c007438b39ff",
+          "code": "CONSULT-EAST-002-AFTER",
+          "name": "Khám Tim mạch ngoài giờ (VitaCare Cơ sở Đông)",
+          "specialty": "Tim mạch",
+          "score": 0.38975614066293673,
+          "relevant": false,
+          "rank": 20
+        },
+        {
+          "id": "291517d9-383c-46e0-ae55-601dd7d62c37",
+          "code": "CONSULT-EAST-001-AFTER",
+          "name": "Khám Nội tổng quát ngoài giờ (VitaCare Cơ sở Đông)",
+          "specialty": "Nội tổng quát",
+          "score": 0.38874573184301153,
+          "relevant": false,
+          "rank": 21
+        },
+        {
+          "id": "42fc927c-b34e-4634-b455-49941f36c4f8",
+          "code": "CONSULT-EAST-006-AFTER",
+          "name": "Khám Thần kinh ngoài giờ (VitaCare Cơ sở Đông)",
+          "specialty": "Thần kinh",
+          "score": 0.38839321067006893,
+          "relevant": false,
+          "rank": 22
+        },
+        {
+          "id": "2174f979-dcdb-4e65-8c7f-f92f38766b06",
+          "code": "CONSULT-CENTRAL-008-STANDARD",
+          "name": "Khám Ngoại Chấn thương Chỉnh hình trong giờ (VitaCare Trung tâm)",
+          "specialty": "Ngoại Chấn thương Chỉnh hình",
+          "score": 0.3872995441888454,
+          "relevant": false,
+          "rank": 23
+        },
+        {
+          "id": "3961cff9-ccd0-4a0e-b5ee-830f1587631e",
+          "code": "CONSULT-CENTRAL-001-STANDARD",
+          "name": "Khám Nội tổng quát trong giờ (VitaCare Trung tâm)",
+          "specialty": "Nội tổng quát",
+          "score": 0.38347602162116573,
+          "relevant": false,
+          "rank": 24
+        },
+        {
+          "id": "892c0ba9-dc77-4023-bbde-b3059ecf447d",
+          "code": "CONSULT-EAST-001-STANDARD",
+          "name": "Khám Nội tổng quát trong giờ (VitaCare Cơ sở Đông)",
+          "specialty": "Nội tổng quát",
+          "score": 0.38263582230050414,
+          "relevant": false,
+          "rank": 25
+        },
+        {
+          "id": "edab22a3-8aa7-4a0f-99c9-8a0327d5791e",
+          "code": "CONSULT-EAST-008-STANDARD",
+          "name": "Khám Ngoại Chấn thương Chỉnh hình trong giờ (VitaCare Cơ sở Đông)",
+          "specialty": "Ngoại Chấn thương Chỉnh hình",
+          "score": 0.38056653002504026,
+          "relevant": false,
+          "rank": 26
+        },
+        {
+          "id": "93df1ec7-5263-47f5-87d2-510c48c9615c",
+          "code": "CONSULT-CENTRAL-003-STANDARD",
+          "name": "Khám Tiêu hóa – Gan mật trong giờ (VitaCare Trung tâm)",
+          "specialty": "Tiêu hóa – Gan mật",
+          "score": 0.3800394150677885,
+          "relevant": false,
+          "rank": 27
+        },
+        {
+          "id": "6cb7e7ba-21d8-4ad4-8bc4-7d293f0b5814",
+          "code": "CONSULT-CENTRAL-008-AFTER",
+          "name": "Khám Ngoại Chấn thương Chỉnh hình ngoài giờ (VitaCare Trung tâm)",
+          "specialty": "Ngoại Chấn thương Chỉnh hình",
+          "score": 0.3765589912994663,
+          "relevant": false,
+          "rank": 28
+        },
+        {
+          "id": "333532b6-0415-45aa-9aba-98e0926fc6b3",
+          "code": "CONSULT-CENTRAL-003-AFTER",
+          "name": "Khám Tiêu hóa – Gan mật ngoài giờ (VitaCare Trung tâm)",
+          "specialty": "Tiêu hóa – Gan mật",
+          "score": 0.37574757448655094,
+          "relevant": false,
+          "rank": 29
+        },
+        {
+          "id": "3327c83c-50bc-4774-9679-a44ae4c90ec6",
+          "code": "CONSULT-CENTRAL-005-STANDARD",
+          "name": "Khám Nội tiết – Đái tháo đường trong giờ (VitaCare Trung tâm)",
+          "specialty": "Nội tiết – Đái tháo đường",
+          "score": 0.37457010931761237,
+          "relevant": false,
+          "rank": 30
+        },
+        {
+          "id": "74f3c06f-49c0-4ae9-bf55-3608c2897659",
+          "code": "CONSULT-CENTRAL-010-AFTER",
+          "name": "Khám Sản – Phụ khoa ngoài giờ (VitaCare Trung tâm)",
+          "specialty": "Sản – Phụ khoa",
+          "score": 0.3742575518023789,
+          "relevant": false,
+          "rank": 31
+        },
+        {
+          "id": "aad110db-ef55-4b53-bf8c-55933dbf54ef",
+          "code": "PKG-CARDIO-SCREENING-VC-CENTRAL",
+          "name": "Gói tầm soát nguy cơ tim mạch (VitaCare Trung tâm)",
+          "specialty": null,
+          "score": 0.37325188154495215,
+          "relevant": false,
+          "rank": 32
+        },
+        {
+          "id": "b066db1b-4483-4773-a2da-4ff8f2d09541",
+          "code": "CONSULT-EAST-008-AFTER",
+          "name": "Khám Ngoại Chấn thương Chỉnh hình ngoài giờ (VitaCare Cơ sở Đông)",
+          "specialty": "Ngoại Chấn thương Chỉnh hình",
+          "score": 0.3720698075326313,
+          "relevant": false,
+          "rank": 33
+        },
+        {
+          "id": "b021f546-11c8-4051-a9d9-c90cf1233234",
+          "code": "CONSULT-EAST-005-STANDARD",
+          "name": "Khám Nội tiết – Đái tháo đường trong giờ (VitaCare Cơ sở Đông)",
+          "specialty": "Nội tiết – Đái tháo đường",
+          "score": 0.3714840474347947,
+          "relevant": false,
+          "rank": 34
+        },
+        {
+          "id": "2a282121-ac4a-4020-b92f-fc2ccd1a6d55",
+          "code": "CONSULT-EAST-005-AFTER",
+          "name": "Khám Nội tiết – Đái tháo đường ngoài giờ (VitaCare Cơ sở Đông)",
+          "specialty": "Nội tiết – Đái tháo đường",
+          "score": 0.37066421202051564,
+          "relevant": false,
+          "rank": 35
+        },
+        {
+          "id": "22eb1dd6-22f9-43bf-a81f-97e1d759ba01",
+          "code": "CONSULT-EAST-003-STANDARD",
+          "name": "Khám Tiêu hóa – Gan mật trong giờ (VitaCare Cơ sở Đông)",
+          "specialty": "Tiêu hóa – Gan mật",
+          "score": 0.3690250774384678,
+          "relevant": false,
+          "rank": 36
+        },
+        {
+          "id": "5a0c3de8-ca28-4687-93ef-fb81db2d8d2e",
+          "code": "CONSULT-CENTRAL-004-STANDARD",
+          "name": "Khám Hô hấp trong giờ (VitaCare Trung tâm)",
+          "specialty": "Hô hấp",
+          "score": 0.3674456724045113,
+          "relevant": false,
+          "rank": 37
+        },
+        {
+          "id": "59517969-678a-4feb-9c70-66c678eea80b",
+          "code": "CONSULT-CENTRAL-005-AFTER",
+          "name": "Khám Nội tiết – Đái tháo đường ngoài giờ (VitaCare Trung tâm)",
+          "specialty": "Nội tiết – Đái tháo đường",
+          "score": 0.367209703732696,
+          "relevant": false,
+          "rank": 38
+        },
+        {
+          "id": "78602d48-5d6d-42df-abc2-ec0eb8a193e5",
+          "code": "CONSULT-CENTRAL-010-STANDARD",
+          "name": "Khám Sản – Phụ khoa trong giờ (VitaCare Trung tâm)",
+          "specialty": "Sản – Phụ khoa",
+          "score": 0.36655145385540694,
+          "relevant": false,
+          "rank": 39
+        },
+        {
+          "id": "ffee2b55-2c43-4c9d-8f87-1884d9893ff2",
+          "code": "CONSULT-CENTRAL-004-AFTER",
+          "name": "Khám Hô hấp ngoài giờ (VitaCare Trung tâm)",
+          "specialty": "Hô hấp",
+          "score": 0.3661214290484973,
+          "relevant": false,
+          "rank": 40
+        },
+        {
+          "id": "bb0a1a88-7f18-4c86-bff8-0c2204de9d25",
+          "code": "PKG-CARDIO-SCREENING-VC-EAST",
+          "name": "Gói tầm soát nguy cơ tim mạch (VitaCare Cơ sở Đông)",
+          "specialty": null,
+          "score": 0.36591921624438295,
+          "relevant": false,
+          "rank": 41
+        },
+        {
+          "id": "7e58d57d-8c61-40da-893e-f2905ed2bd32",
+          "code": "CONSULT-EAST-003-AFTER",
+          "name": "Khám Tiêu hóa – Gan mật ngoài giờ (VitaCare Cơ sở Đông)",
+          "specialty": "Tiêu hóa – Gan mật",
+          "score": 0.36165193477653707,
+          "relevant": false,
+          "rank": 42
+        },
+        {
+          "id": "0516e2e6-7f1c-4ce1-9f06-587a23e725ff",
+          "code": "CONSULT-EAST-010-AFTER",
+          "name": "Khám Sản – Phụ khoa ngoài giờ (VitaCare Cơ sở Đông)",
+          "specialty": "Sản – Phụ khoa",
+          "score": 0.3593898080112673,
+          "relevant": false,
+          "rank": 43
+        },
+        {
+          "id": "4cfef683-fb79-4cfe-8228-571bbf885ba9",
+          "code": "CONSULT-EAST-010-STANDARD",
+          "name": "Khám Sản – Phụ khoa trong giờ (VitaCare Cơ sở Đông)",
+          "specialty": "Sản – Phụ khoa",
+          "score": 0.3558045998902872,
+          "relevant": false,
+          "rank": 44
+        },
+        {
+          "id": "43ec6111-aed5-4a36-9c9f-a9aeb498d98f",
+          "code": "CONSULT-EAST-004-STANDARD",
+          "name": "Khám Hô hấp trong giờ (VitaCare Cơ sở Đông)",
+          "specialty": "Hô hấp",
+          "score": 0.35331836840734443,
+          "relevant": false,
+          "rank": 45
+        },
+        {
+          "id": "43b172ac-2816-4854-8636-b7c15d68fb91",
+          "code": "CONSULT-EAST-004-AFTER",
+          "name": "Khám Hô hấp ngoài giờ (VitaCare Cơ sở Đông)",
+          "specialty": "Hô hấp",
+          "score": 0.3480162688821629,
+          "relevant": false,
+          "rank": 46
+        },
+        {
+          "id": "40c3230c-fd8c-4b24-84c8-c6f9ca09273e",
+          "code": "PKG-EYE-COMPREHENSIVE-VC-CENTRAL",
+          "name": "Gói khám Mắt toàn diện & Đo thị lực khúc xạ (VitaCare Trung tâm)",
+          "specialty": null,
+          "score": 0.34703380563913133,
+          "relevant": false,
+          "rank": 47
+        },
+        {
+          "id": "9feaff07-5d06-4e13-bee9-b24de59809c4",
+          "code": "PKG-EYE-COMPREHENSIVE-VC-EAST",
+          "name": "Gói khám Mắt toàn diện & Đo thị lực khúc xạ (VitaCare Cơ sở Đông)",
+          "specialty": null,
+          "score": 0.3450598348032356,
+          "relevant": false,
+          "rank": 48
+        },
+        {
+          "id": "5041f659-e6ab-4570-a575-96d16fe59102",
+          "code": "CONSULT-CENTRAL-014-STANDARD",
+          "name": "Khám Da liễu trong giờ (VitaCare Trung tâm)",
+          "specialty": "Da liễu",
+          "score": 0.34174288425751237,
+          "relevant": true,
+          "rank": 49
+        },
+        {
+          "id": "ab9485a9-7f3f-4f38-a4c6-6d5f97ee67fc",
+          "code": "CONSULT-CENTRAL-014-AFTER",
+          "name": "Khám Da liễu ngoài giờ (VitaCare Trung tâm)",
+          "specialty": "Da liễu",
+          "score": 0.33625641670079914,
+          "relevant": true,
+          "rank": 50
+        },
+        {
+          "id": "5fe001d6-fba4-4ac6-be67-9741b7767f9a",
+          "code": "CONSULT-CENTRAL-012-STANDARD",
+          "name": "Khám Tai Mũi Họng trong giờ (VitaCare Trung tâm)",
+          "specialty": "Tai Mũi Họng",
+          "score": 0.3330759746464763,
+          "relevant": false,
+          "rank": 51
+        },
+        {
+          "id": "19cf95d3-9b68-4bea-90ad-9272ecf381a3",
+          "code": "CONSULT-EAST-014-STANDARD",
+          "name": "Khám Da liễu trong giờ (VitaCare Cơ sở Đông)",
+          "specialty": "Da liễu",
+          "score": 0.3278071667804024,
+          "relevant": true,
+          "rank": 52
+        },
+        {
+          "id": "e3fec979-0712-496b-a7a1-4b2a588b736b",
+          "code": "CONSULT-EAST-012-STANDARD",
+          "name": "Khám Tai Mũi Họng trong giờ (VitaCare Cơ sở Đông)",
+          "specialty": "Tai Mũi Họng",
+          "score": 0.3269929742757014,
+          "relevant": false,
+          "rank": 53
+        },
+        {
+          "id": "01bac664-f8f7-41da-8cac-722248bda32d",
+          "code": "CONSULT-CENTRAL-013-STANDARD",
+          "name": "Khám Răng Hàm Mặt trong giờ (VitaCare Trung tâm)",
+          "specialty": "Răng Hàm Mặt",
+          "score": 0.3236413733665079,
+          "relevant": false,
+          "rank": 54
+        },
+        {
+          "id": "428d5352-035c-478d-b2a1-7a8333e18395",
+          "code": "CONSULT-CENTRAL-012-AFTER",
+          "name": "Khám Tai Mũi Họng ngoài giờ (VitaCare Trung tâm)",
+          "specialty": "Tai Mũi Họng",
+          "score": 0.3209361233958769,
+          "relevant": false,
+          "rank": 55
+        },
+        {
+          "id": "a915b49d-afa7-4433-8008-77a5d8ca7345",
+          "code": "CONSULT-CENTRAL-011-STANDARD",
+          "name": "Khám Mắt trong giờ (VitaCare Trung tâm)",
+          "specialty": "Mắt",
+          "score": 0.3204916998322331,
+          "relevant": false,
+          "rank": 56
+        },
+        {
+          "id": "05c6f446-24bf-49a0-a45d-532f023d5cb6",
+          "code": "CONSULT-EAST-014-AFTER",
+          "name": "Khám Da liễu ngoài giờ (VitaCare Cơ sở Đông)",
+          "specialty": "Da liễu",
+          "score": 0.3195425864301163,
+          "relevant": true,
+          "rank": 57
+        },
+        {
+          "id": "407a01fb-62bc-44d3-9efc-0cce9341f43e",
+          "code": "CONSULT-CENTRAL-013-AFTER",
+          "name": "Khám Răng Hàm Mặt ngoài giờ (VitaCare Trung tâm)",
+          "specialty": "Răng Hàm Mặt",
+          "score": 0.31696292644170626,
+          "relevant": false,
+          "rank": 58
+        },
+        {
+          "id": "4495b49b-2661-4d45-8133-22df948351aa",
+          "code": "CONSULT-EAST-013-STANDARD",
+          "name": "Khám Răng Hàm Mặt trong giờ (VitaCare Cơ sở Đông)",
+          "specialty": "Răng Hàm Mặt",
+          "score": 0.31377191787696534,
+          "relevant": false,
+          "rank": 59
+        },
+        {
+          "id": "aa33b0dd-daaa-421c-bd22-5b2e3874d864",
+          "code": "CONSULT-EAST-011-STANDARD",
+          "name": "Khám Mắt trong giờ (VitaCare Cơ sở Đông)",
+          "specialty": "Mắt",
+          "score": 0.3123122978778174,
+          "relevant": false,
+          "rank": 60
+        },
+        {
+          "id": "b6a71197-0853-44b0-ac4b-144a996928ea",
+          "code": "CONSULT-EAST-012-AFTER",
+          "name": "Khám Tai Mũi Họng ngoài giờ (VitaCare Cơ sở Đông)",
+          "specialty": "Tai Mũi Họng",
+          "score": 0.3122325726181313,
+          "relevant": false,
+          "rank": 61
+        },
+        {
+          "id": "c4904b23-0e0b-4efe-9642-8fb4f01b5ada",
+          "code": "CONSULT-CENTRAL-011-AFTER",
+          "name": "Khám Mắt ngoài giờ (VitaCare Trung tâm)",
+          "specialty": "Mắt",
+          "score": 0.3104911202359817,
+          "relevant": false,
+          "rank": 62
+        },
+        {
+          "id": "12db4bef-550d-4b63-b200-402125cd6cc8",
+          "code": "CONSULT-EAST-013-AFTER",
+          "name": "Khám Răng Hàm Mặt ngoài giờ (VitaCare Cơ sở Đông)",
+          "specialty": "Răng Hàm Mặt",
+          "score": 0.3072043055925004,
+          "relevant": false,
+          "rank": 63
+        },
+        {
+          "id": "f72d158b-2ea1-4f81-a446-5366551bff10",
+          "code": "CONSULT-EAST-011-AFTER",
+          "name": "Khám Mắt ngoài giờ (VitaCare Cơ sở Đông)",
+          "specialty": "Mắt",
+          "score": 0.30459725001827226,
+          "relevant": false,
+          "rank": 64
+        }
+      ]
+    }
+  ],
+  "catalogCount": 96,
+  "catalogIdsUnchanged": true,
+  "index": {
+    "name": "idx:packages_vss:openai:v2:text-embedding-3-small:1536",
+    "vectors": 96,
+    "staleContentFingerprints": 0
+  },
+  "packageMetadata": [
+    {
+      "id": "04bd1265-9d5c-4d9d-bb1e-228ce2c78abb",
+      "name": "Tái khám Mắt (VitaCare Cơ sở Đông)",
+      "specialtyId": 11,
+      "specialty": "Mắt",
+      "ownSymptoms": [
+        "Mắt nhìn mờ",
+        "Đỏ mắt cộm rát",
+        "Chảy nước mắt sống",
+        "Khám đo kính cận loạn"
+      ],
+      "specialtySymptoms": [
+        "Mắt nhìn mờ",
+        "Đỏ mắt cộm rát",
+        "Chảy nước mắt sống",
+        "Khám đo kính cận loạn"
+      ],
+      "indexedText": "Gói khám: Tái khám Mắt (VitaCare Cơ sở Đông). Chuyên khoa: Mắt. Mô tả: Kiểm tra tiến trình hồi phục sau can thiệp mắt, đo lại nhãn áp và điều chỉnh kính mắt phù hợp. - Đo thị lực, khám tật khúc xạ, viêm kết mạc, đục thủy tinh thể và soi đáy mắt.. Triệu chứng lâm sàng: Mắt nhìn mờ, Đỏ mắt cộm rát, Chảy nước mắt sống, Khám đo kính cận loạn",
+      "retrievalMappingText": "Gói khám: Tái khám Mắt (VitaCare Cơ sở Đông). Chuyên khoa: Mắt. Mô tả: Kiểm tra tiến trình hồi phục sau can thiệp mắt, đo lại nhãn áp và điều chỉnh kính mắt phù hợp. - Đo thị lực, khám tật khúc xạ, viêm kết mạc, đục thủy tinh thể và soi đáy mắt.. Triệu chứng lâm sàng: Mắt nhìn mờ, Đỏ mắt cộm rát, Chảy nước mắt sống, Khám đo kính cận loạn",
+      "textsDiffer": false
+    },
+    {
+      "id": "08e21d83-45d3-44c8-a16f-097f632e413f",
+      "name": "Tái khám Thần kinh (VitaCare Cơ sở Đông)",
+      "specialtyId": 6,
+      "specialty": "Thần kinh",
+      "ownSymptoms": [
+        "Kiểm tra sức khỏe định kỳ",
+        "Mệt mỏi suy nhược",
+        "Sụt cân không rõ nguyên nhân",
+        "Đau đầu mất ngủ"
+      ],
+      "specialtySymptoms": [
+        "Đau nửa đầu Migraine",
+        "Chóng mặt hoa mắt",
+        "Mất ngủ kéo dài",
+        "Tê bì chân tay"
+      ],
+      "indexedText": "Gói khám: Tái khám Thần kinh (VitaCare Cơ sở Đông). Chuyên khoa: Thần kinh. Mô tả: Đánh giá lại các chỉ số xét nghiệm bất thường, theo dõi tiến triển sức khỏe định kỳ và tư vấn cải thiện. - Khám đau đầu mạn tính, mất ngủ, rối loạn tiền đình và suy giảm trí nhớ.. Triệu chứng lâm sàng: Kiểm tra sức khỏe định kỳ, Mệt mỏi suy nhược, Sụt cân không rõ nguyên nhân, Đau đầu mất ngủ, Đau nửa đầu Migraine, Chóng mặt hoa mắt, Mất ngủ kéo dài, Tê bì chân tay",
+      "retrievalMappingText": "Gói khám: Tái khám Thần kinh (VitaCare Cơ sở Đông). Chuyên khoa: Thần kinh. Mô tả: Đánh giá lại các chỉ số xét nghiệm bất thường, theo dõi tiến triển sức khỏe định kỳ và tư vấn cải thiện. - Khám đau đầu mạn tính, mất ngủ, rối loạn tiền đình và suy giảm trí nhớ.. Triệu chứng lâm sàng: Kiểm tra sức khỏe định kỳ, Mệt mỏi suy nhược, Sụt cân không rõ nguyên nhân, Đau đầu mất ngủ, Đau nửa đầu Migraine, Chóng mặt hoa mắt, Mất ngủ kéo dài, Tê bì chân tay",
+      "textsDiffer": false
+    },
+    {
+      "id": "1e9ab80f-0fd7-465d-ad7e-814252fcf923",
+      "name": "Tái khám Da liễu (VitaCare Cơ sở Đông)",
+      "specialtyId": 14,
+      "specialty": "Da liễu",
+      "ownSymptoms": [
+        "Mụn viêm mụn ẩn",
+        "Dị ứng mẩn ngứa",
+        "Nổi mề đay",
+        "Viêm da cơ địa",
+        "Rụng tóc",
+        "Nấm da"
+      ],
+      "specialtySymptoms": [
+        "Mụn viêm mụn bọc",
+        "Ngứa ngáy dị ứng mề đay",
+        "Vảy nến á sừng",
+        "Nấm da rụng tóc"
+      ],
+      "indexedText": "Gói khám: Tái khám Da liễu (VitaCare Cơ sở Đông). Chuyên khoa: Da liễu. Mô tả: Theo dõi diễn tiến điều trị da liễu, đánh giá mức độ đáp ứng thuốc bôi/thuốc uống và kiểm tra đơn thuốc. - Khám, điều trị viêm da cơ địa, mụn trứng cá, nấm da và chăm sóc thẩm mỹ da liễu.. Triệu chứng lâm sàng: Mụn viêm mụn ẩn, Dị ứng mẩn ngứa, Nổi mề đay, Viêm da cơ địa, Rụng tóc, Nấm da, Mụn viêm mụn bọc, Ngứa ngáy dị ứng mề đay, Vảy nến á sừng, Nấm da rụng tóc",
+      "retrievalMappingText": "Gói khám: Tái khám Da liễu (VitaCare Cơ sở Đông). Chuyên khoa: Da liễu. Mô tả: Theo dõi diễn tiến điều trị da liễu, đánh giá mức độ đáp ứng thuốc bôi/thuốc uống và kiểm tra đơn thuốc. - Khám, điều trị viêm da cơ địa, mụn trứng cá, nấm da và chăm sóc thẩm mỹ da liễu.. Triệu chứng lâm sàng: Mụn viêm mụn ẩn, Dị ứng mẩn ngứa, Nổi mề đay, Viêm da cơ địa, Rụng tóc, Nấm da, Mụn viêm mụn bọc, Ngứa ngáy dị ứng mề đay, Vảy nến á sừng, Nấm da rụng tóc",
+      "textsDiffer": false
+    },
+    {
+      "id": "1f804b90-4177-450b-87f0-180e3f95a08b",
+      "name": "Tái khám Nội tổng quát (VitaCare Cơ sở Đông)",
+      "specialtyId": 1,
+      "specialty": "Nội tổng quát",
+      "ownSymptoms": [
+        "Kiểm tra sức khỏe định kỳ",
+        "Mệt mỏi suy nhược",
+        "Sụt cân không rõ nguyên nhân",
+        "Đau đầu mất ngủ"
+      ],
+      "specialtySymptoms": [
+        "Mệt mỏi suy nhược",
+        "Sụt cân không rõ nguyên nhân",
+        "Sốt kéo dài",
+        "Kiểm tra sức khỏe định kỳ"
+      ],
+      "indexedText": "Gói khám: Tái khám Nội tổng quát (VitaCare Cơ sở Đông). Chuyên khoa: Nội tổng quát. Mô tả: Đánh giá lại các chỉ số xét nghiệm bất thường, theo dõi tiến triển sức khỏe định kỳ và tư vấn cải thiện. - Khám, tư vấn sức khỏe chung và tầm soát bệnh lý mạn tính người lớn.. Triệu chứng lâm sàng: Kiểm tra sức khỏe định kỳ, Mệt mỏi suy nhược, Sụt cân không rõ nguyên nhân, Đau đầu mất ngủ, Sốt kéo dài",
+      "retrievalMappingText": "Gói khám: Tái khám Nội tổng quát (VitaCare Cơ sở Đông). Chuyên khoa: Nội tổng quát. Mô tả: Đánh giá lại các chỉ số xét nghiệm bất thường, theo dõi tiến triển sức khỏe định kỳ và tư vấn cải thiện. - Khám, tư vấn sức khỏe chung và tầm soát bệnh lý mạn tính người lớn.. Triệu chứng lâm sàng: Kiểm tra sức khỏe định kỳ, Mệt mỏi suy nhược, Sụt cân không rõ nguyên nhân, Đau đầu mất ngủ, Sốt kéo dài",
+      "textsDiffer": false
+    },
+    {
+      "id": "24b83975-e59c-4c64-9f60-4378702a5929",
+      "name": "Tái khám Nội tiết – Đái tháo đường (VitaCare Trung tâm)",
+      "specialtyId": 5,
+      "specialty": "Nội tiết – Đái tháo đường",
+      "ownSymptoms": [
+        "Kiểm tra sức khỏe định kỳ",
+        "Mệt mỏi suy nhược",
+        "Sụt cân không rõ nguyên nhân",
+        "Đau đầu mất ngủ"
+      ],
+      "specialtySymptoms": [
+        "Khát nước nhiều",
+        "Tiểu nhiều ban đêm",
+        "Run tay sụt cân nhanh",
+        "Bướu cổ phì đại"
+      ],
+      "indexedText": "Gói khám: Tái khám Nội tiết – Đái tháo đường (VitaCare Trung tâm). Chuyên khoa: Nội tiết – Đái tháo đường. Mô tả: Đánh giá lại các chỉ số xét nghiệm bất thường, theo dõi tiến triển sức khỏe định kỳ và tư vấn cải thiện. - Kiểm soát đường huyết, bệnh lý tuyến giáp và rối loạn chuyển hóa lipid.. Triệu chứng lâm sàng: Kiểm tra sức khỏe định kỳ, Mệt mỏi suy nhược, Sụt cân không rõ nguyên nhân, Đau đầu mất ngủ, Khát nước nhiều, Tiểu nhiều ban đêm, Run tay sụt cân nhanh, Bướu cổ phì đại",
+      "retrievalMappingText": "Gói khám: Tái khám Nội tiết – Đái tháo đường (VitaCare Trung tâm). Chuyên khoa: Nội tiết – Đái tháo đường. Mô tả: Đánh giá lại các chỉ số xét nghiệm bất thường, theo dõi tiến triển sức khỏe định kỳ và tư vấn cải thiện. - Kiểm soát đường huyết, bệnh lý tuyến giáp và rối loạn chuyển hóa lipid.. Triệu chứng lâm sàng: Kiểm tra sức khỏe định kỳ, Mệt mỏi suy nhược, Sụt cân không rõ nguyên nhân, Đau đầu mất ngủ, Khát nước nhiều, Tiểu nhiều ban đêm, Run tay sụt cân nhanh, Bướu cổ phì đại",
+      "textsDiffer": false
+    },
+    {
+      "id": "2c22423c-7cfe-4fcd-9630-8503376a9c8a",
+      "name": "Tái khám Tai Mũi Họng (VitaCare Trung tâm)",
+      "specialtyId": 12,
+      "specialty": "Tai Mũi Họng",
+      "ownSymptoms": [
+        "Đau rát họng nuốt vướng",
+        "Nghẹt mũi chảy nước mũi",
+        "Ù tai chảy dịch tai",
+        "Khàn tiếng kéo dài"
+      ],
+      "specialtySymptoms": [
+        "Đau rát họng nuốt vướng",
+        "Nghẹt mũi chảy nước mũi",
+        "Ù tai chảy dịch tai",
+        "Khàn tiếng kéo dài"
+      ],
+      "indexedText": "Gói khám: Tái khám Tai Mũi Họng (VitaCare Trung tâm). Chuyên khoa: Tai Mũi Họng. Mô tả: Kiểm tra mức độ lành niêm mạc xoang, hút rửa mũi xoang/tai và đánh giá hiệu quả kháng sinh. - Nội soi tai mũi họng, viêm xoang, viêm họng hạt, viêm amidan và viêm tai giữa.. Triệu chứng lâm sàng: Đau rát họng nuốt vướng, Nghẹt mũi chảy nước mũi, Ù tai chảy dịch tai, Khàn tiếng kéo dài",
+      "retrievalMappingText": "Gói khám: Tái khám Tai Mũi Họng (VitaCare Trung tâm). Chuyên khoa: Tai Mũi Họng. Mô tả: Kiểm tra mức độ lành niêm mạc xoang, hút rửa mũi xoang/tai và đánh giá hiệu quả kháng sinh. - Nội soi tai mũi họng, viêm xoang, viêm họng hạt, viêm amidan và viêm tai giữa.. Triệu chứng lâm sàng: Đau rát họng nuốt vướng, Nghẹt mũi chảy nước mũi, Ù tai chảy dịch tai, Khàn tiếng kéo dài",
+      "textsDiffer": false
+    },
+    {
+      "id": "332fe7d0-d764-442e-973c-5f9dcb664635",
+      "name": "Tái khám Ngoại Chấn thương Chỉnh hình (VitaCare Trung tâm)",
+      "specialtyId": 8,
+      "specialty": "Ngoại Chấn thương Chỉnh hình",
+      "ownSymptoms": [
+        "Đau nhức khớp gối",
+        "Thoái hóa cột sống",
+        "Đau mỏi vai gáy",
+        "Căng cơ chấn thương vận động"
+      ],
+      "specialtySymptoms": [
+        "Đau nhức khớp gối",
+        "Thoái hóa cột sống",
+        "Đau mỏi vai gáy",
+        "Căng cơ chấn thương vận động"
+      ],
+      "indexedText": "Gói khám: Tái khám Ngoại Chấn thương Chỉnh hình (VitaCare Trung tâm). Chuyên khoa: Ngoại Chấn thương Chỉnh hình. Mô tả: Đánh giá mức độ thuyên giảm đau nhức, kiểm tra tiến trình phục hồi sụn khớp và điều chỉnh bài tập vận động. - Bệnh lý cơ xương khớp, thoái hóa khớp, trật khớp và chấn thương thể thao.. Triệu chứng lâm sàng: Đau nhức khớp gối, Thoái hóa cột sống, Đau mỏi vai gáy, Căng cơ chấn thương vận động",
+      "retrievalMappingText": "Gói khám: Tái khám Ngoại Chấn thương Chỉnh hình (VitaCare Trung tâm). Chuyên khoa: Ngoại Chấn thương Chỉnh hình. Mô tả: Đánh giá mức độ thuyên giảm đau nhức, kiểm tra tiến trình phục hồi sụn khớp và điều chỉnh bài tập vận động. - Bệnh lý cơ xương khớp, thoái hóa khớp, trật khớp và chấn thương thể thao.. Triệu chứng lâm sàng: Đau nhức khớp gối, Thoái hóa cột sống, Đau mỏi vai gáy, Căng cơ chấn thương vận động",
+      "textsDiffer": false
+    },
+    {
+      "id": "52841df1-71fe-4556-bcd4-70ccf15c0056",
+      "name": "Tái khám Tiêu hóa – Gan mật (VitaCare Trung tâm)",
+      "specialtyId": 3,
+      "specialty": "Tiêu hóa – Gan mật",
+      "ownSymptoms": [
+        "Đau thượng vị",
+        "Đầy hơi khó tiêu",
+        "Ợ chua trào ngược",
+        "Rối loạn tiêu hóa",
+        "Buồn nôn"
+      ],
+      "specialtySymptoms": [
+        "Đau thượng vị",
+        "Ợ chua trào ngược",
+        "Đầy hơi khó tiêu",
+        "Rối loạn tiêu hóa kéo dài",
+        "Vàng da"
+      ],
+      "indexedText": "Gói khám: Tái khám Tiêu hóa – Gan mật (VitaCare Trung tâm). Chuyên khoa: Tiêu hóa – Gan mật. Mô tả: Đánh giá mức độ hồi phục niêm mạc dạ dày/đại tràng, kiểm tra hiệu quả phác đồ diệt khuẩn HP và điều chỉnh thuốc. - Viêm loét dạ dày - đại tràng, trào ngược dạ dày, viêm gan B/C và sỏi mật.. Triệu chứng lâm sàng: Đau thượng vị, Đầy hơi khó tiêu, Ợ chua trào ngược, Rối loạn tiêu hóa, Buồn nôn, Rối loạn tiêu hóa kéo dài, Vàng da",
+      "retrievalMappingText": "Gói khám: Tái khám Tiêu hóa – Gan mật (VitaCare Trung tâm). Chuyên khoa: Tiêu hóa – Gan mật. Mô tả: Đánh giá mức độ hồi phục niêm mạc dạ dày/đại tràng, kiểm tra hiệu quả phác đồ diệt khuẩn HP và điều chỉnh thuốc. - Viêm loét dạ dày - đại tràng, trào ngược dạ dày, viêm gan B/C và sỏi mật.. Triệu chứng lâm sàng: Đau thượng vị, Đầy hơi khó tiêu, Ợ chua trào ngược, Rối loạn tiêu hóa, Buồn nôn, Rối loạn tiêu hóa kéo dài, Vàng da",
+      "textsDiffer": false
+    },
+    {
+      "id": "54ef955a-a7d1-4a63-917c-54e340c60a81",
+      "name": "Tái khám Sản – Phụ khoa (VitaCare Trung tâm)",
+      "specialtyId": 10,
+      "specialty": "Sản – Phụ khoa",
+      "ownSymptoms": [
+        "Rối loạn kinh nguyệt",
+        "Khám thai định kỳ",
+        "Đau bụng dưới bất thường",
+        "Viêm nhiễm phụ khoa"
+      ],
+      "specialtySymptoms": [
+        "Rối loạn kinh nguyệt",
+        "Khám thai định kỳ",
+        "Đau bụng dưới bất thường",
+        "Viêm nhiễm phụ khoa"
+      ],
+      "indexedText": "Gói khám: Tái khám Sản – Phụ khoa (VitaCare Trung tâm). Chuyên khoa: Sản – Phụ khoa. Mô tả: Kiểm tra kết quả phết tế bào cổ tử cung, theo dõi sự phát triển của thai nhi và điều chỉnh thuốc phụ khoa. - Chăm sóc sức khỏe sinh sản phụ nữ, tầm soát phụ khoa và theo dõi thai kỳ định kỳ.. Triệu chứng lâm sàng: Rối loạn kinh nguyệt, Khám thai định kỳ, Đau bụng dưới bất thường, Viêm nhiễm phụ khoa",
+      "retrievalMappingText": "Gói khám: Tái khám Sản – Phụ khoa (VitaCare Trung tâm). Chuyên khoa: Sản – Phụ khoa. Mô tả: Kiểm tra kết quả phết tế bào cổ tử cung, theo dõi sự phát triển của thai nhi và điều chỉnh thuốc phụ khoa. - Chăm sóc sức khỏe sinh sản phụ nữ, tầm soát phụ khoa và theo dõi thai kỳ định kỳ.. Triệu chứng lâm sàng: Rối loạn kinh nguyệt, Khám thai định kỳ, Đau bụng dưới bất thường, Viêm nhiễm phụ khoa",
+      "textsDiffer": false
+    },
+    {
+      "id": "557a839c-58be-4a52-a7c6-5d70c38cbc1c",
+      "name": "Tái khám Tim mạch (VitaCare Cơ sở Đông)",
+      "specialtyId": 2,
+      "specialty": "Tim mạch",
+      "ownSymptoms": [
+        "Tức ngực",
+        "Hồi hộp đánh trống ngực",
+        "Khó thở khi gắng sức",
+        "Huyết áp cao",
+        "Chóng mặt"
+      ],
+      "specialtySymptoms": [
+        "Đau thắt ngực",
+        "Hồi hộp đánh trống ngực",
+        "Khó thở khi gắng sức",
+        "Huyết áp cao hoặc không ổn định"
+      ],
+      "indexedText": "Gói khám: Tái khám Tim mạch (VitaCare Cơ sở Đông). Chuyên khoa: Tim mạch. Mô tả: Theo dõi diễn tiến bệnh lý tim mạch, kiểm tra chỉ số huyết áp, đánh giá phản ứng thuốc và điều chỉnh phác đồ điều trị tối ưu. - Khám và điều trị tăng huyết áp, xơ vữa động mạch, suy tim và rối loạn nhịp tim.. Triệu chứng lâm sàng: Tức ngực, Hồi hộp đánh trống ngực, Khó thở khi gắng sức, Huyết áp cao, Chóng mặt, Đau thắt ngực, Huyết áp cao hoặc không ổn định",
+      "retrievalMappingText": "Gói khám: Tái khám Tim mạch (VitaCare Cơ sở Đông). Chuyên khoa: Tim mạch. Mô tả: Theo dõi diễn tiến bệnh lý tim mạch, kiểm tra chỉ số huyết áp, đánh giá phản ứng thuốc và điều chỉnh phác đồ điều trị tối ưu. - Khám và điều trị tăng huyết áp, xơ vữa động mạch, suy tim và rối loạn nhịp tim.. Triệu chứng lâm sàng: Tức ngực, Hồi hộp đánh trống ngực, Khó thở khi gắng sức, Huyết áp cao, Chóng mặt, Đau thắt ngực, Huyết áp cao hoặc không ổn định",
+      "textsDiffer": false
+    },
+    {
+      "id": "5ae2788e-0c8f-4f82-a1cb-f259486f5981",
+      "name": "Tái khám Ngoại tổng quát (VitaCare Cơ sở Đông)",
+      "specialtyId": 7,
+      "specialty": "Ngoại tổng quát",
+      "ownSymptoms": [
+        "Kiểm tra sức khỏe định kỳ",
+        "Mệt mỏi suy nhược",
+        "Sụt cân không rõ nguyên nhân",
+        "Đau đầu mất ngủ"
+      ],
+      "specialtySymptoms": [
+        "Khối u bướu vùng bẹn",
+        "Đau rát hậu môn trĩ",
+        "U mỡ bao hoạt dịch",
+        "Vết thương hở phần mềm"
+      ],
+      "indexedText": "Gói khám: Tái khám Ngoại tổng quát (VitaCare Cơ sở Đông). Chuyên khoa: Ngoại tổng quát. Mô tả: Đánh giá lại các chỉ số xét nghiệm bất thường, theo dõi tiến triển sức khỏe định kỳ và tư vấn cải thiện. - Bệnh lý hậu môn trực tràng, thoát vị bẹn và xử lý tiểu phẫu ngoại khoa.. Triệu chứng lâm sàng: Kiểm tra sức khỏe định kỳ, Mệt mỏi suy nhược, Sụt cân không rõ nguyên nhân, Đau đầu mất ngủ, Khối u bướu vùng bẹn, Đau rát hậu môn trĩ, U mỡ bao hoạt dịch, Vết thương hở phần mềm",
+      "retrievalMappingText": "Gói khám: Tái khám Ngoại tổng quát (VitaCare Cơ sở Đông). Chuyên khoa: Ngoại tổng quát. Mô tả: Đánh giá lại các chỉ số xét nghiệm bất thường, theo dõi tiến triển sức khỏe định kỳ và tư vấn cải thiện. - Bệnh lý hậu môn trực tràng, thoát vị bẹn và xử lý tiểu phẫu ngoại khoa.. Triệu chứng lâm sàng: Kiểm tra sức khỏe định kỳ, Mệt mỏi suy nhược, Sụt cân không rõ nguyên nhân, Đau đầu mất ngủ, Khối u bướu vùng bẹn, Đau rát hậu môn trĩ, U mỡ bao hoạt dịch, Vết thương hở phần mềm",
+      "textsDiffer": false
+    },
+    {
+      "id": "65345e4e-b0ba-46c2-8b20-fa5679ab52ad",
+      "name": "Tái khám Nội tiết – Đái tháo đường (VitaCare Cơ sở Đông)",
+      "specialtyId": 5,
+      "specialty": "Nội tiết – Đái tháo đường",
+      "ownSymptoms": [
+        "Kiểm tra sức khỏe định kỳ",
+        "Mệt mỏi suy nhược",
+        "Sụt cân không rõ nguyên nhân",
+        "Đau đầu mất ngủ"
+      ],
+      "specialtySymptoms": [
+        "Khát nước nhiều",
+        "Tiểu nhiều ban đêm",
+        "Run tay sụt cân nhanh",
+        "Bướu cổ phì đại"
+      ],
+      "indexedText": "Gói khám: Tái khám Nội tiết – Đái tháo đường (VitaCare Cơ sở Đông). Chuyên khoa: Nội tiết – Đái tháo đường. Mô tả: Đánh giá lại các chỉ số xét nghiệm bất thường, theo dõi tiến triển sức khỏe định kỳ và tư vấn cải thiện. - Kiểm soát đường huyết, bệnh lý tuyến giáp và rối loạn chuyển hóa lipid.. Triệu chứng lâm sàng: Kiểm tra sức khỏe định kỳ, Mệt mỏi suy nhược, Sụt cân không rõ nguyên nhân, Đau đầu mất ngủ, Khát nước nhiều, Tiểu nhiều ban đêm, Run tay sụt cân nhanh, Bướu cổ phì đại",
+      "retrievalMappingText": "Gói khám: Tái khám Nội tiết – Đái tháo đường (VitaCare Cơ sở Đông). Chuyên khoa: Nội tiết – Đái tháo đường. Mô tả: Đánh giá lại các chỉ số xét nghiệm bất thường, theo dõi tiến triển sức khỏe định kỳ và tư vấn cải thiện. - Kiểm soát đường huyết, bệnh lý tuyến giáp và rối loạn chuyển hóa lipid.. Triệu chứng lâm sàng: Kiểm tra sức khỏe định kỳ, Mệt mỏi suy nhược, Sụt cân không rõ nguyên nhân, Đau đầu mất ngủ, Khát nước nhiều, Tiểu nhiều ban đêm, Run tay sụt cân nhanh, Bướu cổ phì đại",
+      "textsDiffer": false
+    },
+    {
+      "id": "9dccf4d4-99a6-4462-9cf4-b54129355501",
+      "name": "Tái khám Tai Mũi Họng (VitaCare Cơ sở Đông)",
+      "specialtyId": 12,
+      "specialty": "Tai Mũi Họng",
+      "ownSymptoms": [
+        "Đau rát họng nuốt vướng",
+        "Nghẹt mũi chảy nước mũi",
+        "Ù tai chảy dịch tai",
+        "Khàn tiếng kéo dài"
+      ],
+      "specialtySymptoms": [
+        "Đau rát họng nuốt vướng",
+        "Nghẹt mũi chảy nước mũi",
+        "Ù tai chảy dịch tai",
+        "Khàn tiếng kéo dài"
+      ],
+      "indexedText": "Gói khám: Tái khám Tai Mũi Họng (VitaCare Cơ sở Đông). Chuyên khoa: Tai Mũi Họng. Mô tả: Kiểm tra mức độ lành niêm mạc xoang, hút rửa mũi xoang/tai và đánh giá hiệu quả kháng sinh. - Nội soi tai mũi họng, viêm xoang, viêm họng hạt, viêm amidan và viêm tai giữa.. Triệu chứng lâm sàng: Đau rát họng nuốt vướng, Nghẹt mũi chảy nước mũi, Ù tai chảy dịch tai, Khàn tiếng kéo dài",
+      "retrievalMappingText": "Gói khám: Tái khám Tai Mũi Họng (VitaCare Cơ sở Đông). Chuyên khoa: Tai Mũi Họng. Mô tả: Kiểm tra mức độ lành niêm mạc xoang, hút rửa mũi xoang/tai và đánh giá hiệu quả kháng sinh. - Nội soi tai mũi họng, viêm xoang, viêm họng hạt, viêm amidan và viêm tai giữa.. Triệu chứng lâm sàng: Đau rát họng nuốt vướng, Nghẹt mũi chảy nước mũi, Ù tai chảy dịch tai, Khàn tiếng kéo dài",
+      "textsDiffer": false
+    },
+    {
+      "id": "ac09ff49-7fbf-4778-9abe-faa6773a4d3c",
+      "name": "Tái khám Thần kinh (VitaCare Trung tâm)",
+      "specialtyId": 6,
+      "specialty": "Thần kinh",
+      "ownSymptoms": [
+        "Kiểm tra sức khỏe định kỳ",
+        "Mệt mỏi suy nhược",
+        "Sụt cân không rõ nguyên nhân",
+        "Đau đầu mất ngủ"
+      ],
+      "specialtySymptoms": [
+        "Đau nửa đầu Migraine",
+        "Chóng mặt hoa mắt",
+        "Mất ngủ kéo dài",
+        "Tê bì chân tay"
+      ],
+      "indexedText": "Gói khám: Tái khám Thần kinh (VitaCare Trung tâm). Chuyên khoa: Thần kinh. Mô tả: Đánh giá lại các chỉ số xét nghiệm bất thường, theo dõi tiến triển sức khỏe định kỳ và tư vấn cải thiện. - Khám đau đầu mạn tính, mất ngủ, rối loạn tiền đình và suy giảm trí nhớ.. Triệu chứng lâm sàng: Kiểm tra sức khỏe định kỳ, Mệt mỏi suy nhược, Sụt cân không rõ nguyên nhân, Đau đầu mất ngủ, Đau nửa đầu Migraine, Chóng mặt hoa mắt, Mất ngủ kéo dài, Tê bì chân tay",
+      "retrievalMappingText": "Gói khám: Tái khám Thần kinh (VitaCare Trung tâm). Chuyên khoa: Thần kinh. Mô tả: Đánh giá lại các chỉ số xét nghiệm bất thường, theo dõi tiến triển sức khỏe định kỳ và tư vấn cải thiện. - Khám đau đầu mạn tính, mất ngủ, rối loạn tiền đình và suy giảm trí nhớ.. Triệu chứng lâm sàng: Kiểm tra sức khỏe định kỳ, Mệt mỏi suy nhược, Sụt cân không rõ nguyên nhân, Đau đầu mất ngủ, Đau nửa đầu Migraine, Chóng mặt hoa mắt, Mất ngủ kéo dài, Tê bì chân tay",
+      "textsDiffer": false
+    },
+    {
+      "id": "aea03276-7c37-4481-8bc3-4b82a4ad2f51",
+      "name": "Tái khám Răng Hàm Mặt (VitaCare Cơ sở Đông)",
+      "specialtyId": 13,
+      "specialty": "Răng Hàm Mặt",
+      "ownSymptoms": [
+        "Đau buốt răng sâu",
+        "Chảy máu chân răng nướu",
+        "Răng khôn mọc lệch",
+        "Cần lấy cao răng làm sạch"
+      ],
+      "specialtySymptoms": [
+        "Đau buốt răng sâu",
+        "Chảy máu chân răng nướu",
+        "Răng khôn mọc lệch",
+        "Cần lấy cao răng làm sạch"
+      ],
+      "indexedText": "Gói khám: Tái khám Răng Hàm Mặt (VitaCare Cơ sở Đông). Chuyên khoa: Răng Hàm Mặt. Mô tả: Kiểm tra vết thương sau nhổ răng/tiểu phẫu, kiểm tra khớp cắn và theo dõi răng sứ/niềng răng. - Khám răng tổng quát, nhổ răng, trám răng thẩm mỹ, điều trị tủy và lấy cao răng.. Triệu chứng lâm sàng: Đau buốt răng sâu, Chảy máu chân răng nướu, Răng khôn mọc lệch, Cần lấy cao răng làm sạch",
+      "retrievalMappingText": "Gói khám: Tái khám Răng Hàm Mặt (VitaCare Cơ sở Đông). Chuyên khoa: Răng Hàm Mặt. Mô tả: Kiểm tra vết thương sau nhổ răng/tiểu phẫu, kiểm tra khớp cắn và theo dõi răng sứ/niềng răng. - Khám răng tổng quát, nhổ răng, trám răng thẩm mỹ, điều trị tủy và lấy cao răng.. Triệu chứng lâm sàng: Đau buốt răng sâu, Chảy máu chân răng nướu, Răng khôn mọc lệch, Cần lấy cao răng làm sạch",
+      "textsDiffer": false
+    },
+    {
+      "id": "af1bd9a4-a170-457b-b94f-e880d51d1c6c",
+      "name": "Tái khám Ngoại tổng quát (VitaCare Trung tâm)",
+      "specialtyId": 7,
+      "specialty": "Ngoại tổng quát",
+      "ownSymptoms": [
+        "Kiểm tra sức khỏe định kỳ",
+        "Mệt mỏi suy nhược",
+        "Sụt cân không rõ nguyên nhân",
+        "Đau đầu mất ngủ"
+      ],
+      "specialtySymptoms": [
+        "Khối u bướu vùng bẹn",
+        "Đau rát hậu môn trĩ",
+        "U mỡ bao hoạt dịch",
+        "Vết thương hở phần mềm"
+      ],
+      "indexedText": "Gói khám: Tái khám Ngoại tổng quát (VitaCare Trung tâm). Chuyên khoa: Ngoại tổng quát. Mô tả: Đánh giá lại các chỉ số xét nghiệm bất thường, theo dõi tiến triển sức khỏe định kỳ và tư vấn cải thiện. - Bệnh lý hậu môn trực tràng, thoát vị bẹn và xử lý tiểu phẫu ngoại khoa.. Triệu chứng lâm sàng: Kiểm tra sức khỏe định kỳ, Mệt mỏi suy nhược, Sụt cân không rõ nguyên nhân, Đau đầu mất ngủ, Khối u bướu vùng bẹn, Đau rát hậu môn trĩ, U mỡ bao hoạt dịch, Vết thương hở phần mềm",
+      "retrievalMappingText": "Gói khám: Tái khám Ngoại tổng quát (VitaCare Trung tâm). Chuyên khoa: Ngoại tổng quát. Mô tả: Đánh giá lại các chỉ số xét nghiệm bất thường, theo dõi tiến triển sức khỏe định kỳ và tư vấn cải thiện. - Bệnh lý hậu môn trực tràng, thoát vị bẹn và xử lý tiểu phẫu ngoại khoa.. Triệu chứng lâm sàng: Kiểm tra sức khỏe định kỳ, Mệt mỏi suy nhược, Sụt cân không rõ nguyên nhân, Đau đầu mất ngủ, Khối u bướu vùng bẹn, Đau rát hậu môn trĩ, U mỡ bao hoạt dịch, Vết thương hở phần mềm",
+      "textsDiffer": false
+    },
+    {
+      "id": "b77725d9-b052-46c8-b32f-75665fe8fe70",
+      "name": "Tái khám Sản – Phụ khoa (VitaCare Cơ sở Đông)",
+      "specialtyId": 10,
+      "specialty": "Sản – Phụ khoa",
+      "ownSymptoms": [
+        "Rối loạn kinh nguyệt",
+        "Khám thai định kỳ",
+        "Đau bụng dưới bất thường",
+        "Viêm nhiễm phụ khoa"
+      ],
+      "specialtySymptoms": [
+        "Rối loạn kinh nguyệt",
+        "Khám thai định kỳ",
+        "Đau bụng dưới bất thường",
+        "Viêm nhiễm phụ khoa"
+      ],
+      "indexedText": "Gói khám: Tái khám Sản – Phụ khoa (VitaCare Cơ sở Đông). Chuyên khoa: Sản – Phụ khoa. Mô tả: Kiểm tra kết quả phết tế bào cổ tử cung, theo dõi sự phát triển của thai nhi và điều chỉnh thuốc phụ khoa. - Chăm sóc sức khỏe sinh sản phụ nữ, tầm soát phụ khoa và theo dõi thai kỳ định kỳ.. Triệu chứng lâm sàng: Rối loạn kinh nguyệt, Khám thai định kỳ, Đau bụng dưới bất thường, Viêm nhiễm phụ khoa",
+      "retrievalMappingText": "Gói khám: Tái khám Sản – Phụ khoa (VitaCare Cơ sở Đông). Chuyên khoa: Sản – Phụ khoa. Mô tả: Kiểm tra kết quả phết tế bào cổ tử cung, theo dõi sự phát triển của thai nhi và điều chỉnh thuốc phụ khoa. - Chăm sóc sức khỏe sinh sản phụ nữ, tầm soát phụ khoa và theo dõi thai kỳ định kỳ.. Triệu chứng lâm sàng: Rối loạn kinh nguyệt, Khám thai định kỳ, Đau bụng dưới bất thường, Viêm nhiễm phụ khoa",
+      "textsDiffer": false
+    },
+    {
+      "id": "c64c891b-344c-4872-8173-d747c8dc8b16",
+      "name": "Tái khám Tim mạch (VitaCare Trung tâm)",
+      "specialtyId": 2,
+      "specialty": "Tim mạch",
+      "ownSymptoms": [
+        "Tức ngực",
+        "Hồi hộp đánh trống ngực",
+        "Khó thở khi gắng sức",
+        "Huyết áp cao",
+        "Chóng mặt"
+      ],
+      "specialtySymptoms": [
+        "Đau thắt ngực",
+        "Hồi hộp đánh trống ngực",
+        "Khó thở khi gắng sức",
+        "Huyết áp cao hoặc không ổn định"
+      ],
+      "indexedText": "Gói khám: Tái khám Tim mạch (VitaCare Trung tâm). Chuyên khoa: Tim mạch. Mô tả: Theo dõi diễn tiến bệnh lý tim mạch, kiểm tra chỉ số huyết áp, đánh giá phản ứng thuốc và điều chỉnh phác đồ điều trị tối ưu. - Khám và điều trị tăng huyết áp, xơ vữa động mạch, suy tim và rối loạn nhịp tim.. Triệu chứng lâm sàng: Tức ngực, Hồi hộp đánh trống ngực, Khó thở khi gắng sức, Huyết áp cao, Chóng mặt, Đau thắt ngực, Huyết áp cao hoặc không ổn định",
+      "retrievalMappingText": "Gói khám: Tái khám Tim mạch (VitaCare Trung tâm). Chuyên khoa: Tim mạch. Mô tả: Theo dõi diễn tiến bệnh lý tim mạch, kiểm tra chỉ số huyết áp, đánh giá phản ứng thuốc và điều chỉnh phác đồ điều trị tối ưu. - Khám và điều trị tăng huyết áp, xơ vữa động mạch, suy tim và rối loạn nhịp tim.. Triệu chứng lâm sàng: Tức ngực, Hồi hộp đánh trống ngực, Khó thở khi gắng sức, Huyết áp cao, Chóng mặt, Đau thắt ngực, Huyết áp cao hoặc không ổn định",
+      "textsDiffer": false
+    },
+    {
+      "id": "d1749e09-ea11-4d92-b8a7-3324db59634e",
+      "name": "Tái khám Nội tổng quát (VitaCare Trung tâm)",
+      "specialtyId": 1,
+      "specialty": "Nội tổng quát",
+      "ownSymptoms": [
+        "Kiểm tra sức khỏe định kỳ",
+        "Mệt mỏi suy nhược",
+        "Sụt cân không rõ nguyên nhân",
+        "Đau đầu mất ngủ"
+      ],
+      "specialtySymptoms": [
+        "Mệt mỏi suy nhược",
+        "Sụt cân không rõ nguyên nhân",
+        "Sốt kéo dài",
+        "Kiểm tra sức khỏe định kỳ"
+      ],
+      "indexedText": "Gói khám: Tái khám Nội tổng quát (VitaCare Trung tâm). Chuyên khoa: Nội tổng quát. Mô tả: Đánh giá lại các chỉ số xét nghiệm bất thường, theo dõi tiến triển sức khỏe định kỳ và tư vấn cải thiện. - Khám, tư vấn sức khỏe chung và tầm soát bệnh lý mạn tính người lớn.. Triệu chứng lâm sàng: Kiểm tra sức khỏe định kỳ, Mệt mỏi suy nhược, Sụt cân không rõ nguyên nhân, Đau đầu mất ngủ, Sốt kéo dài",
+      "retrievalMappingText": "Gói khám: Tái khám Nội tổng quát (VitaCare Trung tâm). Chuyên khoa: Nội tổng quát. Mô tả: Đánh giá lại các chỉ số xét nghiệm bất thường, theo dõi tiến triển sức khỏe định kỳ và tư vấn cải thiện. - Khám, tư vấn sức khỏe chung và tầm soát bệnh lý mạn tính người lớn.. Triệu chứng lâm sàng: Kiểm tra sức khỏe định kỳ, Mệt mỏi suy nhược, Sụt cân không rõ nguyên nhân, Đau đầu mất ngủ, Sốt kéo dài",
+      "textsDiffer": false
+    },
+    {
+      "id": "d1ab7fd1-6e9b-425c-81b1-46d4f851a779",
+      "name": "Tái khám Nhi khoa (VitaCare Cơ sở Đông)",
+      "specialtyId": 9,
+      "specialty": "Nhi khoa",
+      "ownSymptoms": [
+        "Sốt co giật ở trẻ",
+        "Biếng ăn chậm tăng cân",
+        "Ho sốt cảm cúm",
+        "Phát ban mẩn ngứa trẻ nhỏ"
+      ],
+      "specialtySymptoms": [
+        "Sốt co giật ở trẻ",
+        "Biếng ăn chậm tăng cân",
+        "Ho sốt cảm cúm",
+        "Phát ban mẩn ngứa trẻ nhỏ"
+      ],
+      "indexedText": "Gói khám: Tái khám Nhi khoa (VitaCare Cơ sở Đông). Chuyên khoa: Nhi khoa. Mô tả: Đánh giá tiến trình hồi phục của trẻ sau đợt điều trị, kiểm tra cân nặng và điều chỉnh liều lượng thuốc an toàn. - Khám, điều trị và theo dõi sự phát triển thể chất toàn diện của trẻ nhỏ.. Triệu chứng lâm sàng: Sốt co giật ở trẻ, Biếng ăn chậm tăng cân, Ho sốt cảm cúm, Phát ban mẩn ngứa trẻ nhỏ",
+      "retrievalMappingText": "Gói khám: Tái khám Nhi khoa (VitaCare Cơ sở Đông). Chuyên khoa: Nhi khoa. Mô tả: Đánh giá tiến trình hồi phục của trẻ sau đợt điều trị, kiểm tra cân nặng và điều chỉnh liều lượng thuốc an toàn. - Khám, điều trị và theo dõi sự phát triển thể chất toàn diện của trẻ nhỏ.. Triệu chứng lâm sàng: Sốt co giật ở trẻ, Biếng ăn chậm tăng cân, Ho sốt cảm cúm, Phát ban mẩn ngứa trẻ nhỏ",
+      "textsDiffer": false
+    },
+    {
+      "id": "d3c69dd8-4783-43fc-8b8b-458c7088afe9",
+      "name": "Tái khám Tiêu hóa – Gan mật (VitaCare Cơ sở Đông)",
+      "specialtyId": 3,
+      "specialty": "Tiêu hóa – Gan mật",
+      "ownSymptoms": [
+        "Đau thượng vị",
+        "Đầy hơi khó tiêu",
+        "Ợ chua trào ngược",
+        "Rối loạn tiêu hóa",
+        "Buồn nôn"
+      ],
+      "specialtySymptoms": [
+        "Đau thượng vị",
+        "Ợ chua trào ngược",
+        "Đầy hơi khó tiêu",
+        "Rối loạn tiêu hóa kéo dài",
+        "Vàng da"
+      ],
+      "indexedText": "Gói khám: Tái khám Tiêu hóa – Gan mật (VitaCare Cơ sở Đông). Chuyên khoa: Tiêu hóa – Gan mật. Mô tả: Đánh giá mức độ hồi phục niêm mạc dạ dày/đại tràng, kiểm tra hiệu quả phác đồ diệt khuẩn HP và điều chỉnh thuốc. - Viêm loét dạ dày - đại tràng, trào ngược dạ dày, viêm gan B/C và sỏi mật.. Triệu chứng lâm sàng: Đau thượng vị, Đầy hơi khó tiêu, Ợ chua trào ngược, Rối loạn tiêu hóa, Buồn nôn, Rối loạn tiêu hóa kéo dài, Vàng da",
+      "retrievalMappingText": "Gói khám: Tái khám Tiêu hóa – Gan mật (VitaCare Cơ sở Đông). Chuyên khoa: Tiêu hóa – Gan mật. Mô tả: Đánh giá mức độ hồi phục niêm mạc dạ dày/đại tràng, kiểm tra hiệu quả phác đồ diệt khuẩn HP và điều chỉnh thuốc. - Viêm loét dạ dày - đại tràng, trào ngược dạ dày, viêm gan B/C và sỏi mật.. Triệu chứng lâm sàng: Đau thượng vị, Đầy hơi khó tiêu, Ợ chua trào ngược, Rối loạn tiêu hóa, Buồn nôn, Rối loạn tiêu hóa kéo dài, Vàng da",
+      "textsDiffer": false
+    },
+    {
+      "id": "d869df2f-c1bd-44bf-947d-e23f3a34d8e7",
+      "name": "Tái khám Răng Hàm Mặt (VitaCare Trung tâm)",
+      "specialtyId": 13,
+      "specialty": "Răng Hàm Mặt",
+      "ownSymptoms": [
+        "Đau buốt răng sâu",
+        "Chảy máu chân răng nướu",
+        "Răng khôn mọc lệch",
+        "Cần lấy cao răng làm sạch"
+      ],
+      "specialtySymptoms": [
+        "Đau buốt răng sâu",
+        "Chảy máu chân răng nướu",
+        "Răng khôn mọc lệch",
+        "Cần lấy cao răng làm sạch"
+      ],
+      "indexedText": "Gói khám: Tái khám Răng Hàm Mặt (VitaCare Trung tâm). Chuyên khoa: Răng Hàm Mặt. Mô tả: Kiểm tra vết thương sau nhổ răng/tiểu phẫu, kiểm tra khớp cắn và theo dõi răng sứ/niềng răng. - Khám răng tổng quát, nhổ răng, trám răng thẩm mỹ, điều trị tủy và lấy cao răng.. Triệu chứng lâm sàng: Đau buốt răng sâu, Chảy máu chân răng nướu, Răng khôn mọc lệch, Cần lấy cao răng làm sạch",
+      "retrievalMappingText": "Gói khám: Tái khám Răng Hàm Mặt (VitaCare Trung tâm). Chuyên khoa: Răng Hàm Mặt. Mô tả: Kiểm tra vết thương sau nhổ răng/tiểu phẫu, kiểm tra khớp cắn và theo dõi răng sứ/niềng răng. - Khám răng tổng quát, nhổ răng, trám răng thẩm mỹ, điều trị tủy và lấy cao răng.. Triệu chứng lâm sàng: Đau buốt răng sâu, Chảy máu chân răng nướu, Răng khôn mọc lệch, Cần lấy cao răng làm sạch",
+      "textsDiffer": false
+    },
+    {
+      "id": "e54c848b-3c90-4098-8503-0b5de0e85bc2",
+      "name": "Tái khám Mắt (VitaCare Trung tâm)",
+      "specialtyId": 11,
+      "specialty": "Mắt",
+      "ownSymptoms": [
+        "Mắt nhìn mờ",
+        "Đỏ mắt cộm rát",
+        "Chảy nước mắt sống",
+        "Khám đo kính cận loạn"
+      ],
+      "specialtySymptoms": [
+        "Mắt nhìn mờ",
+        "Đỏ mắt cộm rát",
+        "Chảy nước mắt sống",
+        "Khám đo kính cận loạn"
+      ],
+      "indexedText": "Gói khám: Tái khám Mắt (VitaCare Trung tâm). Chuyên khoa: Mắt. Mô tả: Kiểm tra tiến trình hồi phục sau can thiệp mắt, đo lại nhãn áp và điều chỉnh kính mắt phù hợp. - Đo thị lực, khám tật khúc xạ, viêm kết mạc, đục thủy tinh thể và soi đáy mắt.. Triệu chứng lâm sàng: Mắt nhìn mờ, Đỏ mắt cộm rát, Chảy nước mắt sống, Khám đo kính cận loạn",
+      "retrievalMappingText": "Gói khám: Tái khám Mắt (VitaCare Trung tâm). Chuyên khoa: Mắt. Mô tả: Kiểm tra tiến trình hồi phục sau can thiệp mắt, đo lại nhãn áp và điều chỉnh kính mắt phù hợp. - Đo thị lực, khám tật khúc xạ, viêm kết mạc, đục thủy tinh thể và soi đáy mắt.. Triệu chứng lâm sàng: Mắt nhìn mờ, Đỏ mắt cộm rát, Chảy nước mắt sống, Khám đo kính cận loạn",
+      "textsDiffer": false
+    },
+    {
+      "id": "e7abde3f-5bd5-4771-9043-5280bd3138da",
+      "name": "Tái khám Hô hấp (VitaCare Trung tâm)",
+      "specialtyId": 4,
+      "specialty": "Hô hấp",
+      "ownSymptoms": [
+        "Ho kéo dài",
+        "Khò khè tức ngực",
+        "Ho có đờm hoặc lẫn máu",
+        "Hụt hơi khó thở"
+      ],
+      "specialtySymptoms": [
+        "Ho kéo dài",
+        "Khò khè tức ngực",
+        "Ho có đờm hoặc lẫn máu",
+        "Hụt hơi khó thở"
+      ],
+      "indexedText": "Gói khám: Tái khám Hô hấp (VitaCare Trung tâm). Chuyên khoa: Hô hấp. Mô tả: Kiểm tra chức năng hô hấp, đánh giá đáp ứng khí dung/thuốc xịt và điều chỉnh phác đồ điều trị hen/COPD. - Viêm phế quản, hen suyễn, viêm phổi và bệnh phổi tắc nghẽn mạn tính (COPD).. Triệu chứng lâm sàng: Ho kéo dài, Khò khè tức ngực, Ho có đờm hoặc lẫn máu, Hụt hơi khó thở",
+      "retrievalMappingText": "Gói khám: Tái khám Hô hấp (VitaCare Trung tâm). Chuyên khoa: Hô hấp. Mô tả: Kiểm tra chức năng hô hấp, đánh giá đáp ứng khí dung/thuốc xịt và điều chỉnh phác đồ điều trị hen/COPD. - Viêm phế quản, hen suyễn, viêm phổi và bệnh phổi tắc nghẽn mạn tính (COPD).. Triệu chứng lâm sàng: Ho kéo dài, Khò khè tức ngực, Ho có đờm hoặc lẫn máu, Hụt hơi khó thở",
+      "textsDiffer": false
+    },
+    {
+      "id": "f3b33605-f7b8-4c8c-8892-5acd66125646",
+      "name": "Tái khám Ngoại Chấn thương Chỉnh hình (VitaCare Cơ sở Đông)",
+      "specialtyId": 8,
+      "specialty": "Ngoại Chấn thương Chỉnh hình",
+      "ownSymptoms": [
+        "Đau nhức khớp gối",
+        "Thoái hóa cột sống",
+        "Đau mỏi vai gáy",
+        "Căng cơ chấn thương vận động"
+      ],
+      "specialtySymptoms": [
+        "Đau nhức khớp gối",
+        "Thoái hóa cột sống",
+        "Đau mỏi vai gáy",
+        "Căng cơ chấn thương vận động"
+      ],
+      "indexedText": "Gói khám: Tái khám Ngoại Chấn thương Chỉnh hình (VitaCare Cơ sở Đông). Chuyên khoa: Ngoại Chấn thương Chỉnh hình. Mô tả: Đánh giá mức độ thuyên giảm đau nhức, kiểm tra tiến trình phục hồi sụn khớp và điều chỉnh bài tập vận động. - Bệnh lý cơ xương khớp, thoái hóa khớp, trật khớp và chấn thương thể thao.. Triệu chứng lâm sàng: Đau nhức khớp gối, Thoái hóa cột sống, Đau mỏi vai gáy, Căng cơ chấn thương vận động",
+      "retrievalMappingText": "Gói khám: Tái khám Ngoại Chấn thương Chỉnh hình (VitaCare Cơ sở Đông). Chuyên khoa: Ngoại Chấn thương Chỉnh hình. Mô tả: Đánh giá mức độ thuyên giảm đau nhức, kiểm tra tiến trình phục hồi sụn khớp và điều chỉnh bài tập vận động. - Bệnh lý cơ xương khớp, thoái hóa khớp, trật khớp và chấn thương thể thao.. Triệu chứng lâm sàng: Đau nhức khớp gối, Thoái hóa cột sống, Đau mỏi vai gáy, Căng cơ chấn thương vận động",
+      "textsDiffer": false
+    },
+    {
+      "id": "f62f53fc-61b9-4200-b741-059ac99857a8",
+      "name": "Tái khám Hô hấp (VitaCare Cơ sở Đông)",
+      "specialtyId": 4,
+      "specialty": "Hô hấp",
+      "ownSymptoms": [
+        "Ho kéo dài",
+        "Khò khè tức ngực",
+        "Ho có đờm hoặc lẫn máu",
+        "Hụt hơi khó thở"
+      ],
+      "specialtySymptoms": [
+        "Ho kéo dài",
+        "Khò khè tức ngực",
+        "Ho có đờm hoặc lẫn máu",
+        "Hụt hơi khó thở"
+      ],
+      "indexedText": "Gói khám: Tái khám Hô hấp (VitaCare Cơ sở Đông). Chuyên khoa: Hô hấp. Mô tả: Kiểm tra chức năng hô hấp, đánh giá đáp ứng khí dung/thuốc xịt và điều chỉnh phác đồ điều trị hen/COPD. - Viêm phế quản, hen suyễn, viêm phổi và bệnh phổi tắc nghẽn mạn tính (COPD).. Triệu chứng lâm sàng: Ho kéo dài, Khò khè tức ngực, Ho có đờm hoặc lẫn máu, Hụt hơi khó thở",
+      "retrievalMappingText": "Gói khám: Tái khám Hô hấp (VitaCare Cơ sở Đông). Chuyên khoa: Hô hấp. Mô tả: Kiểm tra chức năng hô hấp, đánh giá đáp ứng khí dung/thuốc xịt và điều chỉnh phác đồ điều trị hen/COPD. - Viêm phế quản, hen suyễn, viêm phổi và bệnh phổi tắc nghẽn mạn tính (COPD).. Triệu chứng lâm sàng: Ho kéo dài, Khò khè tức ngực, Ho có đờm hoặc lẫn máu, Hụt hơi khó thở",
+      "textsDiffer": false
+    },
+    {
+      "id": "f8064680-bde1-425e-b20e-65b7ad01f91f",
+      "name": "Tái khám Da liễu (VitaCare Trung tâm)",
+      "specialtyId": 14,
+      "specialty": "Da liễu",
+      "ownSymptoms": [
+        "Mụn viêm mụn ẩn",
+        "Dị ứng mẩn ngứa",
+        "Nổi mề đay",
+        "Viêm da cơ địa",
+        "Rụng tóc",
+        "Nấm da"
+      ],
+      "specialtySymptoms": [
+        "Mụn viêm mụn bọc",
+        "Ngứa ngáy dị ứng mề đay",
+        "Vảy nến á sừng",
+        "Nấm da rụng tóc"
+      ],
+      "indexedText": "Gói khám: Tái khám Da liễu (VitaCare Trung tâm). Chuyên khoa: Da liễu. Mô tả: Theo dõi diễn tiến điều trị da liễu, đánh giá mức độ đáp ứng thuốc bôi/thuốc uống và kiểm tra đơn thuốc. - Khám, điều trị viêm da cơ địa, mụn trứng cá, nấm da và chăm sóc thẩm mỹ da liễu.. Triệu chứng lâm sàng: Mụn viêm mụn ẩn, Dị ứng mẩn ngứa, Nổi mề đay, Viêm da cơ địa, Rụng tóc, Nấm da, Mụn viêm mụn bọc, Ngứa ngáy dị ứng mề đay, Vảy nến á sừng, Nấm da rụng tóc",
+      "retrievalMappingText": "Gói khám: Tái khám Da liễu (VitaCare Trung tâm). Chuyên khoa: Da liễu. Mô tả: Theo dõi diễn tiến điều trị da liễu, đánh giá mức độ đáp ứng thuốc bôi/thuốc uống và kiểm tra đơn thuốc. - Khám, điều trị viêm da cơ địa, mụn trứng cá, nấm da và chăm sóc thẩm mỹ da liễu.. Triệu chứng lâm sàng: Mụn viêm mụn ẩn, Dị ứng mẩn ngứa, Nổi mề đay, Viêm da cơ địa, Rụng tóc, Nấm da, Mụn viêm mụn bọc, Ngứa ngáy dị ứng mề đay, Vảy nến á sừng, Nấm da rụng tóc",
+      "textsDiffer": false
+    },
+    {
+      "id": "fd64921c-18c4-42c7-ac21-45e2ebafa168",
+      "name": "Tái khám Nhi khoa (VitaCare Trung tâm)",
+      "specialtyId": 9,
+      "specialty": "Nhi khoa",
+      "ownSymptoms": [
+        "Sốt co giật ở trẻ",
+        "Biếng ăn chậm tăng cân",
+        "Ho sốt cảm cúm",
+        "Phát ban mẩn ngứa trẻ nhỏ"
+      ],
+      "specialtySymptoms": [
+        "Sốt co giật ở trẻ",
+        "Biếng ăn chậm tăng cân",
+        "Ho sốt cảm cúm",
+        "Phát ban mẩn ngứa trẻ nhỏ"
+      ],
+      "indexedText": "Gói khám: Tái khám Nhi khoa (VitaCare Trung tâm). Chuyên khoa: Nhi khoa. Mô tả: Đánh giá tiến trình hồi phục của trẻ sau đợt điều trị, kiểm tra cân nặng và điều chỉnh liều lượng thuốc an toàn. - Khám, điều trị và theo dõi sự phát triển thể chất toàn diện của trẻ nhỏ.. Triệu chứng lâm sàng: Sốt co giật ở trẻ, Biếng ăn chậm tăng cân, Ho sốt cảm cúm, Phát ban mẩn ngứa trẻ nhỏ",
+      "retrievalMappingText": "Gói khám: Tái khám Nhi khoa (VitaCare Trung tâm). Chuyên khoa: Nhi khoa. Mô tả: Đánh giá tiến trình hồi phục của trẻ sau đợt điều trị, kiểm tra cân nặng và điều chỉnh liều lượng thuốc an toàn. - Khám, điều trị và theo dõi sự phát triển thể chất toàn diện của trẻ nhỏ.. Triệu chứng lâm sàng: Sốt co giật ở trẻ, Biếng ăn chậm tăng cân, Ho sốt cảm cúm, Phát ban mẩn ngứa trẻ nhỏ",
+      "textsDiffer": false
+    },
+    {
+      "id": "01bac664-f8f7-41da-8cac-722248bda32d",
+      "name": "Khám Răng Hàm Mặt trong giờ (VitaCare Trung tâm)",
+      "specialtyId": 13,
+      "specialty": "Răng Hàm Mặt",
+      "ownSymptoms": [
+        "Đau buốt răng sâu",
+        "Chảy máu chân răng nướu",
+        "Răng khôn mọc lệch",
+        "Cần lấy cao răng làm sạch"
+      ],
+      "specialtySymptoms": [
+        "Đau buốt răng sâu",
+        "Chảy máu chân răng nướu",
+        "Răng khôn mọc lệch",
+        "Cần lấy cao răng làm sạch"
+      ],
+      "indexedText": "Gói khám: Khám Răng Hàm Mặt trong giờ (VitaCare Trung tâm). Chuyên khoa: Răng Hàm Mặt. Mô tả: Khám kiểm tra tổng quát răng miệng, chụp X-quang răng, cạo vôi răng, trám răng sâu và điều trị tủy răng. - Khám răng tổng quát, nhổ răng, trám răng thẩm mỹ, điều trị tủy và lấy cao răng.. Triệu chứng lâm sàng: Đau buốt răng sâu, Chảy máu chân răng nướu, Răng khôn mọc lệch, Cần lấy cao răng làm sạch",
+      "retrievalMappingText": "Gói khám: Khám Răng Hàm Mặt trong giờ (VitaCare Trung tâm). Chuyên khoa: Răng Hàm Mặt. Mô tả: Khám kiểm tra tổng quát răng miệng, chụp X-quang răng, cạo vôi răng, trám răng sâu và điều trị tủy răng. - Khám răng tổng quát, nhổ răng, trám răng thẩm mỹ, điều trị tủy và lấy cao răng.. Triệu chứng lâm sàng: Đau buốt răng sâu, Chảy máu chân răng nướu, Răng khôn mọc lệch, Cần lấy cao răng làm sạch",
+      "textsDiffer": false
+    },
+    {
+      "id": "19cf95d3-9b68-4bea-90ad-9272ecf381a3",
+      "name": "Khám Da liễu trong giờ (VitaCare Cơ sở Đông)",
+      "specialtyId": 14,
+      "specialty": "Da liễu",
+      "ownSymptoms": [
+        "Mụn viêm mụn ẩn",
+        "Dị ứng mẩn ngứa",
+        "Nổi mề đay",
+        "Viêm da cơ địa",
+        "Rụng tóc",
+        "Nấm da"
+      ],
+      "specialtySymptoms": [
+        "Mụn viêm mụn bọc",
+        "Ngứa ngáy dị ứng mề đay",
+        "Vảy nến á sừng",
+        "Nấm da rụng tóc"
+      ],
+      "indexedText": "Gói khám: Khám Da liễu trong giờ (VitaCare Cơ sở Đông). Chuyên khoa: Da liễu. Mô tả: Khám soi da vi thể, chẩn đoán và điều trị mụn trứng cá, viêm da cơ địa, dị ứng, vảy nến và các bệnh lý ngoài da. - Khám, điều trị viêm da cơ địa, mụn trứng cá, nấm da và chăm sóc thẩm mỹ da liễu.. Triệu chứng lâm sàng: Mụn viêm mụn ẩn, Dị ứng mẩn ngứa, Nổi mề đay, Viêm da cơ địa, Rụng tóc, Nấm da, Mụn viêm mụn bọc, Ngứa ngáy dị ứng mề đay, Vảy nến á sừng, Nấm da rụng tóc",
+      "retrievalMappingText": "Gói khám: Khám Da liễu trong giờ (VitaCare Cơ sở Đông). Chuyên khoa: Da liễu. Mô tả: Khám soi da vi thể, chẩn đoán và điều trị mụn trứng cá, viêm da cơ địa, dị ứng, vảy nến và các bệnh lý ngoài da. - Khám, điều trị viêm da cơ địa, mụn trứng cá, nấm da và chăm sóc thẩm mỹ da liễu.. Triệu chứng lâm sàng: Mụn viêm mụn ẩn, Dị ứng mẩn ngứa, Nổi mề đay, Viêm da cơ địa, Rụng tóc, Nấm da, Mụn viêm mụn bọc, Ngứa ngáy dị ứng mề đay, Vảy nến á sừng, Nấm da rụng tóc",
+      "textsDiffer": false
+    },
+    {
+      "id": "1baecddc-67aa-4dd7-9edc-974cb0acff7f",
+      "name": "Khám Tim mạch trong giờ (VitaCare Cơ sở Đông)",
+      "specialtyId": 2,
+      "specialty": "Tim mạch",
+      "ownSymptoms": [
+        "Tức ngực",
+        "Hồi hộp đánh trống ngực",
+        "Khó thở khi gắng sức",
+        "Huyết áp cao",
+        "Chóng mặt"
+      ],
+      "specialtySymptoms": [
+        "Đau thắt ngực",
+        "Hồi hộp đánh trống ngực",
+        "Khó thở khi gắng sức",
+        "Huyết áp cao hoặc không ổn định"
+      ],
+      "indexedText": "Gói khám: Khám Tim mạch trong giờ (VitaCare Cơ sở Đông). Chuyên khoa: Tim mạch. Mô tả: Khám lâm sàng chuyên sâu, nghe tim phổi, đo huyết áp và tầm soát các bệnh lý mạch vành, rối loạn nhịp tim, tăng huyết áp. - Khám và điều trị tăng huyết áp, xơ vữa động mạch, suy tim và rối loạn nhịp tim.. Triệu chứng lâm sàng: Tức ngực, Hồi hộp đánh trống ngực, Khó thở khi gắng sức, Huyết áp cao, Chóng mặt, Đau thắt ngực, Huyết áp cao hoặc không ổn định",
+      "retrievalMappingText": "Gói khám: Khám Tim mạch trong giờ (VitaCare Cơ sở Đông). Chuyên khoa: Tim mạch. Mô tả: Khám lâm sàng chuyên sâu, nghe tim phổi, đo huyết áp và tầm soát các bệnh lý mạch vành, rối loạn nhịp tim, tăng huyết áp. - Khám và điều trị tăng huyết áp, xơ vữa động mạch, suy tim và rối loạn nhịp tim.. Triệu chứng lâm sàng: Tức ngực, Hồi hộp đánh trống ngực, Khó thở khi gắng sức, Huyết áp cao, Chóng mặt, Đau thắt ngực, Huyết áp cao hoặc không ổn định",
+      "textsDiffer": false
+    },
+    {
+      "id": "1c33d90f-4f36-4f2f-a908-d0cddefdaa23",
+      "name": "Khám Thần kinh trong giờ (VitaCare Trung tâm)",
+      "specialtyId": 6,
+      "specialty": "Thần kinh",
+      "ownSymptoms": [
+        "Kiểm tra sức khỏe định kỳ",
+        "Mệt mỏi suy nhược",
+        "Sụt cân không rõ nguyên nhân",
+        "Đau đầu mất ngủ"
+      ],
+      "specialtySymptoms": [
+        "Đau nửa đầu Migraine",
+        "Chóng mặt hoa mắt",
+        "Mất ngủ kéo dài",
+        "Tê bì chân tay"
+      ],
+      "indexedText": "Gói khám: Khám Thần kinh trong giờ (VitaCare Trung tâm). Chuyên khoa: Thần kinh. Mô tả: Khám lâm sàng toàn diện các cơ quan nội khoa, đánh giá chỉ số sinh hiệu và tầm soát sớm các bệnh lý lối sống. - Khám đau đầu mạn tính, mất ngủ, rối loạn tiền đình và suy giảm trí nhớ.. Triệu chứng lâm sàng: Kiểm tra sức khỏe định kỳ, Mệt mỏi suy nhược, Sụt cân không rõ nguyên nhân, Đau đầu mất ngủ, Đau nửa đầu Migraine, Chóng mặt hoa mắt, Mất ngủ kéo dài, Tê bì chân tay",
+      "retrievalMappingText": "Gói khám: Khám Thần kinh trong giờ (VitaCare Trung tâm). Chuyên khoa: Thần kinh. Mô tả: Khám lâm sàng toàn diện các cơ quan nội khoa, đánh giá chỉ số sinh hiệu và tầm soát sớm các bệnh lý lối sống. - Khám đau đầu mạn tính, mất ngủ, rối loạn tiền đình và suy giảm trí nhớ.. Triệu chứng lâm sàng: Kiểm tra sức khỏe định kỳ, Mệt mỏi suy nhược, Sụt cân không rõ nguyên nhân, Đau đầu mất ngủ, Đau nửa đầu Migraine, Chóng mặt hoa mắt, Mất ngủ kéo dài, Tê bì chân tay",
+      "textsDiffer": false
+    },
+    {
+      "id": "2174f979-dcdb-4e65-8c7f-f92f38766b06",
+      "name": "Khám Ngoại Chấn thương Chỉnh hình trong giờ (VitaCare Trung tâm)",
+      "specialtyId": 8,
+      "specialty": "Ngoại Chấn thương Chỉnh hình",
+      "ownSymptoms": [
+        "Đau nhức khớp gối",
+        "Thoái hóa cột sống",
+        "Đau mỏi vai gáy",
+        "Căng cơ chấn thương vận động"
+      ],
+      "specialtySymptoms": [
+        "Đau nhức khớp gối",
+        "Thoái hóa cột sống",
+        "Đau mỏi vai gáy",
+        "Căng cơ chấn thương vận động"
+      ],
+      "indexedText": "Gói khám: Khám Ngoại Chấn thương Chỉnh hình trong giờ (VitaCare Trung tâm). Chuyên khoa: Ngoại Chấn thương Chỉnh hình. Mô tả: Khám đánh giá tầm vận động khớp, chẩn đoán thoái hóa khớp, thoát vị đĩa đệm, viêm khớp dạng thấp và loãng xương. - Bệnh lý cơ xương khớp, thoái hóa khớp, trật khớp và chấn thương thể thao.. Triệu chứng lâm sàng: Đau nhức khớp gối, Thoái hóa cột sống, Đau mỏi vai gáy, Căng cơ chấn thương vận động",
+      "retrievalMappingText": "Gói khám: Khám Ngoại Chấn thương Chỉnh hình trong giờ (VitaCare Trung tâm). Chuyên khoa: Ngoại Chấn thương Chỉnh hình. Mô tả: Khám đánh giá tầm vận động khớp, chẩn đoán thoái hóa khớp, thoát vị đĩa đệm, viêm khớp dạng thấp và loãng xương. - Bệnh lý cơ xương khớp, thoái hóa khớp, trật khớp và chấn thương thể thao.. Triệu chứng lâm sàng: Đau nhức khớp gối, Thoái hóa cột sống, Đau mỏi vai gáy, Căng cơ chấn thương vận động",
+      "textsDiffer": false
+    },
+    {
+      "id": "22eb1dd6-22f9-43bf-a81f-97e1d759ba01",
+      "name": "Khám Tiêu hóa – Gan mật trong giờ (VitaCare Cơ sở Đông)",
+      "specialtyId": 3,
+      "specialty": "Tiêu hóa – Gan mật",
+      "ownSymptoms": [
+        "Đau thượng vị",
+        "Đầy hơi khó tiêu",
+        "Ợ chua trào ngược",
+        "Rối loạn tiêu hóa",
+        "Buồn nôn"
+      ],
+      "specialtySymptoms": [
+        "Đau thượng vị",
+        "Ợ chua trào ngược",
+        "Đầy hơi khó tiêu",
+        "Rối loạn tiêu hóa kéo dài",
+        "Vàng da"
+      ],
+      "indexedText": "Gói khám: Khám Tiêu hóa – Gan mật trong giờ (VitaCare Cơ sở Đông). Chuyên khoa: Tiêu hóa – Gan mật. Mô tả: Thăm khám và chẩn đoán các bệnh lý dạ dày, đại tràng, gan mật tụy, viêm loét đường tiêu hóa và trào ngược dạ dày thực quản. - Viêm loét dạ dày - đại tràng, trào ngược dạ dày, viêm gan B/C và sỏi mật.. Triệu chứng lâm sàng: Đau thượng vị, Đầy hơi khó tiêu, Ợ chua trào ngược, Rối loạn tiêu hóa, Buồn nôn, Rối loạn tiêu hóa kéo dài, Vàng da",
+      "retrievalMappingText": "Gói khám: Khám Tiêu hóa – Gan mật trong giờ (VitaCare Cơ sở Đông). Chuyên khoa: Tiêu hóa – Gan mật. Mô tả: Thăm khám và chẩn đoán các bệnh lý dạ dày, đại tràng, gan mật tụy, viêm loét đường tiêu hóa và trào ngược dạ dày thực quản. - Viêm loét dạ dày - đại tràng, trào ngược dạ dày, viêm gan B/C và sỏi mật.. Triệu chứng lâm sàng: Đau thượng vị, Đầy hơi khó tiêu, Ợ chua trào ngược, Rối loạn tiêu hóa, Buồn nôn, Rối loạn tiêu hóa kéo dài, Vàng da",
+      "textsDiffer": false
+    },
+    {
+      "id": "2312edd2-c51e-41e9-8480-adc76a792c0c",
+      "name": "Khám Nhi khoa trong giờ (VitaCare Cơ sở Đông)",
+      "specialtyId": 9,
+      "specialty": "Nhi khoa",
+      "ownSymptoms": [
+        "Sốt co giật ở trẻ",
+        "Biếng ăn chậm tăng cân",
+        "Ho sốt cảm cúm",
+        "Phát ban mẩn ngứa trẻ nhỏ"
+      ],
+      "specialtySymptoms": [
+        "Sốt co giật ở trẻ",
+        "Biếng ăn chậm tăng cân",
+        "Ho sốt cảm cúm",
+        "Phát ban mẩn ngứa trẻ nhỏ"
+      ],
+      "indexedText": "Gói khám: Khám Nhi khoa trong giờ (VitaCare Cơ sở Đông). Chuyên khoa: Nhi khoa. Mô tả: Khám tổng quát thể trạng trẻ em, chẩn đoán bệnh lý hô hấp, tiêu hóa, dinh dưỡng và tư vấn phát triển toàn diện. - Khám, điều trị và theo dõi sự phát triển thể chất toàn diện của trẻ nhỏ.. Triệu chứng lâm sàng: Sốt co giật ở trẻ, Biếng ăn chậm tăng cân, Ho sốt cảm cúm, Phát ban mẩn ngứa trẻ nhỏ",
+      "retrievalMappingText": "Gói khám: Khám Nhi khoa trong giờ (VitaCare Cơ sở Đông). Chuyên khoa: Nhi khoa. Mô tả: Khám tổng quát thể trạng trẻ em, chẩn đoán bệnh lý hô hấp, tiêu hóa, dinh dưỡng và tư vấn phát triển toàn diện. - Khám, điều trị và theo dõi sự phát triển thể chất toàn diện của trẻ nhỏ.. Triệu chứng lâm sàng: Sốt co giật ở trẻ, Biếng ăn chậm tăng cân, Ho sốt cảm cúm, Phát ban mẩn ngứa trẻ nhỏ",
+      "textsDiffer": false
+    },
+    {
+      "id": "3327c83c-50bc-4774-9679-a44ae4c90ec6",
+      "name": "Khám Nội tiết – Đái tháo đường trong giờ (VitaCare Trung tâm)",
+      "specialtyId": 5,
+      "specialty": "Nội tiết – Đái tháo đường",
+      "ownSymptoms": [
+        "Kiểm tra sức khỏe định kỳ",
+        "Mệt mỏi suy nhược",
+        "Sụt cân không rõ nguyên nhân",
+        "Đau đầu mất ngủ"
+      ],
+      "specialtySymptoms": [
+        "Khát nước nhiều",
+        "Tiểu nhiều ban đêm",
+        "Run tay sụt cân nhanh",
+        "Bướu cổ phì đại"
+      ],
+      "indexedText": "Gói khám: Khám Nội tiết – Đái tháo đường trong giờ (VitaCare Trung tâm). Chuyên khoa: Nội tiết – Đái tháo đường. Mô tả: Khám lâm sàng toàn diện các cơ quan nội khoa, đánh giá chỉ số sinh hiệu và tầm soát sớm các bệnh lý lối sống. - Kiểm soát đường huyết, bệnh lý tuyến giáp và rối loạn chuyển hóa lipid.. Triệu chứng lâm sàng: Kiểm tra sức khỏe định kỳ, Mệt mỏi suy nhược, Sụt cân không rõ nguyên nhân, Đau đầu mất ngủ, Khát nước nhiều, Tiểu nhiều ban đêm, Run tay sụt cân nhanh, Bướu cổ phì đại",
+      "retrievalMappingText": "Gói khám: Khám Nội tiết – Đái tháo đường trong giờ (VitaCare Trung tâm). Chuyên khoa: Nội tiết – Đái tháo đường. Mô tả: Khám lâm sàng toàn diện các cơ quan nội khoa, đánh giá chỉ số sinh hiệu và tầm soát sớm các bệnh lý lối sống. - Kiểm soát đường huyết, bệnh lý tuyến giáp và rối loạn chuyển hóa lipid.. Triệu chứng lâm sàng: Kiểm tra sức khỏe định kỳ, Mệt mỏi suy nhược, Sụt cân không rõ nguyên nhân, Đau đầu mất ngủ, Khát nước nhiều, Tiểu nhiều ban đêm, Run tay sụt cân nhanh, Bướu cổ phì đại",
+      "textsDiffer": false
+    },
+    {
+      "id": "3961cff9-ccd0-4a0e-b5ee-830f1587631e",
+      "name": "Khám Nội tổng quát trong giờ (VitaCare Trung tâm)",
+      "specialtyId": 1,
+      "specialty": "Nội tổng quát",
+      "ownSymptoms": [
+        "Kiểm tra sức khỏe định kỳ",
+        "Mệt mỏi suy nhược",
+        "Sụt cân không rõ nguyên nhân",
+        "Đau đầu mất ngủ"
+      ],
+      "specialtySymptoms": [
+        "Mệt mỏi suy nhược",
+        "Sụt cân không rõ nguyên nhân",
+        "Sốt kéo dài",
+        "Kiểm tra sức khỏe định kỳ"
+      ],
+      "indexedText": "Gói khám: Khám Nội tổng quát trong giờ (VitaCare Trung tâm). Chuyên khoa: Nội tổng quát. Mô tả: Khám lâm sàng toàn diện các cơ quan nội khoa, đánh giá chỉ số sinh hiệu và tầm soát sớm các bệnh lý lối sống. - Khám, tư vấn sức khỏe chung và tầm soát bệnh lý mạn tính người lớn.. Triệu chứng lâm sàng: Kiểm tra sức khỏe định kỳ, Mệt mỏi suy nhược, Sụt cân không rõ nguyên nhân, Đau đầu mất ngủ, Sốt kéo dài",
+      "retrievalMappingText": "Gói khám: Khám Nội tổng quát trong giờ (VitaCare Trung tâm). Chuyên khoa: Nội tổng quát. Mô tả: Khám lâm sàng toàn diện các cơ quan nội khoa, đánh giá chỉ số sinh hiệu và tầm soát sớm các bệnh lý lối sống. - Khám, tư vấn sức khỏe chung và tầm soát bệnh lý mạn tính người lớn.. Triệu chứng lâm sàng: Kiểm tra sức khỏe định kỳ, Mệt mỏi suy nhược, Sụt cân không rõ nguyên nhân, Đau đầu mất ngủ, Sốt kéo dài",
+      "textsDiffer": false
+    },
+    {
+      "id": "43ec6111-aed5-4a36-9c9f-a9aeb498d98f",
+      "name": "Khám Hô hấp trong giờ (VitaCare Cơ sở Đông)",
+      "specialtyId": 4,
+      "specialty": "Hô hấp",
+      "ownSymptoms": [
+        "Ho kéo dài",
+        "Khò khè tức ngực",
+        "Ho có đờm hoặc lẫn máu",
+        "Hụt hơi khó thở"
+      ],
+      "specialtySymptoms": [
+        "Ho kéo dài",
+        "Khò khè tức ngực",
+        "Ho có đờm hoặc lẫn máu",
+        "Hụt hơi khó thở"
+      ],
+      "indexedText": "Gói khám: Khám Hô hấp trong giờ (VitaCare Cơ sở Đông). Chuyên khoa: Hô hấp. Mô tả: Khám chẩn đoán các bệnh lý phế quản, hen suyễn, phổi tắc nghẽn mạn tính COPD và nhiễm trùng đường hô hấp. - Viêm phế quản, hen suyễn, viêm phổi và bệnh phổi tắc nghẽn mạn tính (COPD).. Triệu chứng lâm sàng: Ho kéo dài, Khò khè tức ngực, Ho có đờm hoặc lẫn máu, Hụt hơi khó thở",
+      "retrievalMappingText": "Gói khám: Khám Hô hấp trong giờ (VitaCare Cơ sở Đông). Chuyên khoa: Hô hấp. Mô tả: Khám chẩn đoán các bệnh lý phế quản, hen suyễn, phổi tắc nghẽn mạn tính COPD và nhiễm trùng đường hô hấp. - Viêm phế quản, hen suyễn, viêm phổi và bệnh phổi tắc nghẽn mạn tính (COPD).. Triệu chứng lâm sàng: Ho kéo dài, Khò khè tức ngực, Ho có đờm hoặc lẫn máu, Hụt hơi khó thở",
+      "textsDiffer": false
+    },
+    {
+      "id": "4495b49b-2661-4d45-8133-22df948351aa",
+      "name": "Khám Răng Hàm Mặt trong giờ (VitaCare Cơ sở Đông)",
+      "specialtyId": 13,
+      "specialty": "Răng Hàm Mặt",
+      "ownSymptoms": [
+        "Đau buốt răng sâu",
+        "Chảy máu chân răng nướu",
+        "Răng khôn mọc lệch",
+        "Cần lấy cao răng làm sạch"
+      ],
+      "specialtySymptoms": [
+        "Đau buốt răng sâu",
+        "Chảy máu chân răng nướu",
+        "Răng khôn mọc lệch",
+        "Cần lấy cao răng làm sạch"
+      ],
+      "indexedText": "Gói khám: Khám Răng Hàm Mặt trong giờ (VitaCare Cơ sở Đông). Chuyên khoa: Răng Hàm Mặt. Mô tả: Khám kiểm tra tổng quát răng miệng, chụp X-quang răng, cạo vôi răng, trám răng sâu và điều trị tủy răng. - Khám răng tổng quát, nhổ răng, trám răng thẩm mỹ, điều trị tủy và lấy cao răng.. Triệu chứng lâm sàng: Đau buốt răng sâu, Chảy máu chân răng nướu, Răng khôn mọc lệch, Cần lấy cao răng làm sạch",
+      "retrievalMappingText": "Gói khám: Khám Răng Hàm Mặt trong giờ (VitaCare Cơ sở Đông). Chuyên khoa: Răng Hàm Mặt. Mô tả: Khám kiểm tra tổng quát răng miệng, chụp X-quang răng, cạo vôi răng, trám răng sâu và điều trị tủy răng. - Khám răng tổng quát, nhổ răng, trám răng thẩm mỹ, điều trị tủy và lấy cao răng.. Triệu chứng lâm sàng: Đau buốt răng sâu, Chảy máu chân răng nướu, Răng khôn mọc lệch, Cần lấy cao răng làm sạch",
+      "textsDiffer": false
+    },
+    {
+      "id": "4cfef683-fb79-4cfe-8228-571bbf885ba9",
+      "name": "Khám Sản – Phụ khoa trong giờ (VitaCare Cơ sở Đông)",
+      "specialtyId": 10,
+      "specialty": "Sản – Phụ khoa",
+      "ownSymptoms": [
+        "Rối loạn kinh nguyệt",
+        "Khám thai định kỳ",
+        "Đau bụng dưới bất thường",
+        "Viêm nhiễm phụ khoa"
+      ],
+      "specialtySymptoms": [
+        "Rối loạn kinh nguyệt",
+        "Khám thai định kỳ",
+        "Đau bụng dưới bất thường",
+        "Viêm nhiễm phụ khoa"
+      ],
+      "indexedText": "Gói khám: Khám Sản – Phụ khoa trong giờ (VitaCare Cơ sở Đông). Chuyên khoa: Sản – Phụ khoa. Mô tả: Khám phụ khoa định kỳ, siêu âm tử cung phần phụ, siêu âm thai 4D, tầm soát ung thư cổ tử cung Thinprep. - Chăm sóc sức khỏe sinh sản phụ nữ, tầm soát phụ khoa và theo dõi thai kỳ định kỳ.. Triệu chứng lâm sàng: Rối loạn kinh nguyệt, Khám thai định kỳ, Đau bụng dưới bất thường, Viêm nhiễm phụ khoa",
+      "retrievalMappingText": "Gói khám: Khám Sản – Phụ khoa trong giờ (VitaCare Cơ sở Đông). Chuyên khoa: Sản – Phụ khoa. Mô tả: Khám phụ khoa định kỳ, siêu âm tử cung phần phụ, siêu âm thai 4D, tầm soát ung thư cổ tử cung Thinprep. - Chăm sóc sức khỏe sinh sản phụ nữ, tầm soát phụ khoa và theo dõi thai kỳ định kỳ.. Triệu chứng lâm sàng: Rối loạn kinh nguyệt, Khám thai định kỳ, Đau bụng dưới bất thường, Viêm nhiễm phụ khoa",
+      "textsDiffer": false
+    },
+    {
+      "id": "5041f659-e6ab-4570-a575-96d16fe59102",
+      "name": "Khám Da liễu trong giờ (VitaCare Trung tâm)",
+      "specialtyId": 14,
+      "specialty": "Da liễu",
+      "ownSymptoms": [
+        "Mụn viêm mụn ẩn",
+        "Dị ứng mẩn ngứa",
+        "Nổi mề đay",
+        "Viêm da cơ địa",
+        "Rụng tóc",
+        "Nấm da"
+      ],
+      "specialtySymptoms": [
+        "Mụn viêm mụn bọc",
+        "Ngứa ngáy dị ứng mề đay",
+        "Vảy nến á sừng",
+        "Nấm da rụng tóc"
+      ],
+      "indexedText": "Gói khám: Khám Da liễu trong giờ (VitaCare Trung tâm). Chuyên khoa: Da liễu. Mô tả: Khám soi da vi thể, chẩn đoán và điều trị mụn trứng cá, viêm da cơ địa, dị ứng, vảy nến và các bệnh lý ngoài da. - Khám, điều trị viêm da cơ địa, mụn trứng cá, nấm da và chăm sóc thẩm mỹ da liễu.. Triệu chứng lâm sàng: Mụn viêm mụn ẩn, Dị ứng mẩn ngứa, Nổi mề đay, Viêm da cơ địa, Rụng tóc, Nấm da, Mụn viêm mụn bọc, Ngứa ngáy dị ứng mề đay, Vảy nến á sừng, Nấm da rụng tóc",
+      "retrievalMappingText": "Gói khám: Khám Da liễu trong giờ (VitaCare Trung tâm). Chuyên khoa: Da liễu. Mô tả: Khám soi da vi thể, chẩn đoán và điều trị mụn trứng cá, viêm da cơ địa, dị ứng, vảy nến và các bệnh lý ngoài da. - Khám, điều trị viêm da cơ địa, mụn trứng cá, nấm da và chăm sóc thẩm mỹ da liễu.. Triệu chứng lâm sàng: Mụn viêm mụn ẩn, Dị ứng mẩn ngứa, Nổi mề đay, Viêm da cơ địa, Rụng tóc, Nấm da, Mụn viêm mụn bọc, Ngứa ngáy dị ứng mề đay, Vảy nến á sừng, Nấm da rụng tóc",
+      "textsDiffer": false
+    },
+    {
+      "id": "5a0c3de8-ca28-4687-93ef-fb81db2d8d2e",
+      "name": "Khám Hô hấp trong giờ (VitaCare Trung tâm)",
+      "specialtyId": 4,
+      "specialty": "Hô hấp",
+      "ownSymptoms": [
+        "Ho kéo dài",
+        "Khò khè tức ngực",
+        "Ho có đờm hoặc lẫn máu",
+        "Hụt hơi khó thở"
+      ],
+      "specialtySymptoms": [
+        "Ho kéo dài",
+        "Khò khè tức ngực",
+        "Ho có đờm hoặc lẫn máu",
+        "Hụt hơi khó thở"
+      ],
+      "indexedText": "Gói khám: Khám Hô hấp trong giờ (VitaCare Trung tâm). Chuyên khoa: Hô hấp. Mô tả: Khám chẩn đoán các bệnh lý phế quản, hen suyễn, phổi tắc nghẽn mạn tính COPD và nhiễm trùng đường hô hấp. - Viêm phế quản, hen suyễn, viêm phổi và bệnh phổi tắc nghẽn mạn tính (COPD).. Triệu chứng lâm sàng: Ho kéo dài, Khò khè tức ngực, Ho có đờm hoặc lẫn máu, Hụt hơi khó thở",
+      "retrievalMappingText": "Gói khám: Khám Hô hấp trong giờ (VitaCare Trung tâm). Chuyên khoa: Hô hấp. Mô tả: Khám chẩn đoán các bệnh lý phế quản, hen suyễn, phổi tắc nghẽn mạn tính COPD và nhiễm trùng đường hô hấp. - Viêm phế quản, hen suyễn, viêm phổi và bệnh phổi tắc nghẽn mạn tính (COPD).. Triệu chứng lâm sàng: Ho kéo dài, Khò khè tức ngực, Ho có đờm hoặc lẫn máu, Hụt hơi khó thở",
+      "textsDiffer": false
+    },
+    {
+      "id": "5fe001d6-fba4-4ac6-be67-9741b7767f9a",
+      "name": "Khám Tai Mũi Họng trong giờ (VitaCare Trung tâm)",
+      "specialtyId": 12,
+      "specialty": "Tai Mũi Họng",
+      "ownSymptoms": [
+        "Đau rát họng nuốt vướng",
+        "Nghẹt mũi chảy nước mũi",
+        "Ù tai chảy dịch tai",
+        "Khàn tiếng kéo dài"
+      ],
+      "specialtySymptoms": [
+        "Đau rát họng nuốt vướng",
+        "Nghẹt mũi chảy nước mũi",
+        "Ù tai chảy dịch tai",
+        "Khàn tiếng kéo dài"
+      ],
+      "indexedText": "Gói khám: Khám Tai Mũi Họng trong giờ (VitaCare Trung tâm). Chuyên khoa: Tai Mũi Họng. Mô tả: Nội soi dải tần hẹp tai mũi họng, chẩn đoán viêm xoang, viêm họng hạt, viêm amidan, viêm tai giữa và polyp. - Nội soi tai mũi họng, viêm xoang, viêm họng hạt, viêm amidan và viêm tai giữa.. Triệu chứng lâm sàng: Đau rát họng nuốt vướng, Nghẹt mũi chảy nước mũi, Ù tai chảy dịch tai, Khàn tiếng kéo dài",
+      "retrievalMappingText": "Gói khám: Khám Tai Mũi Họng trong giờ (VitaCare Trung tâm). Chuyên khoa: Tai Mũi Họng. Mô tả: Nội soi dải tần hẹp tai mũi họng, chẩn đoán viêm xoang, viêm họng hạt, viêm amidan, viêm tai giữa và polyp. - Nội soi tai mũi họng, viêm xoang, viêm họng hạt, viêm amidan và viêm tai giữa.. Triệu chứng lâm sàng: Đau rát họng nuốt vướng, Nghẹt mũi chảy nước mũi, Ù tai chảy dịch tai, Khàn tiếng kéo dài",
+      "textsDiffer": false
+    },
+    {
+      "id": "63e1e755-dfda-4844-9abd-75da6c039692",
+      "name": "Khám Ngoại tổng quát trong giờ (VitaCare Cơ sở Đông)",
+      "specialtyId": 7,
+      "specialty": "Ngoại tổng quát",
+      "ownSymptoms": [
+        "Kiểm tra sức khỏe định kỳ",
+        "Mệt mỏi suy nhược",
+        "Sụt cân không rõ nguyên nhân",
+        "Đau đầu mất ngủ"
+      ],
+      "specialtySymptoms": [
+        "Khối u bướu vùng bẹn",
+        "Đau rát hậu môn trĩ",
+        "U mỡ bao hoạt dịch",
+        "Vết thương hở phần mềm"
+      ],
+      "indexedText": "Gói khám: Khám Ngoại tổng quát trong giờ (VitaCare Cơ sở Đông). Chuyên khoa: Ngoại tổng quát. Mô tả: Khám lâm sàng toàn diện các cơ quan nội khoa, đánh giá chỉ số sinh hiệu và tầm soát sớm các bệnh lý lối sống. - Bệnh lý hậu môn trực tràng, thoát vị bẹn và xử lý tiểu phẫu ngoại khoa.. Triệu chứng lâm sàng: Kiểm tra sức khỏe định kỳ, Mệt mỏi suy nhược, Sụt cân không rõ nguyên nhân, Đau đầu mất ngủ, Khối u bướu vùng bẹn, Đau rát hậu môn trĩ, U mỡ bao hoạt dịch, Vết thương hở phần mềm",
+      "retrievalMappingText": "Gói khám: Khám Ngoại tổng quát trong giờ (VitaCare Cơ sở Đông). Chuyên khoa: Ngoại tổng quát. Mô tả: Khám lâm sàng toàn diện các cơ quan nội khoa, đánh giá chỉ số sinh hiệu và tầm soát sớm các bệnh lý lối sống. - Bệnh lý hậu môn trực tràng, thoát vị bẹn và xử lý tiểu phẫu ngoại khoa.. Triệu chứng lâm sàng: Kiểm tra sức khỏe định kỳ, Mệt mỏi suy nhược, Sụt cân không rõ nguyên nhân, Đau đầu mất ngủ, Khối u bướu vùng bẹn, Đau rát hậu môn trĩ, U mỡ bao hoạt dịch, Vết thương hở phần mềm",
+      "textsDiffer": false
+    },
+    {
+      "id": "776b3b70-2310-4031-b95f-b0515c718e62",
+      "name": "Khám Thần kinh trong giờ (VitaCare Cơ sở Đông)",
+      "specialtyId": 6,
+      "specialty": "Thần kinh",
+      "ownSymptoms": [
+        "Kiểm tra sức khỏe định kỳ",
+        "Mệt mỏi suy nhược",
+        "Sụt cân không rõ nguyên nhân",
+        "Đau đầu mất ngủ"
+      ],
+      "specialtySymptoms": [
+        "Đau nửa đầu Migraine",
+        "Chóng mặt hoa mắt",
+        "Mất ngủ kéo dài",
+        "Tê bì chân tay"
+      ],
+      "indexedText": "Gói khám: Khám Thần kinh trong giờ (VitaCare Cơ sở Đông). Chuyên khoa: Thần kinh. Mô tả: Khám lâm sàng toàn diện các cơ quan nội khoa, đánh giá chỉ số sinh hiệu và tầm soát sớm các bệnh lý lối sống. - Khám đau đầu mạn tính, mất ngủ, rối loạn tiền đình và suy giảm trí nhớ.. Triệu chứng lâm sàng: Kiểm tra sức khỏe định kỳ, Mệt mỏi suy nhược, Sụt cân không rõ nguyên nhân, Đau đầu mất ngủ, Đau nửa đầu Migraine, Chóng mặt hoa mắt, Mất ngủ kéo dài, Tê bì chân tay",
+      "retrievalMappingText": "Gói khám: Khám Thần kinh trong giờ (VitaCare Cơ sở Đông). Chuyên khoa: Thần kinh. Mô tả: Khám lâm sàng toàn diện các cơ quan nội khoa, đánh giá chỉ số sinh hiệu và tầm soát sớm các bệnh lý lối sống. - Khám đau đầu mạn tính, mất ngủ, rối loạn tiền đình và suy giảm trí nhớ.. Triệu chứng lâm sàng: Kiểm tra sức khỏe định kỳ, Mệt mỏi suy nhược, Sụt cân không rõ nguyên nhân, Đau đầu mất ngủ, Đau nửa đầu Migraine, Chóng mặt hoa mắt, Mất ngủ kéo dài, Tê bì chân tay",
+      "textsDiffer": false
+    },
+    {
+      "id": "78602d48-5d6d-42df-abc2-ec0eb8a193e5",
+      "name": "Khám Sản – Phụ khoa trong giờ (VitaCare Trung tâm)",
+      "specialtyId": 10,
+      "specialty": "Sản – Phụ khoa",
+      "ownSymptoms": [
+        "Rối loạn kinh nguyệt",
+        "Khám thai định kỳ",
+        "Đau bụng dưới bất thường",
+        "Viêm nhiễm phụ khoa"
+      ],
+      "specialtySymptoms": [
+        "Rối loạn kinh nguyệt",
+        "Khám thai định kỳ",
+        "Đau bụng dưới bất thường",
+        "Viêm nhiễm phụ khoa"
+      ],
+      "indexedText": "Gói khám: Khám Sản – Phụ khoa trong giờ (VitaCare Trung tâm). Chuyên khoa: Sản – Phụ khoa. Mô tả: Khám phụ khoa định kỳ, siêu âm tử cung phần phụ, siêu âm thai 4D, tầm soát ung thư cổ tử cung Thinprep. - Chăm sóc sức khỏe sinh sản phụ nữ, tầm soát phụ khoa và theo dõi thai kỳ định kỳ.. Triệu chứng lâm sàng: Rối loạn kinh nguyệt, Khám thai định kỳ, Đau bụng dưới bất thường, Viêm nhiễm phụ khoa",
+      "retrievalMappingText": "Gói khám: Khám Sản – Phụ khoa trong giờ (VitaCare Trung tâm). Chuyên khoa: Sản – Phụ khoa. Mô tả: Khám phụ khoa định kỳ, siêu âm tử cung phần phụ, siêu âm thai 4D, tầm soát ung thư cổ tử cung Thinprep. - Chăm sóc sức khỏe sinh sản phụ nữ, tầm soát phụ khoa và theo dõi thai kỳ định kỳ.. Triệu chứng lâm sàng: Rối loạn kinh nguyệt, Khám thai định kỳ, Đau bụng dưới bất thường, Viêm nhiễm phụ khoa",
+      "textsDiffer": false
+    },
+    {
+      "id": "892c0ba9-dc77-4023-bbde-b3059ecf447d",
+      "name": "Khám Nội tổng quát trong giờ (VitaCare Cơ sở Đông)",
+      "specialtyId": 1,
+      "specialty": "Nội tổng quát",
+      "ownSymptoms": [
+        "Kiểm tra sức khỏe định kỳ",
+        "Mệt mỏi suy nhược",
+        "Sụt cân không rõ nguyên nhân",
+        "Đau đầu mất ngủ"
+      ],
+      "specialtySymptoms": [
+        "Mệt mỏi suy nhược",
+        "Sụt cân không rõ nguyên nhân",
+        "Sốt kéo dài",
+        "Kiểm tra sức khỏe định kỳ"
+      ],
+      "indexedText": "Gói khám: Khám Nội tổng quát trong giờ (VitaCare Cơ sở Đông). Chuyên khoa: Nội tổng quát. Mô tả: Khám lâm sàng toàn diện các cơ quan nội khoa, đánh giá chỉ số sinh hiệu và tầm soát sớm các bệnh lý lối sống. - Khám, tư vấn sức khỏe chung và tầm soát bệnh lý mạn tính người lớn.. Triệu chứng lâm sàng: Kiểm tra sức khỏe định kỳ, Mệt mỏi suy nhược, Sụt cân không rõ nguyên nhân, Đau đầu mất ngủ, Sốt kéo dài",
+      "retrievalMappingText": "Gói khám: Khám Nội tổng quát trong giờ (VitaCare Cơ sở Đông). Chuyên khoa: Nội tổng quát. Mô tả: Khám lâm sàng toàn diện các cơ quan nội khoa, đánh giá chỉ số sinh hiệu và tầm soát sớm các bệnh lý lối sống. - Khám, tư vấn sức khỏe chung và tầm soát bệnh lý mạn tính người lớn.. Triệu chứng lâm sàng: Kiểm tra sức khỏe định kỳ, Mệt mỏi suy nhược, Sụt cân không rõ nguyên nhân, Đau đầu mất ngủ, Sốt kéo dài",
+      "textsDiffer": false
+    },
+    {
+      "id": "93df1ec7-5263-47f5-87d2-510c48c9615c",
+      "name": "Khám Tiêu hóa – Gan mật trong giờ (VitaCare Trung tâm)",
+      "specialtyId": 3,
+      "specialty": "Tiêu hóa – Gan mật",
+      "ownSymptoms": [
+        "Đau thượng vị",
+        "Đầy hơi khó tiêu",
+        "Ợ chua trào ngược",
+        "Rối loạn tiêu hóa",
+        "Buồn nôn"
+      ],
+      "specialtySymptoms": [
+        "Đau thượng vị",
+        "Ợ chua trào ngược",
+        "Đầy hơi khó tiêu",
+        "Rối loạn tiêu hóa kéo dài",
+        "Vàng da"
+      ],
+      "indexedText": "Gói khám: Khám Tiêu hóa – Gan mật trong giờ (VitaCare Trung tâm). Chuyên khoa: Tiêu hóa – Gan mật. Mô tả: Thăm khám và chẩn đoán các bệnh lý dạ dày, đại tràng, gan mật tụy, viêm loét đường tiêu hóa và trào ngược dạ dày thực quản. - Viêm loét dạ dày - đại tràng, trào ngược dạ dày, viêm gan B/C và sỏi mật.. Triệu chứng lâm sàng: Đau thượng vị, Đầy hơi khó tiêu, Ợ chua trào ngược, Rối loạn tiêu hóa, Buồn nôn, Rối loạn tiêu hóa kéo dài, Vàng da",
+      "retrievalMappingText": "Gói khám: Khám Tiêu hóa – Gan mật trong giờ (VitaCare Trung tâm). Chuyên khoa: Tiêu hóa – Gan mật. Mô tả: Thăm khám và chẩn đoán các bệnh lý dạ dày, đại tràng, gan mật tụy, viêm loét đường tiêu hóa và trào ngược dạ dày thực quản. - Viêm loét dạ dày - đại tràng, trào ngược dạ dày, viêm gan B/C và sỏi mật.. Triệu chứng lâm sàng: Đau thượng vị, Đầy hơi khó tiêu, Ợ chua trào ngược, Rối loạn tiêu hóa, Buồn nôn, Rối loạn tiêu hóa kéo dài, Vàng da",
+      "textsDiffer": false
+    },
+    {
+      "id": "9dfe5c99-f5f9-4363-98bd-bfb3b4e37e76",
+      "name": "Khám Tim mạch trong giờ (VitaCare Trung tâm)",
+      "specialtyId": 2,
+      "specialty": "Tim mạch",
+      "ownSymptoms": [
+        "Tức ngực",
+        "Hồi hộp đánh trống ngực",
+        "Khó thở khi gắng sức",
+        "Huyết áp cao",
+        "Chóng mặt"
+      ],
+      "specialtySymptoms": [
+        "Đau thắt ngực",
+        "Hồi hộp đánh trống ngực",
+        "Khó thở khi gắng sức",
+        "Huyết áp cao hoặc không ổn định"
+      ],
+      "indexedText": "Gói khám: Khám Tim mạch trong giờ (VitaCare Trung tâm). Chuyên khoa: Tim mạch. Mô tả: Khám lâm sàng chuyên sâu, nghe tim phổi, đo huyết áp và tầm soát các bệnh lý mạch vành, rối loạn nhịp tim, tăng huyết áp. - Khám và điều trị tăng huyết áp, xơ vữa động mạch, suy tim và rối loạn nhịp tim.. Triệu chứng lâm sàng: Tức ngực, Hồi hộp đánh trống ngực, Khó thở khi gắng sức, Huyết áp cao, Chóng mặt, Đau thắt ngực, Huyết áp cao hoặc không ổn định",
+      "retrievalMappingText": "Gói khám: Khám Tim mạch trong giờ (VitaCare Trung tâm). Chuyên khoa: Tim mạch. Mô tả: Khám lâm sàng chuyên sâu, nghe tim phổi, đo huyết áp và tầm soát các bệnh lý mạch vành, rối loạn nhịp tim, tăng huyết áp. - Khám và điều trị tăng huyết áp, xơ vữa động mạch, suy tim và rối loạn nhịp tim.. Triệu chứng lâm sàng: Tức ngực, Hồi hộp đánh trống ngực, Khó thở khi gắng sức, Huyết áp cao, Chóng mặt, Đau thắt ngực, Huyết áp cao hoặc không ổn định",
+      "textsDiffer": false
+    },
+    {
+      "id": "a915b49d-afa7-4433-8008-77a5d8ca7345",
+      "name": "Khám Mắt trong giờ (VitaCare Trung tâm)",
+      "specialtyId": 11,
+      "specialty": "Mắt",
+      "ownSymptoms": [
+        "Mắt nhìn mờ",
+        "Đỏ mắt cộm rát",
+        "Chảy nước mắt sống",
+        "Khám đo kính cận loạn"
+      ],
+      "specialtySymptoms": [
+        "Mắt nhìn mờ",
+        "Đỏ mắt cộm rát",
+        "Chảy nước mắt sống",
+        "Khám đo kính cận loạn"
+      ],
+      "indexedText": "Gói khám: Khám Mắt trong giờ (VitaCare Trung tâm). Chuyên khoa: Mắt. Mô tả: Đo thị lực điện tử, soi đáy mắt, đo nhãn áp và chẩn đoán tật khúc xạ cận/viễn/loạn thị, viêm kết mạc. - Đo thị lực, khám tật khúc xạ, viêm kết mạc, đục thủy tinh thể và soi đáy mắt.. Triệu chứng lâm sàng: Mắt nhìn mờ, Đỏ mắt cộm rát, Chảy nước mắt sống, Khám đo kính cận loạn",
+      "retrievalMappingText": "Gói khám: Khám Mắt trong giờ (VitaCare Trung tâm). Chuyên khoa: Mắt. Mô tả: Đo thị lực điện tử, soi đáy mắt, đo nhãn áp và chẩn đoán tật khúc xạ cận/viễn/loạn thị, viêm kết mạc. - Đo thị lực, khám tật khúc xạ, viêm kết mạc, đục thủy tinh thể và soi đáy mắt.. Triệu chứng lâm sàng: Mắt nhìn mờ, Đỏ mắt cộm rát, Chảy nước mắt sống, Khám đo kính cận loạn",
+      "textsDiffer": false
+    },
+    {
+      "id": "aa33b0dd-daaa-421c-bd22-5b2e3874d864",
+      "name": "Khám Mắt trong giờ (VitaCare Cơ sở Đông)",
+      "specialtyId": 11,
+      "specialty": "Mắt",
+      "ownSymptoms": [
+        "Mắt nhìn mờ",
+        "Đỏ mắt cộm rát",
+        "Chảy nước mắt sống",
+        "Khám đo kính cận loạn"
+      ],
+      "specialtySymptoms": [
+        "Mắt nhìn mờ",
+        "Đỏ mắt cộm rát",
+        "Chảy nước mắt sống",
+        "Khám đo kính cận loạn"
+      ],
+      "indexedText": "Gói khám: Khám Mắt trong giờ (VitaCare Cơ sở Đông). Chuyên khoa: Mắt. Mô tả: Đo thị lực điện tử, soi đáy mắt, đo nhãn áp và chẩn đoán tật khúc xạ cận/viễn/loạn thị, viêm kết mạc. - Đo thị lực, khám tật khúc xạ, viêm kết mạc, đục thủy tinh thể và soi đáy mắt.. Triệu chứng lâm sàng: Mắt nhìn mờ, Đỏ mắt cộm rát, Chảy nước mắt sống, Khám đo kính cận loạn",
+      "retrievalMappingText": "Gói khám: Khám Mắt trong giờ (VitaCare Cơ sở Đông). Chuyên khoa: Mắt. Mô tả: Đo thị lực điện tử, soi đáy mắt, đo nhãn áp và chẩn đoán tật khúc xạ cận/viễn/loạn thị, viêm kết mạc. - Đo thị lực, khám tật khúc xạ, viêm kết mạc, đục thủy tinh thể và soi đáy mắt.. Triệu chứng lâm sàng: Mắt nhìn mờ, Đỏ mắt cộm rát, Chảy nước mắt sống, Khám đo kính cận loạn",
+      "textsDiffer": false
+    },
+    {
+      "id": "ac59f70b-6a9e-4ea9-b196-9a637766d87a",
+      "name": "Khám Ngoại tổng quát trong giờ (VitaCare Trung tâm)",
+      "specialtyId": 7,
+      "specialty": "Ngoại tổng quát",
+      "ownSymptoms": [
+        "Kiểm tra sức khỏe định kỳ",
+        "Mệt mỏi suy nhược",
+        "Sụt cân không rõ nguyên nhân",
+        "Đau đầu mất ngủ"
+      ],
+      "specialtySymptoms": [
+        "Khối u bướu vùng bẹn",
+        "Đau rát hậu môn trĩ",
+        "U mỡ bao hoạt dịch",
+        "Vết thương hở phần mềm"
+      ],
+      "indexedText": "Gói khám: Khám Ngoại tổng quát trong giờ (VitaCare Trung tâm). Chuyên khoa: Ngoại tổng quát. Mô tả: Khám lâm sàng toàn diện các cơ quan nội khoa, đánh giá chỉ số sinh hiệu và tầm soát sớm các bệnh lý lối sống. - Bệnh lý hậu môn trực tràng, thoát vị bẹn và xử lý tiểu phẫu ngoại khoa.. Triệu chứng lâm sàng: Kiểm tra sức khỏe định kỳ, Mệt mỏi suy nhược, Sụt cân không rõ nguyên nhân, Đau đầu mất ngủ, Khối u bướu vùng bẹn, Đau rát hậu môn trĩ, U mỡ bao hoạt dịch, Vết thương hở phần mềm",
+      "retrievalMappingText": "Gói khám: Khám Ngoại tổng quát trong giờ (VitaCare Trung tâm). Chuyên khoa: Ngoại tổng quát. Mô tả: Khám lâm sàng toàn diện các cơ quan nội khoa, đánh giá chỉ số sinh hiệu và tầm soát sớm các bệnh lý lối sống. - Bệnh lý hậu môn trực tràng, thoát vị bẹn và xử lý tiểu phẫu ngoại khoa.. Triệu chứng lâm sàng: Kiểm tra sức khỏe định kỳ, Mệt mỏi suy nhược, Sụt cân không rõ nguyên nhân, Đau đầu mất ngủ, Khối u bướu vùng bẹn, Đau rát hậu môn trĩ, U mỡ bao hoạt dịch, Vết thương hở phần mềm",
+      "textsDiffer": false
+    },
+    {
+      "id": "b021f546-11c8-4051-a9d9-c90cf1233234",
+      "name": "Khám Nội tiết – Đái tháo đường trong giờ (VitaCare Cơ sở Đông)",
+      "specialtyId": 5,
+      "specialty": "Nội tiết – Đái tháo đường",
+      "ownSymptoms": [
+        "Kiểm tra sức khỏe định kỳ",
+        "Mệt mỏi suy nhược",
+        "Sụt cân không rõ nguyên nhân",
+        "Đau đầu mất ngủ"
+      ],
+      "specialtySymptoms": [
+        "Khát nước nhiều",
+        "Tiểu nhiều ban đêm",
+        "Run tay sụt cân nhanh",
+        "Bướu cổ phì đại"
+      ],
+      "indexedText": "Gói khám: Khám Nội tiết – Đái tháo đường trong giờ (VitaCare Cơ sở Đông). Chuyên khoa: Nội tiết – Đái tháo đường. Mô tả: Khám lâm sàng toàn diện các cơ quan nội khoa, đánh giá chỉ số sinh hiệu và tầm soát sớm các bệnh lý lối sống. - Kiểm soát đường huyết, bệnh lý tuyến giáp và rối loạn chuyển hóa lipid.. Triệu chứng lâm sàng: Kiểm tra sức khỏe định kỳ, Mệt mỏi suy nhược, Sụt cân không rõ nguyên nhân, Đau đầu mất ngủ, Khát nước nhiều, Tiểu nhiều ban đêm, Run tay sụt cân nhanh, Bướu cổ phì đại",
+      "retrievalMappingText": "Gói khám: Khám Nội tiết – Đái tháo đường trong giờ (VitaCare Cơ sở Đông). Chuyên khoa: Nội tiết – Đái tháo đường. Mô tả: Khám lâm sàng toàn diện các cơ quan nội khoa, đánh giá chỉ số sinh hiệu và tầm soát sớm các bệnh lý lối sống. - Kiểm soát đường huyết, bệnh lý tuyến giáp và rối loạn chuyển hóa lipid.. Triệu chứng lâm sàng: Kiểm tra sức khỏe định kỳ, Mệt mỏi suy nhược, Sụt cân không rõ nguyên nhân, Đau đầu mất ngủ, Khát nước nhiều, Tiểu nhiều ban đêm, Run tay sụt cân nhanh, Bướu cổ phì đại",
+      "textsDiffer": false
+    },
+    {
+      "id": "d9009bd9-ace8-4795-bf6f-12002c87c1aa",
+      "name": "Khám Nhi khoa trong giờ (VitaCare Trung tâm)",
+      "specialtyId": 9,
+      "specialty": "Nhi khoa",
+      "ownSymptoms": [
+        "Sốt co giật ở trẻ",
+        "Biếng ăn chậm tăng cân",
+        "Ho sốt cảm cúm",
+        "Phát ban mẩn ngứa trẻ nhỏ"
+      ],
+      "specialtySymptoms": [
+        "Sốt co giật ở trẻ",
+        "Biếng ăn chậm tăng cân",
+        "Ho sốt cảm cúm",
+        "Phát ban mẩn ngứa trẻ nhỏ"
+      ],
+      "indexedText": "Gói khám: Khám Nhi khoa trong giờ (VitaCare Trung tâm). Chuyên khoa: Nhi khoa. Mô tả: Khám tổng quát thể trạng trẻ em, chẩn đoán bệnh lý hô hấp, tiêu hóa, dinh dưỡng và tư vấn phát triển toàn diện. - Khám, điều trị và theo dõi sự phát triển thể chất toàn diện của trẻ nhỏ.. Triệu chứng lâm sàng: Sốt co giật ở trẻ, Biếng ăn chậm tăng cân, Ho sốt cảm cúm, Phát ban mẩn ngứa trẻ nhỏ",
+      "retrievalMappingText": "Gói khám: Khám Nhi khoa trong giờ (VitaCare Trung tâm). Chuyên khoa: Nhi khoa. Mô tả: Khám tổng quát thể trạng trẻ em, chẩn đoán bệnh lý hô hấp, tiêu hóa, dinh dưỡng và tư vấn phát triển toàn diện. - Khám, điều trị và theo dõi sự phát triển thể chất toàn diện của trẻ nhỏ.. Triệu chứng lâm sàng: Sốt co giật ở trẻ, Biếng ăn chậm tăng cân, Ho sốt cảm cúm, Phát ban mẩn ngứa trẻ nhỏ",
+      "textsDiffer": false
+    },
+    {
+      "id": "e3fec979-0712-496b-a7a1-4b2a588b736b",
+      "name": "Khám Tai Mũi Họng trong giờ (VitaCare Cơ sở Đông)",
+      "specialtyId": 12,
+      "specialty": "Tai Mũi Họng",
+      "ownSymptoms": [
+        "Đau rát họng nuốt vướng",
+        "Nghẹt mũi chảy nước mũi",
+        "Ù tai chảy dịch tai",
+        "Khàn tiếng kéo dài"
+      ],
+      "specialtySymptoms": [
+        "Đau rát họng nuốt vướng",
+        "Nghẹt mũi chảy nước mũi",
+        "Ù tai chảy dịch tai",
+        "Khàn tiếng kéo dài"
+      ],
+      "indexedText": "Gói khám: Khám Tai Mũi Họng trong giờ (VitaCare Cơ sở Đông). Chuyên khoa: Tai Mũi Họng. Mô tả: Nội soi dải tần hẹp tai mũi họng, chẩn đoán viêm xoang, viêm họng hạt, viêm amidan, viêm tai giữa và polyp. - Nội soi tai mũi họng, viêm xoang, viêm họng hạt, viêm amidan và viêm tai giữa.. Triệu chứng lâm sàng: Đau rát họng nuốt vướng, Nghẹt mũi chảy nước mũi, Ù tai chảy dịch tai, Khàn tiếng kéo dài",
+      "retrievalMappingText": "Gói khám: Khám Tai Mũi Họng trong giờ (VitaCare Cơ sở Đông). Chuyên khoa: Tai Mũi Họng. Mô tả: Nội soi dải tần hẹp tai mũi họng, chẩn đoán viêm xoang, viêm họng hạt, viêm amidan, viêm tai giữa và polyp. - Nội soi tai mũi họng, viêm xoang, viêm họng hạt, viêm amidan và viêm tai giữa.. Triệu chứng lâm sàng: Đau rát họng nuốt vướng, Nghẹt mũi chảy nước mũi, Ù tai chảy dịch tai, Khàn tiếng kéo dài",
+      "textsDiffer": false
+    },
+    {
+      "id": "edab22a3-8aa7-4a0f-99c9-8a0327d5791e",
+      "name": "Khám Ngoại Chấn thương Chỉnh hình trong giờ (VitaCare Cơ sở Đông)",
+      "specialtyId": 8,
+      "specialty": "Ngoại Chấn thương Chỉnh hình",
+      "ownSymptoms": [
+        "Đau nhức khớp gối",
+        "Thoái hóa cột sống",
+        "Đau mỏi vai gáy",
+        "Căng cơ chấn thương vận động"
+      ],
+      "specialtySymptoms": [
+        "Đau nhức khớp gối",
+        "Thoái hóa cột sống",
+        "Đau mỏi vai gáy",
+        "Căng cơ chấn thương vận động"
+      ],
+      "indexedText": "Gói khám: Khám Ngoại Chấn thương Chỉnh hình trong giờ (VitaCare Cơ sở Đông). Chuyên khoa: Ngoại Chấn thương Chỉnh hình. Mô tả: Khám đánh giá tầm vận động khớp, chẩn đoán thoái hóa khớp, thoát vị đĩa đệm, viêm khớp dạng thấp và loãng xương. - Bệnh lý cơ xương khớp, thoái hóa khớp, trật khớp và chấn thương thể thao.. Triệu chứng lâm sàng: Đau nhức khớp gối, Thoái hóa cột sống, Đau mỏi vai gáy, Căng cơ chấn thương vận động",
+      "retrievalMappingText": "Gói khám: Khám Ngoại Chấn thương Chỉnh hình trong giờ (VitaCare Cơ sở Đông). Chuyên khoa: Ngoại Chấn thương Chỉnh hình. Mô tả: Khám đánh giá tầm vận động khớp, chẩn đoán thoái hóa khớp, thoát vị đĩa đệm, viêm khớp dạng thấp và loãng xương. - Bệnh lý cơ xương khớp, thoái hóa khớp, trật khớp và chấn thương thể thao.. Triệu chứng lâm sàng: Đau nhức khớp gối, Thoái hóa cột sống, Đau mỏi vai gáy, Căng cơ chấn thương vận động",
+      "textsDiffer": false
+    },
+    {
+      "id": "0516e2e6-7f1c-4ce1-9f06-587a23e725ff",
+      "name": "Khám Sản – Phụ khoa ngoài giờ (VitaCare Cơ sở Đông)",
+      "specialtyId": 10,
+      "specialty": "Sản – Phụ khoa",
+      "ownSymptoms": [
+        "Rối loạn kinh nguyệt",
+        "Khám thai định kỳ",
+        "Đau bụng dưới bất thường",
+        "Viêm nhiễm phụ khoa"
+      ],
+      "specialtySymptoms": [
+        "Rối loạn kinh nguyệt",
+        "Khám thai định kỳ",
+        "Đau bụng dưới bất thường",
+        "Viêm nhiễm phụ khoa"
+      ],
+      "indexedText": "Gói khám: Khám Sản – Phụ khoa ngoài giờ (VitaCare Cơ sở Đông). Chuyên khoa: Sản – Phụ khoa. Mô tả: Khám phụ khoa định kỳ, siêu âm tử cung phần phụ, siêu âm thai 4D, tầm soát ung thư cổ tử cung Thinprep. - Chăm sóc sức khỏe sinh sản phụ nữ, tầm soát phụ khoa và theo dõi thai kỳ định kỳ.. Triệu chứng lâm sàng: Rối loạn kinh nguyệt, Khám thai định kỳ, Đau bụng dưới bất thường, Viêm nhiễm phụ khoa",
+      "retrievalMappingText": "Gói khám: Khám Sản – Phụ khoa ngoài giờ (VitaCare Cơ sở Đông). Chuyên khoa: Sản – Phụ khoa. Mô tả: Khám phụ khoa định kỳ, siêu âm tử cung phần phụ, siêu âm thai 4D, tầm soát ung thư cổ tử cung Thinprep. - Chăm sóc sức khỏe sinh sản phụ nữ, tầm soát phụ khoa và theo dõi thai kỳ định kỳ.. Triệu chứng lâm sàng: Rối loạn kinh nguyệt, Khám thai định kỳ, Đau bụng dưới bất thường, Viêm nhiễm phụ khoa",
+      "textsDiffer": false
+    },
+    {
+      "id": "05c6f446-24bf-49a0-a45d-532f023d5cb6",
+      "name": "Khám Da liễu ngoài giờ (VitaCare Cơ sở Đông)",
+      "specialtyId": 14,
+      "specialty": "Da liễu",
+      "ownSymptoms": [
+        "Mụn viêm mụn ẩn",
+        "Dị ứng mẩn ngứa",
+        "Nổi mề đay",
+        "Viêm da cơ địa",
+        "Rụng tóc",
+        "Nấm da"
+      ],
+      "specialtySymptoms": [
+        "Mụn viêm mụn bọc",
+        "Ngứa ngáy dị ứng mề đay",
+        "Vảy nến á sừng",
+        "Nấm da rụng tóc"
+      ],
+      "indexedText": "Gói khám: Khám Da liễu ngoài giờ (VitaCare Cơ sở Đông). Chuyên khoa: Da liễu. Mô tả: Khám soi da vi thể, chẩn đoán và điều trị mụn trứng cá, viêm da cơ địa, dị ứng, vảy nến và các bệnh lý ngoài da. - Khám, điều trị viêm da cơ địa, mụn trứng cá, nấm da và chăm sóc thẩm mỹ da liễu.. Triệu chứng lâm sàng: Mụn viêm mụn ẩn, Dị ứng mẩn ngứa, Nổi mề đay, Viêm da cơ địa, Rụng tóc, Nấm da, Mụn viêm mụn bọc, Ngứa ngáy dị ứng mề đay, Vảy nến á sừng, Nấm da rụng tóc",
+      "retrievalMappingText": "Gói khám: Khám Da liễu ngoài giờ (VitaCare Cơ sở Đông). Chuyên khoa: Da liễu. Mô tả: Khám soi da vi thể, chẩn đoán và điều trị mụn trứng cá, viêm da cơ địa, dị ứng, vảy nến và các bệnh lý ngoài da. - Khám, điều trị viêm da cơ địa, mụn trứng cá, nấm da và chăm sóc thẩm mỹ da liễu.. Triệu chứng lâm sàng: Mụn viêm mụn ẩn, Dị ứng mẩn ngứa, Nổi mề đay, Viêm da cơ địa, Rụng tóc, Nấm da, Mụn viêm mụn bọc, Ngứa ngáy dị ứng mề đay, Vảy nến á sừng, Nấm da rụng tóc",
+      "textsDiffer": false
+    },
+    {
+      "id": "0cd7d237-4411-44fa-ad82-c007438b39ff",
+      "name": "Khám Tim mạch ngoài giờ (VitaCare Cơ sở Đông)",
+      "specialtyId": 2,
+      "specialty": "Tim mạch",
+      "ownSymptoms": [
+        "Tức ngực",
+        "Hồi hộp đánh trống ngực",
+        "Khó thở khi gắng sức",
+        "Huyết áp cao",
+        "Chóng mặt"
+      ],
+      "specialtySymptoms": [
+        "Đau thắt ngực",
+        "Hồi hộp đánh trống ngực",
+        "Khó thở khi gắng sức",
+        "Huyết áp cao hoặc không ổn định"
+      ],
+      "indexedText": "Gói khám: Khám Tim mạch ngoài giờ (VitaCare Cơ sở Đông). Chuyên khoa: Tim mạch. Mô tả: Khám lâm sàng chuyên sâu, nghe tim phổi, đo huyết áp và tầm soát các bệnh lý mạch vành, rối loạn nhịp tim, tăng huyết áp. - Khám và điều trị tăng huyết áp, xơ vữa động mạch, suy tim và rối loạn nhịp tim.. Triệu chứng lâm sàng: Tức ngực, Hồi hộp đánh trống ngực, Khó thở khi gắng sức, Huyết áp cao, Chóng mặt, Đau thắt ngực, Huyết áp cao hoặc không ổn định",
+      "retrievalMappingText": "Gói khám: Khám Tim mạch ngoài giờ (VitaCare Cơ sở Đông). Chuyên khoa: Tim mạch. Mô tả: Khám lâm sàng chuyên sâu, nghe tim phổi, đo huyết áp và tầm soát các bệnh lý mạch vành, rối loạn nhịp tim, tăng huyết áp. - Khám và điều trị tăng huyết áp, xơ vữa động mạch, suy tim và rối loạn nhịp tim.. Triệu chứng lâm sàng: Tức ngực, Hồi hộp đánh trống ngực, Khó thở khi gắng sức, Huyết áp cao, Chóng mặt, Đau thắt ngực, Huyết áp cao hoặc không ổn định",
+      "textsDiffer": false
+    },
+    {
+      "id": "0ed0b73e-0db8-47c6-bc3c-856c0f4387e5",
+      "name": "Khám Nội tổng quát ngoài giờ (VitaCare Trung tâm)",
+      "specialtyId": 1,
+      "specialty": "Nội tổng quát",
+      "ownSymptoms": [
+        "Kiểm tra sức khỏe định kỳ",
+        "Mệt mỏi suy nhược",
+        "Sụt cân không rõ nguyên nhân",
+        "Đau đầu mất ngủ"
+      ],
+      "specialtySymptoms": [
+        "Mệt mỏi suy nhược",
+        "Sụt cân không rõ nguyên nhân",
+        "Sốt kéo dài",
+        "Kiểm tra sức khỏe định kỳ"
+      ],
+      "indexedText": "Gói khám: Khám Nội tổng quát ngoài giờ (VitaCare Trung tâm). Chuyên khoa: Nội tổng quát. Mô tả: Khám lâm sàng toàn diện các cơ quan nội khoa, đánh giá chỉ số sinh hiệu và tầm soát sớm các bệnh lý lối sống. - Khám, tư vấn sức khỏe chung và tầm soát bệnh lý mạn tính người lớn.. Triệu chứng lâm sàng: Kiểm tra sức khỏe định kỳ, Mệt mỏi suy nhược, Sụt cân không rõ nguyên nhân, Đau đầu mất ngủ, Sốt kéo dài",
+      "retrievalMappingText": "Gói khám: Khám Nội tổng quát ngoài giờ (VitaCare Trung tâm). Chuyên khoa: Nội tổng quát. Mô tả: Khám lâm sàng toàn diện các cơ quan nội khoa, đánh giá chỉ số sinh hiệu và tầm soát sớm các bệnh lý lối sống. - Khám, tư vấn sức khỏe chung và tầm soát bệnh lý mạn tính người lớn.. Triệu chứng lâm sàng: Kiểm tra sức khỏe định kỳ, Mệt mỏi suy nhược, Sụt cân không rõ nguyên nhân, Đau đầu mất ngủ, Sốt kéo dài",
+      "textsDiffer": false
+    },
+    {
+      "id": "12db4bef-550d-4b63-b200-402125cd6cc8",
+      "name": "Khám Răng Hàm Mặt ngoài giờ (VitaCare Cơ sở Đông)",
+      "specialtyId": 13,
+      "specialty": "Răng Hàm Mặt",
+      "ownSymptoms": [
+        "Đau buốt răng sâu",
+        "Chảy máu chân răng nướu",
+        "Răng khôn mọc lệch",
+        "Cần lấy cao răng làm sạch"
+      ],
+      "specialtySymptoms": [
+        "Đau buốt răng sâu",
+        "Chảy máu chân răng nướu",
+        "Răng khôn mọc lệch",
+        "Cần lấy cao răng làm sạch"
+      ],
+      "indexedText": "Gói khám: Khám Răng Hàm Mặt ngoài giờ (VitaCare Cơ sở Đông). Chuyên khoa: Răng Hàm Mặt. Mô tả: Khám kiểm tra tổng quát răng miệng, chụp X-quang răng, cạo vôi răng, trám răng sâu và điều trị tủy răng. - Khám răng tổng quát, nhổ răng, trám răng thẩm mỹ, điều trị tủy và lấy cao răng.. Triệu chứng lâm sàng: Đau buốt răng sâu, Chảy máu chân răng nướu, Răng khôn mọc lệch, Cần lấy cao răng làm sạch",
+      "retrievalMappingText": "Gói khám: Khám Răng Hàm Mặt ngoài giờ (VitaCare Cơ sở Đông). Chuyên khoa: Răng Hàm Mặt. Mô tả: Khám kiểm tra tổng quát răng miệng, chụp X-quang răng, cạo vôi răng, trám răng sâu và điều trị tủy răng. - Khám răng tổng quát, nhổ răng, trám răng thẩm mỹ, điều trị tủy và lấy cao răng.. Triệu chứng lâm sàng: Đau buốt răng sâu, Chảy máu chân răng nướu, Răng khôn mọc lệch, Cần lấy cao răng làm sạch",
+      "textsDiffer": false
+    },
+    {
+      "id": "291517d9-383c-46e0-ae55-601dd7d62c37",
+      "name": "Khám Nội tổng quát ngoài giờ (VitaCare Cơ sở Đông)",
+      "specialtyId": 1,
+      "specialty": "Nội tổng quát",
+      "ownSymptoms": [
+        "Kiểm tra sức khỏe định kỳ",
+        "Mệt mỏi suy nhược",
+        "Sụt cân không rõ nguyên nhân",
+        "Đau đầu mất ngủ"
+      ],
+      "specialtySymptoms": [
+        "Mệt mỏi suy nhược",
+        "Sụt cân không rõ nguyên nhân",
+        "Sốt kéo dài",
+        "Kiểm tra sức khỏe định kỳ"
+      ],
+      "indexedText": "Gói khám: Khám Nội tổng quát ngoài giờ (VitaCare Cơ sở Đông). Chuyên khoa: Nội tổng quát. Mô tả: Khám lâm sàng toàn diện các cơ quan nội khoa, đánh giá chỉ số sinh hiệu và tầm soát sớm các bệnh lý lối sống. - Khám, tư vấn sức khỏe chung và tầm soát bệnh lý mạn tính người lớn.. Triệu chứng lâm sàng: Kiểm tra sức khỏe định kỳ, Mệt mỏi suy nhược, Sụt cân không rõ nguyên nhân, Đau đầu mất ngủ, Sốt kéo dài",
+      "retrievalMappingText": "Gói khám: Khám Nội tổng quát ngoài giờ (VitaCare Cơ sở Đông). Chuyên khoa: Nội tổng quát. Mô tả: Khám lâm sàng toàn diện các cơ quan nội khoa, đánh giá chỉ số sinh hiệu và tầm soát sớm các bệnh lý lối sống. - Khám, tư vấn sức khỏe chung và tầm soát bệnh lý mạn tính người lớn.. Triệu chứng lâm sàng: Kiểm tra sức khỏe định kỳ, Mệt mỏi suy nhược, Sụt cân không rõ nguyên nhân, Đau đầu mất ngủ, Sốt kéo dài",
+      "textsDiffer": false
+    },
+    {
+      "id": "2a282121-ac4a-4020-b92f-fc2ccd1a6d55",
+      "name": "Khám Nội tiết – Đái tháo đường ngoài giờ (VitaCare Cơ sở Đông)",
+      "specialtyId": 5,
+      "specialty": "Nội tiết – Đái tháo đường",
+      "ownSymptoms": [
+        "Kiểm tra sức khỏe định kỳ",
+        "Mệt mỏi suy nhược",
+        "Sụt cân không rõ nguyên nhân",
+        "Đau đầu mất ngủ"
+      ],
+      "specialtySymptoms": [
+        "Khát nước nhiều",
+        "Tiểu nhiều ban đêm",
+        "Run tay sụt cân nhanh",
+        "Bướu cổ phì đại"
+      ],
+      "indexedText": "Gói khám: Khám Nội tiết – Đái tháo đường ngoài giờ (VitaCare Cơ sở Đông). Chuyên khoa: Nội tiết – Đái tháo đường. Mô tả: Khám lâm sàng toàn diện các cơ quan nội khoa, đánh giá chỉ số sinh hiệu và tầm soát sớm các bệnh lý lối sống. - Kiểm soát đường huyết, bệnh lý tuyến giáp và rối loạn chuyển hóa lipid.. Triệu chứng lâm sàng: Kiểm tra sức khỏe định kỳ, Mệt mỏi suy nhược, Sụt cân không rõ nguyên nhân, Đau đầu mất ngủ, Khát nước nhiều, Tiểu nhiều ban đêm, Run tay sụt cân nhanh, Bướu cổ phì đại",
+      "retrievalMappingText": "Gói khám: Khám Nội tiết – Đái tháo đường ngoài giờ (VitaCare Cơ sở Đông). Chuyên khoa: Nội tiết – Đái tháo đường. Mô tả: Khám lâm sàng toàn diện các cơ quan nội khoa, đánh giá chỉ số sinh hiệu và tầm soát sớm các bệnh lý lối sống. - Kiểm soát đường huyết, bệnh lý tuyến giáp và rối loạn chuyển hóa lipid.. Triệu chứng lâm sàng: Kiểm tra sức khỏe định kỳ, Mệt mỏi suy nhược, Sụt cân không rõ nguyên nhân, Đau đầu mất ngủ, Khát nước nhiều, Tiểu nhiều ban đêm, Run tay sụt cân nhanh, Bướu cổ phì đại",
+      "textsDiffer": false
+    },
+    {
+      "id": "2cf606bf-b705-40ea-b911-1bfa4b96ca6c",
+      "name": "Khám Nhi khoa ngoài giờ (VitaCare Cơ sở Đông)",
+      "specialtyId": 9,
+      "specialty": "Nhi khoa",
+      "ownSymptoms": [
+        "Sốt co giật ở trẻ",
+        "Biếng ăn chậm tăng cân",
+        "Ho sốt cảm cúm",
+        "Phát ban mẩn ngứa trẻ nhỏ"
+      ],
+      "specialtySymptoms": [
+        "Sốt co giật ở trẻ",
+        "Biếng ăn chậm tăng cân",
+        "Ho sốt cảm cúm",
+        "Phát ban mẩn ngứa trẻ nhỏ"
+      ],
+      "indexedText": "Gói khám: Khám Nhi khoa ngoài giờ (VitaCare Cơ sở Đông). Chuyên khoa: Nhi khoa. Mô tả: Khám tổng quát thể trạng trẻ em, chẩn đoán bệnh lý hô hấp, tiêu hóa, dinh dưỡng và tư vấn phát triển toàn diện. - Khám, điều trị và theo dõi sự phát triển thể chất toàn diện của trẻ nhỏ.. Triệu chứng lâm sàng: Sốt co giật ở trẻ, Biếng ăn chậm tăng cân, Ho sốt cảm cúm, Phát ban mẩn ngứa trẻ nhỏ",
+      "retrievalMappingText": "Gói khám: Khám Nhi khoa ngoài giờ (VitaCare Cơ sở Đông). Chuyên khoa: Nhi khoa. Mô tả: Khám tổng quát thể trạng trẻ em, chẩn đoán bệnh lý hô hấp, tiêu hóa, dinh dưỡng và tư vấn phát triển toàn diện. - Khám, điều trị và theo dõi sự phát triển thể chất toàn diện của trẻ nhỏ.. Triệu chứng lâm sàng: Sốt co giật ở trẻ, Biếng ăn chậm tăng cân, Ho sốt cảm cúm, Phát ban mẩn ngứa trẻ nhỏ",
+      "textsDiffer": false
+    },
+    {
+      "id": "333532b6-0415-45aa-9aba-98e0926fc6b3",
+      "name": "Khám Tiêu hóa – Gan mật ngoài giờ (VitaCare Trung tâm)",
+      "specialtyId": 3,
+      "specialty": "Tiêu hóa – Gan mật",
+      "ownSymptoms": [
+        "Đau thượng vị",
+        "Đầy hơi khó tiêu",
+        "Ợ chua trào ngược",
+        "Rối loạn tiêu hóa",
+        "Buồn nôn"
+      ],
+      "specialtySymptoms": [
+        "Đau thượng vị",
+        "Ợ chua trào ngược",
+        "Đầy hơi khó tiêu",
+        "Rối loạn tiêu hóa kéo dài",
+        "Vàng da"
+      ],
+      "indexedText": "Gói khám: Khám Tiêu hóa – Gan mật ngoài giờ (VitaCare Trung tâm). Chuyên khoa: Tiêu hóa – Gan mật. Mô tả: Thăm khám và chẩn đoán các bệnh lý dạ dày, đại tràng, gan mật tụy, viêm loét đường tiêu hóa và trào ngược dạ dày thực quản. - Viêm loét dạ dày - đại tràng, trào ngược dạ dày, viêm gan B/C và sỏi mật.. Triệu chứng lâm sàng: Đau thượng vị, Đầy hơi khó tiêu, Ợ chua trào ngược, Rối loạn tiêu hóa, Buồn nôn, Rối loạn tiêu hóa kéo dài, Vàng da",
+      "retrievalMappingText": "Gói khám: Khám Tiêu hóa – Gan mật ngoài giờ (VitaCare Trung tâm). Chuyên khoa: Tiêu hóa – Gan mật. Mô tả: Thăm khám và chẩn đoán các bệnh lý dạ dày, đại tràng, gan mật tụy, viêm loét đường tiêu hóa và trào ngược dạ dày thực quản. - Viêm loét dạ dày - đại tràng, trào ngược dạ dày, viêm gan B/C và sỏi mật.. Triệu chứng lâm sàng: Đau thượng vị, Đầy hơi khó tiêu, Ợ chua trào ngược, Rối loạn tiêu hóa, Buồn nôn, Rối loạn tiêu hóa kéo dài, Vàng da",
+      "textsDiffer": false
+    },
+    {
+      "id": "407a01fb-62bc-44d3-9efc-0cce9341f43e",
+      "name": "Khám Răng Hàm Mặt ngoài giờ (VitaCare Trung tâm)",
+      "specialtyId": 13,
+      "specialty": "Răng Hàm Mặt",
+      "ownSymptoms": [
+        "Đau buốt răng sâu",
+        "Chảy máu chân răng nướu",
+        "Răng khôn mọc lệch",
+        "Cần lấy cao răng làm sạch"
+      ],
+      "specialtySymptoms": [
+        "Đau buốt răng sâu",
+        "Chảy máu chân răng nướu",
+        "Răng khôn mọc lệch",
+        "Cần lấy cao răng làm sạch"
+      ],
+      "indexedText": "Gói khám: Khám Răng Hàm Mặt ngoài giờ (VitaCare Trung tâm). Chuyên khoa: Răng Hàm Mặt. Mô tả: Khám kiểm tra tổng quát răng miệng, chụp X-quang răng, cạo vôi răng, trám răng sâu và điều trị tủy răng. - Khám răng tổng quát, nhổ răng, trám răng thẩm mỹ, điều trị tủy và lấy cao răng.. Triệu chứng lâm sàng: Đau buốt răng sâu, Chảy máu chân răng nướu, Răng khôn mọc lệch, Cần lấy cao răng làm sạch",
+      "retrievalMappingText": "Gói khám: Khám Răng Hàm Mặt ngoài giờ (VitaCare Trung tâm). Chuyên khoa: Răng Hàm Mặt. Mô tả: Khám kiểm tra tổng quát răng miệng, chụp X-quang răng, cạo vôi răng, trám răng sâu và điều trị tủy răng. - Khám răng tổng quát, nhổ răng, trám răng thẩm mỹ, điều trị tủy và lấy cao răng.. Triệu chứng lâm sàng: Đau buốt răng sâu, Chảy máu chân răng nướu, Răng khôn mọc lệch, Cần lấy cao răng làm sạch",
+      "textsDiffer": false
+    },
+    {
+      "id": "428d5352-035c-478d-b2a1-7a8333e18395",
+      "name": "Khám Tai Mũi Họng ngoài giờ (VitaCare Trung tâm)",
+      "specialtyId": 12,
+      "specialty": "Tai Mũi Họng",
+      "ownSymptoms": [
+        "Đau rát họng nuốt vướng",
+        "Nghẹt mũi chảy nước mũi",
+        "Ù tai chảy dịch tai",
+        "Khàn tiếng kéo dài"
+      ],
+      "specialtySymptoms": [
+        "Đau rát họng nuốt vướng",
+        "Nghẹt mũi chảy nước mũi",
+        "Ù tai chảy dịch tai",
+        "Khàn tiếng kéo dài"
+      ],
+      "indexedText": "Gói khám: Khám Tai Mũi Họng ngoài giờ (VitaCare Trung tâm). Chuyên khoa: Tai Mũi Họng. Mô tả: Nội soi dải tần hẹp tai mũi họng, chẩn đoán viêm xoang, viêm họng hạt, viêm amidan, viêm tai giữa và polyp. - Nội soi tai mũi họng, viêm xoang, viêm họng hạt, viêm amidan và viêm tai giữa.. Triệu chứng lâm sàng: Đau rát họng nuốt vướng, Nghẹt mũi chảy nước mũi, Ù tai chảy dịch tai, Khàn tiếng kéo dài",
+      "retrievalMappingText": "Gói khám: Khám Tai Mũi Họng ngoài giờ (VitaCare Trung tâm). Chuyên khoa: Tai Mũi Họng. Mô tả: Nội soi dải tần hẹp tai mũi họng, chẩn đoán viêm xoang, viêm họng hạt, viêm amidan, viêm tai giữa và polyp. - Nội soi tai mũi họng, viêm xoang, viêm họng hạt, viêm amidan và viêm tai giữa.. Triệu chứng lâm sàng: Đau rát họng nuốt vướng, Nghẹt mũi chảy nước mũi, Ù tai chảy dịch tai, Khàn tiếng kéo dài",
+      "textsDiffer": false
+    },
+    {
+      "id": "42fc927c-b34e-4634-b455-49941f36c4f8",
+      "name": "Khám Thần kinh ngoài giờ (VitaCare Cơ sở Đông)",
+      "specialtyId": 6,
+      "specialty": "Thần kinh",
+      "ownSymptoms": [
+        "Kiểm tra sức khỏe định kỳ",
+        "Mệt mỏi suy nhược",
+        "Sụt cân không rõ nguyên nhân",
+        "Đau đầu mất ngủ"
+      ],
+      "specialtySymptoms": [
+        "Đau nửa đầu Migraine",
+        "Chóng mặt hoa mắt",
+        "Mất ngủ kéo dài",
+        "Tê bì chân tay"
+      ],
+      "indexedText": "Gói khám: Khám Thần kinh ngoài giờ (VitaCare Cơ sở Đông). Chuyên khoa: Thần kinh. Mô tả: Khám lâm sàng toàn diện các cơ quan nội khoa, đánh giá chỉ số sinh hiệu và tầm soát sớm các bệnh lý lối sống. - Khám đau đầu mạn tính, mất ngủ, rối loạn tiền đình và suy giảm trí nhớ.. Triệu chứng lâm sàng: Kiểm tra sức khỏe định kỳ, Mệt mỏi suy nhược, Sụt cân không rõ nguyên nhân, Đau đầu mất ngủ, Đau nửa đầu Migraine, Chóng mặt hoa mắt, Mất ngủ kéo dài, Tê bì chân tay",
+      "retrievalMappingText": "Gói khám: Khám Thần kinh ngoài giờ (VitaCare Cơ sở Đông). Chuyên khoa: Thần kinh. Mô tả: Khám lâm sàng toàn diện các cơ quan nội khoa, đánh giá chỉ số sinh hiệu và tầm soát sớm các bệnh lý lối sống. - Khám đau đầu mạn tính, mất ngủ, rối loạn tiền đình và suy giảm trí nhớ.. Triệu chứng lâm sàng: Kiểm tra sức khỏe định kỳ, Mệt mỏi suy nhược, Sụt cân không rõ nguyên nhân, Đau đầu mất ngủ, Đau nửa đầu Migraine, Chóng mặt hoa mắt, Mất ngủ kéo dài, Tê bì chân tay",
+      "textsDiffer": false
+    },
+    {
+      "id": "43b172ac-2816-4854-8636-b7c15d68fb91",
+      "name": "Khám Hô hấp ngoài giờ (VitaCare Cơ sở Đông)",
+      "specialtyId": 4,
+      "specialty": "Hô hấp",
+      "ownSymptoms": [
+        "Ho kéo dài",
+        "Khò khè tức ngực",
+        "Ho có đờm hoặc lẫn máu",
+        "Hụt hơi khó thở"
+      ],
+      "specialtySymptoms": [
+        "Ho kéo dài",
+        "Khò khè tức ngực",
+        "Ho có đờm hoặc lẫn máu",
+        "Hụt hơi khó thở"
+      ],
+      "indexedText": "Gói khám: Khám Hô hấp ngoài giờ (VitaCare Cơ sở Đông). Chuyên khoa: Hô hấp. Mô tả: Khám chẩn đoán các bệnh lý phế quản, hen suyễn, phổi tắc nghẽn mạn tính COPD và nhiễm trùng đường hô hấp. - Viêm phế quản, hen suyễn, viêm phổi và bệnh phổi tắc nghẽn mạn tính (COPD).. Triệu chứng lâm sàng: Ho kéo dài, Khò khè tức ngực, Ho có đờm hoặc lẫn máu, Hụt hơi khó thở",
+      "retrievalMappingText": "Gói khám: Khám Hô hấp ngoài giờ (VitaCare Cơ sở Đông). Chuyên khoa: Hô hấp. Mô tả: Khám chẩn đoán các bệnh lý phế quản, hen suyễn, phổi tắc nghẽn mạn tính COPD và nhiễm trùng đường hô hấp. - Viêm phế quản, hen suyễn, viêm phổi và bệnh phổi tắc nghẽn mạn tính (COPD).. Triệu chứng lâm sàng: Ho kéo dài, Khò khè tức ngực, Ho có đờm hoặc lẫn máu, Hụt hơi khó thở",
+      "textsDiffer": false
+    },
+    {
+      "id": "59517969-678a-4feb-9c70-66c678eea80b",
+      "name": "Khám Nội tiết – Đái tháo đường ngoài giờ (VitaCare Trung tâm)",
+      "specialtyId": 5,
+      "specialty": "Nội tiết – Đái tháo đường",
+      "ownSymptoms": [
+        "Kiểm tra sức khỏe định kỳ",
+        "Mệt mỏi suy nhược",
+        "Sụt cân không rõ nguyên nhân",
+        "Đau đầu mất ngủ"
+      ],
+      "specialtySymptoms": [
+        "Khát nước nhiều",
+        "Tiểu nhiều ban đêm",
+        "Run tay sụt cân nhanh",
+        "Bướu cổ phì đại"
+      ],
+      "indexedText": "Gói khám: Khám Nội tiết – Đái tháo đường ngoài giờ (VitaCare Trung tâm). Chuyên khoa: Nội tiết – Đái tháo đường. Mô tả: Khám lâm sàng toàn diện các cơ quan nội khoa, đánh giá chỉ số sinh hiệu và tầm soát sớm các bệnh lý lối sống. - Kiểm soát đường huyết, bệnh lý tuyến giáp và rối loạn chuyển hóa lipid.. Triệu chứng lâm sàng: Kiểm tra sức khỏe định kỳ, Mệt mỏi suy nhược, Sụt cân không rõ nguyên nhân, Đau đầu mất ngủ, Khát nước nhiều, Tiểu nhiều ban đêm, Run tay sụt cân nhanh, Bướu cổ phì đại",
+      "retrievalMappingText": "Gói khám: Khám Nội tiết – Đái tháo đường ngoài giờ (VitaCare Trung tâm). Chuyên khoa: Nội tiết – Đái tháo đường. Mô tả: Khám lâm sàng toàn diện các cơ quan nội khoa, đánh giá chỉ số sinh hiệu và tầm soát sớm các bệnh lý lối sống. - Kiểm soát đường huyết, bệnh lý tuyến giáp và rối loạn chuyển hóa lipid.. Triệu chứng lâm sàng: Kiểm tra sức khỏe định kỳ, Mệt mỏi suy nhược, Sụt cân không rõ nguyên nhân, Đau đầu mất ngủ, Khát nước nhiều, Tiểu nhiều ban đêm, Run tay sụt cân nhanh, Bướu cổ phì đại",
+      "textsDiffer": false
+    },
+    {
+      "id": "6cb7e7ba-21d8-4ad4-8bc4-7d293f0b5814",
+      "name": "Khám Ngoại Chấn thương Chỉnh hình ngoài giờ (VitaCare Trung tâm)",
+      "specialtyId": 8,
+      "specialty": "Ngoại Chấn thương Chỉnh hình",
+      "ownSymptoms": [
+        "Đau nhức khớp gối",
+        "Thoái hóa cột sống",
+        "Đau mỏi vai gáy",
+        "Căng cơ chấn thương vận động"
+      ],
+      "specialtySymptoms": [
+        "Đau nhức khớp gối",
+        "Thoái hóa cột sống",
+        "Đau mỏi vai gáy",
+        "Căng cơ chấn thương vận động"
+      ],
+      "indexedText": "Gói khám: Khám Ngoại Chấn thương Chỉnh hình ngoài giờ (VitaCare Trung tâm). Chuyên khoa: Ngoại Chấn thương Chỉnh hình. Mô tả: Khám đánh giá tầm vận động khớp, chẩn đoán thoái hóa khớp, thoát vị đĩa đệm, viêm khớp dạng thấp và loãng xương. - Bệnh lý cơ xương khớp, thoái hóa khớp, trật khớp và chấn thương thể thao.. Triệu chứng lâm sàng: Đau nhức khớp gối, Thoái hóa cột sống, Đau mỏi vai gáy, Căng cơ chấn thương vận động",
+      "retrievalMappingText": "Gói khám: Khám Ngoại Chấn thương Chỉnh hình ngoài giờ (VitaCare Trung tâm). Chuyên khoa: Ngoại Chấn thương Chỉnh hình. Mô tả: Khám đánh giá tầm vận động khớp, chẩn đoán thoái hóa khớp, thoát vị đĩa đệm, viêm khớp dạng thấp và loãng xương. - Bệnh lý cơ xương khớp, thoái hóa khớp, trật khớp và chấn thương thể thao.. Triệu chứng lâm sàng: Đau nhức khớp gối, Thoái hóa cột sống, Đau mỏi vai gáy, Căng cơ chấn thương vận động",
+      "textsDiffer": false
+    },
+    {
+      "id": "74f3c06f-49c0-4ae9-bf55-3608c2897659",
+      "name": "Khám Sản – Phụ khoa ngoài giờ (VitaCare Trung tâm)",
+      "specialtyId": 10,
+      "specialty": "Sản – Phụ khoa",
+      "ownSymptoms": [
+        "Rối loạn kinh nguyệt",
+        "Khám thai định kỳ",
+        "Đau bụng dưới bất thường",
+        "Viêm nhiễm phụ khoa"
+      ],
+      "specialtySymptoms": [
+        "Rối loạn kinh nguyệt",
+        "Khám thai định kỳ",
+        "Đau bụng dưới bất thường",
+        "Viêm nhiễm phụ khoa"
+      ],
+      "indexedText": "Gói khám: Khám Sản – Phụ khoa ngoài giờ (VitaCare Trung tâm). Chuyên khoa: Sản – Phụ khoa. Mô tả: Khám phụ khoa định kỳ, siêu âm tử cung phần phụ, siêu âm thai 4D, tầm soát ung thư cổ tử cung Thinprep. - Chăm sóc sức khỏe sinh sản phụ nữ, tầm soát phụ khoa và theo dõi thai kỳ định kỳ.. Triệu chứng lâm sàng: Rối loạn kinh nguyệt, Khám thai định kỳ, Đau bụng dưới bất thường, Viêm nhiễm phụ khoa",
+      "retrievalMappingText": "Gói khám: Khám Sản – Phụ khoa ngoài giờ (VitaCare Trung tâm). Chuyên khoa: Sản – Phụ khoa. Mô tả: Khám phụ khoa định kỳ, siêu âm tử cung phần phụ, siêu âm thai 4D, tầm soát ung thư cổ tử cung Thinprep. - Chăm sóc sức khỏe sinh sản phụ nữ, tầm soát phụ khoa và theo dõi thai kỳ định kỳ.. Triệu chứng lâm sàng: Rối loạn kinh nguyệt, Khám thai định kỳ, Đau bụng dưới bất thường, Viêm nhiễm phụ khoa",
+      "textsDiffer": false
+    },
+    {
+      "id": "7e58d57d-8c61-40da-893e-f2905ed2bd32",
+      "name": "Khám Tiêu hóa – Gan mật ngoài giờ (VitaCare Cơ sở Đông)",
+      "specialtyId": 3,
+      "specialty": "Tiêu hóa – Gan mật",
+      "ownSymptoms": [
+        "Đau thượng vị",
+        "Đầy hơi khó tiêu",
+        "Ợ chua trào ngược",
+        "Rối loạn tiêu hóa",
+        "Buồn nôn"
+      ],
+      "specialtySymptoms": [
+        "Đau thượng vị",
+        "Ợ chua trào ngược",
+        "Đầy hơi khó tiêu",
+        "Rối loạn tiêu hóa kéo dài",
+        "Vàng da"
+      ],
+      "indexedText": "Gói khám: Khám Tiêu hóa – Gan mật ngoài giờ (VitaCare Cơ sở Đông). Chuyên khoa: Tiêu hóa – Gan mật. Mô tả: Thăm khám và chẩn đoán các bệnh lý dạ dày, đại tràng, gan mật tụy, viêm loét đường tiêu hóa và trào ngược dạ dày thực quản. - Viêm loét dạ dày - đại tràng, trào ngược dạ dày, viêm gan B/C và sỏi mật.. Triệu chứng lâm sàng: Đau thượng vị, Đầy hơi khó tiêu, Ợ chua trào ngược, Rối loạn tiêu hóa, Buồn nôn, Rối loạn tiêu hóa kéo dài, Vàng da",
+      "retrievalMappingText": "Gói khám: Khám Tiêu hóa – Gan mật ngoài giờ (VitaCare Cơ sở Đông). Chuyên khoa: Tiêu hóa – Gan mật. Mô tả: Thăm khám và chẩn đoán các bệnh lý dạ dày, đại tràng, gan mật tụy, viêm loét đường tiêu hóa và trào ngược dạ dày thực quản. - Viêm loét dạ dày - đại tràng, trào ngược dạ dày, viêm gan B/C và sỏi mật.. Triệu chứng lâm sàng: Đau thượng vị, Đầy hơi khó tiêu, Ợ chua trào ngược, Rối loạn tiêu hóa, Buồn nôn, Rối loạn tiêu hóa kéo dài, Vàng da",
+      "textsDiffer": false
+    },
+    {
+      "id": "831a683a-ced9-4fff-8cf8-3aa5dcbecbb2",
+      "name": "Khám Ngoại tổng quát ngoài giờ (VitaCare Trung tâm)",
+      "specialtyId": 7,
+      "specialty": "Ngoại tổng quát",
+      "ownSymptoms": [
+        "Kiểm tra sức khỏe định kỳ",
+        "Mệt mỏi suy nhược",
+        "Sụt cân không rõ nguyên nhân",
+        "Đau đầu mất ngủ"
+      ],
+      "specialtySymptoms": [
+        "Khối u bướu vùng bẹn",
+        "Đau rát hậu môn trĩ",
+        "U mỡ bao hoạt dịch",
+        "Vết thương hở phần mềm"
+      ],
+      "indexedText": "Gói khám: Khám Ngoại tổng quát ngoài giờ (VitaCare Trung tâm). Chuyên khoa: Ngoại tổng quát. Mô tả: Khám lâm sàng toàn diện các cơ quan nội khoa, đánh giá chỉ số sinh hiệu và tầm soát sớm các bệnh lý lối sống. - Bệnh lý hậu môn trực tràng, thoát vị bẹn và xử lý tiểu phẫu ngoại khoa.. Triệu chứng lâm sàng: Kiểm tra sức khỏe định kỳ, Mệt mỏi suy nhược, Sụt cân không rõ nguyên nhân, Đau đầu mất ngủ, Khối u bướu vùng bẹn, Đau rát hậu môn trĩ, U mỡ bao hoạt dịch, Vết thương hở phần mềm",
+      "retrievalMappingText": "Gói khám: Khám Ngoại tổng quát ngoài giờ (VitaCare Trung tâm). Chuyên khoa: Ngoại tổng quát. Mô tả: Khám lâm sàng toàn diện các cơ quan nội khoa, đánh giá chỉ số sinh hiệu và tầm soát sớm các bệnh lý lối sống. - Bệnh lý hậu môn trực tràng, thoát vị bẹn và xử lý tiểu phẫu ngoại khoa.. Triệu chứng lâm sàng: Kiểm tra sức khỏe định kỳ, Mệt mỏi suy nhược, Sụt cân không rõ nguyên nhân, Đau đầu mất ngủ, Khối u bướu vùng bẹn, Đau rát hậu môn trĩ, U mỡ bao hoạt dịch, Vết thương hở phần mềm",
+      "textsDiffer": false
+    },
+    {
+      "id": "92b68e42-83ea-4776-b6e6-7f5b762d5bfc",
+      "name": "Khám Ngoại tổng quát ngoài giờ (VitaCare Cơ sở Đông)",
+      "specialtyId": 7,
+      "specialty": "Ngoại tổng quát",
+      "ownSymptoms": [
+        "Kiểm tra sức khỏe định kỳ",
+        "Mệt mỏi suy nhược",
+        "Sụt cân không rõ nguyên nhân",
+        "Đau đầu mất ngủ"
+      ],
+      "specialtySymptoms": [
+        "Khối u bướu vùng bẹn",
+        "Đau rát hậu môn trĩ",
+        "U mỡ bao hoạt dịch",
+        "Vết thương hở phần mềm"
+      ],
+      "indexedText": "Gói khám: Khám Ngoại tổng quát ngoài giờ (VitaCare Cơ sở Đông). Chuyên khoa: Ngoại tổng quát. Mô tả: Khám lâm sàng toàn diện các cơ quan nội khoa, đánh giá chỉ số sinh hiệu và tầm soát sớm các bệnh lý lối sống. - Bệnh lý hậu môn trực tràng, thoát vị bẹn và xử lý tiểu phẫu ngoại khoa.. Triệu chứng lâm sàng: Kiểm tra sức khỏe định kỳ, Mệt mỏi suy nhược, Sụt cân không rõ nguyên nhân, Đau đầu mất ngủ, Khối u bướu vùng bẹn, Đau rát hậu môn trĩ, U mỡ bao hoạt dịch, Vết thương hở phần mềm",
+      "retrievalMappingText": "Gói khám: Khám Ngoại tổng quát ngoài giờ (VitaCare Cơ sở Đông). Chuyên khoa: Ngoại tổng quát. Mô tả: Khám lâm sàng toàn diện các cơ quan nội khoa, đánh giá chỉ số sinh hiệu và tầm soát sớm các bệnh lý lối sống. - Bệnh lý hậu môn trực tràng, thoát vị bẹn và xử lý tiểu phẫu ngoại khoa.. Triệu chứng lâm sàng: Kiểm tra sức khỏe định kỳ, Mệt mỏi suy nhược, Sụt cân không rõ nguyên nhân, Đau đầu mất ngủ, Khối u bướu vùng bẹn, Đau rát hậu môn trĩ, U mỡ bao hoạt dịch, Vết thương hở phần mềm",
+      "textsDiffer": false
+    },
+    {
+      "id": "96688ca5-680c-4089-aca0-5ba22ed4111e",
+      "name": "Khám Thần kinh ngoài giờ (VitaCare Trung tâm)",
+      "specialtyId": 6,
+      "specialty": "Thần kinh",
+      "ownSymptoms": [
+        "Kiểm tra sức khỏe định kỳ",
+        "Mệt mỏi suy nhược",
+        "Sụt cân không rõ nguyên nhân",
+        "Đau đầu mất ngủ"
+      ],
+      "specialtySymptoms": [
+        "Đau nửa đầu Migraine",
+        "Chóng mặt hoa mắt",
+        "Mất ngủ kéo dài",
+        "Tê bì chân tay"
+      ],
+      "indexedText": "Gói khám: Khám Thần kinh ngoài giờ (VitaCare Trung tâm). Chuyên khoa: Thần kinh. Mô tả: Khám lâm sàng toàn diện các cơ quan nội khoa, đánh giá chỉ số sinh hiệu và tầm soát sớm các bệnh lý lối sống. - Khám đau đầu mạn tính, mất ngủ, rối loạn tiền đình và suy giảm trí nhớ.. Triệu chứng lâm sàng: Kiểm tra sức khỏe định kỳ, Mệt mỏi suy nhược, Sụt cân không rõ nguyên nhân, Đau đầu mất ngủ, Đau nửa đầu Migraine, Chóng mặt hoa mắt, Mất ngủ kéo dài, Tê bì chân tay",
+      "retrievalMappingText": "Gói khám: Khám Thần kinh ngoài giờ (VitaCare Trung tâm). Chuyên khoa: Thần kinh. Mô tả: Khám lâm sàng toàn diện các cơ quan nội khoa, đánh giá chỉ số sinh hiệu và tầm soát sớm các bệnh lý lối sống. - Khám đau đầu mạn tính, mất ngủ, rối loạn tiền đình và suy giảm trí nhớ.. Triệu chứng lâm sàng: Kiểm tra sức khỏe định kỳ, Mệt mỏi suy nhược, Sụt cân không rõ nguyên nhân, Đau đầu mất ngủ, Đau nửa đầu Migraine, Chóng mặt hoa mắt, Mất ngủ kéo dài, Tê bì chân tay",
+      "textsDiffer": false
+    },
+    {
+      "id": "ab9485a9-7f3f-4f38-a4c6-6d5f97ee67fc",
+      "name": "Khám Da liễu ngoài giờ (VitaCare Trung tâm)",
+      "specialtyId": 14,
+      "specialty": "Da liễu",
+      "ownSymptoms": [
+        "Mụn viêm mụn ẩn",
+        "Dị ứng mẩn ngứa",
+        "Nổi mề đay",
+        "Viêm da cơ địa",
+        "Rụng tóc",
+        "Nấm da"
+      ],
+      "specialtySymptoms": [
+        "Mụn viêm mụn bọc",
+        "Ngứa ngáy dị ứng mề đay",
+        "Vảy nến á sừng",
+        "Nấm da rụng tóc"
+      ],
+      "indexedText": "Gói khám: Khám Da liễu ngoài giờ (VitaCare Trung tâm). Chuyên khoa: Da liễu. Mô tả: Khám soi da vi thể, chẩn đoán và điều trị mụn trứng cá, viêm da cơ địa, dị ứng, vảy nến và các bệnh lý ngoài da. - Khám, điều trị viêm da cơ địa, mụn trứng cá, nấm da và chăm sóc thẩm mỹ da liễu.. Triệu chứng lâm sàng: Mụn viêm mụn ẩn, Dị ứng mẩn ngứa, Nổi mề đay, Viêm da cơ địa, Rụng tóc, Nấm da, Mụn viêm mụn bọc, Ngứa ngáy dị ứng mề đay, Vảy nến á sừng, Nấm da rụng tóc",
+      "retrievalMappingText": "Gói khám: Khám Da liễu ngoài giờ (VitaCare Trung tâm). Chuyên khoa: Da liễu. Mô tả: Khám soi da vi thể, chẩn đoán và điều trị mụn trứng cá, viêm da cơ địa, dị ứng, vảy nến và các bệnh lý ngoài da. - Khám, điều trị viêm da cơ địa, mụn trứng cá, nấm da và chăm sóc thẩm mỹ da liễu.. Triệu chứng lâm sàng: Mụn viêm mụn ẩn, Dị ứng mẩn ngứa, Nổi mề đay, Viêm da cơ địa, Rụng tóc, Nấm da, Mụn viêm mụn bọc, Ngứa ngáy dị ứng mề đay, Vảy nến á sừng, Nấm da rụng tóc",
+      "textsDiffer": false
+    },
+    {
+      "id": "b066db1b-4483-4773-a2da-4ff8f2d09541",
+      "name": "Khám Ngoại Chấn thương Chỉnh hình ngoài giờ (VitaCare Cơ sở Đông)",
+      "specialtyId": 8,
+      "specialty": "Ngoại Chấn thương Chỉnh hình",
+      "ownSymptoms": [
+        "Đau nhức khớp gối",
+        "Thoái hóa cột sống",
+        "Đau mỏi vai gáy",
+        "Căng cơ chấn thương vận động"
+      ],
+      "specialtySymptoms": [
+        "Đau nhức khớp gối",
+        "Thoái hóa cột sống",
+        "Đau mỏi vai gáy",
+        "Căng cơ chấn thương vận động"
+      ],
+      "indexedText": "Gói khám: Khám Ngoại Chấn thương Chỉnh hình ngoài giờ (VitaCare Cơ sở Đông). Chuyên khoa: Ngoại Chấn thương Chỉnh hình. Mô tả: Khám đánh giá tầm vận động khớp, chẩn đoán thoái hóa khớp, thoát vị đĩa đệm, viêm khớp dạng thấp và loãng xương. - Bệnh lý cơ xương khớp, thoái hóa khớp, trật khớp và chấn thương thể thao.. Triệu chứng lâm sàng: Đau nhức khớp gối, Thoái hóa cột sống, Đau mỏi vai gáy, Căng cơ chấn thương vận động",
+      "retrievalMappingText": "Gói khám: Khám Ngoại Chấn thương Chỉnh hình ngoài giờ (VitaCare Cơ sở Đông). Chuyên khoa: Ngoại Chấn thương Chỉnh hình. Mô tả: Khám đánh giá tầm vận động khớp, chẩn đoán thoái hóa khớp, thoát vị đĩa đệm, viêm khớp dạng thấp và loãng xương. - Bệnh lý cơ xương khớp, thoái hóa khớp, trật khớp và chấn thương thể thao.. Triệu chứng lâm sàng: Đau nhức khớp gối, Thoái hóa cột sống, Đau mỏi vai gáy, Căng cơ chấn thương vận động",
+      "textsDiffer": false
+    },
+    {
+      "id": "b6a71197-0853-44b0-ac4b-144a996928ea",
+      "name": "Khám Tai Mũi Họng ngoài giờ (VitaCare Cơ sở Đông)",
+      "specialtyId": 12,
+      "specialty": "Tai Mũi Họng",
+      "ownSymptoms": [
+        "Đau rát họng nuốt vướng",
+        "Nghẹt mũi chảy nước mũi",
+        "Ù tai chảy dịch tai",
+        "Khàn tiếng kéo dài"
+      ],
+      "specialtySymptoms": [
+        "Đau rát họng nuốt vướng",
+        "Nghẹt mũi chảy nước mũi",
+        "Ù tai chảy dịch tai",
+        "Khàn tiếng kéo dài"
+      ],
+      "indexedText": "Gói khám: Khám Tai Mũi Họng ngoài giờ (VitaCare Cơ sở Đông). Chuyên khoa: Tai Mũi Họng. Mô tả: Nội soi dải tần hẹp tai mũi họng, chẩn đoán viêm xoang, viêm họng hạt, viêm amidan, viêm tai giữa và polyp. - Nội soi tai mũi họng, viêm xoang, viêm họng hạt, viêm amidan và viêm tai giữa.. Triệu chứng lâm sàng: Đau rát họng nuốt vướng, Nghẹt mũi chảy nước mũi, Ù tai chảy dịch tai, Khàn tiếng kéo dài",
+      "retrievalMappingText": "Gói khám: Khám Tai Mũi Họng ngoài giờ (VitaCare Cơ sở Đông). Chuyên khoa: Tai Mũi Họng. Mô tả: Nội soi dải tần hẹp tai mũi họng, chẩn đoán viêm xoang, viêm họng hạt, viêm amidan, viêm tai giữa và polyp. - Nội soi tai mũi họng, viêm xoang, viêm họng hạt, viêm amidan và viêm tai giữa.. Triệu chứng lâm sàng: Đau rát họng nuốt vướng, Nghẹt mũi chảy nước mũi, Ù tai chảy dịch tai, Khàn tiếng kéo dài",
+      "textsDiffer": false
+    },
+    {
+      "id": "c4904b23-0e0b-4efe-9642-8fb4f01b5ada",
+      "name": "Khám Mắt ngoài giờ (VitaCare Trung tâm)",
+      "specialtyId": 11,
+      "specialty": "Mắt",
+      "ownSymptoms": [
+        "Mắt nhìn mờ",
+        "Đỏ mắt cộm rát",
+        "Chảy nước mắt sống",
+        "Khám đo kính cận loạn"
+      ],
+      "specialtySymptoms": [
+        "Mắt nhìn mờ",
+        "Đỏ mắt cộm rát",
+        "Chảy nước mắt sống",
+        "Khám đo kính cận loạn"
+      ],
+      "indexedText": "Gói khám: Khám Mắt ngoài giờ (VitaCare Trung tâm). Chuyên khoa: Mắt. Mô tả: Đo thị lực điện tử, soi đáy mắt, đo nhãn áp và chẩn đoán tật khúc xạ cận/viễn/loạn thị, viêm kết mạc. - Đo thị lực, khám tật khúc xạ, viêm kết mạc, đục thủy tinh thể và soi đáy mắt.. Triệu chứng lâm sàng: Mắt nhìn mờ, Đỏ mắt cộm rát, Chảy nước mắt sống, Khám đo kính cận loạn",
+      "retrievalMappingText": "Gói khám: Khám Mắt ngoài giờ (VitaCare Trung tâm). Chuyên khoa: Mắt. Mô tả: Đo thị lực điện tử, soi đáy mắt, đo nhãn áp và chẩn đoán tật khúc xạ cận/viễn/loạn thị, viêm kết mạc. - Đo thị lực, khám tật khúc xạ, viêm kết mạc, đục thủy tinh thể và soi đáy mắt.. Triệu chứng lâm sàng: Mắt nhìn mờ, Đỏ mắt cộm rát, Chảy nước mắt sống, Khám đo kính cận loạn",
+      "textsDiffer": false
+    },
+    {
+      "id": "c5cb5709-66a4-4619-a738-bc49b8b092a7",
+      "name": "Khám Nhi khoa ngoài giờ (VitaCare Trung tâm)",
+      "specialtyId": 9,
+      "specialty": "Nhi khoa",
+      "ownSymptoms": [
+        "Sốt co giật ở trẻ",
+        "Biếng ăn chậm tăng cân",
+        "Ho sốt cảm cúm",
+        "Phát ban mẩn ngứa trẻ nhỏ"
+      ],
+      "specialtySymptoms": [
+        "Sốt co giật ở trẻ",
+        "Biếng ăn chậm tăng cân",
+        "Ho sốt cảm cúm",
+        "Phát ban mẩn ngứa trẻ nhỏ"
+      ],
+      "indexedText": "Gói khám: Khám Nhi khoa ngoài giờ (VitaCare Trung tâm). Chuyên khoa: Nhi khoa. Mô tả: Khám tổng quát thể trạng trẻ em, chẩn đoán bệnh lý hô hấp, tiêu hóa, dinh dưỡng và tư vấn phát triển toàn diện. - Khám, điều trị và theo dõi sự phát triển thể chất toàn diện của trẻ nhỏ.. Triệu chứng lâm sàng: Sốt co giật ở trẻ, Biếng ăn chậm tăng cân, Ho sốt cảm cúm, Phát ban mẩn ngứa trẻ nhỏ",
+      "retrievalMappingText": "Gói khám: Khám Nhi khoa ngoài giờ (VitaCare Trung tâm). Chuyên khoa: Nhi khoa. Mô tả: Khám tổng quát thể trạng trẻ em, chẩn đoán bệnh lý hô hấp, tiêu hóa, dinh dưỡng và tư vấn phát triển toàn diện. - Khám, điều trị và theo dõi sự phát triển thể chất toàn diện của trẻ nhỏ.. Triệu chứng lâm sàng: Sốt co giật ở trẻ, Biếng ăn chậm tăng cân, Ho sốt cảm cúm, Phát ban mẩn ngứa trẻ nhỏ",
+      "textsDiffer": false
+    },
+    {
+      "id": "e4296f04-6b09-4fa6-8abf-9520c4c5d8c8",
+      "name": "Khám Tim mạch ngoài giờ (VitaCare Trung tâm)",
+      "specialtyId": 2,
+      "specialty": "Tim mạch",
+      "ownSymptoms": [
+        "Tức ngực",
+        "Hồi hộp đánh trống ngực",
+        "Khó thở khi gắng sức",
+        "Huyết áp cao",
+        "Chóng mặt"
+      ],
+      "specialtySymptoms": [
+        "Đau thắt ngực",
+        "Hồi hộp đánh trống ngực",
+        "Khó thở khi gắng sức",
+        "Huyết áp cao hoặc không ổn định"
+      ],
+      "indexedText": "Gói khám: Khám Tim mạch ngoài giờ (VitaCare Trung tâm). Chuyên khoa: Tim mạch. Mô tả: Khám lâm sàng chuyên sâu, nghe tim phổi, đo huyết áp và tầm soát các bệnh lý mạch vành, rối loạn nhịp tim, tăng huyết áp. - Khám và điều trị tăng huyết áp, xơ vữa động mạch, suy tim và rối loạn nhịp tim.. Triệu chứng lâm sàng: Tức ngực, Hồi hộp đánh trống ngực, Khó thở khi gắng sức, Huyết áp cao, Chóng mặt, Đau thắt ngực, Huyết áp cao hoặc không ổn định",
+      "retrievalMappingText": "Gói khám: Khám Tim mạch ngoài giờ (VitaCare Trung tâm). Chuyên khoa: Tim mạch. Mô tả: Khám lâm sàng chuyên sâu, nghe tim phổi, đo huyết áp và tầm soát các bệnh lý mạch vành, rối loạn nhịp tim, tăng huyết áp. - Khám và điều trị tăng huyết áp, xơ vữa động mạch, suy tim và rối loạn nhịp tim.. Triệu chứng lâm sàng: Tức ngực, Hồi hộp đánh trống ngực, Khó thở khi gắng sức, Huyết áp cao, Chóng mặt, Đau thắt ngực, Huyết áp cao hoặc không ổn định",
+      "textsDiffer": false
+    },
+    {
+      "id": "f72d158b-2ea1-4f81-a446-5366551bff10",
+      "name": "Khám Mắt ngoài giờ (VitaCare Cơ sở Đông)",
+      "specialtyId": 11,
+      "specialty": "Mắt",
+      "ownSymptoms": [
+        "Mắt nhìn mờ",
+        "Đỏ mắt cộm rát",
+        "Chảy nước mắt sống",
+        "Khám đo kính cận loạn"
+      ],
+      "specialtySymptoms": [
+        "Mắt nhìn mờ",
+        "Đỏ mắt cộm rát",
+        "Chảy nước mắt sống",
+        "Khám đo kính cận loạn"
+      ],
+      "indexedText": "Gói khám: Khám Mắt ngoài giờ (VitaCare Cơ sở Đông). Chuyên khoa: Mắt. Mô tả: Đo thị lực điện tử, soi đáy mắt, đo nhãn áp và chẩn đoán tật khúc xạ cận/viễn/loạn thị, viêm kết mạc. - Đo thị lực, khám tật khúc xạ, viêm kết mạc, đục thủy tinh thể và soi đáy mắt.. Triệu chứng lâm sàng: Mắt nhìn mờ, Đỏ mắt cộm rát, Chảy nước mắt sống, Khám đo kính cận loạn",
+      "retrievalMappingText": "Gói khám: Khám Mắt ngoài giờ (VitaCare Cơ sở Đông). Chuyên khoa: Mắt. Mô tả: Đo thị lực điện tử, soi đáy mắt, đo nhãn áp và chẩn đoán tật khúc xạ cận/viễn/loạn thị, viêm kết mạc. - Đo thị lực, khám tật khúc xạ, viêm kết mạc, đục thủy tinh thể và soi đáy mắt.. Triệu chứng lâm sàng: Mắt nhìn mờ, Đỏ mắt cộm rát, Chảy nước mắt sống, Khám đo kính cận loạn",
+      "textsDiffer": false
+    },
+    {
+      "id": "ffee2b55-2c43-4c9d-8f87-1884d9893ff2",
+      "name": "Khám Hô hấp ngoài giờ (VitaCare Trung tâm)",
+      "specialtyId": 4,
+      "specialty": "Hô hấp",
+      "ownSymptoms": [
+        "Ho kéo dài",
+        "Khò khè tức ngực",
+        "Ho có đờm hoặc lẫn máu",
+        "Hụt hơi khó thở"
+      ],
+      "specialtySymptoms": [
+        "Ho kéo dài",
+        "Khò khè tức ngực",
+        "Ho có đờm hoặc lẫn máu",
+        "Hụt hơi khó thở"
+      ],
+      "indexedText": "Gói khám: Khám Hô hấp ngoài giờ (VitaCare Trung tâm). Chuyên khoa: Hô hấp. Mô tả: Khám chẩn đoán các bệnh lý phế quản, hen suyễn, phổi tắc nghẽn mạn tính COPD và nhiễm trùng đường hô hấp. - Viêm phế quản, hen suyễn, viêm phổi và bệnh phổi tắc nghẽn mạn tính (COPD).. Triệu chứng lâm sàng: Ho kéo dài, Khò khè tức ngực, Ho có đờm hoặc lẫn máu, Hụt hơi khó thở",
+      "retrievalMappingText": "Gói khám: Khám Hô hấp ngoài giờ (VitaCare Trung tâm). Chuyên khoa: Hô hấp. Mô tả: Khám chẩn đoán các bệnh lý phế quản, hen suyễn, phổi tắc nghẽn mạn tính COPD và nhiễm trùng đường hô hấp. - Viêm phế quản, hen suyễn, viêm phổi và bệnh phổi tắc nghẽn mạn tính (COPD).. Triệu chứng lâm sàng: Ho kéo dài, Khò khè tức ngực, Ho có đờm hoặc lẫn máu, Hụt hơi khó thở",
+      "textsDiffer": false
+    },
+    {
+      "id": "40c3230c-fd8c-4b24-84c8-c6f9ca09273e",
+      "name": "Gói khám Mắt toàn diện & Đo thị lực khúc xạ (VitaCare Trung tâm)",
+      "specialtyId": null,
+      "specialty": null,
+      "ownSymptoms": [
+        "Mắt nhìn mờ",
+        "Mỏi mắt chảy nước mắt",
+        "Cần đo cắt kính cận loạn"
+      ],
+      "specialtySymptoms": [],
+      "indexedText": "Gói khám: Gói khám Mắt toàn diện & Đo thị lực khúc xạ (VitaCare Trung tâm). Chuyên khoa: Đa khoa. Mô tả: Kiểm tra thị lực kỹ thuật số, soi đáy mắt, đo nhãn áp và tầm soát các tật khúc xạ cận/viễn/loạn thị.. Triệu chứng lâm sàng: Mắt nhìn mờ, Mỏi mắt chảy nước mắt, Cần đo cắt kính cận loạn",
+      "retrievalMappingText": "Gói khám: Gói khám Mắt toàn diện & Đo thị lực khúc xạ (VitaCare Trung tâm). Chuyên khoa: Đa khoa. Mô tả: Kiểm tra thị lực kỹ thuật số, soi đáy mắt, đo nhãn áp và tầm soát các tật khúc xạ cận/viễn/loạn thị.. Triệu chứng lâm sàng: Mắt nhìn mờ, Mỏi mắt chảy nước mắt, Cần đo cắt kính cận loạn",
+      "textsDiffer": false
+    },
+    {
+      "id": "9feaff07-5d06-4e13-bee9-b24de59809c4",
+      "name": "Gói khám Mắt toàn diện & Đo thị lực khúc xạ (VitaCare Cơ sở Đông)",
+      "specialtyId": null,
+      "specialty": null,
+      "ownSymptoms": [
+        "Mắt nhìn mờ",
+        "Mỏi mắt chảy nước mắt",
+        "Cần đo cắt kính cận loạn"
+      ],
+      "specialtySymptoms": [],
+      "indexedText": "Gói khám: Gói khám Mắt toàn diện & Đo thị lực khúc xạ (VitaCare Cơ sở Đông). Chuyên khoa: Đa khoa. Mô tả: Kiểm tra thị lực kỹ thuật số, soi đáy mắt, đo nhãn áp và tầm soát các tật khúc xạ cận/viễn/loạn thị.. Triệu chứng lâm sàng: Mắt nhìn mờ, Mỏi mắt chảy nước mắt, Cần đo cắt kính cận loạn",
+      "retrievalMappingText": "Gói khám: Gói khám Mắt toàn diện & Đo thị lực khúc xạ (VitaCare Cơ sở Đông). Chuyên khoa: Đa khoa. Mô tả: Kiểm tra thị lực kỹ thuật số, soi đáy mắt, đo nhãn áp và tầm soát các tật khúc xạ cận/viễn/loạn thị.. Triệu chứng lâm sàng: Mắt nhìn mờ, Mỏi mắt chảy nước mắt, Cần đo cắt kính cận loạn",
+      "textsDiffer": false
+    },
+    {
+      "id": "221621e8-7d99-493c-a522-0eb3f67ad6ce",
+      "name": "Gói nội soi tầm soát bệnh lý Tai Mũi Họng (VitaCare Cơ sở Đông)",
+      "specialtyId": null,
+      "specialty": null,
+      "ownSymptoms": [
+        "Đau rát họng nuốt vướng",
+        "Nghẹt mũi chảy mũi kéo dài",
+        "Ù tai",
+        "Khàn giọng"
+      ],
+      "specialtySymptoms": [],
+      "indexedText": "Gói khám: Gói nội soi tầm soát bệnh lý Tai Mũi Họng (VitaCare Cơ sở Đông). Chuyên khoa: Đa khoa. Mô tả: Nội soi dải tần hẹp NBI tai mũi họng, phát hiện sớm tổn thương niêm mạc xoang, vòm họng và thanh quản.. Triệu chứng lâm sàng: Đau rát họng nuốt vướng, Nghẹt mũi chảy mũi kéo dài, Ù tai, Khàn giọng",
+      "retrievalMappingText": "Gói khám: Gói nội soi tầm soát bệnh lý Tai Mũi Họng (VitaCare Cơ sở Đông). Chuyên khoa: Đa khoa. Mô tả: Nội soi dải tần hẹp NBI tai mũi họng, phát hiện sớm tổn thương niêm mạc xoang, vòm họng và thanh quản.. Triệu chứng lâm sàng: Đau rát họng nuốt vướng, Nghẹt mũi chảy mũi kéo dài, Ù tai, Khàn giọng",
+      "textsDiffer": false
+    },
+    {
+      "id": "9f1673ee-8a96-4282-a85f-89bd436d16a2",
+      "name": "Gói nội soi tầm soát bệnh lý Tai Mũi Họng (VitaCare Trung tâm)",
+      "specialtyId": null,
+      "specialty": null,
+      "ownSymptoms": [
+        "Đau rát họng nuốt vướng",
+        "Nghẹt mũi chảy mũi kéo dài",
+        "Ù tai",
+        "Khàn giọng"
+      ],
+      "specialtySymptoms": [],
+      "indexedText": "Gói khám: Gói nội soi tầm soát bệnh lý Tai Mũi Họng (VitaCare Trung tâm). Chuyên khoa: Đa khoa. Mô tả: Nội soi dải tần hẹp NBI tai mũi họng, phát hiện sớm tổn thương niêm mạc xoang, vòm họng và thanh quản.. Triệu chứng lâm sàng: Đau rát họng nuốt vướng, Nghẹt mũi chảy mũi kéo dài, Ù tai, Khàn giọng",
+      "retrievalMappingText": "Gói khám: Gói nội soi tầm soát bệnh lý Tai Mũi Họng (VitaCare Trung tâm). Chuyên khoa: Đa khoa. Mô tả: Nội soi dải tần hẹp NBI tai mũi họng, phát hiện sớm tổn thương niêm mạc xoang, vòm họng và thanh quản.. Triệu chứng lâm sàng: Đau rát họng nuốt vướng, Nghẹt mũi chảy mũi kéo dài, Ù tai, Khàn giọng",
+      "textsDiffer": false
+    },
+    {
+      "id": "0d34468e-e533-4f09-9664-a910caa6698c",
+      "name": "Gói tầm soát cườm nước & Bệnh lý võng mạc (VitaCare Cơ sở Đông)",
+      "specialtyId": null,
+      "specialty": null,
+      "ownSymptoms": [
+        "Thị lực giảm sút ở người lớn tuổi",
+        "Nhìn lóa quầng sáng",
+        "Đau nhức hốc mắt"
+      ],
+      "specialtySymptoms": [],
+      "indexedText": "Gói khám: Gói tầm soát cườm nước & Bệnh lý võng mạc (VitaCare Cơ sở Đông). Chuyên khoa: Đa khoa. Mô tả: Chụp hình màu đáy mắt, đo nhãn áp không tiếp xúc và tư vấn phòng ngừa đục thủy tinh thể, glôcôm.. Triệu chứng lâm sàng: Thị lực giảm sút ở người lớn tuổi, Nhìn lóa quầng sáng, Đau nhức hốc mắt",
+      "retrievalMappingText": "Gói khám: Gói tầm soát cườm nước & Bệnh lý võng mạc (VitaCare Cơ sở Đông). Chuyên khoa: Đa khoa. Mô tả: Chụp hình màu đáy mắt, đo nhãn áp không tiếp xúc và tư vấn phòng ngừa đục thủy tinh thể, glôcôm.. Triệu chứng lâm sàng: Thị lực giảm sút ở người lớn tuổi, Nhìn lóa quầng sáng, Đau nhức hốc mắt",
+      "textsDiffer": false
+    },
+    {
+      "id": "dd3d0531-8692-4d81-aef6-3c1855b05c26",
+      "name": "Gói tầm soát cườm nước & Bệnh lý võng mạc (VitaCare Trung tâm)",
+      "specialtyId": null,
+      "specialty": null,
+      "ownSymptoms": [
+        "Thị lực giảm sút ở người lớn tuổi",
+        "Nhìn lóa quầng sáng",
+        "Đau nhức hốc mắt"
+      ],
+      "specialtySymptoms": [],
+      "indexedText": "Gói khám: Gói tầm soát cườm nước & Bệnh lý võng mạc (VitaCare Trung tâm). Chuyên khoa: Đa khoa. Mô tả: Chụp hình màu đáy mắt, đo nhãn áp không tiếp xúc và tư vấn phòng ngừa đục thủy tinh thể, glôcôm.. Triệu chứng lâm sàng: Thị lực giảm sút ở người lớn tuổi, Nhìn lóa quầng sáng, Đau nhức hốc mắt",
+      "retrievalMappingText": "Gói khám: Gói tầm soát cườm nước & Bệnh lý võng mạc (VitaCare Trung tâm). Chuyên khoa: Đa khoa. Mô tả: Chụp hình màu đáy mắt, đo nhãn áp không tiếp xúc và tư vấn phòng ngừa đục thủy tinh thể, glôcôm.. Triệu chứng lâm sàng: Thị lực giảm sút ở người lớn tuổi, Nhìn lóa quầng sáng, Đau nhức hốc mắt",
+      "textsDiffer": false
+    },
+    {
+      "id": "aad110db-ef55-4b53-bf8c-55933dbf54ef",
+      "name": "Gói tầm soát nguy cơ tim mạch (VitaCare Trung tâm)",
+      "specialtyId": null,
+      "specialty": null,
+      "ownSymptoms": [
+        "Đau tức ngực",
+        "Hồi hộp đánh trống ngực",
+        "Khó thở khi gắng sức",
+        "Huyết áp không ổn định"
+      ],
+      "specialtySymptoms": [],
+      "indexedText": "Gói khám: Gói tầm soát nguy cơ tim mạch (VitaCare Trung tâm). Chuyên khoa: Đa khoa. Mô tả: Đánh giá các yếu tố nguy cơ tim mạch, đo điện tim ECG, siêu âm doppler tim và định lượng lipid máu.. Triệu chứng lâm sàng: Đau tức ngực, Hồi hộp đánh trống ngực, Khó thở khi gắng sức, Huyết áp không ổn định",
+      "retrievalMappingText": "Gói khám: Gói tầm soát nguy cơ tim mạch (VitaCare Trung tâm). Chuyên khoa: Đa khoa. Mô tả: Đánh giá các yếu tố nguy cơ tim mạch, đo điện tim ECG, siêu âm doppler tim và định lượng lipid máu.. Triệu chứng lâm sàng: Đau tức ngực, Hồi hộp đánh trống ngực, Khó thở khi gắng sức, Huyết áp không ổn định",
+      "textsDiffer": false
+    },
+    {
+      "id": "bb0a1a88-7f18-4c86-bff8-0c2204de9d25",
+      "name": "Gói tầm soát nguy cơ tim mạch (VitaCare Cơ sở Đông)",
+      "specialtyId": null,
+      "specialty": null,
+      "ownSymptoms": [
+        "Đau tức ngực",
+        "Hồi hộp đánh trống ngực",
+        "Khó thở khi gắng sức",
+        "Huyết áp không ổn định"
+      ],
+      "specialtySymptoms": [],
+      "indexedText": "Gói khám: Gói tầm soát nguy cơ tim mạch (VitaCare Cơ sở Đông). Chuyên khoa: Đa khoa. Mô tả: Đánh giá các yếu tố nguy cơ tim mạch, đo điện tim ECG, siêu âm doppler tim và định lượng lipid máu.. Triệu chứng lâm sàng: Đau tức ngực, Hồi hộp đánh trống ngực, Khó thở khi gắng sức, Huyết áp không ổn định",
+      "retrievalMappingText": "Gói khám: Gói tầm soát nguy cơ tim mạch (VitaCare Cơ sở Đông). Chuyên khoa: Đa khoa. Mô tả: Đánh giá các yếu tố nguy cơ tim mạch, đo điện tim ECG, siêu âm doppler tim và định lượng lipid máu.. Triệu chứng lâm sàng: Đau tức ngực, Hồi hộp đánh trống ngực, Khó thở khi gắng sức, Huyết áp không ổn định",
+      "textsDiffer": false
+    },
+    {
+      "id": "2ab40f78-01eb-4d24-8795-d20de0ad1734",
+      "name": "Gói khám sức khỏe tổng quát cơ bản (VitaCare Trung tâm)",
+      "specialtyId": null,
+      "specialty": null,
+      "ownSymptoms": [
+        "Kiểm tra sức khỏe định kỳ",
+        "Mệt mỏi suy nhược",
+        "Sụt cân không rõ nguyên nhân"
+      ],
+      "specialtySymptoms": [],
+      "indexedText": "Gói khám: Gói khám sức khỏe tổng quát cơ bản (VitaCare Trung tâm). Chuyên khoa: Đa khoa. Mô tả: Tầm soát sức khỏe định kỳ với xét nghiệm công thức máu, đường huyết, mỡ máu và chụp X-quang phổi.. Triệu chứng lâm sàng: Kiểm tra sức khỏe định kỳ, Mệt mỏi suy nhược, Sụt cân không rõ nguyên nhân",
+      "retrievalMappingText": "Gói khám: Gói khám sức khỏe tổng quát cơ bản (VitaCare Trung tâm). Chuyên khoa: Đa khoa. Mô tả: Tầm soát sức khỏe định kỳ với xét nghiệm công thức máu, đường huyết, mỡ máu và chụp X-quang phổi.. Triệu chứng lâm sàng: Kiểm tra sức khỏe định kỳ, Mệt mỏi suy nhược, Sụt cân không rõ nguyên nhân",
+      "textsDiffer": false
+    },
+    {
+      "id": "a7a139ab-0959-4c21-9160-8c3ed0be3b5c",
+      "name": "Gói khám sức khỏe tổng quát cơ bản (VitaCare Cơ sở Đông)",
+      "specialtyId": null,
+      "specialty": null,
+      "ownSymptoms": [
+        "Kiểm tra sức khỏe định kỳ",
+        "Mệt mỏi suy nhược",
+        "Sụt cân không rõ nguyên nhân"
+      ],
+      "specialtySymptoms": [],
+      "indexedText": "Gói khám: Gói khám sức khỏe tổng quát cơ bản (VitaCare Cơ sở Đông). Chuyên khoa: Đa khoa. Mô tả: Tầm soát sức khỏe định kỳ với xét nghiệm công thức máu, đường huyết, mỡ máu và chụp X-quang phổi.. Triệu chứng lâm sàng: Kiểm tra sức khỏe định kỳ, Mệt mỏi suy nhược, Sụt cân không rõ nguyên nhân",
+      "retrievalMappingText": "Gói khám: Gói khám sức khỏe tổng quát cơ bản (VitaCare Cơ sở Đông). Chuyên khoa: Đa khoa. Mô tả: Tầm soát sức khỏe định kỳ với xét nghiệm công thức máu, đường huyết, mỡ máu và chụp X-quang phổi.. Triệu chứng lâm sàng: Kiểm tra sức khỏe định kỳ, Mệt mỏi suy nhược, Sụt cân không rõ nguyên nhân",
+      "textsDiffer": false
+    },
+    {
+      "id": "0a490d61-f463-4ef5-8fd1-d07423238a69",
+      "name": "Gói kiểm tra sức khỏe phụ nữ toàn diện (VitaCare Cơ sở Đông)",
+      "specialtyId": null,
+      "specialty": null,
+      "ownSymptoms": [
+        "Khám phụ khoa định kỳ",
+        "Rối loạn kinh nguyệt",
+        "Tầm soát u xơ u nang"
+      ],
+      "specialtySymptoms": [],
+      "indexedText": "Gói khám: Gói kiểm tra sức khỏe phụ nữ toàn diện (VitaCare Cơ sở Đông). Chuyên khoa: Đa khoa. Mô tả: Kiểm tra sức khỏe định kỳ cho nữ, siêu âm tuyến vú, siêu âm phụ khoa và tầm soát tế bào cổ tử cung.. Triệu chứng lâm sàng: Khám phụ khoa định kỳ, Rối loạn kinh nguyệt, Tầm soát u xơ u nang",
+      "retrievalMappingText": "Gói khám: Gói kiểm tra sức khỏe phụ nữ toàn diện (VitaCare Cơ sở Đông). Chuyên khoa: Đa khoa. Mô tả: Kiểm tra sức khỏe định kỳ cho nữ, siêu âm tuyến vú, siêu âm phụ khoa và tầm soát tế bào cổ tử cung.. Triệu chứng lâm sàng: Khám phụ khoa định kỳ, Rối loạn kinh nguyệt, Tầm soát u xơ u nang",
+      "textsDiffer": false
+    },
+    {
+      "id": "8460c883-2b3b-4f67-a70c-8407096e08d1",
+      "name": "Gói kiểm tra sức khỏe phụ nữ toàn diện (VitaCare Trung tâm)",
+      "specialtyId": null,
+      "specialty": null,
+      "ownSymptoms": [
+        "Khám phụ khoa định kỳ",
+        "Rối loạn kinh nguyệt",
+        "Tầm soát u xơ u nang"
+      ],
+      "specialtySymptoms": [],
+      "indexedText": "Gói khám: Gói kiểm tra sức khỏe phụ nữ toàn diện (VitaCare Trung tâm). Chuyên khoa: Đa khoa. Mô tả: Kiểm tra sức khỏe định kỳ cho nữ, siêu âm tuyến vú, siêu âm phụ khoa và tầm soát tế bào cổ tử cung.. Triệu chứng lâm sàng: Khám phụ khoa định kỳ, Rối loạn kinh nguyệt, Tầm soát u xơ u nang",
+      "retrievalMappingText": "Gói khám: Gói kiểm tra sức khỏe phụ nữ toàn diện (VitaCare Trung tâm). Chuyên khoa: Đa khoa. Mô tả: Kiểm tra sức khỏe định kỳ cho nữ, siêu âm tuyến vú, siêu âm phụ khoa và tầm soát tế bào cổ tử cung.. Triệu chứng lâm sàng: Khám phụ khoa định kỳ, Rối loạn kinh nguyệt, Tầm soát u xơ u nang",
+      "textsDiffer": false
+    }
+  ],
+  "completedAt": "2026-10-20T18:39:52.532Z",
+  "causes": {
+    "VECTOR_RANK_BELOW_TOP_20": 2
+  },
+  "labelLimitations": {
+    "packagesWithoutSpecialty": 12,
+    "casesWithSpecialtyNullTopK": [
+      "TC-05",
+      "TC-20"
+    ],
+    "note": "Specialty-only labels cannot assess specialty-null multi-service packages; clinical relevance is not adjudicated by this audit."
+  }
+}

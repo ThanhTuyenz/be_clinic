@@ -8,7 +8,7 @@ import { BookingService } from '../../../modules/bookings/booking.service.js';
 import { PaymentReconciliationService } from '../../../modules/payments/payment-reconciliation.service.js';
 import { RecommendationService } from '../../../modules/recommendations/recommendation.service.js';
 import { PrismaService } from '../../database/prisma/prisma.service.js';
-import { EmbeddingService } from '../../embedding/embedding.service.js';
+import { EmbeddingService, mapPackageForRetrieval } from '../../embedding/embedding.service.js';
 import { HttpSmsService } from '../../httpsms/httpsms.service.js';
 import { MailsService } from '../../mail/mails.service.js';
 import { RABBITMQ_TOPOLOGY as topology } from './rabbitmq.constants.js';
@@ -217,57 +217,26 @@ export class RabbitMqService implements OnModuleInit, OnModuleDestroy {
     await this.channel.consume(topology.packageVectorSyncQueue, async (message: any) => {
       if (!message) return;
       try {
-        const payload = JSON.parse(message.content.toString()) as {
-          eventId?: string;
-          packageId: string;
-          code: string;
-          name: string;
-          description: string;
-          symptoms?: string[];
-          price: number;
-          durationMin: number;
-          specialtyId: number | null;
-          specialtyName: string;
-        };
-        this.logger.log(`[RabbitMQ] Received package vector sync task: ${payload.name} (${payload.packageId})`);
-        let vec: number[] | null = null;
-        if (payload.eventId) {
-          const processed = await this.prisma.processedEvent.findUnique({ where: { eventId: payload.eventId } });
-          if (!processed) {
-            vec = await this.embeddingService.getOrComputePackageVector({
-              id: payload.packageId,
-              code: payload.code,
-              name: payload.name,
-              description: payload.description,
-              symptoms: payload.symptoms || [],
-              price: payload.price,
-              durationMin: payload.durationMin,
-              specialtyId: payload.specialtyId,
-              specialtyName: payload.specialtyName,
-            });
-            await this.prisma.processedEvent.create({
-              data: { eventId: payload.eventId, consumer: 'package-vector-sync' },
-            });
-          }
+        const payload = JSON.parse(message.content.toString()) as { eventId?: string; packageId: string };
+        if (payload.eventId && await this.prisma.processedEvent.findUnique({ where: { eventId: payload.eventId } })) {
+          this.channel.ack(message);
+          return;
+        }
+        // Read the current DB record: older queued events must not overwrite newer metadata.
+        const pkg = await this.prisma.servicePackage.findUnique({
+          where: { id: payload.packageId },
+          include: { specialty: { select: { name: true, description: true, symptoms: true } } },
+        });
+        if (!pkg?.isActive) {
+          await this.embeddingService.invalidatePackageVector(payload.packageId);
         } else {
-          vec = await this.embeddingService.getOrComputePackageVector({
-            id: payload.packageId,
-            code: payload.code,
-            name: payload.name,
-            description: payload.description,
-            symptoms: payload.symptoms || [],
-            price: payload.price,
-            durationMin: payload.durationMin,
-            specialtyId: payload.specialtyId,
-            specialtyName: payload.specialtyName,
-          });
+          const vector = await this.embeddingService.getOrComputePackageVector(mapPackageForRetrieval(pkg));
+          if (!vector) throw new Error('Package embedding unavailable');
+        }
+        if (payload.eventId) {
+          await this.prisma.processedEvent.create({ data: { eventId: payload.eventId, consumer: 'package-vector-sync' } });
         }
         this.channel.ack(message);
-        if (vec) {
-          this.logger.log(`[RabbitMQ] Successfully synced vector for package ${payload.packageId} into Redis`);
-        } else {
-          this.logger.warn(`[RabbitMQ] Vector for package ${payload.packageId} could not be generated (Embedding API returned null)`);
-        }
       } catch (error: any) {
         this.logger.error(`[RabbitMQ] Failed to sync package vector: ${error?.message}`, error);
         this.channel.nack(message, false, false);

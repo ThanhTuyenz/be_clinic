@@ -1,0 +1,75 @@
+{
+  "capturedAt": "2026-10-20T11:37:23.273Z",
+  "environmentFile": ".env.development",
+  "provenance": "Existing database events; human-versus-test origin is not independently verified. No synthetic engagement is added by this exporter.",
+  "observed": {
+    "start": "2026-09-20T11:37:23.201Z",
+    "end": "2026-10-20T11:37:23.201Z",
+    "attributionWindowHours": 24,
+    "totals": {
+      "impressions": 0,
+      "clicks": 0,
+      "checkouts": 0,
+      "bookings": 0,
+      "paid": 0,
+      "ctr": null,
+      "bookingRate": null,
+      "clickToBookingRate": null
+    },
+    "bySource": [],
+    "byPackage": [],
+    "coverage": {
+      "sessions": 0,
+      "accounts": 0,
+      "responses": 0,
+      "firstImpressionAt": null,
+      "lastImpressionAt": null
+    }
+  },
+  "verification": [
+    {
+      "suite": "backend",
+      "exitCode": 0,
+      "passed": 6,
+      "failed": 0,
+      "skipped": 0,
+      "cases": [
+        "signed recommendations record real positions/source and deduplicate impressions, clicks and retries",
+        "clients cannot forge package, position, signature, owner, session or expired recommendation receipts",
+        "recommendation attribution checks same account/session/package, branch and 24 hour click window",
+        "metrics distinguish held checkouts from successful bookings and preserve zero-data null rates",
+        "aggregate metrics require chain management roles and an active role guard",
+        "PostgreSQL measurement joins count conversions once, exclude HOLD/CANCELLED and see paid invoices"
+      ]
+    },
+    {
+      "suite": "frontend",
+      "exitCode": 0,
+      "passed": 20,
+      "failed": 0,
+      "skipped": 0,
+      "cases": [
+        "recommendation impressions count only visible cards and clicks carry the signed backend receipt",
+        "refreshing profile recommendations reloads the merged list and preserves behavior cards",
+        "selecting a package records a view but never fabricates an abandoned checkout",
+        "payment result reads confirmed status from DB without contacting PayOS",
+        "pending result reads DB and makes only one delayed PayOS sync instead of continuous polling",
+        "refund states stop polling, hide payment retry and never issue a check-in pass",
+        "package booking links use the actual method and incomplete data opens its detail",
+        "quotes use package prices for specialty/after-hours/packages and doctor fees for doctor/online flows",
+        "specialty checkout sends the selected service and doctor slot, then uses the server invoice total for PayOS",
+        "followup enables doctor-slot booking and passes the wizard first step without selecting a package",
+        "family checkout preserves the service and selected real slot and uses server total",
+        "missing PayOS URL reports an error without marking the family payment successful",
+        "family PayOS retry reuses the held order and server total without creating a second checkout",
+        "time conflicts allow adjacent or separate visits and catch partial overlaps",
+        "single PayOS retry and double click reuse the existing booking and its server amount",
+        "payment simulation still requires the explicit demo action",
+        "recommendation click survives detail views and supplies the backend-validated source to checkout",
+        "failed telemetry remains queued and retries with the same event ID before booking",
+        "a newer search click wins over an older recommendation for the same package",
+        "existing analytics storage upgrades safely and expired sources never produce a conversion"
+      ]
+    }
+  ]
+}

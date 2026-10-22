@@ -5,7 +5,9 @@ enum GenderDto { MALE = 'MALE', FEMALE = 'FEMALE', OTHER = 'OTHER' }
 
 export class CreatePatientProfileDto {
   @ApiProperty() @IsString() @MaxLength(100) fullName: string;
-  @ApiProperty({ example: '2000-01-15' }) @IsDateString() dateOfBirth: string;
+  @ApiProperty({ example: '2000-01-15' })
+  @IsDateString({ strict: true, strictSeparator: true }, { message: 'Ngày sinh không hợp lệ. Vui lòng chọn lại ngày sinh.' })
+  dateOfBirth: string;
   @ApiPropertyOptional({ enum: GenderDto }) @IsOptional() @IsEnum(GenderDto) gender?: GenderDto;
   @ApiPropertyOptional() @IsOptional() @IsString() @MaxLength(20) phoneNumber?: string;
   @ApiPropertyOptional() @IsOptional() @IsString() @MaxLength(20) nationalId?: string;

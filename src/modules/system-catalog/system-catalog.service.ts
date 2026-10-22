@@ -4,7 +4,8 @@ import { BadRequestException, ForbiddenException, Injectable, InternalServerErro
 import { Prisma } from '@prisma/client'
 import { PrismaService } from '../../infrastructure/database/prisma/prisma.service.js'
 import { RedisService } from '../../infrastructure/redis/redis.service.js'
-import { EmbeddingService } from '../../infrastructure/embedding/embedding.service.js'
+import { EmbeddingService, mapPackageForRetrieval } from '../../infrastructure/embedding/embedding.service.js'
+import { TELEMETRY_CONFIG } from '../recommendations/constants/recommendation.constants.js'
 
 import { calculateEffectivePermissions } from '../../common/constants/permissions.constant.js'
 
@@ -22,45 +23,22 @@ export class SystemCatalogService {
     private readonly embeddingService: EmbeddingService,
   ) {}
 
-  private async syncPackageVector(pkg: any): Promise<void> {
+  private async syncPackageVector(pkg: { id: string }): Promise<void> {
     try {
-      // 1. Tạo sự kiện Transactional Outbox để RabbitMQ xử lý nền
-      await this.prisma.outboxEvent.create({
-        data: {
-          aggregateType: 'ServicePackage',
-          aggregateId: pkg.id,
-          eventType: 'package.vector.sync',
-          payload: {
-            packageId: pkg.id,
-            code: pkg.code,
-            name: pkg.name,
-            description: pkg.description || '',
-            symptoms: (pkg as any).symptoms || [],
-            price: Number(pkg.price) || 0,
-            durationMin: pkg.durationMin || 30,
-            specialtyId: pkg.specialtyId,
-            specialtyName: pkg.specialty?.name || 'Đa khoa',
-          },
-        },
-      })
+      await this.prisma.outboxEvent.create({ data: {
+        aggregateType: 'ServicePackage', aggregateId: pkg.id,
+        eventType: 'package.vector.sync', payload: { packageId: pkg.id },
+      } });
     } catch {
-      // 2. Fallback trực tiếp nếu Outbox gặp trục trặc
-      if (this.redis.isEnabled()) {
-        try {
-          await this.embeddingService.getOrComputePackageVector({
-            id: pkg.id,
-            code: pkg.code,
-            name: pkg.name,
-            description: pkg.description || '',
-            symptoms: (pkg as any).symptoms || [],
-            price: Number(pkg.price) || 0,
-            durationMin: pkg.durationMin || 30,
-            specialtyId: pkg.specialtyId,
-            specialtyName: pkg.specialty?.name || 'Đa khoa',
-          })
-        } catch (err: any) {
-          console.warn(`[SystemCatalogService] Failed to auto-generate vector for package ${pkg.id}:`, err?.message)
-        }
+      if (!this.redis.isEnabled()) return;
+      try {
+        const current = await this.prisma.servicePackage.findUnique({
+          where: { id: pkg.id },
+          include: { specialty: { select: { name: true, description: true, symptoms: true } } },
+        });
+        if (current?.isActive) await this.embeddingService.getOrComputePackageVector(mapPackageForRetrieval(current));
+      } catch {
+        console.warn(`[SystemCatalogService] Failed to synchronize vector for package ${pkg.id}`);
       }
     }
   }
@@ -70,8 +48,7 @@ export class SystemCatalogService {
       try {
         await this.redis.deletePattern('cache:public:*');
         await this.redis.deletePattern('rec:cache:search_candidates:*');
-        await this.redis.deletePattern('rec:v2:home:*');
-        await this.redis.deletePattern('rec:v2:profile:*');
+        await this.redis.deletePattern(`${TELEMETRY_CONFIG.CACHE_PREFIX}:*`);
       } catch (err: any) {
         console.warn('[SystemCatalogService] Failed to invalidate public cache:', err?.message);
       }
@@ -361,6 +338,11 @@ export class SystemCatalogService {
           })
         }
       }
+      const affectedPackages = await this.prisma.servicePackage.findMany({
+        where: { specialtyId, isActive: true }, select: { id: true },
+      })
+      await Promise.all(affectedPackages.map(pkg => this.syncPackageVector(pkg)))
+      void this.invalidatePublicCache()
       return updated
     }
     if (resource === 'service-packages') {
@@ -650,6 +632,7 @@ export class SystemCatalogService {
     }
     if (resource === 'service-packages') {
       return {
+        ...(b.isFeatured !== undefined ? { isFeatured: b.isFeatured === true } : {}),
         name: String(b.name).trim(),
         code: String(b.code || '').trim() || generatePackageCode(),
         imageUrl: b.imageUrl || null,
@@ -712,6 +695,7 @@ export class SystemCatalogService {
           specialtyId: b.specialtyId ? Number(b.specialtyId) : null,
           price: Number(b.price) || 0,
           durationMin: Number(b.durationMin) || DEFAULT_PACKAGE_DURATION_MIN,
+          isFeatured: b.isFeatured === true,
           isActive: b.isActive ?? true,
           branchBookingMethods: {
             create: bbmList.map((bbm) => ({

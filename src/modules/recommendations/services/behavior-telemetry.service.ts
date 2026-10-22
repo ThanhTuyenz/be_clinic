@@ -28,7 +28,7 @@ export class BehaviorTelemetryService {
         this.recordGlobalAnalytics(dto, resolvedSpecialtyId),
         this.persistDatabaseAnalytics(dto),
       ]);
-      await this.invalidateHomeRecommendationCache(dto.sessionId, userId);
+      await this.invalidateBehaviorRecommendationCache(dto.sessionId, userId);
     } catch (err: any) {
       this.logger.debug(`[Telemetry] Failed to process telemetry: ${err?.message}`);
     }
@@ -178,16 +178,16 @@ export class BehaviorTelemetryService {
   }
 
   /**
-   * Xóa Cache gợi ý trang chủ khi người dùng vừa có hành vi mới để phản ánh tức thời
+   * Xóa cache hành vi, giữ nguyên cache hồ sơ khi người dùng vừa có hành vi mới để phản ánh tức thời
    */
-  async invalidateHomeRecommendationCache(sessionId?: string, userId?: string): Promise<void> {
+  async invalidateBehaviorRecommendationCache(sessionId?: string, userId?: string): Promise<void> {
     try {
       const deletePromises: Promise<any>[] = [];
       if (userId) {
-        deletePromises.push(this.redis.deletePattern(`rec:v2:home:u:${userId}:*`));
+        deletePromises.push(this.redis.deletePattern(`${TELEMETRY_CONFIG.CACHE_PREFIX}:behavior:u:${userId}:*`));
       }
       if (sessionId) {
-        deletePromises.push(this.redis.deletePattern(`rec:v2:home:sess:${sessionId}*`));
+        deletePromises.push(this.redis.deletePattern(`${TELEMETRY_CONFIG.CACHE_PREFIX}:behavior:sess:${sessionId}`));
       }
       if (deletePromises.length > 0) {
         await Promise.all(deletePromises);
