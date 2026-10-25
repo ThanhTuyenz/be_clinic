@@ -1,4 +1,8 @@
 // Diagnose saved benchmark misses against the current catalog/index without changing them.
+if (!process.argv[2]) {
+  console.error('Usage: node scripts/audit-recommendation-retrieval.cjs <path-to-raw-results.json>');
+  process.exit(1);
+}
 require('ts-node/register/transpile-only');
 const fs = require('node:fs');
 const path = require('node:path');
@@ -27,7 +31,7 @@ const { CandidateRetrievalService } = require('../src/modules/recommendations/se
 const redisFactory = require('../src/infrastructure/redis/redis.config.ts').default;
 const openaiFactory = require('../src/config/openai.config.ts').default;
 const config = new ConfigService({ redis: redisFactory(), openai: openaiFactory() });
-const sourceFile = path.resolve(process.argv[2] || 'reports/thesis/benchmark-2026-10-20T14-39-04.848Z/raw-results.json');
+const sourceFile = path.resolve(process.argv[2]);
 const original = JSON.parse(fs.readFileSync(sourceFile, 'utf8'));
 const output = path.join(path.dirname(sourceFile), 'retrieval-audit.json');
 const candidateLimit = original.environment.candidateLimit || 8;

@@ -96,11 +96,39 @@ Không dùng `prisma db push` cho database dùng chung hoặc production.
 
 ### 6. Seed dữ liệu development
 
+Với database trống, apply migration rồi nạp bộ dữ liệu mẫu:
+
 ```powershell
-npm run seed:prisma
+npm run prisma:deploy
+npm run prisma:seed
 ```
 
-Seed có thể chạy lại. Nó cập nhật dữ liệu mẫu và reset ca QR để test lại flow check-in.
+Lịch sử migration đã gộp thành `20261025000000_init/migration.sql`, sinh từ schema
+hiện tại và giữ các CHECK constraint cho lịch tiếp nhận. Chỉ áp dụng initial migration
+này cho database mới, hoàn toàn trống; không dùng trực tiếp cho database đã có bảng
+hoặc lịch sử migration cũ. Các migration trước vẫn có thể xem lại trong lịch sử Git.
+
+Seed đã đồng bộ metadata gói dịch vụ, liên kết phương thức đặt khám, lịch tiếp nhận,
+phí và cờ tư vấn online. Chạy seed bình thường sẽ dừng nếu database đã có dữ liệu.
+Nếu chủ động muốn XÓA toàn bộ dữ liệu hiện tại và nạp lại bộ demo:
+
+```powershell
+npm run prisma:seed -- --reset
+```
+
+Seed dùng `.env.development` mặc định. Với file môi trường khác trên PowerShell,
+đặt `$env:ENV_FILE='.env.production'` trước lệnh. Không tự seed lại dữ liệu demo
+trong mỗi lần CI/CD deploy.
+
+Trên EC2 không cần cài Node riêng; sau khi workflow đã migrate và các dịch vụ phụ
+thuộc chạy, có thể nạp dữ liệu một lần trong container:
+
+```bash
+cd /home/ubuntu/app
+docker compose --env-file .env.production run --rm --no-deps server node prisma/seed.mjs
+```
+
+Chỉ thêm `--reset` sau `prisma/seed.mjs` nếu bạn chấp nhận xóa dữ liệu demo đang có.
 
 ### 7. Chạy NestJS
 
@@ -160,7 +188,7 @@ Phòng seed:
 Sau khi check-in `VC-PED-BOOKED-QR`, reset về `BOOKED` bằng:
 
 ```powershell
-npm run seed:prisma
+npm run prisma:seed -- --reset
 ```
 
 ## Flow QR check-in
@@ -232,5 +260,5 @@ Khởi động MongoDB local hoặc sửa `MONGODB_URI` trong `.env.development`
 Kiểm tra đúng tài khoản bác sĩ và ngày hệ thống, sau đó chạy lại:
 
 ```powershell
-npm run seed:prisma
+npm run prisma:seed -- --reset
 ```

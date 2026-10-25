@@ -65,7 +65,8 @@ export async function seedDashboardData(prisma, { passwordHash }) {
     if (role === 'DOCTOR') {
       const data = { academicRank: 'Bác sĩ CKI', licenseNumber: 'DEMO-CCHN-LOCKED', experienceYears: 10,
         biography: 'Hồ sơ minh họa bác sĩ tạm khóa tài khoản, không phân công lịch trực.',
-        consultationFee: 250000, onlineConsultationFee: 200000, isActive: false };
+        consultationFee: 250000, onlineConsultationFee: 200000,
+        isOnlineConsultationEnabled: false, isFeatured: false, isActive: false };
       await prisma.doctor.upsert({ where: { userId: user.id }, update: data, create: { userId: user.id, ...data } });
     }
   }

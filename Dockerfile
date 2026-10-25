@@ -11,21 +11,21 @@ COPY package*.json ./
 COPY tsconfig*.json ./
 COPY nest-cli.json ./
 
+# postinstall chạy Prisma generate nên cần schema/config trước npm ci
+COPY prisma ./prisma/
+COPY prisma.config.ts ./
+
 # Cài đặt toàn bộ dependencies (kể cả devDependencies để build)
 RUN npm ci
 
-# Copy toàn bộ mã nguồn và Prisma schema
-COPY prisma ./prisma/
+# Copy mã nguồn; npm run build đã bao gồm Prisma generate
 COPY src ./src/
-
-# Sinh Prisma client
-RUN npx prisma generate
 
 # Build ứng dụng NestJS sang dist/
 RUN npm run build
 
 # Gỡ bỏ devDependencies để giảm kích thước
-RUN npm prune --production
+RUN npm prune --omit=dev
 
 # ==========================================
 # STAGE 2: Production Runtime
@@ -48,6 +48,8 @@ RUN addgroup --system --gid 1001 nodejs && \
 COPY --from=builder --chown=nestjs:nodejs /app/node_modules ./node_modules
 COPY --from=builder --chown=nestjs:nodejs /app/dist ./dist
 COPY --from=builder --chown=nestjs:nodejs /app/prisma ./prisma
+# Prisma 7 cần config này khi workflow chạy migrate deploy
+COPY --from=builder --chown=nestjs:nodejs /app/prisma.config.ts ./prisma.config.ts
 COPY --from=builder --chown=nestjs:nodejs /app/package.json ./package.json
 
 # Tạo thư mục uploads và cấp quyền

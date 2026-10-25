@@ -83,6 +83,28 @@ const SHIFT_DEFINITIONS = [
   },
 ];
 
+// Các trường này trước đây được backfill bằng migration. Database mới lấy từ seed.
+function packageMetadata(data) {
+  const text = `${data.name ?? ''} ${data.description ?? ''}`.toLowerCase();
+  const targetGender = data.targetGender ?? (
+    /(phụ khoa|thai sản|cổ tử cung|buồng trứng|mang thai|khám thai|sinh sản nữ|nữ giới)/.test(text)
+      ? 'FEMALE'
+      : /(nam khoa|tuyến tiền liệt|sinh sản nam|sức khỏe nam giới|nam giới)/.test(text) ? 'MALE' : 'ALL'
+  );
+  const isFollowUp = data.isFollowUp ?? (
+    String(data.code ?? '').toUpperCase().includes('-FOLLOWUP') || text.includes('tái khám')
+  );
+  return {
+    targetGender,
+    minAge: data.minAge ?? null,
+    maxAge: data.maxAge ?? null,
+    isPediatric: data.isPediatric ?? /(nhi khoa|sơ sinh|trẻ em|tiêm chủng trẻ em)/.test(text),
+    isFollowUp,
+    followUpAfterDays: data.followUpAfterDays ?? (isFollowUp ? 180 : null),
+    isFeatured: data.isFeatured ?? false,
+  };
+}
+
 async function resetApplicationData() {
   const tables = await prisma.$queryRaw`
     SELECT tablename
@@ -91,7 +113,21 @@ async function resetApplicationData() {
       AND tablename <> '_prisma_migrations'
     ORDER BY tablename
   `;
-  if (!tables.length) return;
+  if (!tables.length) {
+    throw new Error('Database chưa có bảng. Chạy npm run prisma:deploy trước khi seed.');
+  }
+
+  // Không xóa dữ liệu khi chạy seed thông thường; --reset chỉ dành cho dữ liệu demo.
+  if (!process.argv.includes('--reset')) {
+    for (const { tablename } of tables) {
+      const identifier = `"${String(tablename).replaceAll('"', '""')}"`;
+      const rows = await prisma.$queryRawUnsafe(`SELECT 1 FROM "public".${identifier} LIMIT 1`);
+      if (rows.length) {
+        throw new Error('Database đã có dữ liệu. Chỉ dùng npm run prisma:seed -- --reset nếu muốn XÓA và nạp lại toàn bộ dữ liệu demo.');
+      }
+    }
+    return;
+  }
 
   const identifiers = tables
     .map(({ tablename }) => `"${String(tablename).replaceAll('"', '""')}"`)
@@ -284,37 +320,24 @@ async function main() {
     });
     usersMap.set(docData.email, user);
 
+    const doctorData = {
+      academicRank: docData.academicRank,
+      licenseNumber: docData.licenseNumber || null,
+      experienceYears: docData.experienceYears || 0,
+      biography: docData.biography || null,
+      consultationFee: docData.consultationFee,
+      onlineConsultationFee: docData.onlineConsultationFee ?? Math.round((docData.consultationFee || 0) * 0.8 / 10000) * 10000,
+      isOnlineConsultationEnabled: docData.isOnlineConsultationEnabled ?? true,
+      avatarUrl: docData.avatarUrl,
+      ratingAverage: docData.ratingAverage || 4.9,
+      ratingCount: docData.ratingCount || 100,
+      isFeatured: docData.isFeatured ?? false,
+      isActive: true,
+    };
     const doctor = await prisma.doctor.upsert({
       where: { userId: user.id },
-      update: {
-        academicRank: docData.academicRank,
-        licenseNumber: docData.licenseNumber || null,
-        experienceYears: docData.experienceYears || 0,
-        biography: docData.biography || null,
-        consultationFee: docData.consultationFee,
-        onlineConsultationFee: docData.onlineConsultationFee ?? Math.round((docData.consultationFee || 0) * 0.8 / 10000) * 10000,
-        isOnlineConsultationEnabled: docData.isOnlineConsultationEnabled ?? true,
-        avatarUrl: docData.avatarUrl,
-        ratingAverage: docData.ratingAverage || 4.9,
-        ratingCount: docData.ratingCount || 100,
-        isFeatured: docData.isFeatured,
-        isActive: true,
-      },
-      create: {
-        userId: user.id,
-        academicRank: docData.academicRank,
-        licenseNumber: docData.licenseNumber || null,
-        experienceYears: docData.experienceYears || 0,
-        biography: docData.biography || null,
-        consultationFee: docData.consultationFee,
-        onlineConsultationFee: docData.onlineConsultationFee ?? Math.round((docData.consultationFee || 0) * 0.8 / 10000) * 10000,
-        isOnlineConsultationEnabled: docData.isOnlineConsultationEnabled ?? true,
-        avatarUrl: docData.avatarUrl,
-        ratingAverage: docData.ratingAverage || 4.9,
-        ratingCount: docData.ratingCount || 100,
-        isFeatured: docData.isFeatured,
-        isActive: true,
-      },
+      update: doctorData,
+      create: { userId: user.id, ...doctorData },
     });
     doctorsMap.set(docData.email, doctor);
 
@@ -590,9 +613,11 @@ async function main() {
             imageUrl: service.imageUrl,
             branchBookingMethodId: branchBookingMethod.id,
             specialtyId: spec.id,
+            ...packageMetadata(service),
             isActive: true,
           },
           create: {
+            branchBookingMethods: { create: { branchBookingMethodId: branchBookingMethod.id } },
             receptionSchedules: { create: (service.methodCode === 'AFTER_HOURS' ? [6, 0] : [0, 1, 2, 3, 4, 5, 6]).map((dayOfWeek) => ({ branchId: branch.id, dayOfWeek, sessions: ['MORNING', 'AFTERNOON'] })) },
             code: service.code,
             name: service.name,
@@ -605,6 +630,7 @@ async function main() {
             imageUrl: service.imageUrl,
             branchBookingMethodId: branchBookingMethod.id,
             specialtyId: spec.id,
+            ...packageMetadata(service),
             isActive: true,
           },
         });
@@ -631,9 +657,11 @@ async function main() {
             durationMin: pkg.durationMin || 45,
             price: pkg.price,
             branchBookingMethodId: healthPackageMethod.id,
+            ...packageMetadata(pkg),
             isActive: true,
           },
           create: {
+            branchBookingMethods: { create: { branchBookingMethodId: healthPackageMethod.id } },
             receptionSchedules: { create: Array.from({ length: 7 }, (_, dayOfWeek) => ({ branchId: branch.id, dayOfWeek, sessions: ['MORNING', 'AFTERNOON'] })) },
             code: fullCode,
             name: fullName,
@@ -645,6 +673,7 @@ async function main() {
             durationMin: pkg.durationMin || 45,
             price: pkg.price,
             branchBookingMethodId: healthPackageMethod.id,
+            ...packageMetadata(pkg),
             isActive: true,
           },
         });
