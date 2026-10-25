@@ -11,7 +11,7 @@ COPY package*.json ./
 COPY tsconfig*.json ./
 COPY nest-cli.json ./
 
-# postinstall chạy Prisma generate nên cần schema/config trước npm ci
+# Prisma schema/config dùng cho generate khi build và migration khi deploy
 COPY prisma ./prisma/
 COPY prisma.config.ts ./
 
@@ -59,4 +59,4 @@ USER nestjs
 
 EXPOSE 8011
 
-CMD ["node", "dist/src/main.js"]
+CMD ["node", "dist/main.js"]
