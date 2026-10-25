@@ -3,6 +3,22 @@ import { parseDate as parseDateUtil } from '../../common/utils/staff.utils.js';
 import { CLINIC_SESSION_WINDOWS } from '../../common/constants/clinic-sessions.js';
 import { PrismaService } from '../../infrastructure/database/prisma/prisma.service.js';
 
+const ASSIGNED_DOCTOR_SELECT = {
+  id: true,
+  isActive: true,
+  specialties: { where: { specialty: { isActive: true } }, select: { specialtyId: true } },
+  user: { select: { branchAssignments: { select: { branchId: true, branch: { select: { isActive: true } } } } } },
+} as const;
+
+const ASSIGNED_ROOM_SELECT = {
+  branchId: true,
+  isActive: true,
+  specialties: {
+    where: { isActive: true, specialty: { isActive: true } },
+    select: { specialtyId: true },
+  },
+} as const;
+
 @Injectable()
 export class SchedulesService {
   constructor(private readonly prisma: PrismaService) {}
@@ -10,14 +26,48 @@ export class SchedulesService {
   private async resolveAssignedDoctor(doctorId: string, branchId: string) {
     const doctor = await this.prisma.doctor.findFirst({
       where: { isActive: true, OR: [{ id: doctorId }, { userId: doctorId }] },
-      select: { id: true, user: { select: { branchAssignments: { select: { branchId: true, branch: { select: { isActive: true } } } } } } },
+      select: ASSIGNED_DOCTOR_SELECT,
     });
     if (!doctor) throw new BadRequestException('Không tìm thấy thông tin hồ sơ bác sĩ');
+    this.assertDoctorBranch(doctor, branchId);
+    return doctor;
+  }
+
+  private assertDoctorBranch(doctor: {
+    isActive: boolean;
+    user: { branchAssignments: { branchId: string; branch: { isActive: boolean } }[] };
+  }, branchId: string) {
+    if (!doctor.isActive) throw new BadRequestException('Bác sĩ đã ngừng hoạt động.');
     const assignments = doctor.user.branchAssignments;
     if (assignments.length !== 1 || assignments[0].branchId !== branchId || !assignments[0].branch.isActive) {
       throw new BadRequestException('Chỉ được phân lịch tại chi nhánh làm việc duy nhất của bác sĩ.');
     }
-    return doctor;
+  }
+
+  private async validateAssignedRoom(
+    roomId: string | null,
+    branchId: string,
+    doctor: { specialties: { specialtyId: number }[] },
+  ) {
+    // Cho phép ca chưa phân phòng; khi chọn phòng phải kiểm tra cấu hình chuyên khoa.
+    if (!roomId) return;
+    const room = await this.prisma.clinicRoom.findFirst({
+      where: { id: roomId, branchId, isActive: true },
+      select: ASSIGNED_ROOM_SELECT,
+    });
+    this.assertRoomSpecialties(room, branchId, doctor);
+  }
+
+  private assertRoomSpecialties(
+    room: { branchId: string; isActive: boolean; specialties: { specialtyId: number }[] } | null,
+    branchId: string,
+    doctor: { specialties: { specialtyId: number }[] },
+  ) {
+    if (!room || !room.isActive || room.branchId !== branchId) throw new BadRequestException('Phòng khám không tồn tại, đã ngừng hoạt động hoặc không thuộc chi nhánh của ca làm việc.');
+    const doctorSpecialties = new Set(doctor.specialties.map(({ specialtyId }) => specialtyId));
+    if (!room.specialties.some(({ specialtyId }) => doctorSpecialties.has(specialtyId))) {
+      throw new BadRequestException('Phòng khám phải có ít nhất một chuyên khoa đang hoạt động trùng với chuyên khoa của bác sĩ.');
+    }
   }
 
   // ─────────────────────────────────────────────────────────────
@@ -295,6 +345,7 @@ export class SchedulesService {
 
     const doc = await this.resolveAssignedDoctor(doctorId, branchId);
     const realDoctorId = doc.id;
+    await this.validateAssignedRoom(roomId, branchId, doc);
 
     const workDate = new Date(`${workDateStr}T00:00:00.000Z`);
     const startDt = new Date(`${workDateStr}T${startTimeStr}:00.000Z`);
@@ -354,13 +405,16 @@ export class SchedulesService {
     const existing = await this.prisma.doctorSchedule.findUnique({ where: { id } });
     if (!existing) throw new NotFoundException('Không tìm thấy lịch làm việc');
 
-    if (!['CLOSED', 'CANCELLED'].includes(body.status ?? existing.status)) {
-      await this.resolveAssignedDoctor(existing.doctorId, existing.branchId);
-    }
     if (body.branchId !== undefined && body.branchId !== existing.branchId) throw new BadRequestException('Không thể chuyển ca làm việc sang chi nhánh khác.');
 
+    if (body.roomId !== undefined || !['CLOSED', 'CANCELLED'].includes(body.status ?? existing.status)) {
+      const doctor = await this.resolveAssignedDoctor(existing.doctorId, existing.branchId);
+      const roomId = body.roomId !== undefined ? String(body.roomId || '').trim() || null : existing.roomId;
+      await this.validateAssignedRoom(roomId, existing.branchId, doctor);
+    }
+
     const data: any = {};
-    if (body.roomId !== undefined) data.roomId = body.roomId || null;
+    if (body.roomId !== undefined) data.roomId = String(body.roomId || '').trim() || null;
     if (body.status !== undefined) data.status = body.status;
     if (body.slotDurationMin !== undefined) data.slotDurationMin = Number(body.slotDurationMin) || 30;
     if (body.capacityPerSlot !== undefined) data.capacityPerSlot = Number(body.capacityPerSlot) || 1;
@@ -464,6 +518,7 @@ export class SchedulesService {
           ];
 
     const roomId = body.roomId ? String(body.roomId).trim() : null;
+    await this.validateAssignedRoom(roomId, branchId, doc);
     const slotDurationMin = Number(body.slotDurationMin) || 30;
     const capacityPerSlot = Number(body.capacityPerSlot) || 1;
     const status = body.status || 'OPEN';
@@ -578,10 +633,17 @@ export class SchedulesService {
     const sourceSchedules = await this.prisma.doctorSchedule.findMany({
       where,
       orderBy: { workDate: 'asc' },
+      include: { doctor: { select: ASSIGNED_DOCTOR_SELECT }, room: { select: ASSIGNED_ROOM_SELECT } },
     });
 
     if (sourceSchedules.length === 0) {
       throw new BadRequestException('Tuần nguồn không có ca trực nào để sao chép.');
+    }
+
+    // Kiểm tra toàn bộ trước khi ghi để không sao chép một phần rồi mới báo lỗi cấu hình.
+    for (const schedule of sourceSchedules) {
+      this.assertDoctorBranch(schedule.doctor, schedule.branchId);
+      if (schedule.roomId) this.assertRoomSpecialties(schedule.room, schedule.branchId, schedule.doctor);
     }
 
     let copiedCount = 0;

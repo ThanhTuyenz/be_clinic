@@ -12,6 +12,7 @@ import { HISTORY_ACTIONS } from '../history/history.js';
 import { PermissionsService } from '../permissions/permissions.service.js';
 import { calculateEffectivePermissions } from '../../../common/constants/permissions.constant.js';
 import { RedisService } from '../../../infrastructure/redis/redis.service.js';
+import { buildDoctorProfileData, syncDoctorSpecialties } from './helpers/doctor-profile.helper.js';
 
 @Injectable()
 export class UsersService implements IUsersService {
@@ -66,37 +67,13 @@ export class UsersService implements IUsersService {
       }
 
       if (row.role === 'DOCTOR') {
+        const doctorData = buildDoctorProfileData(dto);
         const docRec = await tx.doctor.upsert({
           where: { userId: row.id },
-          update: {
-            academicRank: dto.academicRank || 'BS. CKI',
-            licenseNumber: dto.licenseNumber || null,
-            experienceYears: Number(dto.experienceYears) || 0,
-            consultationFee: Number(dto.consultationFee) || 0,
-            slotDuration: Number(dto.slotDuration) || 30,
-            isFeatured: Boolean(dto.isFeatured),
-            biography: dto.biography || null,
-            avatarUrl: avatarUrl ?? null,
-          },
-          create: {
-            userId: row.id,
-            academicRank: dto.academicRank || 'BS. CKI',
-            licenseNumber: dto.licenseNumber || null,
-            experienceYears: Number(dto.experienceYears) || 0,
-            consultationFee: Number(dto.consultationFee) || 0,
-            slotDuration: Number(dto.slotDuration) || 30,
-            isFeatured: Boolean(dto.isFeatured),
-            biography: dto.biography || null,
-            avatarUrl: avatarUrl ?? null,
-          },
+          update: doctorData,
+          create: { userId: row.id, ...doctorData },
         });
-        if (dto.specialtyId && Number(dto.specialtyId)) {
-          await tx.doctorSpecialty.upsert({
-            where: { doctorId_specialtyId: { doctorId: docRec.id, specialtyId: Number(dto.specialtyId) } },
-            update: { isPrimary: true },
-            create: { doctorId: docRec.id, specialtyId: Number(dto.specialtyId), isPrimary: true },
-          });
-        }
+        await syncDoctorSpecialties(tx, docRec.id, dto, true);
       }
 
       const userWithRelations = await tx.user.findUnique({
@@ -159,12 +136,17 @@ export class UsersService implements IUsersService {
               licenseNumber: true,
               experienceYears: true,
               consultationFee: true,
+              onlineConsultationFee: true,
+              isOnlineConsultationEnabled: true,
+              isActive: true,
+              biography: true,
               slotDuration: true,
               isFeatured: true,
               avatarUrl: true,
               specialties: {
                 select: {
                   isPrimary: true,
+                  specialtyId: true,
                   specialty: { select: { id: true, name: true, slug: true } },
                 },
               },
@@ -222,41 +204,17 @@ export class UsersService implements IUsersService {
       }
 
       if (String(row.role).toUpperCase() === 'DOCTOR') {
+        const storedDoctor = await tx.doctor.findUnique({
+          where: { userId: row.id },
+          select: { academicRank: true, licenseNumber: true, consultationFee: true, onlineConsultationFee: true, isOnlineConsultationEnabled: true },
+        });
+        const doctorData = buildDoctorProfileData(p, storedDoctor);
         const docRec = await tx.doctor.upsert({
           where: { userId: row.id },
-          update: {
-            ...(p.academicRank !== undefined ? { academicRank: p.academicRank } : {}),
-            ...(p.licenseNumber !== undefined ? { licenseNumber: p.licenseNumber } : {}),
-            ...(p.experienceYears !== undefined ? { experienceYears: Number(p.experienceYears) || 0 } : {}),
-            ...(p.consultationFee !== undefined ? { consultationFee: Number(p.consultationFee) || 0 } : {}),
-            ...(p.slotDuration !== undefined ? { slotDuration: Number(p.slotDuration) || 30 } : {}),
-            ...(p.isFeatured !== undefined ? { isFeatured: Boolean(p.isFeatured) } : {}),
-            ...(p.biography !== undefined ? { biography: p.biography } : {}),
-            ...(p.avatarUrl !== undefined ? { avatarUrl: p.avatarUrl || null } : {}),
-          },
-          create: {
-            userId: row.id,
-            academicRank: p.academicRank || 'BS. CKI',
-            licenseNumber: p.licenseNumber || null,
-            experienceYears: Number(p.experienceYears) || 0,
-            consultationFee: Number(p.consultationFee) || 0,
-            slotDuration: Number(p.slotDuration) || 30,
-            isFeatured: Boolean(p.isFeatured),
-            biography: p.biography || null,
-            avatarUrl: p.avatarUrl || null,
-          },
+          update: doctorData,
+          create: { userId: row.id, ...doctorData },
         });
-
-        if (p.specialtyId && Number(p.specialtyId)) {
-          await tx.doctorSpecialty.deleteMany({
-            where: { doctorId: docRec.id, specialtyId: { not: Number(p.specialtyId) } },
-          });
-          await tx.doctorSpecialty.upsert({
-            where: { doctorId_specialtyId: { doctorId: docRec.id, specialtyId: Number(p.specialtyId) } },
-            update: { isPrimary: true },
-            create: { doctorId: docRec.id, specialtyId: Number(p.specialtyId), isPrimary: true },
-          });
-        }
+        await syncDoctorSpecialties(tx, docRec.id, p, !storedDoctor);
       }
 
       return row;

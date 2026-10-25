@@ -24,6 +24,7 @@ export class DoctorsService {
     q?: string,
     featuredOnly = false,
     limit?: number,
+    onlineOnly = false,
   ) {
     if (specialtyId !== undefined && !Number.isInteger(specialtyId)) {
       throw new BadRequestException('specialtyId không hợp lệ');
@@ -34,6 +35,8 @@ export class DoctorsService {
     const rows = await this.prisma.doctor.findMany({
       where: {
         isActive: true,
+        ...(onlineOnly ? { isOnlineConsultationEnabled: true } : {}),
+        ...(featuredOnly ? { isFeatured: true } : {}),
         specialties: specialtyId ? { some: { specialtyId } } : undefined,
         user: {
           fullName: term ? { contains: term, mode: 'insensitive' } : undefined,
@@ -52,6 +55,7 @@ export class DoctorsService {
         avatarUrl: true,
         consultationFee: true,
         onlineConsultationFee: true,
+        isOnlineConsultationEnabled: true,
         ratingAverage: true,
         ratingCount: true,
         isFeatured: true,

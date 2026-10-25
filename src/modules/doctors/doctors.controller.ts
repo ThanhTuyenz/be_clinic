@@ -29,6 +29,7 @@ export class DoctorsController {
   @ApiQuery({ name: 'q', required: false })
   @ApiQuery({ name: 'featuredOnly', required: false, type: Boolean })
   @ApiQuery({ name: 'limit', required: false, type: Number })
+  @ApiQuery({ name: 'onlineOnly', required: false, type: Boolean })
   doctors(
     @Query('branchId') branchId?: string,
     @Query('departmentId') departmentId?: string,
@@ -36,6 +37,7 @@ export class DoctorsController {
     @Query('q') q?: string,
     @Query('featuredOnly') featuredOnly?: string,
     @Query('limit') limit?: string,
+    @Query('onlineOnly') onlineOnly?: string,
   ) {
     return this.doctorsService.doctors(
       branchId,
@@ -44,6 +46,7 @@ export class DoctorsController {
       q,
       featuredOnly === 'true',
       limit ? Number(limit) : undefined,
+      onlineOnly === 'true',
     );
   }
 

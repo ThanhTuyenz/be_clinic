@@ -59,6 +59,9 @@ export class BookingService {
           });
 
           if (!doctorSlot || !doctorSlot.isActive || doctorSlot.slotStatus !== 'AVAILABLE' || doctorSlot.schedule.status !== 'OPEN' || !doctorSlot.schedule.doctor.isActive) throw new NotFoundException('Khung giờ của bác sĩ không khả dụng');
+          if (dto.bookingMethodCode === 'ONLINE_CONSULTATION' && !doctorSlot.schedule.doctor.isOnlineConsultationEnabled) {
+            throw new BadRequestException('Bác sĩ hiện không nhận tư vấn trực tuyến.');
+          }
           this.validateBookingLeadTime(doctorSlot.schedule.workDate);
           await this.assertBranchBookingMethod(tx, doctorSlot.schedule.branchId, dto.bookingMethodCode);
           await assertPatientSlotAvailable(tx, profile.id, doctorSlot);
@@ -347,6 +350,9 @@ export class BookingService {
             });
             if (!doctorSlot || !doctorSlot.isActive || doctorSlot.slotStatus !== 'AVAILABLE' || doctorSlot.schedule.status !== 'OPEN' || !doctorSlot.schedule.doctor.isActive) {
               throw new NotFoundException(`Khung giờ bác sĩ không khả dụng cho ${profile.fullName}`);
+            }
+            if (item.bookingMethodCode === 'ONLINE_CONSULTATION' && !doctorSlot.schedule.doctor.isOnlineConsultationEnabled) {
+              throw new BadRequestException('Bác sĩ hiện không nhận tư vấn trực tuyến.');
             }
             this.validateBookingLeadTime(doctorSlot.schedule.workDate);
             bookingDates.add(doctorSlot.schedule.workDate.toISOString().slice(0, 10));

@@ -9,14 +9,19 @@ import {
   MinLength,
   IsArray,
   ValidateNested,
+  IsNumber,
+  IsInt,
+  Min,
+  Max,
 } from 'class-validator';
 
 import { lowerCaseTransformer } from 'src/common/utils/transformers/lower-case.transformer';
 
 import { UserRole, UserStatus } from '../entities/user.entity';
 import { RolePermissionDto } from './role-permission.dto';
+import { DoctorProfileDto } from './doctor-profile.dto';
 
-export class UpdateUserAdminDto {
+export class UpdateUserAdminDto extends DoctorProfileDto {
   @ApiPropertyOptional()
   @IsOptional()
   @Transform(lowerCaseTransformer)
@@ -95,10 +100,6 @@ export class UpdateUserAdminDto {
   @IsOptional()
   specialtyId?: number | null;
 
-  @ApiPropertyOptional({ description: 'ID phòng khám phụ trách' })
-  @IsOptional()
-  roomId?: string | null;
-
   @ApiPropertyOptional({ example: 'BS. CKI' })
   @IsOptional()
   academicRank?: string | null;
@@ -109,10 +110,15 @@ export class UpdateUserAdminDto {
 
   @ApiPropertyOptional({ example: 5 })
   @IsOptional()
+  @IsInt()
+  @Min(0)
   experienceYears?: number | null;
 
   @ApiPropertyOptional({ example: 250000 })
   @IsOptional()
+  @IsNumber({ maxDecimalPlaces: 2 })
+  @Min(0)
+  @Max(9999999999.99)
   consultationFee?: number | null;
 
   @ApiPropertyOptional({ example: 30 })
@@ -121,6 +127,7 @@ export class UpdateUserAdminDto {
 
   @ApiPropertyOptional()
   @IsOptional()
+  @IsBoolean()
   isFeatured?: boolean;
 
   @ApiPropertyOptional()

@@ -17,7 +17,7 @@ function fixture(options = {}) {
     const calls = [];
     let appt = 0;
     const record = (name, result) => async (args) => { calls.push({ name, args: JSON.parse(JSON.stringify(args)) }); return typeof result === 'function' ? result(args) : result; };
-    const doctor = { id: 'doctor', isActive: !options.inactiveDoctor, user: { fullName: 'Doctor' }, consultationFee: new Prisma.Decimal(150000), onlineConsultationFee: options.onlineFeeNull ? null : new Prisma.Decimal(120000) };
+    const doctor = { id: 'doctor', isActive: !options.inactiveDoctor, isOnlineConsultationEnabled: !options.onlineDisabled, user: { fullName: 'Doctor' }, consultationFee: new Prisma.Decimal(150000), onlineConsultationFee: options.onlineFeeNull ? null : new Prisma.Decimal(120000) };
     const schedule = { id: 'schedule', status: 'OPEN', doctor, doctorId: doctor.id, branchId: 'east', workDate: new Date((options.date || '2026-10-21') + 'T00:00:00Z'), slotDurationMin: 30, capacityPerSlot: 2 };
     const slot = { id: slotId, isActive: true, slotStatus: options.slotStatus || 'AVAILABLE', schedule, startTime: new Date(`1970-01-01T${options.start || '08:00'}:00Z`), endTime: new Date(`1970-01-01T${options.end || '08:30'}:00Z`) };
     const bbm = { branchId: 'east', isEnabled: true, bookingMethodId: 'method' };
@@ -50,6 +50,18 @@ function freeze(t) {
     t.mock.timers.enable({ apis: ['Date'], now: new Date('2026-10-19T02:00:00Z') });
 }
 const doctorItem = { patientProfileId: 'p1', scheduleSlotId: slotId, bookingMethodCode: 'CONSULTATION' };
+
+test('single and family online checkout reject a doctor who disabled online consultations before reserving slots', async t => {
+    freeze(t);
+    const item = { ...doctorItem, bookingMethodCode: 'ONLINE_CONSULTATION' };
+    for (const family of [false, true]) {
+        const { service, calls } = fixture({ onlineDisabled: true });
+        await assert.rejects(() => family
+            ? service.batchCheckout('owner', { groupType: 'FAMILY', items: [item] })
+            : service.checkout('owner', item), /không nhận tư vấn trực tuyến/);
+        assert.equal(calls.some(c => c.name === 'appointment.create' || c.name === 'execute'), false);
+    }
+});
 
 test('family service bookings retain each package and charge package prices in one invoice', async t => {
     freeze(t);

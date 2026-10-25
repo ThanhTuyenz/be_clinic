@@ -3,14 +3,14 @@ import { CreateUserDto } from './dtos/create-user.dto';
 import { User } from './entities/user.entity';
 import { NullableType } from 'src/common/utils/types/nullable.type';
 import { IPaginationOptions } from 'src/common/utils/types/pagination-options';
+import { DoctorProfileDto } from './dtos/doctor-profile.dto';
 
-export type UserUpdate = Omit<Partial<User>, 'customPermissions'> & {
+export type UserUpdate = Omit<Partial<User>, 'customPermissions'> & DoctorProfileDto & {
   customPermissions?: unknown[] | null;
   phoneNumber?: string | null;
   avatarUrl?: string | null;
   branchId?: string | null;
   specialtyId?: number | null;
-  roomId?: string | null;
   academicRank?: string | null;
   licenseNumber?: string | null;
   experienceYears?: number | null;

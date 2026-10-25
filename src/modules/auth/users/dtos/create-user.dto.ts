@@ -7,6 +7,11 @@ import {
   MinLength,
   IsArray,
   ValidateNested,
+  IsNumber,
+  IsInt,
+  IsBoolean,
+  Min,
+  Max,
 } from 'class-validator';
 import { Type } from 'class-transformer';
 
@@ -15,8 +20,9 @@ import { UserRole, UserStatus } from '../entities/user.entity';
 import { AuthProvidersEnum } from '../../auth-local/enums/auth-providers.enum';
 import { ApiProperty } from '@nestjs/swagger';
 import { RolePermissionDto } from './role-permission.dto';
+import { DoctorProfileDto } from './doctor-profile.dto';
 
-export class CreateUserDto {
+export class CreateUserDto extends DoctorProfileDto {
   @ApiProperty({ example: 'doctor@vitacare.local' })
   @Transform(lowerCaseTransformer)
   @IsNotEmpty()
@@ -83,10 +89,6 @@ export class CreateUserDto {
   @IsOptional()
   specialtyId?: number | null;
 
-  @ApiProperty({ description: 'ID phòng khám phụ trách', required: false })
-  @IsOptional()
-  roomId?: string | null;
-
   @ApiProperty({ example: 'BS. CKI', required: false })
   @IsOptional()
   academicRank?: string | null;
@@ -97,10 +99,15 @@ export class CreateUserDto {
 
   @ApiProperty({ example: 5, required: false })
   @IsOptional()
+  @IsInt()
+  @Min(0)
   experienceYears?: number | null;
 
   @ApiProperty({ example: 250000, required: false })
   @IsOptional()
+  @IsNumber({ maxDecimalPlaces: 2 })
+  @Min(0)
+  @Max(9999999999.99)
   consultationFee?: number | null;
 
   @ApiProperty({ example: 30, required: false })
@@ -109,6 +116,7 @@ export class CreateUserDto {
 
   @ApiProperty({ required: false })
   @IsOptional()
+  @IsBoolean()
   isFeatured?: boolean;
 
   @ApiProperty({ required: false })

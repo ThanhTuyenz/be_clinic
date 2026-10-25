@@ -84,6 +84,14 @@ test('after-hours allows Saturday and Sunday sessions and excludes weekday eveni
   assert.deepEqual(unavailable.slots, []);
 });
 
+test('online availability filters both dates and slots by the doctor online setting', async t => {
+  freeze(t);
+  const { service, queries } = fixture({ slots: [slot('online', '08:00', 1, 0)] });
+  await service.getBookingSlots({ bookingMethodCode: 'ONLINE_CONSULTATION', date: '2026-10-21' });
+  assert.equal(queries.schedules.where.doctor.isOnlineConsultationEnabled, true);
+  assert.equal(queries.slots.where.schedule.doctor.isOnlineConsultationEnabled, true);
+});
+
 test('after-hours available dates exclude weekdays and full weekends', async t => {
   freeze(t);
   const full = weekendSlot('full', '08:00');

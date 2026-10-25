@@ -9,7 +9,13 @@ export class ClinicRoomsService {
   list(activeOnly = true) {
     return this.prisma.clinicRoom.findMany({
       where: activeOnly ? { isActive: true, branch: { isActive: true } } : {},
-      include: { branch: { select: { id: true, code: true, name: true } } },
+      include: {
+        branch: { select: { id: true, code: true, name: true } },
+        specialties: {
+          where: { isActive: true, specialty: { isActive: true } },
+          select: { specialtyId: true },
+        },
+      },
       orderBy: [{ branch: { name: 'asc' } }, { code: 'asc' }],
     })
   }

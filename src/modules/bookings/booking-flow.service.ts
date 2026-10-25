@@ -14,6 +14,7 @@ const BOOKING_DOCTOR_SELECT = {
   avatarUrl: true,
   consultationFee: true,
   onlineConsultationFee: true,
+  isOnlineConsultationEnabled: true,
   ratingAverage: true,
   ratingCount: true,
   isFeatured: true,
@@ -267,6 +268,7 @@ export class BookingFlowService {
       const doctors = await this.prisma.doctor.findMany({
         where: {
           isActive: true,
+          ...(requiredMethodCode === 'ONLINE_CONSULTATION' ? { isOnlineConsultationEnabled: true } : {}),
           ...(effectiveBranchId
             ? { user: { branchAssignments: { some: { branchId: effectiveBranchId } } } }
             : {}),
@@ -504,6 +506,7 @@ export class BookingFlowService {
       ...(doctorId ? { doctorId } : {}),
       doctor: {
         isActive: true,
+        ...(dto.bookingMethodCode === 'ONLINE_CONSULTATION' ? { isOnlineConsultationEnabled: true } : {}),
         ...(targetSpecialtyId ? { specialties: { some: { specialtyId: targetSpecialtyId } } } : {}),
       },
     };
@@ -615,6 +618,7 @@ export class BookingFlowService {
       avatarUrl: d.avatarUrl,
       consultationFee: Number(d.consultationFee) || 0,
       onlineConsultationFee: Number(d.onlineConsultationFee ?? d.consultationFee) || 0,
+      isOnlineConsultationEnabled: d.isOnlineConsultationEnabled,
       ratingAverage: Number(d.ratingAverage) || 5.0,
       ratingCount: d.ratingCount,
       isFeatured: d.isFeatured,
