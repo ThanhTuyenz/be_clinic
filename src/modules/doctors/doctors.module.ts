@@ -1,9 +1,10 @@
-import { Module } from '@nestjs/common'
-import { BranchesController, DoctorsController, PublicDirectoryController } from '../../controllers/doctors.controller.js'
-import { DirectoryService } from './directory.service.js'
+import { Module } from '@nestjs/common';
+import { DoctorsController } from './doctors.controller.js';
+import { DoctorsService } from './doctors.service.js';
 
 @Module({
-  controllers: [DoctorsController, BranchesController, PublicDirectoryController],
-  providers: [DirectoryService],
+  controllers: [DoctorsController],
+  providers: [DoctorsService],
+  exports: [DoctorsService],
 })
 export class DoctorsModule {}

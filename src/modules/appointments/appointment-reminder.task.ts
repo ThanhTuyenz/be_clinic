@@ -1,71 +1,54 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { Cron } from '@nestjs/schedule';
+import { NotificationType } from '@prisma/client';
 import { PrismaService } from '../../infrastructure/database/prisma/prisma.service.js';
-import { MailsService } from '../mails/mails.service.js';
+import { HttpSmsService } from '../../infrastructure/httpsms/httpsms.service.js';
+import { MailsService } from '../../infrastructure/mail/mails.service.js';
+import { NotificationService } from '../notifications/notification.service.js';
+import { reminderSlotWindows } from './helpers/appointment.helper.js';
 
 /**
  * Cron job tự động nhắc lịch hẹn bệnh nhân.
- *
- * Chạy mỗi giờ đúng, quét 2 mốc thời gian:
- *  - 24 giờ trước giờ khám → gửi reminder + hướng dẫn y tế
- *  -  2 giờ trước giờ khám → gửi reminder cuối
- *
- * Dùng flag `reminderSent24h` / `reminderSent2h` trên Appointment
- * để đảm bảo mỗi bệnh nhân chỉ nhận 1 lần.
+ *  - 24 giờ trước giờ khám → gửi reminder qua Email, SMS, Push App, In-App Notification
+ *  - 2 giờ trước giờ khám → gửi reminder khẩn cấp
  */
 @Injectable()
 export class AppointmentReminderTask {
   private readonly logger = new Logger(AppointmentReminderTask.name);
+  private running = false;
 
   constructor(
     private readonly prisma: PrismaService,
     private readonly mails: MailsService,
-  ) {}
+    private readonly httpSms: HttpSmsService,
+    private readonly notifications: NotificationService,
+  ) { }
 
-  // Chạy mỗi giờ đúng (:00)
-  @Cron('0 * * * *')
+  // Chạy mỗi 30 phút - quét và gửi nhắc hẹn trước 24 giờ và 2 giờ
+  @Cron('*/30 * * * *')
   async handleReminders() {
-    this.logger.debug('Bắt đầu quét nhắc lịch...');
-    await Promise.allSettled([
-      this.sendReminders(24),
-      this.sendReminders(2),
-    ]);
+    if (this.running) return;
+    this.running = true;
+    try {
+      await this.sendReminders(24);
+      await this.sendReminders(2);
+    } finally { this.running = false; }
   }
 
   private async sendReminders(hoursAhead: 24 | 2) {
     const now = new Date();
-    // Cửa sổ quét: [targetTime - 30min, targetTime + 30min]
-    const targetMs = now.getTime() + hoursAhead * 60 * 60 * 1000;
-    const windowStart = new Date(targetMs - 30 * 60 * 1000);
-    const windowEnd = new Date(targetMs + 30 * 60 * 1000);
-
     const flagField = hoursAhead === 24 ? 'reminderSent24h' : 'reminderSent2h';
 
     // Tìm tất cả lịch hẹn BOOKED chưa được nhắc, có giờ khám trong cửa sổ
     const appointments = await this.prisma.appointment.findMany({
       where: {
-        status: 'BOOKED',
-        [flagField]: false,
-        OR: [
-          // Lịch theo bác sĩ
-          {
-            scheduleSlot: {
-              startTime: { gte: windowStart, lt: windowEnd },
-              schedule: { workDate: { gte: new Date(now.toISOString().slice(0, 10)) } },
-            },
-          },
-          // Lịch theo gói dịch vụ
-          {
-            servicePackageScheduleSlot: {
-              startTime: { gte: windowStart, lt: windowEnd },
-              schedule: { examDate: { gte: new Date(now.toISOString().slice(0, 10)) } },
-            },
-          },
-        ],
+        status: { in: ['CONFIRMED', 'CHECKED_IN'] },
+        [hoursAhead === 24 ? 'reminderSent24h' : 'reminderSent2h']: false,
+        scheduleSlot: { OR: reminderSlotWindows(now, hoursAhead) },
       },
       include: {
         patientProfile: {
-          include: { account: { select: { email: true, phoneNumber: true } } },
+          include: { account: { select: { id: true, email: true, phoneNumber: true } } },
         },
         scheduleSlot: {
           include: {
@@ -77,16 +60,7 @@ export class AppointmentReminderTask {
             },
           },
         },
-        servicePackageScheduleSlot: {
-          include: {
-            schedule: {
-              include: {
-                servicePackage: { select: { name: true } },
-                room: { select: { name: true } },
-              },
-            },
-          },
-        },
+        servicePackage: { select: { name: true } },
         branch: { select: { name: true, address: true, phoneNumber: true } },
       },
       take: 200, // Giới hạn mỗi lần chạy
@@ -97,47 +71,104 @@ export class AppointmentReminderTask {
 
     for (const appt of appointments) {
       const email = appt.patientProfile.account?.email;
-      if (!email) continue;
+      const phone = appt.patientProfile.phoneNumber || appt.patientProfile.account?.phoneNumber;
+      const userId = appt.patientProfile.accountId || appt.patientProfile.account?.id;
+      if (!email && !phone && !userId) continue;
 
       try {
         const doctorSlot = appt.scheduleSlot;
-        const packageSlot = appt.servicePackageScheduleSlot;
         const branch = doctorSlot?.schedule.branch ?? appt.branch;
         const appointmentDate =
           doctorSlot?.schedule.workDate?.toISOString().slice(0, 10) ??
-          packageSlot?.schedule.examDate?.toISOString().slice(0, 10) ??
           '?';
         const startTime =
           doctorSlot?.startTime?.toISOString().slice(11, 16) ??
-          packageSlot?.startTime?.toISOString().slice(11, 16) ??
           '?';
         const doctorName = doctorSlot?.schedule.doctor
           ? `${doctorSlot.schedule.doctor.academicRank ?? ''} ${doctorSlot.schedule.doctor.user?.fullName ?? ''}`.trim()
           : null;
-        const serviceName = packageSlot?.schedule.servicePackage?.name ?? null;
+        const serviceName = appt.servicePackage?.name ?? null;
 
-        const medicalNote = this.buildMedicalNote(hoursAhead, doctorName, serviceName);
+        const tasks: Promise<any>[] = [];
 
-        await this.mails.sendAppointmentReminder({
-          to: email,
-          data: {
-            patientName: appt.patientProfile.fullName,
-            bookingCode: appt.bookingCode ?? appt.id,
-            appointmentDate,
-            startTime,
-            branchName: branch?.name ?? 'VitaCare Clinic',
-            branchAddress: branch?.address ?? '',
-            branchPhone: branch?.phoneNumber ?? '',
-            doctorName,
-            serviceName,
-            medicalNote,
-            hoursAhead,
-          },
-        });
+        // 1. Tạo Notification (Lưu DB + Socket.IO + Push Notification nổi trên Mobile App)
+        if (userId) {
+          const title =
+            hoursAhead === 24
+              ? 'Nhắc lịch khám ngày mai'
+              : 'Nhắc lịch khám sắp diễn ra (2h tới)';
+          const content = `Lịch khám ${serviceName || (doctorName ? 'cùng ' + doctorName : '')} của bạn sẽ diễn ra lúc ${startTime} ngày ${appointmentDate} tại ${branch?.name ?? 'VitaCare Clinic'}.`;
+
+          tasks.push(
+            this.notifications.createNotification({
+              userId,
+              title,
+              content,
+              type: NotificationType.APPOINTMENT_REMINDER,
+              data: {
+                appointmentId: appt.id,
+                bookingCode: appt.bookingCode ?? appt.id,
+                hoursAhead,
+                startTime,
+                appointmentDate,
+                branchName: branch?.name ?? 'VitaCare Clinic',
+                doctorName,
+                serviceName,
+              },
+            })
+          );
+        }
+
+        if (email) {
+          const medicalNote = this.buildMedicalNote(hoursAhead, serviceName);
+          tasks.push(
+            this.mails.sendAppointmentReminder({
+              to: email,
+              data: {
+                patientName: appt.patientProfile.fullName,
+                bookingCode: appt.bookingCode ?? appt.id,
+                appointmentDate,
+                startTime,
+                branchName: branch?.name ?? 'VitaCare Clinic',
+                branchAddress: branch?.address ?? '',
+                branchPhone: branch?.phoneNumber ?? '',
+                doctorName,
+                serviceName,
+                medicalNote,
+                hoursAhead,
+              },
+            })
+          );
+        }
+
+        if (phone) {
+          tasks.push(
+            this.httpSms.sendAppointmentReminder({
+              to: phone,
+              patientName: appt.patientProfile.fullName,
+              bookingCode: appt.bookingCode ?? appt.id,
+              hoursAhead,
+              appointmentDate,
+              startTime,
+              branchName: branch?.name ?? 'VitaCare Clinic',
+              branchAddress: branch?.address ?? undefined,
+              branchPhone: branch?.phoneNumber ?? undefined,
+              doctorName,
+              serviceName,
+              medicalNote: this.buildMedicalNote(hoursAhead, serviceName),
+            })
+          );
+        }
+
+        const results = await Promise.allSettled(tasks);
+        if (!results.some(result => result.status === 'fulfilled')) {
+          this.logger.warn('Không gửi được nhắc lịch qua bất kỳ kênh nào; sẽ thử lại.');
+          continue;
+        }
 
         // Đánh dấu đã gửi
-        await this.prisma.appointment.update({
-          where: { id: appt.id },
+        await this.prisma.appointment.updateMany({
+          where: { id: appt.id, scheduleSlotId: appt.scheduleSlotId, status: { in: ['CONFIRMED', 'CHECKED_IN'] }, [flagField]: false },
           data: { [flagField]: true },
         });
       } catch (err) {
@@ -146,17 +177,17 @@ export class AppointmentReminderTask {
     }
   }
 
-  private buildMedicalNote(hoursAhead: number, doctorName: string | null, serviceName: string | null): string {
+  private buildMedicalNote(hoursAhead: number, serviceName: string | null): string {
     const notes: string[] = [];
     if (hoursAhead === 24) {
-      notes.push('📋 Chuẩn bị CMND/Căn cước công dân và thẻ BHYT (nếu có).');
+      notes.push('📋 Vui lòng mang theo CCCD/mã khám bệnh (phiếu hẹn) hoặc thẻ BHYT (nếu có) để check-in nhanh tại quầy tiếp tân.');
       if (serviceName?.toLowerCase().includes('siêu âm') || serviceName?.toLowerCase().includes('xét nghiệm')) {
         notes.push('⚠️ Vui lòng nhịn ăn ít nhất 6 giờ trước khi đến khám.');
       }
-      notes.push('🕐 Đến trước giờ hẹn 15 phút để làm thủ tục.');
+      notes.push('🕐 Đến trước giờ hẹn 15 phút để làm thủ tục tiếp nhận.');
     } else {
       notes.push('⏰ Lịch khám của bạn diễn ra trong khoảng 2 giờ nữa.');
-      notes.push('📍 Vui lòng đến đúng giờ và mang theo mã QR check-in.');
+      notes.push('📍 Vui lòng đến đúng giờ và mang theo CCCD hoặc mã check-in.');
     }
     return notes.join(' ');
   }

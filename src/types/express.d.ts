@@ -1,4 +1,4 @@
-import type { Permission } from '../modules/permissions/types/permission.type'
+import type { Permission } from '../modules/auth/permissions/types/permission.type'
 
 declare global {
   namespace Express {

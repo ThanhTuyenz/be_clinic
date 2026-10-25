@@ -1,0 +1,38 @@
+[
+  {
+    "code": "VC-CENTRAL",
+    "name": "VitaCare Trung tâm",
+    "slug": "vitacare-trung-tam",
+    "address": "201 Nguyễn Thị Minh Khai, Phường Bến Thành, Quận 1, TP.HCM",
+    "province": "Thành phố Hồ Chí Minh",
+    "district": "Quận 1",
+    "ward": "Phường Bến Thành",
+    "phoneNumber": "0946135382",
+    "email": "trungtam@vitacare.vn",
+    "imageUrl": "https://images.unsplash.com/photo-1519494026892-80bbd2d6fd0d?w=800&auto=format&fit=crop&q=80",
+    "description": "Cơ sở phòng khám Trung tâm với hơn 14 chuyên khoa mũi nhọn, trang thiết bị chẩn đoán hình ảnh và phòng xét nghiệm đạt chuẩn quốc tế.",
+    "operatingHours": "07:00 - 20:00 (Thứ 2 - Thứ 7)",
+    "openTime": "07:00",
+    "closeTime": "20:00",
+    "latitude": 10.7769,
+    "longitude": 106.7009
+  },
+  {
+    "code": "VC-EAST",
+    "name": "VitaCare Cơ sở Đông",
+    "slug": "vitacare-co-so-dong",
+    "address": "15 Võ Văn Ngân, Phường Linh Chiểu, TP. Thủ Đức, TP.HCM",
+    "province": "Thành phố Hồ Chí Minh",
+    "district": "Thành phố Thủ Đức",
+    "ward": "Phường Linh Chiểu",
+    "phoneNumber": "0946135382",
+    "email": "cosodong@vitacare.vn",
+    "imageUrl": "https://images.unsplash.com/photo-1586773860418-d37222d8fce3?w=800&auto=format&fit=crop&q=80",
+    "description": "Cơ sở phòng khám khu vực phía Đông TP.HCM, không gian hiện đại, phục vụ nhanh chóng và thuận tiện cho người dân TP. Thủ Đức.",
+    "operatingHours": "07:00 - 20:00 (Thứ 2 - Thứ 7)",
+    "openTime": "07:00",
+    "closeTime": "20:00",
+    "latitude": 10.8499,
+    "longitude": 106.7719
+  }
+]

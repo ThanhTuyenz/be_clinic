@@ -1,0 +1,114 @@
+name: Backend CI/CD (AWS ECR & EC2)
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# Tránh hai lần deploy cùng nhánh chạy đồng thời.
+concurrency:
+  group: backend-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  ECR_REPOSITORY: vitacare-server
+  APP_DIR: /home/ubuntu/app
+
+jobs:
+  check:
+    name: Check pull request
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Build image without publishing
+        run: docker build -t vitacare-backend:check .
+
+  build-and-push:
+    name: Build and push to ECR
+    if: >-
+      github.ref == 'refs/heads/main' &&
+      (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    outputs:
+      registry: ${{ steps.login-ecr.outputs.registry }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v3
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: ${{ secrets.AWS_REGION }}
+
+      - name: Login to ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Build and push image
+        env:
+          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+          VERSION_TAG: v1.0.${{ github.run_number }}
+        run: |
+          set -euo pipefail
+          IMAGE="$ECR_REGISTRY/$ECR_REPOSITORY"
+          docker build -t "$IMAGE:latest" -t "$IMAGE:$VERSION_TAG" .
+          docker push "$IMAGE:$VERSION_TAG"
+          docker push "$IMAGE:latest"
+
+  deploy:
+    name: Deploy to EC2
+    needs: build-and-push
+    if: >-
+      github.ref == 'refs/heads/main' &&
+      (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
+    runs-on: ubuntu-latest
+    steps:
+      - name: Deploy via SSH
+        uses: appleboy/ssh-action@v1.0.3
+        env:
+          AWS_REGION: ${{ secrets.AWS_REGION }}
+          ECR_REGISTRY: ${{ needs.build-and-push.outputs.registry }}
+          ECR_REPOSITORY: ${{ env.ECR_REPOSITORY }}
+          APP_DIR: ${{ env.APP_DIR }}
+        with:
+          host: ${{ secrets.REMOTE_HOST }}
+          username: ${{ secrets.REMOTE_USER }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          envs: AWS_REGION,ECR_REGISTRY,ECR_REPOSITORY,APP_DIR
+          command_timeout: 20m
+          script: |
+            set -euo pipefail
+            cd "$APP_DIR"
+
+            # 1. Kiểm tra cấu hình Terraform đã chuẩn bị trên EC2.
+            test -s .env.production
+            chmod 600 .env.production
+            docker compose --env-file .env.production config --quiet
+            docker compose --env-file .env.production config --images \
+              | grep -Fxq "$ECR_REGISTRY/$ECR_REPOSITORY:latest"
+
+            # 2. Đăng nhập ECR và tải image trước khi cập nhật container.
+            aws ecr get-login-password --region "$AWS_REGION" \
+              | docker login --username AWS --password-stdin "$ECR_REGISTRY"
+            docker compose --env-file .env.production pull
+
+            # 3. Khởi động dịch vụ phụ thuộc và chạy migration trước khi cập nhật API.
+            docker compose --env-file .env.production up -d --wait --wait-timeout 180 redis rabbitmq
+            docker compose --env-file .env.production run --rm --no-deps server npx prisma migrate deploy
+
+            # 4. Cập nhật ứng dụng và để Nginx nhận địa chỉ container API mới.
+            docker compose --env-file .env.production up -d --remove-orphans --wait --wait-timeout 180
+            docker compose --env-file .env.production exec -T nginx nginx -s reload
+            docker compose --env-file .env.production ps

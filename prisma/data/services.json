@@ -1,0 +1,62 @@
+[
+  {
+    "codeSuffix": "GENERAL-BASIC",
+    "name": "Gói khám sức khỏe tổng quát cơ bản",
+    "description": "Tầm soát sức khỏe định kỳ với xét nghiệm công thức máu, đường huyết, mỡ máu và chụp X-quang phổi.",
+    "notes": "Nhịn ăn sáng ít nhất 6-8 tiếng trước khi lấy máu xét nghiệm. Không uống nước ngọt, sữa, rượu bia hoặc cà phê.",
+    "symptoms": ["Kiểm tra sức khỏe định kỳ", "Mệt mỏi suy nhược", "Sụt cân không rõ nguyên nhân"],
+    "price": 1290000,
+    "durationMin": 45,
+    "imageUrl": "https://images.unsplash.com/photo-1576091160399-112ba8d25d1d?w=800&auto=format&fit=crop&q=80"
+  },
+  {
+    "codeSuffix": "CARDIO-SCREENING",
+    "name": "Gói tầm soát nguy cơ tim mạch",
+    "description": "Đánh giá các yếu tố nguy cơ tim mạch, đo điện tim ECG, siêu âm doppler tim và định lượng lipid máu.",
+    "notes": "Tránh dùng các chất kích thích (cà phê, trà đặc, thuốc lá) trong vòng 12h trước khám. Mang theo kết quả khám tim mạch cũ nếu có.",
+    "symptoms": ["Đau tức ngực", "Hồi hộp đánh trống ngực", "Khó thở khi gắng sức", "Huyết áp không ổn định"],
+    "price": 990000,
+    "durationMin": 40,
+    "imageUrl": "https://images.unsplash.com/photo-1628348068343-c6a848d2b6dd?w=800&auto=format&fit=crop&q=80"
+  },
+  {
+    "codeSuffix": "WOMEN-WELLNESS",
+    "name": "Gói kiểm tra sức khỏe phụ nữ toàn diện",
+    "description": "Kiểm tra sức khỏe định kỳ cho nữ, siêu âm tuyến vú, siêu âm phụ khoa và tầm soát tế bào cổ tử cung.",
+    "notes": "Nên khám sau khi sạch kinh 3 - 5 ngày. Không thụt rửa âm đạo hoặc quan hệ tình dục trong 24h trước khi khám.",
+    "symptoms": ["Khám phụ khoa định kỳ", "Rối loạn kinh nguyệt", "Tầm soát u xơ u nang"],
+    "price": 1490000,
+    "durationMin": 50,
+    "imageUrl": "https://images.unsplash.com/photo-1579684385127-1ef15d508118?w=800&auto=format&fit=crop&q=80"
+  },
+  {
+    "codeSuffix": "EYE-COMPREHENSIVE",
+    "name": "Gói khám Mắt toàn diện & Đo thị lực khúc xạ",
+    "description": "Kiểm tra thị lực kỹ thuật số, soi đáy mắt, đo nhãn áp và tầm soát các tật khúc xạ cận/viễn/loạn thị.",
+    "notes": "Tháo kính áp tròng ít nhất 24h trước khi đo khúc xạ. Mang theo kính mắt đang sử dụng để bác sĩ đối chiếu.",
+    "symptoms": ["Mắt nhìn mờ", "Mỏi mắt chảy nước mắt", "Cần đo cắt kính cận loạn"],
+    "price": 350000,
+    "durationMin": 30,
+    "imageUrl": "https://images.unsplash.com/photo-1559839734-2b71ea197ec2?w=800&auto=format&fit=crop&q=80"
+  },
+  {
+    "codeSuffix": "EYE-CATARACT",
+    "name": "Gói tầm soát cườm nước & Bệnh lý võng mạc",
+    "description": "Chụp hình màu đáy mắt, đo nhãn áp không tiếp xúc và tư vấn phòng ngừa đục thủy tinh thể, glôcôm.",
+    "notes": "Có thể cần nhỏ thuốc giãn đồng tử để soi đáy mắt; nên có người thân đi cùng sau khám mắt.",
+    "symptoms": ["Thị lực giảm sút ở người lớn tuổi", "Nhìn lóa quầng sáng", "Đau nhức hốc mắt"],
+    "price": 650000,
+    "durationMin": 35,
+    "imageUrl": "https://images.unsplash.com/photo-1579154204601-01588f351e67?w=800&auto=format&fit=crop&q=80"
+  },
+  {
+    "codeSuffix": "ENT-ENDOSCOPY",
+    "name": "Gói nội soi tầm soát bệnh lý Tai Mũi Họng",
+    "description": "Nội soi dải tần hẹp NBI tai mũi họng, phát hiện sớm tổn thương niêm mạc xoang, vòm họng và thanh quản.",
+    "notes": "Nhịn ăn uống ít nhất 2 giờ trước khi nội soi để tránh cảm giác buồn nôn khi đưa ống soi vào vòm họng.",
+    "symptoms": ["Đau rát họng nuốt vướng", "Nghẹt mũi chảy mũi kéo dài", "Ù tai", "Khàn giọng"],
+    "price": 450000,
+    "durationMin": 30,
+    "imageUrl": "https://images.unsplash.com/photo-1622253692010-333f2da6031d?w=800&auto=format&fit=crop&q=80"
+  }
+]

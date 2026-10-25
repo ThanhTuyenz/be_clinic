@@ -1,39 +1,105 @@
-import { Controller, Inject, Get, UseGuards, Req } from '@nestjs/common';
-
-import { Routes, Services } from 'src/common/utils/constants';
-import { IAuthService } from '../auth-local/auth';
-import { AuthProvidersEnum } from '../auth-local/enums/auth-providers.enum';
-import { ApiTags } from '@nestjs/swagger';
+import { Controller, Inject, Get, Post, Body, UseGuards, Req, Res, HttpStatus, HttpCode, Logger } from '@nestjs/common';
+import type { Response, Request } from 'express';
+import { ConfigService } from '@nestjs/config';
+import { Routes, Services } from '../../../common/utils/constants.js';
+import { IAuthService } from '../auth-local/auth.js';
+import { AuthProvidersEnum } from '../auth-local/enums/auth-providers.enum.js';
+import { ApiOperation, ApiTags } from '@nestjs/swagger';
 import { AuthGuard } from '@nestjs/passport';
-import { Public } from 'src/common/decorators/public.decorator';
-import { SkipPermissions } from '../../permissions/decorators/skip-permissions.decorator';
+import { Public } from '../../../common/decorators/public.decorator.js';
+import { SkipPermissions } from '../../../common/decorators/skip-permissions.decorator.js';
+import { AuthGoogleService } from './auth-google.service.js';
+import { AuthGoogleLoginDto } from './dtos/auth-google-login.dto.js';
+import { GoogleAuthGuard } from './guards/google-auth.guard.js';
+import { LoginResponseType } from '../auth-local/types/index.js';
 
 @ApiTags('Auth')
 @Public()
 @SkipPermissions()
 @Controller(Routes.AUTH)
 export class AuthGoogleController {
+  private readonly logger = new Logger(AuthGoogleController.name);
+
   constructor(
     @Inject(Services.AUTH) private readonly authService: IAuthService,
+    private readonly authGoogleService: AuthGoogleService,
+    private readonly configService: ConfigService,
   ) {}
 
-  @Get('google/login')
-  @UseGuards(AuthGuard('google'))
-  async googleLogin() {
-    // Initiates the Google OAuth2 authentication process
+  // 1. Bắt đầu quá trình xác thực Google OAuth2 (hỗ trợ cả /google và alias /google/login)
+  @Get(['google', 'google/login'])
+  @UseGuards(GoogleAuthGuard)
+  @ApiOperation({ summary: 'Bắt đầu quá trình xác thực Google OAuth2' })
+  async googleAuth() {
+    // Passport tự động redirect sang trang đăng nhập của Google
   }
 
-  @Get('google/redirect')
+  // 2. Nhận kết quả callback từ Google (hỗ trợ cả /google/callback và alias /google/redirect)
+  @Get(['google/callback', 'google/redirect'])
   @UseGuards(AuthGuard('google'))
-  async googleLoginCallback(@Req() req: any) {
-    const user = await this.authService.validateSocialLogin(
-      AuthProvidersEnum.google,
-      {
-        id: req.user.user.id,
-        fullName: req.user.user.fullName,
-        email: req.user.user.email,
-      },
-    );
-    return user;
+  @ApiOperation({ summary: 'Google OAuth2 callback redirect về Frontend' })
+  async googleCallback(
+    @Req() req: Request & { user?: LoginResponseType },
+    @Res() res: Response,
+  ) {
+    return this.handleGoogleRedirect(req, res);
+  }
+
+  // 3. Đăng nhập trực tiếp bằng IdToken từ Google Button / Mobile App
+  @Post('google')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Đăng nhập Google bằng IdToken trực tiếp từ Client' })
+  async googleTokenLogin(
+    @Body() loginDto: AuthGoogleLoginDto,
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    const timings: string[] = [];
+    const measure = async <T>(stage: string, task: () => Promise<T>): Promise<T> => {
+      const started = performance.now();
+      try {
+        return await task();
+      } finally {
+        const duration = Math.round(performance.now() - started);
+        timings.push(`${stage};dur=${duration}`);
+        if (duration >= 2000) this.logger.warn(`[GoogleLogin] ${stage}: ${duration}ms`);
+      }
+    };
+    try {
+      const socialData = await measure('google_verify', () => this.authGoogleService.getProfileByToken(loginDto));
+      return await measure('vitacare_session', () => this.authService.validateSocialLogin(AuthProvidersEnum.google, socialData));
+    } finally {
+      // Durations only; no Google token, email or session identifiers.
+      res.setHeader('Server-Timing', timings.join(', '));
+    }
+  }
+
+  private handleGoogleRedirect(req: Request & { user?: LoginResponseType }, res: Response) {
+    const loginResponse = req.user;
+    let targetBase = this.configService.get<string>('FRONTEND_DOMAIN') || 'http://localhost:3000';
+
+    // Đọc state từ request để biết client nào gọi tới (App Mobile hay Web Frontend)
+    const state = req.query?.state;
+    if (state && typeof state === 'string') {
+      try {
+        const decoded = decodeURIComponent(state);
+        if (decoded.startsWith('http://') || decoded.startsWith('https://')) {
+          targetBase = decoded;
+        }
+      } catch {
+        if (state.startsWith('http://') || state.startsWith('https://')) {
+          targetBase = state;
+        }
+      }
+    }
+
+    const token = loginResponse?.token || '';
+    const refreshToken = loginResponse?.refreshToken || '';
+
+    const targetUrl = new URL('/auth/callback', targetBase);
+    targetUrl.searchParams.set('token', token);
+    if (refreshToken) {
+      targetUrl.searchParams.set('refreshToken', refreshToken);
+    }
+    return res.redirect(targetUrl.toString());
   }
 }

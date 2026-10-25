@@ -1,0 +1,461 @@
+{
+  "summary": {
+    "avgPrecision": 0.8222222222222222,
+    "avgHitRate": 0.8666666666666667,
+    "avgMRR": 0.8277777777777777,
+    "p50Latency": 379.12879999999996,
+    "p90Latency": 411.3765000000003
+  },
+  "cases": [
+    {
+      "caseId": "TC-01",
+      "category": "Tim mạch - Huyết áp",
+      "patientName": "Trần Văn Mạnh",
+      "precision3": 1,
+      "hit3": 1,
+      "mrr": 1,
+      "hasViolation": false,
+      "durationMs": 603.5344000000001,
+      "topRecommended": [
+        "Tư vấn Tim mạch (VitaCare Trung tâm)",
+        "Khám Tim mạch trong giờ (VitaCare Trung tâm)",
+        "Gói tầm soát nguy cơ tim mạch (VitaCare Trung tâm)"
+      ]
+    },
+    {
+      "caseId": "TC-02",
+      "category": "Tim mạch - Huyết áp",
+      "patientName": "Lê Thị Thu",
+      "precision3": 1,
+      "hit3": 1,
+      "mrr": 1,
+      "hasViolation": false,
+      "durationMs": 353.6902,
+      "topRecommended": [
+        "Khám Tim mạch trong giờ (VitaCare Trung tâm)",
+        "Tư vấn Tim mạch (VitaCare Trung tâm)",
+        "Khám Tim mạch trong giờ (VitaCare Cơ sở Đông)"
+      ]
+    },
+    {
+      "caseId": "TC-03",
+      "category": "Nội tiết - Chuyển hóa",
+      "patientName": "Nguyễn Hoàng Long",
+      "precision3": 1,
+      "hit3": 1,
+      "mrr": 1,
+      "hasViolation": false,
+      "durationMs": 391.6421,
+      "topRecommended": [
+        "Khám Nội tiết – Đái tháo đường ngoài giờ (VitaCare Trung tâm)",
+        "Khám Nội tiết – Đái tháo đường trong giờ (VitaCare Trung tâm)",
+        "Tư vấn Nội tiết – Đái tháo đường (VitaCare Trung tâm)"
+      ]
+    },
+    {
+      "caseId": "TC-04",
+      "category": "Nội tiết - Chuyển hóa",
+      "patientName": "Phạm Thị Lan",
+      "precision3": 0,
+      "hit3": 0,
+      "mrr": 0,
+      "hasViolation": false,
+      "durationMs": 384.32360000000017,
+      "topRecommended": [
+        "Trọng Nghĩa",
+        "Trọng Nghĩa",
+        "Trọng Nghĩa"
+      ]
+    },
+    {
+      "caseId": "TC-05",
+      "category": "Tiêu hóa - Gan mật",
+      "patientName": "Vũ Đức Thịnh",
+      "precision3": 1,
+      "hit3": 1,
+      "mrr": 1,
+      "hasViolation": false,
+      "durationMs": 379.12879999999996,
+      "topRecommended": [
+        "Tái khám Tiêu hóa – Gan mật (VitaCare Trung tâm)",
+        "Khám Tiêu hóa – Gan mật trong giờ (VitaCare Trung tâm)",
+        "Tư vấn Tiêu hóa – Gan mật (VitaCare Trung tâm)"
+      ]
+    },
+    {
+      "caseId": "TC-06",
+      "category": "Tiêu hóa - Gan mật",
+      "patientName": "Đỗ Văn Thành",
+      "precision3": 1,
+      "hit3": 1,
+      "mrr": 1,
+      "hasViolation": false,
+      "durationMs": 378.9539,
+      "topRecommended": [
+        "Khám Tiêu hóa – Gan mật trong giờ (VitaCare Trung tâm)",
+        "Tư vấn Tiêu hóa – Gan mật (VitaCare Trung tâm)",
+        "Tái khám Tiêu hóa – Gan mật (VitaCare Trung tâm)"
+      ]
+    },
+    {
+      "caseId": "TC-07",
+      "category": "Hô hấp",
+      "patientName": "Bùi Quang Hải",
+      "precision3": 1,
+      "hit3": 1,
+      "mrr": 1,
+      "hasViolation": false,
+      "durationMs": 353.62660000000005,
+      "topRecommended": [
+        "Tư vấn Hô hấp (VitaCare Trung tâm)",
+        "Khám Hô hấp trong giờ (VitaCare Trung tâm)",
+        "Tái khám Hô hấp (VitaCare Trung tâm)"
+      ]
+    },
+    {
+      "caseId": "TC-08",
+      "category": "Hô hấp",
+      "patientName": "Nguyễn Thị Mai",
+      "precision3": 1,
+      "hit3": 1,
+      "mrr": 1,
+      "hasViolation": false,
+      "durationMs": 360.6714999999999,
+      "topRecommended": [
+        "Tái khám Hô hấp (VitaCare Trung tâm)",
+        "Khám Hô hấp trong giờ (VitaCare Trung tâm)",
+        "Tư vấn Hô hấp (VitaCare Trung tâm)"
+      ]
+    },
+    {
+      "caseId": "TC-09",
+      "category": "Sản - Phụ khoa",
+      "patientName": "Đặng Thanh Thảo",
+      "precision3": 1,
+      "hit3": 1,
+      "mrr": 1,
+      "hasViolation": false,
+      "durationMs": 411.3765000000003,
+      "topRecommended": [
+        "Gói kiểm tra sức khỏe nữ (VitaCare Trung tâm)",
+        "Trọng Nghĩa",
+        "Trọng Nghĩa"
+      ]
+    },
+    {
+      "caseId": "TC-10",
+      "category": "Sản - Phụ khoa",
+      "patientName": "Lê Mai Anh",
+      "precision3": 1,
+      "hit3": 1,
+      "mrr": 1,
+      "hasViolation": false,
+      "durationMs": 356.2970000000005,
+      "topRecommended": [
+        "Gói kiểm tra sức khỏe nữ (VitaCare Trung tâm)",
+        "Gói kiểm tra sức khỏe nữ (VitaCare Cơ sở Đông)",
+        "Trọng Nghĩa"
+      ]
+    },
+    {
+      "caseId": "TC-11",
+      "category": "Cơ xương khớp",
+      "patientName": "Nguyễn Văn Định",
+      "precision3": 0.6666666666666666,
+      "hit3": 1,
+      "mrr": 1,
+      "hasViolation": false,
+      "durationMs": 391.22730000000047,
+      "topRecommended": [
+        "Tư vấn Ngoại Chấn thương Chỉnh hình (VitaCare Cơ sở Đông)",
+        "Tư vấn Ngoại Chấn thương Chỉnh hình (VitaCare Trung tâm)",
+        "Gói khám sức khỏe tổng quát cơ bản (VitaCare Cơ sở Đông)"
+      ]
+    },
+    {
+      "caseId": "TC-12",
+      "category": "Cơ xương khớp",
+      "patientName": "Trương Thị Nga",
+      "precision3": 0,
+      "hit3": 0,
+      "mrr": 0,
+      "hasViolation": false,
+      "durationMs": 427.09529999999995,
+      "topRecommended": [
+        "Trọng Nghĩa",
+        "Trọng Nghĩa",
+        "Trọng Nghĩa"
+      ]
+    },
+    {
+      "caseId": "TC-13",
+      "category": "Thần kinh",
+      "patientName": "Hoàng Văn Phúc",
+      "precision3": 1,
+      "hit3": 1,
+      "mrr": 1,
+      "hasViolation": false,
+      "durationMs": 407.7957999999999,
+      "topRecommended": [
+        "Tư vấn Thần kinh (VitaCare Trung tâm)",
+        "Tư vấn Thần kinh (VitaCare Cơ sở Đông)",
+        "Khám Thần kinh ngoài giờ (VitaCare Trung tâm)"
+      ]
+    },
+    {
+      "caseId": "TC-14",
+      "category": "Thần kinh",
+      "patientName": "Nguyễn Thu Trang",
+      "precision3": 0,
+      "hit3": 0,
+      "mrr": 0,
+      "hasViolation": false,
+      "durationMs": 394.84180000000015,
+      "topRecommended": [
+        "Gói kiểm tra sức khỏe nữ (VitaCare Trung tâm)",
+        "Gói kiểm tra sức khỏe nữ (VitaCare Cơ sở Đông)",
+        "Trọng Nghĩa"
+      ]
+    },
+    {
+      "caseId": "TC-15",
+      "category": "Mắt - Nhãn khoa",
+      "patientName": "Trần Minh Trí",
+      "precision3": 1,
+      "hit3": 1,
+      "mrr": 1,
+      "hasViolation": false,
+      "durationMs": 410.89729999999963,
+      "topRecommended": [
+        "Tư vấn Mắt (VitaCare Trung tâm)",
+        "Khám Mắt trong giờ (VitaCare Trung tâm)",
+        "Gói khám Mắt toàn diện & Đo thị lực khúc xạ (VitaCare Trung tâm)"
+      ]
+    },
+    {
+      "caseId": "TC-16",
+      "category": "Mắt - Nhãn khoa",
+      "patientName": "Võ Thị Lệ",
+      "precision3": 1,
+      "hit3": 1,
+      "mrr": 1,
+      "hasViolation": false,
+      "durationMs": 386.35440000000017,
+      "topRecommended": [
+        "Gói tầm soát cườm nước & Bệnh lý võng mạc (VitaCare Trung tâm)",
+        "Gói tầm soát cườm nước & Bệnh lý võng mạc (VitaCare Cơ sở Đông)",
+        "Tư vấn Mắt (VitaCare Trung tâm)"
+      ]
+    },
+    {
+      "caseId": "TC-17",
+      "category": "Tai Mũi Họng",
+      "patientName": "Ngô Quốc Bảo",
+      "precision3": 1,
+      "hit3": 1,
+      "mrr": 1,
+      "hasViolation": false,
+      "durationMs": 409.22310000000016,
+      "topRecommended": [
+        "Khám Tai Mũi Họng trong giờ (VitaCare Trung tâm)",
+        "Tư vấn Tai Mũi Họng (VitaCare Trung tâm)",
+        "Tái khám Tai Mũi Họng (VitaCare Trung tâm)"
+      ]
+    },
+    {
+      "caseId": "TC-18",
+      "category": "Tai Mũi Họng",
+      "patientName": "Phan Thị Diễm",
+      "precision3": 1,
+      "hit3": 1,
+      "mrr": 1,
+      "hasViolation": false,
+      "durationMs": 369.79019999999946,
+      "topRecommended": [
+        "Tái khám Tai Mũi Họng (VitaCare Trung tâm)",
+        "Tái khám Tai Mũi Họng (VitaCare Cơ sở Đông)",
+        "Khám Tai Mũi Họng trong giờ (VitaCare Trung tâm)"
+      ]
+    },
+    {
+      "caseId": "TC-19",
+      "category": "Da liễu",
+      "patientName": "Dương Văn Khoa",
+      "precision3": 1,
+      "hit3": 1,
+      "mrr": 1,
+      "hasViolation": false,
+      "durationMs": 403.4419000000007,
+      "topRecommended": [
+        "Tư vấn Da liễu (VitaCare Trung tâm)",
+        "Khám Da liễu trong giờ (VitaCare Trung tâm)",
+        "Tư vấn Da liễu (VitaCare Cơ sở Đông)"
+      ]
+    },
+    {
+      "caseId": "TC-20",
+      "category": "Da liễu",
+      "patientName": "Nguyễn Thị Hồng",
+      "precision3": 1,
+      "hit3": 1,
+      "mrr": 1,
+      "hasViolation": false,
+      "durationMs": 368.0096000000003,
+      "topRecommended": [
+        "Tư vấn Da liễu (VitaCare Trung tâm)",
+        "Tư vấn Da liễu (VitaCare Cơ sở Đông)",
+        "Khám Da liễu ngoài giờ (VitaCare Trung tâm)"
+      ]
+    },
+    {
+      "caseId": "TC-21",
+      "category": "Tổng quát định kỳ",
+      "patientName": "Lâm Tuấn Kiệt",
+      "precision3": 1,
+      "hit3": 1,
+      "mrr": 1,
+      "hasViolation": false,
+      "durationMs": 402.3065999999999,
+      "topRecommended": [
+        "Gói khám sức khỏe tổng quát cơ bản (VitaCare Trung tâm)",
+        "Gói khám sức khỏe tổng quát cơ bản (VitaCare Cơ sở Đông)",
+        "Tư vấn Nội tổng quát (VitaCare Trung tâm)"
+      ]
+    },
+    {
+      "caseId": "TC-22",
+      "category": "Tổng quát định kỳ",
+      "patientName": "Đoàn Thanh Trúc",
+      "precision3": 1,
+      "hit3": 1,
+      "mrr": 1,
+      "hasViolation": false,
+      "durationMs": 353.72209999999905,
+      "topRecommended": [
+        "Gói kiểm tra sức khỏe nữ (VitaCare Trung tâm)",
+        "Gói kiểm tra sức khỏe nữ (VitaCare Cơ sở Đông)",
+        "Gói khám sức khỏe tổng quát cơ bản (VitaCare Trung tâm)"
+      ]
+    },
+    {
+      "caseId": "TC-23",
+      "category": "Đa bệnh lý đồng mắc",
+      "patientName": "Trần Đình Trọng",
+      "precision3": 1,
+      "hit3": 1,
+      "mrr": 1,
+      "hasViolation": false,
+      "durationMs": 372.8176000000003,
+      "topRecommended": [
+        "Khám Nội tiết – Đái tháo đường trong giờ (VitaCare Trung tâm)",
+        "Tư vấn Nội tiết – Đái tháo đường (VitaCare Trung tâm)",
+        "Khám Ngoại tổng quát trong giờ (VitaCare Trung tâm)"
+      ]
+    },
+    {
+      "caseId": "TC-24",
+      "category": "Đa bệnh lý đồng mắc",
+      "patientName": "Bùi Thị Cúc",
+      "precision3": 0.3333333333333333,
+      "hit3": 1,
+      "mrr": 0.3333333333333333,
+      "hasViolation": false,
+      "durationMs": 369.60009999999966,
+      "topRecommended": [
+        "Gói tầm soát cườm nước & Bệnh lý võng mạc (VitaCare Trung tâm)",
+        "Gói tầm soát cườm nước & Bệnh lý võng mạc (VitaCare Cơ sở Đông)",
+        "Tư vấn Mắt (VitaCare Trung tâm)"
+      ]
+    },
+    {
+      "caseId": "TC-25",
+      "category": "Đa bệnh lý đồng mắc",
+      "patientName": "Nguyễn Văn Sang",
+      "precision3": 1,
+      "hit3": 1,
+      "mrr": 1,
+      "hasViolation": false,
+      "durationMs": 372.940700000001,
+      "topRecommended": [
+        "Tái khám Tiêu hóa – Gan mật (VitaCare Trung tâm)",
+        "Khám Tiêu hóa – Gan mật trong giờ (VitaCare Trung tâm)",
+        "Tư vấn Tiêu hóa – Gan mật (VitaCare Trung tâm)"
+      ]
+    },
+    {
+      "caseId": "TC-26",
+      "category": "An toàn giới tính (Nam)",
+      "patientName": "Lê Văn Hùng",
+      "precision3": 0,
+      "hit3": 0,
+      "mrr": 0,
+      "hasViolation": true,
+      "durationMs": 381.4331999999995,
+      "topRecommended": [
+        "Trọng Nghĩa",
+        "Trọng Nghĩa",
+        "Trọng Nghĩa"
+      ]
+    },
+    {
+      "caseId": "TC-27",
+      "category": "An toàn giới tính (Nữ)",
+      "patientName": "Nguyễn Bích Ngọc",
+      "precision3": 0.6666666666666666,
+      "hit3": 1,
+      "mrr": 0.5,
+      "hasViolation": false,
+      "durationMs": 375.3858999999993,
+      "topRecommended": [
+        "Gói kiểm tra sức khỏe nữ (VitaCare Trung tâm)",
+        "Trọng Nghĩa",
+        "Trọng Nghĩa"
+      ]
+    },
+    {
+      "caseId": "TC-28",
+      "category": "Luật tái khám (Tim mạch)",
+      "patientName": "Đặng Quốc Huy",
+      "precision3": 1,
+      "hit3": 1,
+      "mrr": 1,
+      "hasViolation": false,
+      "durationMs": 363.0597999999991,
+      "topRecommended": [
+        "Tái khám Tim mạch (VitaCare Trung tâm)",
+        "Tái khám Tim mạch (VitaCare Cơ sở Đông)",
+        "Khám Tim mạch trong giờ (VitaCare Trung tâm)"
+      ]
+    },
+    {
+      "caseId": "TC-29",
+      "category": "Luật tái khám (Mắt)",
+      "patientName": "Trần Thị Thu Trang",
+      "precision3": 1,
+      "hit3": 1,
+      "mrr": 1,
+      "hasViolation": false,
+      "durationMs": 365.28659999999945,
+      "topRecommended": [
+        "Tái khám Mắt (VitaCare Trung tâm)",
+        "Tái khám Mắt (VitaCare Cơ sở Đông)",
+        "Gói khám Mắt toàn diện & Đo thị lực khúc xạ (VitaCare Trung tâm)"
+      ]
+    },
+    {
+      "caseId": "TC-30",
+      "category": "Luật tái khám (Tai Mũi Họng)",
+      "patientName": "Hoàng Minh Quân",
+      "precision3": 1,
+      "hit3": 1,
+      "mrr": 1,
+      "hasViolation": false,
+      "durationMs": 360.60149999999885,
+      "topRecommended": [
+        "Tái khám Tai Mũi Họng (VitaCare Trung tâm)",
+        "Tái khám Tai Mũi Họng (VitaCare Cơ sở Đông)",
+        "Khám Tai Mũi Họng trong giờ (VitaCare Trung tâm)"
+      ]
+    }
+  ]
+}

@@ -1,31 +1,34 @@
-import { Module } from '@nestjs/common'
-import { ScheduleModule } from '@nestjs/schedule'
-import { AppointmentsController } from '../../controllers/appointments.controller.js'
-import { MailsModule } from '../mails/mails.module.js'
-import { AppointmentReminderTask } from './appointment-reminder.task.js'
-import { BookingController, CheckInController, PaymentWebhookController } from './booking.controller.js'
-import { BookingService } from './booking.service.js'
-import { PaymentWebhookSignatureService } from './payment-webhook-signature.service.js'
-import { StaffAppointmentsController } from './staff-appointments.controller.js'
-import { StaffAppointmentsService } from './staff-appointments.service.js'
+import { Module } from '@nestjs/common';
+import { HttpSmsModule } from '../../infrastructure/httpsms/httpsms.module.js';
+import { MailsModule } from '../../infrastructure/mail/mails.module.js';
+import { NotificationModule } from '../notifications/notification.module.js';
+import { RecommendationModule } from '../recommendations/recommendation.module.js';
+import { AppointmentReminderTask } from './appointment-reminder.task.js';
+import { AppointmentsController } from './appointments.controller.js';
+import { AppointmentsService } from './appointments.service.js';
+
+import { PatientAppointmentsController } from './patient-appointments.controller.js';
+import { PatientAppointmentsService } from './patient-appointments.service.js';
+
+import { AppointmentConfirmationService } from './appointment-confirmation.service.js';
 
 @Module({
   imports: [
     MailsModule,
+    RecommendationModule,
+    HttpSmsModule,
+    NotificationModule,
   ],
   controllers: [
     AppointmentsController,
-    StaffAppointmentsController,
-    BookingController,
-    PaymentWebhookController,
-    CheckInController,
+    PatientAppointmentsController,
   ],
   providers: [
-    BookingService,
-    PaymentWebhookSignatureService,
-    StaffAppointmentsService,
+    AppointmentsService,
+    AppointmentConfirmationService,
+    PatientAppointmentsService,
     AppointmentReminderTask,
   ],
-  exports: [BookingService],
+  exports: [AppointmentConfirmationService],
 })
-export class AppointmentsModule {}
+export class AppointmentsModule { }

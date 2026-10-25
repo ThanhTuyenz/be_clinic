@@ -9,14 +9,19 @@ import {
   MinLength,
   IsArray,
   ValidateNested,
+  IsNumber,
+  IsInt,
+  Min,
+  Max,
 } from 'class-validator';
 
 import { lowerCaseTransformer } from 'src/common/utils/transformers/lower-case.transformer';
 
 import { UserRole, UserStatus } from '../entities/user.entity';
-import { RolePermissionDto } from '../../../roles/dtos/create-role.dto';
+import { RolePermissionDto } from './role-permission.dto';
+import { DoctorProfileDto } from './doctor-profile.dto';
 
-export class UpdateUserAdminDto {
+export class UpdateUserAdminDto extends DoctorProfileDto {
   @ApiPropertyOptional()
   @IsOptional()
   @Transform(lowerCaseTransformer)
@@ -44,14 +49,10 @@ export class UpdateUserAdminDto {
   roleId?: string | null;
 
   @ApiPropertyOptional({
-    description: 'Custom permissions for user',
-    type: [RolePermissionDto],
+    description: 'Custom permissions for user ({ granted?: string[], revoked?: string[] } or array)',
   })
   @IsOptional()
-  @IsArray()
-  @ValidateNested({ each: true })
-  @Type(() => RolePermissionDto)
-  customPermissions?: RolePermissionDto[] | null;
+  customPermissions?: any;
 
   @ApiPropertyOptional({ description: 'Đặt mật khẩu mới (admin)' })
   @IsOptional()
@@ -73,4 +74,63 @@ export class UpdateUserAdminDto {
   @IsOptional()
   @IsBoolean()
   isDeleted?: boolean;
+
+  @ApiPropertyOptional({ example: '0901234567' })
+  @IsOptional()
+  phoneNumber?: string | null;
+
+  @ApiPropertyOptional({ description: 'URL ảnh đại diện' })
+  @IsOptional()
+  avatarUrl?: string | null;
+
+  @ApiPropertyOptional({ description: 'ID cơ sở làm việc' })
+  @IsOptional()
+  branchId?: string | null;
+
+  @ApiPropertyOptional({ description: 'Danh sách ID cơ sở làm việc / quản lý', type: [String] })
+  @IsOptional()
+  @IsArray()
+  branchIds?: string[];
+
+  @ApiPropertyOptional({ description: 'ID cơ sở chính' })
+  @IsOptional()
+  primaryBranchId?: string | null;
+
+  @ApiPropertyOptional({ description: 'ID chuyên khoa chính (Bác sĩ)' })
+  @IsOptional()
+  specialtyId?: number | null;
+
+  @ApiPropertyOptional({ example: 'BS. CKI' })
+  @IsOptional()
+  academicRank?: string | null;
+
+  @ApiPropertyOptional({ example: 'CCHN-12345' })
+  @IsOptional()
+  licenseNumber?: string | null;
+
+  @ApiPropertyOptional({ example: 5 })
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  experienceYears?: number | null;
+
+  @ApiPropertyOptional({ example: 250000 })
+  @IsOptional()
+  @IsNumber({ maxDecimalPlaces: 2 })
+  @Min(0)
+  @Max(9999999999.99)
+  consultationFee?: number | null;
+
+  @ApiPropertyOptional({ example: 30 })
+  @IsOptional()
+  slotDuration?: number | null;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsBoolean()
+  isFeatured?: boolean;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  biography?: string | null;
 }

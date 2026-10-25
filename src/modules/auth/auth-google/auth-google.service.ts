@@ -1,50 +1,47 @@
-import { HttpException, HttpStatus, Injectable } from '@nestjs/common';
+import {
+  Injectable,
+  UnauthorizedException,
+  UnprocessableEntityException,
+} from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { OAuth2Client } from 'google-auth-library';
 import { AllConfigType } from '../../../config/config.type';
 import { AuthGoogleLoginDto } from './dtos/auth-google-login.dto';
 import { SocialType } from '../../../common/utils/social.type';
-import { IAuthGoogleService } from './auth-google';
 
 @Injectable()
-export class AuthGoogleService implements IAuthGoogleService {
-  private google: OAuth2Client;
+export class AuthGoogleService {
+  private readonly google = new OAuth2Client();
+  private readonly clientId: string;
 
-  constructor(private configService: ConfigService<AllConfigType>) {
-    this.google = new OAuth2Client(
-      configService.get<string>('google.clientId', { infer: true }),
-      configService.get<string>('google.clientSecret', { infer: true }),
-    );
+  constructor(configService: ConfigService<AllConfigType>) {
+    this.clientId = configService.getOrThrow<string>('google.clientId', {
+      infer: true,
+    });
   }
 
   async getProfileByToken(loginDto: AuthGoogleLoginDto): Promise<SocialType> {
-    const ticket = await this.google.verifyIdToken({
-      idToken: loginDto.idToken,
-      audience: [
-        this.configService.getOrThrow<string>('google.clientId', {
-          infer: true,
-        }),
-      ],
-    });
+    let data;
+    try {
+      const ticket = await this.google.verifyIdToken({
+        idToken: loginDto.idToken,
+        audience: this.clientId,
+      });
+      data = ticket.getPayload();
+    } catch {
+      throw new UnauthorizedException('Mã Google ID Token không hợp lệ hoặc đã hết hạn.');
+    }
 
-    const data = ticket.getPayload();
-
-    if (!data) {
-      throw new HttpException(
-        {
-          status: HttpStatus.UNPROCESSABLE_ENTITY,
-          errors: {
-            user: 'wrongToken',
-          },
-        },
-        HttpStatus.UNPROCESSABLE_ENTITY,
-      );
+    if (!data?.sub || !data?.email) {
+      throw new UnprocessableEntityException('Không thể lấy thông tin tài khoản từ Google Token.');
     }
 
     return {
       id: data.sub,
       email: data.email,
-      fullName: [data.given_name, data.family_name].filter(Boolean).join(' '),
+      fullName: data.name || [data.family_name, data.given_name].filter(Boolean).join(' ') || data.email.split('@')[0],
+      avatarUrl: data.picture,
     };
   }
 }
+

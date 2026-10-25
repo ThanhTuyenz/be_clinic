@@ -18,23 +18,25 @@ import { Request, Response, CookieOptions } from 'express';
 import { Routes, Services } from 'src/common/utils/constants';
 import { Public } from 'src/common/decorators/public.decorator';
 import { IAuthService } from './auth';
-import { AuthEmailLoginDto } from './dtos/auth-email-login.dto';
-import { LoginResponseType } from './types/login-response.type';
-import { AuthRegisterDto } from './dtos/auth-register.dto';
-import { AuthConfirmEmailDto } from './dtos/auth-confirm-email.dto';
+import {
+  AuthEmailLoginDto,
+  AuthRegisterDto,
+  AuthConfirmEmailDto,
+  AuthForgotPasswordDto,
+  AuthResetPasswordDto,
+  AuthVerifyOtpDto,
+  AuthResendOtpDto,
+} from './dtos/index.js';
+import { LoginResponseType, JwtPayloadType } from './types/index.js';
 import { NullableType } from 'src/common/utils/types/nullable.type';
 import { User } from '../users/entities/user.entity';
-import { AuthForgotPasswordDto } from './dtos/auth-forgot-password.dto';
-import { AuthResetPasswordDto } from './dtos/auth-reset-password.dto';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
-import { SkipPermissions } from '../../permissions/decorators/skip-permissions.decorator';
+import { SkipPermissions } from 'src/common/decorators';
 import { ConfigService } from '@nestjs/config';
 import { AllConfigType } from 'src/config/config.type';
 import { ttlToMilliseconds } from '../../../config/auth.config';
-import {
-  AuthResendOtpDto,
-  AuthVerifyOtpDto,
-} from './dtos/auth-verify-otp.dto';
+
+type AuthenticatedRequest = Request & { user: JwtPayloadType };
 
 @ApiTags('Auth')
 @SkipPermissions() // Skip permissions check for all routes in this controller
@@ -61,6 +63,28 @@ export class AuthController {
     }
   }
 
+  /**
+   * Trả về cookie options dùng chung cho tất cả auth routes.
+   */
+  private buildCookieOptions(): CookieOptions {
+    const isProduction = process.env.NODE_ENV === 'production';
+    return {
+      httpOnly: true,
+      secure: isProduction,
+      sameSite: isProduction ? 'none' : 'lax',
+      path: '/',
+    };
+  }
+
+  /**
+   * Set cả 2 auth cookies (access + refresh) — loại bỏ duplicate code trong 3 endpoints.
+   */
+  private setAuthCookies(res: Response, token: string, refreshToken: string): void {
+    const opts = this.buildCookieOptions();
+    res.cookie('token', token, { ...opts, maxAge: this.getCookieMaxAge('auth.expires') });
+    res.cookie('refreshToken', refreshToken, { ...opts, maxAge: this.getCookieMaxAge('auth.refreshExpires') });
+  }
+
   @Get('check-email')
   @Public()
   @HttpCode(HttpStatus.OK)
@@ -81,31 +105,7 @@ export class AuthController {
     @Res({ passthrough: true }) res: Response,
   ): Promise<LoginResponseType> {
     const response = await this.authService.validateLogin(loginDto);
-
-    const isProduction = process.env.NODE_ENV === 'production';
-
-    const cookieOptions: CookieOptions = {
-      httpOnly: true,
-      secure: isProduction,
-      sameSite: isProduction ? 'none' : 'lax', // Bắt buộc 'none' cho cross-site giữa Vercel và Render
-      path: '/',
-    };
-
-    const tokenMaxAge = this.getCookieMaxAge('auth.expires');
-    const refreshTokenMaxAge = this.getCookieMaxAge('auth.refreshExpires');
-
-    // Set accessToken vào cookie
-    res.cookie('token', response.token, {
-      ...cookieOptions,
-      maxAge: tokenMaxAge,
-    });
-
-    // Set refreshToken vào cookie
-    res.cookie('refreshToken', response.refreshToken, {
-      ...cookieOptions,
-      maxAge: refreshTokenMaxAge,
-    });
-
+    this.setAuthCookies(res, response.token, response.refreshToken);
     return response;
   }
 
@@ -157,7 +157,7 @@ export class AuthController {
   @ApiBearerAuth('access-token')
   @Get('status')
   @HttpCode(HttpStatus.OK)
-  public status(@Req() request): Promise<NullableType<User>> {
+  public status(@Req() request: AuthenticatedRequest): Promise<NullableType<User>> {
     return this.authService.status(request.user);
   }
 
@@ -201,35 +201,14 @@ export class AuthController {
 
     this.logger.log('Refresh request accepted');
 
-    const response =
-      await this.authService.refreshTokenFromCookie(refreshToken);
+    const response = await this.authService.refreshTokenFromCookie(refreshToken);
 
     this.logger.log(
       `Refresh response issued, hasToken=${Boolean(response.token)}, hasRefreshToken=${Boolean(response.refreshToken)}`,
     );
 
-    const isProduction = process.env.NODE_ENV === 'production';
-    const tokenMaxAge = this.getCookieMaxAge('auth.expires');
-    const refreshTokenMaxAge = this.getCookieMaxAge('auth.refreshExpires');
-
-    // Set accessToken vào cookie
-    const refreshCookieOptions: CookieOptions = {
-      httpOnly: true,
-      secure: isProduction,
-      sameSite: isProduction ? 'none' : 'lax', // Bắt buộc 'none' cho cross-site giữa Vercel và Render
-      maxAge: tokenMaxAge,
-      path: '/',
-    };
-    res.cookie('token', response.token, refreshCookieOptions);
-    // Refresh token được rotate sau mỗi lần sử dụng, vì vậy cookie
-    // cũ phải được thay thế cùng response.
-    res.cookie('refreshToken', response.refreshToken, {
-      httpOnly: true,
-      secure: isProduction,
-      sameSite: isProduction ? 'none' : 'lax',
-      maxAge: refreshTokenMaxAge,
-      path: '/',
-    });
+    // Refresh token đã được rotate — set cả 2 cookies mới
+    this.setAuthCookies(res, response.token, response.refreshToken);
 
     return {
       token: response.token,
@@ -246,21 +225,23 @@ export class AuthController {
     @Req() request: Request,
     @Res({ passthrough: true }) res: Response,
   ): Promise<void> {
+    const token =
+      request.cookies?.token ||
+      (request.headers.authorization?.startsWith('Bearer ')
+        ? request.headers.authorization.split(' ')[1]
+        : undefined);
+
+    const sessionId = (request as Request & { user?: { sessionId?: string } }).user?.sessionId;
+
     await this.authService.logout({
-      sessionId: (request as Request & { user?: { sessionId?: string } }).user!.sessionId!,
+      sessionId,
+      token,
     });
 
-    const isProduction = process.env.NODE_ENV === 'production';
-
-    const cookieOptions: CookieOptions = {
-      httpOnly: true,
-      secure: isProduction,
-      sameSite: isProduction ? 'none' : 'lax',
-      path: '/',
-    };
-
-    // Clear cả 2 cookies
+    // Clear cả 2 cookies dùng cùng options với lúc set
+    const cookieOptions = this.buildCookieOptions();
     res.clearCookie('token', cookieOptions);
     res.clearCookie('refreshToken', cookieOptions);
   }
 }
+

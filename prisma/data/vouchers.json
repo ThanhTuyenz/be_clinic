@@ -1,0 +1,46 @@
+[
+  {
+    "code": "CHAOBANMOI",
+    "name": "Ưu đãi chào bạn mới",
+    "description": "Giảm ngay 20.000đ cho lượt đặt lịch khám đầu tiên",
+    "discountType": "FIXED_AMOUNT",
+    "discountValue": 20000,
+    "minOrderValue": 0,
+    "maxDiscount": null,
+    "usageLimit": 1000,
+    "userUsageLimit": 1
+  },
+  {
+    "code": "MEDPRO10",
+    "name": "Ưu đãi Medpro 10%",
+    "description": "Giảm 10% tổng chi phí khám (tối đa 50.000đ)",
+    "discountType": "PERCENTAGE",
+    "discountValue": 10,
+    "minOrderValue": 100000,
+    "maxDiscount": 50000,
+    "usageLimit": 500,
+    "userUsageLimit": 2
+  },
+  {
+    "code": "TRIAN2026",
+    "name": "Tri ân người bệnh 2026",
+    "description": "Giảm 30.000đ cho đơn khám từ 200.000đ",
+    "discountType": "FIXED_AMOUNT",
+    "discountValue": 30000,
+    "minOrderValue": 200000,
+    "maxDiscount": null,
+    "usageLimit": 300,
+    "userUsageLimit": 1
+  },
+  {
+    "code": "KHAMONLINE",
+    "name": "Khuyến mãi đặt khám trực tuyến",
+    "description": "Giảm 50.000đ cho các gói khám và chuyên khoa từ 300.000đ",
+    "discountType": "FIXED_AMOUNT",
+    "discountValue": 50000,
+    "minOrderValue": 300000,
+    "maxDiscount": null,
+    "usageLimit": 200,
+    "userUsageLimit": 1
+  }
+]

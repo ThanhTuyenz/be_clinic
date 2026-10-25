@@ -8,4 +8,11 @@ export const RABBITMQ_TOPOLOGY = {
   retryExchange: 'appointments.hold.retry',
   failedRoutingKey: 'failed',
   deadLetterQueue: 'appointments.hold.expired.dlq',
+  eventsExchange: 'amq.topic',
+  bookedRoutingKey: 'appointment.booked',
+  bookedQueue: 'appointments.booked.mail',
+  recommendationRoutingKey: 'recommendation.profile.analyze',
+  recommendationQueue: 'recommendations.profile.analyze',
+  packageVectorSyncRoutingKey: 'package.vector.sync',
+  packageVectorSyncQueue: 'packages.vector.sync',
 } as const;

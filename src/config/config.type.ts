@@ -27,6 +27,7 @@ export type AuthConfig = {
 };
 
 export type MailerConfig = {
+  enabled: boolean;
   port: number;
   host?: string;
   user?: string;
@@ -62,12 +63,29 @@ export type RedisConfig = {
   connectTimeoutMs: number;
 };
 
+export type GeminiConfig = {
+  apiKey?: string;
+  model: string;
+};
+
+
+
+export type HttpSmsConfig = {
+  enabled: boolean;
+  apiKey?: string;
+  fromNumber: string;
+  endpoint: string;
+};
+
 export type AllConfigType = {
   app: AppConfig;
   database: DatabaseConfig;
   auth: AuthConfig;
   mailer: MailerConfig;
   google: GoogleConfig;
+  gemini: GeminiConfig;
   rabbitmq: RabbitMqConfig;
   redis: RedisConfig;
+  httpsms: HttpSmsConfig;
 };
+

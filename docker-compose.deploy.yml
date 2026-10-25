@@ -1,0 +1,96 @@
+# Dung cho deploy
+
+services:
+  server:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: vitacare-server
+    restart: unless-stopped
+    ports:
+      - "8011:8011"
+    env_file:
+      - .env.production
+    environment:
+      NODE_ENV: production
+      PORT: 8011
+      REDIS_URL: redis://:vitacare_prod_password@redis:6379
+      RABBITMQ_URL: amqp://vitacare:vitacare_prod_password@rabbitmq:5672
+    depends_on:
+      redis:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    volumes:
+      - vitacare_uploads:/app/uploads
+    networks:
+      - vitacare-prod-net
+
+  redis:
+    image: redis/redis-stack-server:latest
+    container_name: vitacare-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    environment:
+      REDIS_ARGS: "--requirepass vitacare_prod_password --appendonly yes"
+    volumes:
+      - vitacare_redis_prod_data:/data
+    healthcheck:
+      test: ["CMD-SHELL", "redis-cli -a vitacare_prod_password ping | grep PONG"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    networks:
+      - vitacare-prod-net
+
+  rabbitmq:
+    image: rabbitmq:3.13-management-alpine
+    container_name: vitacare-rabbitmq
+    restart: unless-stopped
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    environment:
+      RABBITMQ_DEFAULT_USER: vitacare
+      RABBITMQ_DEFAULT_PASS: vitacare_prod_password
+    volumes:
+      - vitacare_rabbitmq_prod_data:/var/lib/rabbitmq
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    networks:
+      - vitacare-prod-net
+
+  nginx:
+    image: nginx:alpine
+    container_name: vitacare-nginx
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx/default.conf:/etc/nginx/conf.d/default.conf:ro
+      - ./nginx/ssl:/etc/nginx/ssl:ro
+      - ./nginx/logs:/var/log/nginx
+      - vitacare_uploads:/app/uploads:ro
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    depends_on:
+      - server
+    networks:
+      - vitacare-prod-net
+
+volumes:
+  vitacare_redis_prod_data:
+    driver: local
+  vitacare_rabbitmq_prod_data:
+    driver: local
+  vitacare_uploads:
+    driver: local
+
+networks:
+  vitacare-prod-net:
+    driver: bridge

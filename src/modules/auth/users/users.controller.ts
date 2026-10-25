@@ -10,7 +10,11 @@ import {
   Patch,
   Post,
   Query,
+  Req,
+  ForbiddenException,
 } from '@nestjs/common';
+import type { Request } from 'express';
+import { PermissionsService } from '../permissions/permissions.service';
 import {
   ApiBearerAuth,
   ApiOperation,
@@ -18,12 +22,8 @@ import {
   ApiTags,
 } from '@nestjs/swagger';
 
-import {
-  RequiresPermission,
-  PermissionAction,
-  PermissionResource,
-  PermissionResourceTarget,
-} from '../../permissions/decorators/permissions.decorator';
+import { RequirePermissions } from 'src/common/decorators/require-permissions.decorator';
+import { AppPermission } from 'src/common/constants/permissions.constant';
 import { Routes, Services } from 'src/common/utils/constants';
 
 import { CreateUserDto } from './dtos/create-user.dto';
@@ -31,33 +31,29 @@ import { UpdateUserAdminDto } from './dtos/update-user-admin.dto';
 import { UsersPaginationQueryDto } from './dtos/users-pagination-query.dto';
 import { AssignRoleDto } from './dtos/assign-role.dto';
 import { IUsersService } from './users';
-import { RolePermissionDto } from '../../roles/dtos/create-role.dto';
+import { RolePermissionDto } from './dtos/role-permission.dto';
 
 @ApiTags('Users')
 @Controller(Routes.USERS)
 export class UsersController {
   constructor(
     @Inject(Services.USERS) private readonly usersService: IUsersService,
-  ) {}
+    private readonly permissions: PermissionsService,
+  ) { }
 
   @Post()
-  @RequiresPermission(
-    PermissionResource.USER,
-    PermissionAction.CREATE,
-    PermissionResourceTarget.ANY,
-  )
+  @RequirePermissions(AppPermission.USER_CREATE)
   @ApiBearerAuth('access-token')
   @ApiOperation({ summary: 'Tạo mới người dùng (admin)' })
-  create(@Body() createUserDto: CreateUserDto) {
+  async create(@Req() request: Request, @Body() createUserDto: CreateUserDto) {
+    if (['admin', 'chain_manager', 'branch_manager'].includes(String(createUserDto.role).toLowerCase()) || createUserDto.roleId !== undefined || createUserDto.customPermissions !== undefined) {
+      await this.requireAdditional(request.user!.id, AppPermission.ROLE_MANAGE);
+    }
     return this.usersService.createUser(createUserDto);
   }
 
   @Get()
-  @RequiresPermission(
-    PermissionResource.USER,
-    PermissionAction.GET,
-    PermissionResourceTarget.ANY,
-  )
+  @RequirePermissions(AppPermission.USER_READ)
   @ApiBearerAuth('access-token')
   @ApiOperation({
     summary:
@@ -75,24 +71,24 @@ export class UsersController {
   }
 
   @Patch(':id')
-  @RequiresPermission(
-    PermissionResource.USER,
-    PermissionAction.EDIT,
-    PermissionResourceTarget.ANY,
-  )
+  @RequirePermissions(AppPermission.USER_UPDATE)
   @ApiBearerAuth('access-token')
   @ApiParam({ name: 'id', description: 'UUID người dùng' })
   @ApiOperation({ summary: 'Cập nhật người dùng (admin)' })
-  update(@Param('id') id: string, @Body() updateUserDto: UpdateUserAdminDto) {
+  async update(@Req() request: Request, @Param('id') id: string, @Body() updateUserDto: UpdateUserAdminDto) {
+    if (updateUserDto.customPermissions !== undefined || updateUserDto.roleId !== undefined) {
+      await this.requireAdditional(request.user!.id, AppPermission.ROLE_MANAGE);
+    }
+    if (updateUserDto.role !== undefined) {
+      const existing = await this.usersService.findOneUser({ id });
+      if (String(existing?.role).toLowerCase() !== String(updateUserDto.role).toLowerCase()) await this.requireAdditional(request.user!.id, AppPermission.ROLE_MANAGE);
+    }
+    if (updateUserDto.isDeleted !== undefined) await this.requireAdditional(request.user!.id, AppPermission.USER_DELETE);
     return this.usersService.updateUser(id, updateUserDto);
   }
 
   @Delete(':id')
-  @RequiresPermission(
-    PermissionResource.USER,
-    PermissionAction.DELETE,
-    PermissionResourceTarget.ANY,
-  )
+  @RequirePermissions(AppPermission.USER_DELETE)
   @ApiBearerAuth('access-token')
   @HttpCode(HttpStatus.NO_CONTENT)
   @ApiParam({ name: 'id', description: 'UUID người dùng' })
@@ -102,11 +98,7 @@ export class UsersController {
   }
 
   @Patch(':id/role')
-  @RequiresPermission(
-    PermissionResource.USER,
-    PermissionAction.EDIT,
-    PermissionResourceTarget.ANY,
-  )
+  @RequirePermissions(AppPermission.ROLE_MANAGE)
   @ApiBearerAuth('access-token')
   @ApiParam({ name: 'id', description: 'UUID người dùng' })
   @ApiOperation({ summary: 'Gán role cho người dùng (admin)' })
@@ -115,11 +107,7 @@ export class UsersController {
   }
 
   @Delete(':id/role')
-  @RequiresPermission(
-    PermissionResource.USER,
-    PermissionAction.EDIT,
-    PermissionResourceTarget.ANY,
-  )
+  @RequirePermissions(AppPermission.ROLE_MANAGE)
   @ApiBearerAuth('access-token')
   @HttpCode(HttpStatus.NO_CONTENT)
   @ApiParam({ name: 'id', description: 'UUID người dùng' })
@@ -129,11 +117,7 @@ export class UsersController {
   }
 
   @Post(':id/permissions')
-  @RequiresPermission(
-    PermissionResource.USER,
-    PermissionAction.EDIT,
-    PermissionResourceTarget.ANY,
-  )
+  @RequirePermissions(AppPermission.ROLE_MANAGE)
   @ApiBearerAuth('access-token')
   @ApiParam({ name: 'id', description: 'UUID người dùng' })
   @ApiOperation({ summary: 'Gán quyền tùy chỉnh cho người dùng (admin)' })
@@ -145,16 +129,16 @@ export class UsersController {
   }
 
   @Delete(':id/permissions')
-  @RequiresPermission(
-    PermissionResource.USER,
-    PermissionAction.EDIT,
-    PermissionResourceTarget.ANY,
-  )
+  @RequirePermissions(AppPermission.ROLE_MANAGE)
   @ApiBearerAuth('access-token')
   @HttpCode(HttpStatus.NO_CONTENT)
   @ApiParam({ name: 'id', description: 'UUID người dùng' })
   @ApiOperation({ summary: 'Xóa quyền tùy chỉnh của người dùng (admin)' })
   async removeCustomPermissions(@Param('id') id: string): Promise<void> {
     await this.usersService.updateUser(id, { customPermissions: null });
+  }
+  private async requireAdditional(userId: string, permission: AppPermission) {
+    const result = await this.permissions.getUserPermissions(userId);
+    if (!result.effectivePermissions.includes(permission)) throw new ForbiddenException('Bạn không có quyền thay đổi vai trò, phân quyền hoặc trạng thái xóa tài khoản');
   }
 }

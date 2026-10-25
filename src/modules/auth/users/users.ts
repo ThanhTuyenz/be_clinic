@@ -3,9 +3,21 @@ import { CreateUserDto } from './dtos/create-user.dto';
 import { User } from './entities/user.entity';
 import { NullableType } from 'src/common/utils/types/nullable.type';
 import { IPaginationOptions } from 'src/common/utils/types/pagination-options';
+import { DoctorProfileDto } from './dtos/doctor-profile.dto';
 
-export type UserUpdate = Omit<Partial<User>, 'customPermissions'> & {
+export type UserUpdate = Omit<Partial<User>, 'customPermissions'> & DoctorProfileDto & {
   customPermissions?: unknown[] | null;
+  phoneNumber?: string | null;
+  avatarUrl?: string | null;
+  branchId?: string | null;
+  specialtyId?: number | null;
+  academicRank?: string | null;
+  licenseNumber?: string | null;
+  experienceYears?: number | null;
+  consultationFee?: number | null;
+  slotDuration?: number | null;
+  isFeatured?: boolean | null;
+  biography?: string | null;
 };
 
 export type UsersPaginatedResult = {
@@ -24,6 +36,11 @@ export interface IUsersService {
   createUser(createUserDto: CreateUserDto): Promise<User>;
   findOneUser(options: EntityCondition<User>): Promise<NullableType<User>>;
   findByEmail(email: string): Promise<NullableType<User>>;
+  /**
+   * Tìm user theo nhiều biến thể số điện thoại trong 1 query (thay thế N+1 queries).
+   * @param variants Mảng các biến thể SĐT (e.g., ['0912...', '+84912...'])
+   */
+  findByPhoneVariants(variants: string[]): Promise<NullableType<User>>;
   findUsersWithPagination(
     options: FindUsersOptions,
   ): Promise<UsersPaginatedResult>;
@@ -33,3 +50,4 @@ export interface IUsersService {
   assignRole(userId: string, roleId: string): Promise<User>;
   removeRole(userId: string): Promise<User>;
 }
+

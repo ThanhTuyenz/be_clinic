@@ -18,10 +18,22 @@ model Branch {
   id              String                    @id @default(uuid()) @db.Uuid
   clinicId        String                    @map("clinic_id") @db.Uuid
   code            String                    @unique @db.VarChar(30)
+  slug            String?                   @unique @db.VarChar(120)
   name            String                    @db.VarChar(150)
   address         String?
+  province        String?                   @map("province") @db.VarChar(100)
+  district        String?                   @map("district") @db.VarChar(100)
+  ward            String?                   @map("ward") @db.VarChar(100)
+  latitude        Float?                    @map("latitude")
+  longitude       Float?                    @map("longitude")
   phoneNumber     String?                   @map("phone_number") @db.VarChar(20)
-  timezone        String                    @default("Asia/Ho_Chi_Minh") @db.VarChar(50)
+  email           String?                   @map("email") @db.VarChar(100)
+  imageUrl        String?                   @map("image_url") @db.VarChar(500)
+  description     String?                   @map("description")
+  operatingHours  String?                   @map("operating_hours") @db.VarChar(100)
+  openTime        String?                   @map("open_time") @db.VarChar(10)
+  closeTime       String?                   @map("close_time") @db.VarChar(10)
+  timezone        String                    @default("Asia/Ho_Chi_Minh") @db.VarChar(500)
   isActive        Boolean                   @default(true) @map("is_active")
   createdAt       DateTime                  @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt       DateTime                  @updatedAt @map("updated_at") @db.Timestamptz(3)
@@ -33,10 +45,13 @@ model Branch {
   appointments    Appointment[]
   issuedInvoices  Invoice[]
   bookingMethods  BranchBookingMethod[]
+  packageReceptionSchedules PackageReceptionSchedule[]
   specialties     BranchSpecialty[]
+  aiTriageInsights AITriageInsight[]
 
   @@index([clinicId, isActive])
   @@map("branches")
+
 }
 
 model BranchSpecialty {
@@ -65,6 +80,7 @@ model BookingMethod {
   createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt   DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
   branches    BranchBookingMethod[]
+  appointments Appointment[]
 
   @@index([isActive, name])
   @@map("booking_methods")
@@ -81,6 +97,7 @@ model BranchBookingMethod {
   branch          Branch        @relation(fields: [branchId], references: [id], onDelete: Cascade)
   bookingMethod   BookingMethod @relation(fields: [bookingMethodId], references: [id], onDelete: Restrict)
   servicePackages ServicePackage[]
+  servicePackageLinks ServicePackageBranchBookingMethod[]
 
   @@unique([branchId, bookingMethodId])
   @@index([branchId, isEnabled, sortOrder])
@@ -98,7 +115,6 @@ model ClinicRoom {
   updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
   branch    Branch   @relation(fields: [branchId], references: [id], onDelete: Cascade)
   schedules DoctorSchedule[]
-  servicePackageSchedules ServicePackageSchedule[]
   specialties ClinicRoomSpecialty[]
 
   @@unique([branchId, code])

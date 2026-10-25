@@ -4,10 +4,13 @@
 
 enum UserRole {
   ADMIN          @map("admin")
+  CHAIN_MANAGER  @map("chain_manager")
   BRANCH_MANAGER @map("branch_manager")
   DOCTOR         @map("doctor")
   RECEPTIONIST   @map("receptionist")
   PATIENT        @map("patient")
+  PHARMACIST     @map("pharmacist")
+  CASHIER        @map("cashier")
 }
 
 enum UserStatus {
@@ -18,12 +21,19 @@ enum UserStatus {
 enum AuthProvider {
   EMAIL  @map("email")
   GOOGLE @map("google")
+  ZALO   @map("zalo")
 }
 
 enum Gender {
   MALE
   FEMALE
   OTHER
+}
+
+enum PackageGenderTarget {
+  ALL
+  MALE
+  FEMALE
 }
 
 enum ScheduleStatus {
@@ -39,8 +49,10 @@ enum SlotStatus {
 }
 
 enum AppointmentStatus {
+  HOLD
   PENDING_PAYMENT
   BOOKED
+  CONFIRMED
   CHECKED_IN
   IN_EXAMINATION
   COMPLETED
@@ -52,10 +64,11 @@ enum AppointmentStatus {
 }
 
 enum BookingOrderStatus {
+  UNPAID
   PENDING_PAYMENT
   PAID
-  PARTIALLY_CANCELLED
   CANCELLED
+  PARTIALLY_CANCELLED
   REFUNDED
 }
 
@@ -72,9 +85,9 @@ enum PaymentStatus {
   FAILED
   EXPIRED
   CANCELLED
+  REFUNDED
   LATE_SUCCESS
   REFUND_REQUIRED
-  REFUNDED
   MANUAL_REVIEW
 }
 
@@ -91,9 +104,16 @@ enum OutboxStatus {
   FAILED
 }
 
-enum MedicalServiceCategory {
-  LAB_TEST
-  IMAGING
-  PROCEDURE
-  CONSULTATION
+enum DiscountType {
+  PERCENTAGE
+  FIXED_AMOUNT
+}
+
+enum NotificationType {
+  APPOINTMENT_REMINDER
+  BOOKING_CONFIRMED
+  STATUS_CHANGED
+  MEDICAL_RESULT
+  CONTACT_REPLY
+  SYSTEM
 }
