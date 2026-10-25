@@ -277,29 +277,31 @@ Truy cập thông tin permissions đã được kiểm tra:
 ```typescript
 import { Injectable } from '@nestjs/common';
 import { Request as ExpressRequest } from 'express';
-import { In, Not } from 'typeorm';
+import { PrismaService } from 'src/infrastructure/database/prisma/prisma.service';
 
 @Injectable()
 export class UsersService {
+  constructor(private readonly prisma: PrismaService) {}
+
   async findAll(req: ExpressRequest) {
     const { allowedResourcesIds, deniedResourcesIds } = req.permissionsContext || {};
 
     // USER/STAFF: chỉ lấy users được phép
     if (allowedResourcesIds) {
-      return this.usersRepository.find({
-        where: { id: In(allowedResourcesIds) }
+      return this.prisma.user.findMany({
+        where: { id: { in: allowedResourcesIds } }
       });
     }
 
     // ADMIN/SUPER_ADMIN: lấy tất cả trừ những users bị deny
     if (deniedResourcesIds && deniedResourcesIds.length > 0) {
-      return this.usersRepository.find({
-        where: { id: Not(In(deniedResourcesIds)) }
+      return this.prisma.user.findMany({
+        where: { id: { notIn: deniedResourcesIds } }
       });
     }
 
     // Lấy tất cả
-    return this.usersRepository.find();
+    return this.prisma.user.findMany();
   }
 }
 ```

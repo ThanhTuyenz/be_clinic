@@ -1,17 +1,7 @@
-import { Body, Controller, Get, Post, Req } from '@nestjs/common'
+import { Controller, Get, Post } from '@nestjs/common'
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger'
-import type { Request } from 'express'
-import mongoose from 'mongoose'
 import { Public } from '../../common/decorators/public.decorator.js'
 import { SkipPermissions } from 'src/common/decorators'
-
-type ContactBody = {
-  fullName?: string
-  email?: string
-  phone?: string
-  subject?: string
-  message?: string
-}
 
 @ApiTags('Contacts')
 @Controller('contacts')

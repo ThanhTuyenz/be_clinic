@@ -232,7 +232,6 @@ export class UsersService implements IUsersService {
     });
     const entity = updatedWithRelations ? this.toEntity(updatedWithRelations) : this.toEntity(row);
     delete (entity as any).password;
-    delete (entity as any).previousPassword;
     delete (entity as any).hash;
     return entity;
   }
@@ -303,14 +302,12 @@ export class UsersService implements IUsersService {
       status: row.status.toLowerCase() as UserStatus,
       provider: row.provider.toLowerCase(),
       customPermissions: row.customPermissions as User['customPermissions'],
-      previousPassword: row.password,
     });
   }
 
   private toSafeEntity(row: PrismaUser): User {
     const entity = this.toEntity(row);
     delete (entity as any).password;
-    delete (entity as any).previousPassword;
     delete (entity as any).hash;
     (entity as any).effectivePermissions = calculateEffectivePermissions(row.role, row.customPermissions);
     return entity;

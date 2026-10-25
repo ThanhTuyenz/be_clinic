@@ -1,13 +1,12 @@
 # VitaCare Clinic API (`be_clinic`)
 
-Backend NestJS cho hệ thống phòng khám. PostgreSQL/Prisma phục vụ nghiệp vụ mới; Redis dùng cho cache; RabbitMQ dùng cho hàng đợi; MongoDB vẫn được một số module legacy sử dụng trong thời gian migrate.
+Backend NestJS cho hệ thống phòng khám. PostgreSQL/Prisma lưu dữ liệu nghiệp vụ; Redis dùng cho cache; RabbitMQ dùng cho hàng đợi.
 
 ## Yêu cầu
 
 - Node.js 22+
 - npm 10+
 - Docker Desktop
-- MongoDB local hoặc MongoDB URI có thể kết nối
 
 | Dịch vụ | Cổng mặc định |
 | --- | ---: |
@@ -16,7 +15,6 @@ Backend NestJS cho hệ thống phòng khám. PostgreSQL/Prisma phục vụ nghi
 | Redis | `6379` |
 | RabbitMQ | `5672` |
 | RabbitMQ Management | `15672` |
-| MongoDB legacy | `27017` |
 
 ## Chạy dự án lần đầu — thực hiện đúng thứ tự
 
@@ -39,7 +37,6 @@ Cập nhật tối thiểu:
 ```dotenv
 NODE_ENV=development
 PORT=8011
-MONGODB_URI=mongodb://127.0.0.1:27017/clinic
 JWT_SECRET=replace-with-a-long-random-secret
 
 DATABASE_URL=postgresql://vitacare:vitacare_local@localhost:5432/vitacare?schema=public
@@ -67,7 +64,6 @@ Chờ ba container chuyển sang `healthy` trước khi chạy Prisma hoặc bac
 docker compose logs -f postgres redis rabbitmq
 ```
 
-> Docker Compose hiện quản lý PostgreSQL, Redis và RabbitMQ. MongoDB local vẫn phải chạy hoặc `MONGODB_URI` phải trỏ tới MongoDB bên ngoài.
 
 ### 4. Kiểm tra schema và generate Prisma Client
 
@@ -250,10 +246,6 @@ docker compose ps
 Get-NetTCPConnection -LocalPort 8011 | Select-Object LocalPort, OwningProcess
 Stop-Process -Id <PID> -Force
 ```
-
-### Backend không kết nối được MongoDB
-
-Khởi động MongoDB local hoặc sửa `MONGODB_URI` trong `.env.development`.
 
 ### Seed xong nhưng bác sĩ không thấy bệnh nhân
 
