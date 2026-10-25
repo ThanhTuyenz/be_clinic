@@ -46,6 +46,20 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      - name: Validate AWS role configuration
+        env:
+          ROLE_ARN: ${{ secrets.AWS_ROLE_ARN }}
+        run: |
+          node <<'NODE'
+          const role = (process.env.ROLE_ARN || '').trim();
+          const valid = /^arn:aws(?:-us-gov|-cn)?:iam::[0-9]{12}:role\/[A-Za-z0-9+=,.@_\/-]+$/.test(role);
+          if (!valid) {
+            console.error('::error::AWS_ROLE_ARN không phải ARN role đầy đủ. Kiểm tra secret trong đúng repo; bỏ dấu ngoặc kép và ký tự lạ.');
+            process.exit(1);
+          }
+          console.log('AWS_ROLE_ARN có định dạng hợp lệ. Giá trị không được hiển thị.');
+          NODE
+
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v3
         with:
