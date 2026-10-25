@@ -3,8 +3,8 @@ FROM node:22-alpine AS builder
 
 WORKDIR /app
 
-# Cài đặt OpenSSL (cần cho Prisma trên Alpine)
-RUN apk add --no-cache openssl libc6-compat
+# OpenSSL phục vụ Prisma CLI/migration trên Alpine
+RUN apk add --no-cache openssl
 
 # Copy package files
 COPY package*.json ./
@@ -34,8 +34,8 @@ FROM node:22-alpine AS runner
 
 WORKDIR /app
 
-# Cài đặt OpenSSL cho Prisma client lúc runtime
-RUN apk add --no-cache openssl libc6-compat
+# Workflow chạy Prisma migration trong container runtime
+RUN apk add --no-cache openssl
 
 ENV NODE_ENV=production
 ENV PORT=8011
