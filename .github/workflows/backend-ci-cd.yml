@@ -40,8 +40,6 @@ jobs:
     permissions:
       contents: read
       id-token: write
-    outputs:
-      registry: ${{ steps.login-ecr.outputs.registry }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -93,36 +91,50 @@ jobs:
         uses: appleboy/ssh-action@v1.0.3
         env:
           AWS_REGION: ${{ secrets.AWS_REGION }}
-          ECR_REGISTRY: ${{ needs.build-and-push.outputs.registry }}
           ECR_REPOSITORY: ${{ env.ECR_REPOSITORY }}
           APP_DIR: ${{ env.APP_DIR }}
         with:
           host: ${{ secrets.REMOTE_HOST }}
           username: ${{ secrets.REMOTE_USER }}
           key: ${{ secrets.SSH_PRIVATE_KEY }}
-          envs: AWS_REGION,ECR_REGISTRY,ECR_REPOSITORY,APP_DIR
+          envs: AWS_REGION,ECR_REPOSITORY,APP_DIR
           command_timeout: 20m
           script: |
             set -euo pipefail
-            cd "$APP_DIR"
+            trap 'echo "Deploy thất bại tại dòng $LINENO. Xem thông báo của bước ngay trước đó." >&2' ERR
 
-            # 1. Kiểm tra cấu hình Terraform đã chuẩn bị trên EC2.
-            test -s .env.production
+            echo "[1/5] Kiểm tra thư mục và file môi trường"
+            if [ ! -d "$APP_DIR" ]; then
+              echo "Thiếu thư mục ứng dụng do Terraform chuẩn bị trên EC2." >&2
+              exit 1
+            fi
+            cd "$APP_DIR"
+            if [ ! -s .env.production ]; then
+              echo "Thiếu hoặc rỗng .env.production. Hãy chuyển file lên đúng EC2 trước khi deploy." >&2
+              exit 1
+            fi
             chmod 600 .env.production
             docker compose --env-file .env.production config --quiet
-            docker compose --env-file .env.production config --images \
-              | grep -Fxq "$ECR_REGISTRY/$ECR_REPOSITORY:latest"
 
-            # 2. Đăng nhập ECR và tải image trước khi cập nhật container.
+            echo "[2/5] Xác định registry và đăng nhập ECR bằng IAM role của EC2"
+            AWS_ACCOUNT_ID=$(aws sts get-caller-identity --region "$AWS_REGION" --query Account --output text)
+            ECR_REGISTRY="$AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com"
+            if ! docker compose --env-file .env.production config --images \
+              | grep -Fxq "$ECR_REGISTRY/$ECR_REPOSITORY:latest"; then
+              echo "Image trong Compose không khớp tài khoản, region hoặc repository ECR. Hãy đồng bộ Compose từ Terraform lên EC2." >&2
+              exit 1
+            fi
             aws ecr get-login-password --region "$AWS_REGION" \
               | docker login --username AWS --password-stdin "$ECR_REGISTRY"
+
+            echo "[3/5] Tải Docker images"
             docker compose --env-file .env.production pull
 
-            # 3. Khởi động dịch vụ phụ thuộc và chạy migration trước khi cập nhật API.
+            echo "[4/5] Khởi động dịch vụ phụ thuộc và chạy migration"
             docker compose --env-file .env.production up -d --wait --wait-timeout 180 redis rabbitmq
             docker compose --env-file .env.production run --rm --no-deps server npx prisma migrate deploy
 
-            # 4. Cập nhật ứng dụng và để Nginx nhận địa chỉ container API mới.
+            echo "[5/5] Cập nhật container và reload Nginx"
             docker compose --env-file .env.production up -d --remove-orphans --wait --wait-timeout 180
             docker compose --env-file .env.production exec -T nginx nginx -s reload
             docker compose --env-file .env.production ps
