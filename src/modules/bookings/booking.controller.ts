@@ -1,3 +1,4 @@
+import { ExcludeRoles } from '../../common/decorators/exclude-roles.decorator.js';
 import { Body, Controller, Post, Req } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import type { Request } from 'express';
@@ -7,6 +8,7 @@ import { BatchCheckoutDto, CheckoutAppointmentDto } from './dtos/checkout-appoin
 
 @ApiTags('Bookings')
 @ApiBearerAuth('access-token')
+@ExcludeRoles('CHAIN_MANAGER')
 @Controller('bookings')
 @SkipPermissions()
 export class BookingController {

@@ -4,7 +4,7 @@ import type { Request } from 'express';
 import { Public } from '../../common/decorators/public.decorator.js';
 import { SkipPermissions } from 'src/common/decorators';
 import { RequirePermissions } from '../../common/decorators/require-permissions.decorator.js';
-import { AppPermission } from '../../common/constants/permissions.constant.js';
+import { AppPermission } from '../auth/permissions/constants/permissions.constant.js';
 import { ClinicRoomsService } from './clinic-rooms.service.js';
 
 @ApiTags('Clinic rooms')

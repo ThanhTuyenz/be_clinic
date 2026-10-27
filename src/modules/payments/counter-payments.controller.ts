@@ -1,3 +1,4 @@
+import { ExcludeRoles } from '../../common/decorators/exclude-roles.decorator.js';
 import { Body, Controller, Param, Post, Req } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import type { Request } from 'express';
@@ -6,6 +7,7 @@ import { CounterPaymentsService } from './counter-payments.service.js';
 
 @ApiTags('CounterPayments')
 @ApiBearerAuth('access-token')
+@ExcludeRoles('CHAIN_MANAGER')
 @Controller('payments/appointments')
 @SkipPermissions()
 export class CounterPaymentsController {

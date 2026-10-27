@@ -23,7 +23,7 @@ import {
 } from '@nestjs/swagger';
 
 import { RequirePermissions } from 'src/common/decorators/require-permissions.decorator';
-import { AppPermission } from 'src/common/constants/permissions.constant';
+import { AppPermission } from '../permissions/constants/permissions.constant.js';
 import { Routes, Services } from 'src/common/utils/constants';
 
 import { CreateUserDto } from './dtos/create-user.dto';

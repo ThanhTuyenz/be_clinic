@@ -292,8 +292,8 @@ export class TelehealthService {
   ) {
     if (!data?.endedByUserId) throw new ForbiddenException('Thiếu người kết thúc phiên tư vấn.');
     const normalizedRole = String(role || '').toUpperCase();
-    if (!['DOCTOR', 'ADMIN', 'SUPER_ADMIN'].includes(normalizedRole)) {
-      throw new ForbiddenException('Chỉ bác sĩ hoặc quản trị viên mới được hoàn tất buổi tư vấn.');
+    if (normalizedRole !== 'DOCTOR') {
+      throw new ForbiddenException('Chỉ bác sĩ phụ trách mới được hoàn tất buổi tư vấn.');
     }
     await this.authorizeAppointment(appointmentId, data.endedByUserId, role);
     const room = this.activeRooms.get(appointmentId);

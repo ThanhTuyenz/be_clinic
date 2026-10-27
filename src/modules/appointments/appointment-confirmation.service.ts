@@ -198,7 +198,7 @@ export class AppointmentConfirmationService {
     const tokenHash = createHash('sha256').update(rawToken).digest('hex');
     const appointmentDate = (doctorSlot?.schedule.workDate ? doctorSlot.schedule.workDate.toISOString().slice(0, 10) : new Date().toISOString().slice(0, 10));
     const expiresAt = new Date(`${appointmentDate}T23:59:59.999+07:00`);
-    if (!isTelehealth) await this.prisma.appointmentQrToken.upsert({
+    await this.prisma.appointmentQrToken.upsert({
       where: { appointmentId: row.id },
       update: { tokenHash, expiresAt },
       create: { appointmentId: row.id, tokenHash, expiresAt },
@@ -210,13 +210,13 @@ export class AppointmentConfirmationService {
     return {
       appointmentId: row.id,
       bookingCode: row.bookingCode,
-      qrPayload: isTelehealth ? null : `VITACARE_CHECKIN:${rawToken}`,
+      qrPayload: `VITACARE_CHECKIN:${rawToken}`,
       expiresAt,
       status: row.status,
       isTelehealth,
       bookingMethod: row.bookingMethod,
-      queueNumber: isTelehealth ? null : row.queueNumber,
-      estimatedQueueNumber: isTelehealth ? null : estimatedQueueNumber,
+      queueNumber: row.queueNumber,
+      estimatedQueueNumber,
       appointmentDate,
       startTime: doctorSlot?.startTime ? doctorSlot.startTime.toISOString().slice(11, 16) : null,
       endTime: doctorSlot?.endTime ? doctorSlot.endTime.toISOString().slice(11, 16) : null,

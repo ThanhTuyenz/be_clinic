@@ -9,6 +9,7 @@ import { Reflector } from '@nestjs/core';
 import { Request as ExpressRequest } from 'express';
 import { REQUIRE_PERMISSIONS_KEY } from '../../../../common/decorators/require-permissions.decorator.js';
 import { SKIP_PERMISSIONS_KEY } from '../../../../common/decorators/skip-permissions.decorator.js';
+import { EXCLUDED_ROLES_KEY } from '../../../../common/decorators/exclude-roles.decorator.js';
 import { IS_PUBLIC_KEY } from '../../../../common/decorators/public.decorator.js';
 import { AppPermission } from '../constants/permissions.constant.js';
 import { PermissionsService } from '../permissions.service.js';
@@ -23,19 +24,7 @@ export class PermissionsGuard implements CanActivate {
   ) { }
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
-    // 1. Bỏ qua nếu route được đánh dấu @SkipPermissions()
-    const skipPermissions = this.reflector.getAllAndOverride<boolean>(
-      SKIP_PERMISSIONS_KEY,
-      [context.getHandler(), context.getClass()],
-    );
-
-    const explicitPermissions = this.reflector.getAllAndOverride<(AppPermission | string)[]>(REQUIRE_PERMISSIONS_KEY, [context.getHandler(), context.getClass()]);
-    // Explicit requirements on a method take precedence over a controller's skip marker.
-    if (skipPermissions && !explicitPermissions?.length) {
-      return true;
-    }
-
-    // 2. Bỏ qua nếu route công khai @Public()
+    // Webhook và các route công khai không yêu cầu vai trò.
     const isPublic = this.reflector.getAllAndOverride<boolean>(IS_PUBLIC_KEY, [
       context.getHandler(),
       context.getClass(),
@@ -55,11 +44,25 @@ export class PermissionsGuard implements CanActivate {
 
     const userRole = String(user.role).toUpperCase();
 
-    // 4. Kiểm tra quyền nguyên tử theo chuẩn RBAC (@RequirePermissions)
+    // Giới hạn vai trò được kiểm tra trước cả @SkipPermissions và quyền tùy chỉnh.
+    const excludedRoles = this.reflector.getAllAndMerge<string[]>(EXCLUDED_ROLES_KEY, [
+      context.getHandler(), context.getClass(),
+    ]) || [];
+    if (excludedRoles.some((role) => role.toUpperCase() === userRole)) {
+      throw new ForbiddenException('Vai trò của bạn không được truy cập chức năng này');
+    }
+
+    const skipPermissions = this.reflector.getAllAndOverride<boolean>(
+      SKIP_PERMISSIONS_KEY, [context.getHandler(), context.getClass()],
+    );
+
+    // Kiểm tra quyền nguyên tử theo chuẩn RBAC (@RequirePermissions)
     const requiredPermissions = this.reflector.getAllAndOverride<(AppPermission | string)[]>(
       REQUIRE_PERMISSIONS_KEY,
       [context.getHandler(), context.getClass()],
     );
+
+    if (skipPermissions && !requiredPermissions?.length) return true;
 
     if (requiredPermissions && requiredPermissions.length > 0) {
       const userPerms = await this.permissionsService.getUserPermissions(user.id);

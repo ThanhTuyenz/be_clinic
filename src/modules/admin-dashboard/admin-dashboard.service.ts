@@ -581,7 +581,7 @@ export class AdminDashboardService {
         month: monthBars,
       },
       appointmentHoursToday,
-      todayRows: todayAppointments.slice(0, 20).map((a) => {
+      todayRows: user.role === 'CHAIN_MANAGER' ? [] : todayAppointments.slice(0, 20).map((a) => {
         const dRank = a.scheduleSlot?.schedule?.doctor?.academicRank || '';
         const rawName = a.scheduleSlot?.schedule?.doctor?.user?.fullName || 'Bác sĩ';
         const docDisplayName = dRank ? `${dRank} ${rawName}` : rawName;
@@ -710,6 +710,7 @@ export class AdminDashboardService {
       paymentTxs,
       doctorsPerformanceRows,
       paidInvoices,
+      invoiceStatusTotals,
     ] = await Promise.all([
       this.calculateStatusCounts(currentScope),
       this.calculateRevenue(scope.branchId, fromDate, toDate),
@@ -790,7 +791,29 @@ export class AdminDashboardService {
           createdAt: true,
         },
       }),
+      this.prisma.invoice.groupBy({
+        by: ['status'],
+        where: {
+          status: { in: ['PAID', 'UNPAID'] },
+          createdAt: { gte: fromDate, lt: toDate },
+          ...(scope.branchId ? { issuedBranchId: scope.branchId } : {}),
+        },
+        _count: { _all: true },
+        _sum: { totalAmount: true },
+      }),
     ])
+
+    // Hóa đơn phát sinh trong kỳ, phân loại theo trạng thái hiện tại.
+    // Không suy ra thanh toán từ trạng thái lịch hẹn hoặc đếm từng giao dịch thanh toán.
+    const invoicePaymentStatus = {
+      paid: { count: 0, amount: 0 },
+      unpaid: { count: 0, amount: 0 },
+    }
+    for (const row of invoiceStatusTotals) {
+      const summary = row.status === 'PAID' ? invoicePaymentStatus.paid : invoicePaymentStatus.unpaid
+      summary.count = row._count._all
+      summary.amount = Number(row._sum.totalAmount || 0)
+    }
 
     // 1. Tài chính & Tỷ lệ tăng trưởng
     const totalRevNum = Number(currRev.total || 0)
@@ -824,6 +847,7 @@ export class AdminDashboardService {
 
     return {
       financialSummary: {
+        invoicePaymentStatus,
         revenue: this.formatVnd(totalRevNum),
         revenueGrowth,
         dailyAvg: this.formatVnd(dailyAvgNum),

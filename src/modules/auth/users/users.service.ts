@@ -10,7 +10,7 @@ import { FindUsersOptions, IUsersService, UsersPaginatedResult, UserUpdate } fro
 import { HistoryService } from '../history/history.service.js';
 import { HISTORY_ACTIONS } from '../history/history.js';
 import { PermissionsService } from '../permissions/permissions.service.js';
-import { calculateEffectivePermissions } from '../../../common/constants/permissions.constant.js';
+import { calculateEffectivePermissions } from '../permissions/constants/permissions.constant.js';
 import { RedisService } from '../../../infrastructure/redis/redis.service.js';
 import { buildDoctorProfileData, syncDoctorSpecialties } from './helpers/doctor-profile.helper.js';
 

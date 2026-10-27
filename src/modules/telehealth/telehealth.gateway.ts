@@ -219,8 +219,11 @@ export class TelehealthGateway
     if (!participant || participant.appointmentId !== payload.appointmentId) {
       return { success: false, message: 'Bạn không ở trong phòng tư vấn này.' };
     }
+    if (participant.role !== 'DOCTOR') {
+      return { success: false, message: 'Chỉ bác sĩ phụ trách mới được hoàn tất buổi tư vấn. Bệnh nhân có thể rời phòng và vào lại.' };
+    }
     this.logger.log(
-      `[Telehealth] Call ended for appointment ${payload.appointmentId} by ${payload.endedByRole}`,
+      `[Telehealth] Call ended for appointment ${payload.appointmentId} by ${participant.role}`,
     );
 
     try {

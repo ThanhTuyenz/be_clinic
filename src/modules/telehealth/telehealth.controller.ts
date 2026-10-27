@@ -3,12 +3,16 @@ import { Request } from 'express';
 import { ApiOperation, ApiTags } from '@nestjs/swagger';
 import { SkipPermissions } from '../../common/decorators/index.js';
 import { TelehealthService } from './telehealth.service.js';
+import { TelehealthGateway } from './telehealth.gateway.js';
 
 @ApiTags('Telehealth & Online Consultation')
 @Controller('telehealth')
 @SkipPermissions()
 export class TelehealthController {
-  constructor(private readonly telehealthService: TelehealthService) {}
+  constructor(
+    private readonly telehealthService: TelehealthService,
+    private readonly telehealthGateway: TelehealthGateway,
+  ) {}
 
   @Get('room/:appointmentId')
   @ApiOperation({ summary: 'Lấy thông tin chi tiết phòng tư vấn trực tuyến theo appointmentId' })
@@ -21,7 +25,7 @@ export class TelehealthController {
   }
 
   @Post('room/:appointmentId/end')
-  @ApiOperation({ summary: 'Kết thúc phiên tư vấn trực tuyến và lưu chẩn đoán, đơn thuốc, lịch sử chat vào DB' })
+  @ApiOperation({ summary: 'Bác sĩ phụ trách kết thúc phiên tư vấn trực tuyến và lưu hồ sơ' })
   async endRoomSession(
     @Param('appointmentId') appointmentId: string,
     @Body() body: { diagnosis?: string; prescriptionNotes?: string; endedByUserId?: string },
@@ -33,6 +37,7 @@ export class TelehealthController {
       endedByUserId: req.user!.id,
       endReason: 'REST',
     }, req.user!.role);
+    this.telehealthGateway.notifyRoomEnded(appointmentId, 'DOCTOR');
     return {
       success: true,
       message: 'Đã kết thúc buổi tư vấn và lưu hồ sơ bệnh án thành công.',

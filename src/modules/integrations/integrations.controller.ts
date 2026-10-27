@@ -2,7 +2,7 @@ import { Controller, Get, Post, Req } from '@nestjs/common'
 import type { Request } from 'express'
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger'
 import { RequirePermissions } from '../../common/decorators/require-permissions.decorator.js'
-import { AppPermission } from '../../common/constants/permissions.constant.js'
+import { AppPermission } from '../auth/permissions/constants/permissions.constant.js'
 import { IntegrationsService } from './integrations.service.js'
 
 @ApiTags('Integration settings')

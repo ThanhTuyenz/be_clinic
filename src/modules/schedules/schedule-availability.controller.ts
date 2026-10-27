@@ -1,7 +1,7 @@
 import { Body, Controller, Get, Post, Query, Req } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiQuery, ApiTags } from '@nestjs/swagger';
 import type { Request } from 'express';
-import { AppPermission } from '../../common/constants/permissions.constant.js';
+import { AppPermission } from '../auth/permissions/constants/permissions.constant.js';
 import { RequirePermissions } from '../../common/decorators/require-permissions.decorator.js';
 import { SkipPermissions } from '../../common/decorators/skip-permissions.decorator.js';
 import { ScheduleAvailabilityService } from './schedule-availability.service.js';

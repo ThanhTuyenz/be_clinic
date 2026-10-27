@@ -139,7 +139,7 @@ export class PatientAppointmentsService {
         orderCode: row.bookingOrder?.orderCode ?? null,
         groupType: row.bookingOrder?.groupType ?? null,
         status: row.status,
-        queueNumber: isTelehealth ? null : row.queueNumber,
+        queueNumber: row.queueNumber,
         holdExpiresAt: row.holdExpiresAt,
         rescheduleCount: row.rescheduleCount ?? 0,
         createdAt: row.createdAt,

@@ -6,7 +6,7 @@ import { RolesGuard } from '../../common/guards/roles.guard.js';
 import { Roles } from '../../common/decorators/roles.decorator.js';
 import { SkipPermissions } from 'src/common/decorators';
 import { RequirePermissions } from '../../common/decorators/require-permissions.decorator.js';
-import { AppPermission } from '../../common/constants/permissions.constant.js';
+import { AppPermission } from '../auth/permissions/constants/permissions.constant.js';
 import { SchedulesService } from './schedules.service.js';
 
 @ApiTags('Schedules')
@@ -44,7 +44,7 @@ export class SchedulesController {
   }
 
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles('CHAIN_MANAGER', 'BRANCH_MANAGER', 'DOCTOR')
+  @Roles('ADMIN', 'BRANCH_MANAGER', 'DOCTOR')
   @ApiBearerAuth()
   @Post()
   @RequirePermissions(AppPermission.SCHEDULE_CREATE)
@@ -54,7 +54,7 @@ export class SchedulesController {
   }
 
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles('CHAIN_MANAGER', 'BRANCH_MANAGER', 'DOCTOR')
+  @Roles('ADMIN', 'BRANCH_MANAGER', 'DOCTOR')
   @ApiBearerAuth()
   @Post('batch')
   @RequirePermissions(AppPermission.SCHEDULE_CREATE)
@@ -64,7 +64,7 @@ export class SchedulesController {
   }
 
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles('CHAIN_MANAGER', 'BRANCH_MANAGER', 'DOCTOR')
+  @Roles('ADMIN', 'BRANCH_MANAGER', 'DOCTOR')
   @ApiBearerAuth()
   @Post('copy-week')
   @RequirePermissions(AppPermission.SCHEDULE_CREATE)
@@ -74,7 +74,7 @@ export class SchedulesController {
   }
 
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles('CHAIN_MANAGER', 'BRANCH_MANAGER', 'DOCTOR')
+  @Roles('ADMIN', 'BRANCH_MANAGER', 'DOCTOR')
   @ApiBearerAuth()
   @Patch(':id')
   @RequirePermissions(AppPermission.SCHEDULE_UPDATE)
@@ -84,7 +84,7 @@ export class SchedulesController {
   }
 
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles('CHAIN_MANAGER', 'BRANCH_MANAGER', 'DOCTOR')
+  @Roles('ADMIN', 'BRANCH_MANAGER', 'DOCTOR')
   @ApiBearerAuth()
   @Delete(':id')
   @RequirePermissions(AppPermission.SCHEDULE_DELETE)

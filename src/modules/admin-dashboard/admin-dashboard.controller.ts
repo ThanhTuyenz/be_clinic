@@ -1,8 +1,9 @@
+import { ExcludeRoles } from '../../common/decorators/exclude-roles.decorator.js';
 import { Controller, Get, Query, Req } from '@nestjs/common'
 import type { Request } from 'express'
 import { ApiBearerAuth, ApiOperation, ApiQuery, ApiTags } from '@nestjs/swagger'
 import { RequirePermissions } from 'src/common/decorators/require-permissions.decorator'
-import { AppPermission } from 'src/common/constants/permissions.constant'
+import { AppPermission } from '../auth/permissions/constants/permissions.constant.js'
 import { ReceptionSummaryService } from './reception-summary.service.js'
 import { AdminDashboardService } from './admin-dashboard.service.js'
 
@@ -12,6 +13,7 @@ import { AdminDashboardService } from './admin-dashboard.service.js'
 export class AdminDashboardController {
   constructor(private readonly dashboard: AdminDashboardService, private readonly reception: ReceptionSummaryService) {}
 
+  @ExcludeRoles('CHAIN_MANAGER')
   @Get('reception-summary')
   @RequirePermissions(AppPermission.APPOINTMENT_READ)
   @ApiOperation({ summary: 'Thống kê tiếp nhận và thu ngân theo phạm vi chi nhánh' })

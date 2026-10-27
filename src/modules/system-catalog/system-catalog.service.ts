@@ -7,7 +7,7 @@ import { RedisService } from '../../infrastructure/redis/redis.service.js'
 import { EmbeddingService, mapPackageForRetrieval } from '../../infrastructure/embedding/embedding.service.js'
 import { TELEMETRY_CONFIG } from '../recommendations/constants/recommendation.constants.js'
 
-import { calculateEffectivePermissions } from '../../common/constants/permissions.constant.js'
+import { calculateEffectivePermissions } from '../auth/permissions/constants/permissions.constant.js'
 
 const DEFAULT_PACKAGE_DURATION_MIN = 30
 

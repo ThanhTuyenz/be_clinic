@@ -63,7 +63,7 @@ export const PERMISSION_GROUP_CONFIG: Record<PermissionGroup, { label: string; b
   operation: { label: 'Vận hành & Cơ sở vật chất', badgeTone: 'emerald' },
   service: { label: 'Chuyên môn & Dịch vụ', badgeTone: 'blue' },
   finance: { label: 'Tài chính & Thu phí', badgeTone: 'amber' },
-  report: { label: 'Báo cáo & Thống kê', badgeTone: 'purple' },
+  report: { label: 'Thống kê', badgeTone: 'purple' },
   system: { label: 'Nhân sự & Hệ thống', badgeTone: 'slate' },
 }
 export const PERMISSION_CATALOG: PermissionItem[] = [
@@ -103,10 +103,10 @@ export const PERMISSION_CATALOG: PermissionItem[] = [
   { code: AppPermission.APPOINTMENT_CHECKIN, label: "Tiếp nhận bệnh nhân", description: "Xác nhận check-in và cấp số chờ khám.", group: 'appointment' },
   { code: AppPermission.APPOINTMENT_CANCEL, label: "Hủy lịch hẹn", description: "Hủy lịch theo quy trình nghiệp vụ.", group: 'appointment' },
   { code: AppPermission.CLINICAL_READ, label: "Xem bệnh án", description: "Xem hồ sơ bệnh án và lịch sử khám.", group: 'clinical' },
-  { code: AppPermission.FINANCE_READ, label: "Xem giao dịch & doanh thu", description: "Xem hóa đơn và báo cáo tài chính.", group: 'finance' },
+  { code: AppPermission.FINANCE_READ, label: "Xem giao dịch & doanh thu", description: "Xem hóa đơn và thống kê tài chính.", group: 'finance' },
   { code: AppPermission.FINANCE_COLLECT, label: "Thu phí & xuất hóa đơn", description: "Thu viện phí tại quầy.", group: 'finance' },
-  { code: AppPermission.REPORT_BRANCH_READ, label: "Xem báo cáo chi nhánh", description: "Xem báo cáo tại chi nhánh được phân công.", group: 'report' },
-  { code: AppPermission.REPORT_SYSTEM_READ, label: "Xem báo cáo toàn chuỗi", description: "Xem báo cáo tổng hợp tất cả chi nhánh.", group: 'report' },
+  { code: AppPermission.REPORT_BRANCH_READ, label: "Xem thống kê chi nhánh", description: "Xem thống kê tại chi nhánh được phân công.", group: 'report' },
+  { code: AppPermission.REPORT_SYSTEM_READ, label: "Xem thống kê toàn chuỗi", description: "Xem thống kê tổng hợp tất cả chi nhánh.", group: 'report' },
   { code: AppPermission.ROLE_MANAGE, label: "Quản lý vai trò & phân quyền", description: "Đổi vai trò, cấp thêm và thu hồi quyền. Không gộp vào sửa tài khoản.", group: 'system' },
   { code: AppPermission.INTEGRATION_READ, label: "Xem cấu hình tích hợp", description: "Xem trạng thái cấu hình tích hợp; vẫn giới hạn vai trò Admin.", group: 'system' },
   { code: AppPermission.INTEGRATION_VERIFY, label: "Kiểm tra kết nối tích hợp", description: "Kiểm tra kết nối SMTP; không gửi email và không sửa khóa.", group: 'system' },
@@ -157,10 +157,31 @@ export const LEGACY_PERMISSION_MAP: Record<string, readonly string[]> = {
 export const ALL_APP_PERMISSIONS = Object.freeze(PERMISSION_CATALOG.map((item) => item.code as AppPermission))
 export const VALID_PERMISSIONS_SET = new Set<string>(ALL_APP_PERMISSIONS)
 
+const SCHEDULE_WRITE_PERMISSIONS = [
+  AppPermission.SCHEDULE_CREATE,
+  AppPermission.SCHEDULE_UPDATE,
+  AppPermission.SCHEDULE_DELETE,
+]
+
+const CHAIN_MANAGER_RESTRICTED_PERMISSIONS = [
+  ...SCHEDULE_WRITE_PERMISSIONS,
+  AppPermission.APPOINTMENT_CREATE,
+  AppPermission.APPOINTMENT_CHECKIN,
+  AppPermission.APPOINTMENT_CANCEL,
+  AppPermission.PATIENT_READ,
+  AppPermission.PATIENT_CREATE,
+  AppPermission.PATIENT_UPDATE,
+  AppPermission.CLINICAL_READ,
+  AppPermission.CLINICAL_WRITE,
+  AppPermission.FINANCE_READ,
+  AppPermission.FINANCE_COLLECT,
+]
+
 export const ROLE_DEFAULT_PERMISSIONS: Record<string, AppPermission[]> = {
-  admin: [AppPermission.USER_READ, AppPermission.USER_CREATE, AppPermission.USER_UPDATE, AppPermission.USER_DELETE, AppPermission.ROLE_MANAGE, AppPermission.INTEGRATION_READ, AppPermission.INTEGRATION_VERIFY, AppPermission.SYSTEM_LOG_READ, AppPermission.BRANCH_READ, AppPermission.ROOM_READ, AppPermission.SPECIALTY_READ, AppPermission.SERVICE_READ, AppPermission.BOOKING_METHOD_READ, AppPermission.SCHEDULE_READ],
+  admin: [AppPermission.USER_READ, AppPermission.USER_CREATE, AppPermission.USER_UPDATE, AppPermission.USER_DELETE, AppPermission.ROLE_MANAGE, AppPermission.INTEGRATION_READ, AppPermission.INTEGRATION_VERIFY, AppPermission.SYSTEM_LOG_READ, AppPermission.BRANCH_READ, AppPermission.ROOM_READ, AppPermission.SPECIALTY_READ, AppPermission.SERVICE_READ, AppPermission.BOOKING_METHOD_READ, AppPermission.SCHEDULE_READ, ...SCHEDULE_WRITE_PERMISSIONS],
   chain_manager: ALL_APP_PERMISSIONS.filter((p) => ![
-    AppPermission.USER_CREATE, AppPermission.USER_UPDATE, AppPermission.USER_DELETE, AppPermission.ROLE_MANAGE, AppPermission.INTEGRATION_READ, AppPermission.INTEGRATION_VERIFY, AppPermission.SYSTEM_LOG_READ, AppPermission.FINANCE_COLLECT
+    ...CHAIN_MANAGER_RESTRICTED_PERMISSIONS,
+    AppPermission.USER_CREATE, AppPermission.USER_UPDATE, AppPermission.USER_DELETE, AppPermission.ROLE_MANAGE, AppPermission.INTEGRATION_READ, AppPermission.INTEGRATION_VERIFY, AppPermission.SYSTEM_LOG_READ
   ].includes(p)),
   branch_manager: [AppPermission.APPOINTMENT_READ, AppPermission.APPOINTMENT_CREATE, AppPermission.APPOINTMENT_CHECKIN, AppPermission.APPOINTMENT_CANCEL, AppPermission.PATIENT_READ, AppPermission.PATIENT_CREATE, AppPermission.PATIENT_UPDATE, AppPermission.CLINICAL_READ, AppPermission.BRANCH_READ, AppPermission.ROOM_READ, AppPermission.SPECIALTY_READ, AppPermission.SERVICE_READ, AppPermission.BOOKING_METHOD_READ, AppPermission.SCHEDULE_READ, AppPermission.BRANCH_UPDATE, AppPermission.ROOM_CREATE, AppPermission.ROOM_UPDATE, AppPermission.ROOM_DELETE, AppPermission.SCHEDULE_CREATE, AppPermission.SCHEDULE_UPDATE, AppPermission.SCHEDULE_DELETE, AppPermission.SPECIALTY_UPDATE, AppPermission.SERVICE_UPDATE, AppPermission.FINANCE_READ, AppPermission.REPORT_BRANCH_READ, AppPermission.USER_READ],
   doctor: [AppPermission.APPOINTMENT_READ, AppPermission.PATIENT_READ, AppPermission.CLINICAL_READ, AppPermission.BRANCH_READ, AppPermission.ROOM_READ, AppPermission.SPECIALTY_READ, AppPermission.SERVICE_READ, AppPermission.BOOKING_METHOD_READ, AppPermission.SCHEDULE_READ],
@@ -190,5 +211,9 @@ export function calculateEffectivePermissions(role?: string | null, customPermis
   const payload = normalizeCustomPermissions(customPermissions)
   for (const code of payload.granted) effective.add(code as AppPermission)
   for (const code of payload.revoked) effective.delete(code as AppPermission)
+  // Quản lý toàn chuỗi xem thống kê và lịch bác sĩ, không vận hành khám chữa bệnh.
+  if (name === 'chain_manager') {
+    for (const permission of CHAIN_MANAGER_RESTRICTED_PERMISSIONS) effective.delete(permission)
+  }
   return [...effective]
 }
