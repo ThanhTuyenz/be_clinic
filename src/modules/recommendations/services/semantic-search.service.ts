@@ -1,9 +1,9 @@
 import { Injectable, Logger, ServiceUnavailableException } from '@nestjs/common';
-import { containsSearchPhrase, matchesSearchConstraints, normalizeSearch, parseSearchIntent, searchTextScore } from '../../../common/utils/search-query.js';
+import { containsSearchPhrase, matchesSearchConstraints, matchesSearchExclusions, normalizeSearch, parseSearchIntent, replaceSearchText, searchTextScore } from '../../../common/utils/search-query.js';
 import { PrismaService } from '../../../infrastructure/database/prisma/prisma.service.js';
 import { RedisService } from '../../../infrastructure/redis/redis.service.js';
 import { EmbeddingService, mapPackageForRetrieval, PackageForRetrieval } from '../../../infrastructure/embedding/embedding.service.js';
-import { SearchAnalyticsService } from '../../search-analytics/search-analytics.service.js';
+import { SearchAnalyticsService, type SearchContext } from '../../search-analytics/search-analytics.service.js';
 import { vietnamDateKey } from '../../search-analytics/analytics-time.js';
 import { BehaviorTelemetryService } from './behavior-telemetry.service.js';
 import { TrackingActionType } from '../recommendation.dto.js';
@@ -61,18 +61,23 @@ export class SemanticSearchService {
   /**
    * Tìm kiếm thông minh đa thực thể (Gói khám, Bác sĩ, Cơ sở) bằng Vector Embeddings & Heuristic Matcher
    */
-  async semanticSearchPackages(query: string, branchId?: string, context: { sessionId?: string; accountId?: string } = {}): Promise<SemanticSearchResult> {
+  async semanticSearchPackages(query: string, branchId?: string, context: SearchContext = {}): Promise<SemanticSearchResult> {
     const start = performance.now();
     let result: SemanticSearchResult;
     try {
       result = await this.runSearch(query, branchId);
     } catch (error) {
-      await this.analytics.recordSearch(query, context, null, performance.now() - start).catch(() => this.logger.warn('Không thể lưu lỗi tìm kiếm'));
+      await this.analytics.recordSearch(query, { ...context, branchId }, null, performance.now() - start).catch(() => this.logger.warn('Không thể lưu lỗi tìm kiếm'));
       throw error;
     }
-    result.searchId = await this.analytics.recordSearch(query, context, result, performance.now() - start)
+    const tracked = await this.analytics.recordSearch(query, { ...context, branchId }, result, performance.now() - start)
       .catch(() => { this.logger.warn('Không thể lưu lượt tìm kiếm'); return undefined; });
-    if (!result.partial && query.trim().length >= 2 && (context.sessionId || context.accountId)) {
+    result.searchId = tracked?.id;
+    if (tracked?.created && !result.partial) {
+      setImmediate(() => void this.recordTelemetryAsync(query, result.total > 0)
+        .catch(() => this.logger.debug('Không thể cập nhật xếp hạng tìm kiếm')));
+    }
+    if (tracked?.created && !result.partial && query.trim().length >= 2 && (context.sessionId || context.accountId)) {
       const specialties = [...new Set(result.packages.map(pkg => pkg.specialtyId).filter((id): id is number => typeof id === 'number'))];
       await this.behaviorTelemetry.trackUserBehavior({
         sessionId: context.sessionId, actionType: TrackingActionType.SEARCH, searchQuery: query.trim(),
@@ -100,8 +105,8 @@ export class SemanticSearchService {
       });
       if (matches.length === 1) {
         branchId = matches[0].id;
-        q = normalizeSearch(q).replace(normalizeSearch(matches[0].name), ' ')
-          .replace(normalizeSearch(matches[0].name).replace(/^vitacare\s*/, ''), ' ').trim();
+        q = replaceSearchText(q, normalizeSearch(matches[0].name), () => ' ');
+        q = replaceSearchText(q, normalizeSearch(matches[0].name).replace(/^vitacare\s*/, ''), () => ' ').trim();
       }
     }
 
@@ -119,7 +124,7 @@ export class SemanticSearchService {
       throw new ServiceUnavailableException('Không thể tải kết quả tìm kiếm. Vui lòng thử lại.');
     }
 
-    const finalResult: SemanticSearchResult = {
+    return {
       query: originalQuery,
       branchId,
       partial,
@@ -129,15 +134,6 @@ export class SemanticSearchService {
       branches,
     };
 
-    // 2. Telemetry Bất đồng bộ (Fire-and-forget: Không làm chậm response của Client)
-    setImmediate(() => {
-      if (partial) return;
-      this.recordTelemetryAsync(originalQuery, finalResult.total > 0).catch((err) => {
-        this.logger.debug(`[SemanticSearch] Telemetry background log error: ${err?.message}`);
-      });
-    });
-
-    return finalResult;
   }
 
   /**
@@ -195,7 +191,9 @@ export class SemanticSearchService {
         },
       });
 
-      return matched.filter(doc => matchesSearchConstraints(intent, { price: Number(doc.consultationFee) })).map(doc => ({ doc, score: Math.max(
+      return matched.filter(doc => matchesSearchConstraints(intent, { price: Number(doc.consultationFee) })
+        && matchesSearchExclusions(intent, [doc.user?.fullName, doc.academicRank, ...doc.specialties.map(s => s.specialty.name)]))
+        .map(doc => ({ doc, score: Math.max(
         searchTextScore(intent.text, doc.user?.fullName || ''),
         searchTextScore(intent.text, doc.academicRank || ''),
         ...doc.specialties.map(s => searchTextScore(intent.text, s.specialty.name)),
@@ -221,7 +219,7 @@ export class SemanticSearchService {
   private async searchBranches(q: string, branches: SemanticSearchResult['branches']) {
     const intent = parseSearchIntent(q);
     if (!intent.text) return [];
-    return branches.map(branch => ({ branch, score: Math.max(
+    return branches.filter(branch => matchesSearchExclusions(intent, [branch.name, branch.address])).map(branch => ({ branch, score: Math.max(
       searchTextScore(intent.text, branch.name), searchTextScore(intent.text, branch.address),
     ) })).filter(hit => hit.score > 0).sort((a, b) => b.score - a.score).slice(0, 3).map(hit => hit.branch);
   }
@@ -230,7 +228,7 @@ export class SemanticSearchService {
    * Lấy danh sách gói khám ứng viên (Được đệm Cache Redis 5 phút để tránh quét DB liên tục)
    */
   private async getCachedCandidatePackages(branchId?: string): Promise<PackageForRetrieval[]> {
-    const cacheKey = `rec:cache:search_candidates:v2:${branchId || 'all'}`;
+    const cacheKey = `rec:cache:search_candidates:v3:${branchId || 'all'}`;
 
     if (this.redis.isEnabled()) {
       try {
@@ -251,7 +249,7 @@ export class SemanticSearchService {
       },
       select: {
         id: true, code: true, name: true, price: true, durationMin: true, description: true,
-        symptoms: true, specialtyId: true, targetGender: true, minAge: true, maxAge: true,
+        symptoms: true, specialtyId: true, targetGender: true, minAge: true, maxAge: true, isFollowUp: true,
         specialty: { select: { id: true, name: true, symptoms: true, description: true } },
         branchBookingMethod: { select: { branchId: true, isEnabled: true, branch: { select: { isActive: true } }, bookingMethod: { select: { code: true, isActive: true } } } },
         branchBookingMethods: { select: { branchBookingMethod: { select: { branchId: true, isEnabled: true, branch: { select: { isActive: true } }, bookingMethod: { select: { code: true, isActive: true } } } } } },

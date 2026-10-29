@@ -1,11 +1,69 @@
 import { BadRequestException, ConflictException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import { randomUUID } from 'node:crypto';
+import { Prisma } from '@prisma/client';
 import { getStaffUser } from '../../common/utils/staff.utils.js';
 import { PrismaService } from '../../infrastructure/database/prisma/prisma.service.js';
+import { MyCollectionsQueryDto } from './dtos/my-collections-query.dto.js';
 
 @Injectable()
 export class CounterPaymentsService {
   constructor(private readonly prisma: PrismaService) {}
+
+  async myCollections(userId: string, query: MyCollectionsQueryDto) {
+    const user = await getStaffUser(this.prisma, userId);
+    if (!['BRANCH_MANAGER', 'RECEPTIONIST'].includes(user.role)) {
+      throw new ForbiddenException('Không có quyền xem lịch sử thu tiền tại quầy');
+    }
+    const branchIds = user.branchAssignments.map(link => link.branchId);
+    if (!branchIds.length) throw new ForbiddenException('Tài khoản chưa được phân công chi nhánh');
+    const date = query.date || new Date(Date.now() + 7 * 60 * 60 * 1000).toISOString().slice(0, 10);
+    const from = new Date(`${date}T00:00:00+07:00`);
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || Number.isNaN(from.getTime()) ||
+        new Date(from.getTime() + 7 * 60 * 60 * 1000).toISOString().slice(0, 10) !== date) {
+      throw new BadRequestException('Ngày thu tiền không hợp lệ');
+    }
+    const page = query.page ?? 1;
+    const pageSize = query.pageSize ?? 10;
+    const where: Prisma.PaymentTransactionWhereInput = {
+      provider: 'CLINIC_COUNTER',
+      status: 'SUCCESS',
+      method: { in: ['CASH', 'VIETQR'] },
+      rawPayload: { path: ['recordedBy'], equals: userId },
+      paidAt: { gte: from, lt: new Date(from.getTime() + 24 * 60 * 60 * 1000) },
+      invoice: { issuedBranchId: { in: branchIds } },
+    };
+    const { items, groups } = await this.prisma.$transaction(async tx => {
+      const items = await tx.paymentTransaction.findMany({
+        where, orderBy: [{ paidAt: 'desc' }, { id: 'desc' }], skip: (page - 1) * pageSize, take: pageSize,
+        select: {
+          id: true, amount: true, method: true, paidAt: true,
+          invoice: { select: {
+            id: true, issuedBranch: { select: { id: true, name: true } },
+            appointment: { select: {
+              bookingCode: true, patientProfile: { select: { fullName: true, phoneNumber: true } },
+            } },
+          } },
+        },
+      });
+      const groups = await tx.paymentTransaction.groupBy({
+        by: ['method'], where, _sum: { amount: true }, _count: { _all: true },
+      });
+      return { items, groups };
+    }, { isolationLevel: Prisma.TransactionIsolationLevel.RepeatableRead });
+    const total = groups.reduce((sum, group) => sum + group._count._all, 0);
+    const totalAmount = groups.reduce((sum, group) => sum + Number(group._sum.amount || 0), 0);
+    const cashAmount = Number(groups.find(group => group.method === 'CASH')?._sum.amount || 0);
+    return {
+      date, page, pageSize, total, totalAmount, cashAmount, transferAmount: totalAmount - cashAmount,
+      items: items.map(item => ({
+        id: item.id, amount: Number(item.amount), method: item.method, paidAt: item.paidAt,
+        invoiceId: item.invoice.id, ticket: item.invoice.appointment?.bookingCode ?? null,
+        patientName: item.invoice.appointment?.patientProfile.fullName ?? null,
+        patientPhone: item.invoice.appointment?.patientProfile.phoneNumber ?? null,
+        branch: item.invoice.issuedBranch,
+      })),
+    };
+  }
 
   async recordPayment(userId: string, appointmentId: string, input: { method?: string; amount?: number; note?: string }) {
     const user = await getStaffUser(this.prisma, userId)

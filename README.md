@@ -2,6 +2,55 @@
 
 Backend NestJS cho hệ thống phòng khám. PostgreSQL/Prisma lưu dữ liệu nghiệp vụ; Redis dùng cho cache; RabbitMQ dùng cho hàng đợi.
 
+## Hiệu quả gói khám gợi ý
+
+`GET /api/v1/analytics/recommendations` dành cho `CHAIN_MANAGER`/`SUPER_ADMIN`,
+trả phễu hiển thị → bấm → tạo giữ chỗ → đặt thành công → thanh toán, theo nguồn và gói.
+Hỗ trợ `timeFilter=today|week|month|quarter`, hoặc `startDate`, `endDate` (ngày Việt Nam,
+bao gồm ngày kết thúc), tối đa 90 ngày. Hai tham số timestamp `start`, `end` cũ vẫn được hỗ trợ.
+Đây là báo cáo toàn hệ thống, không áp dụng bộ lọc chi nhánh vì lượt gợi ý không gắn một cơ sở cụ thể.
+
+Mỗi gói trong một lần gợi ý được đếm một lần ở mỗi bước. Khoảng ngày chọn tập lượt hiển thị;
+kết quả đặt/thanh toán được liên kết với lượt bấm của tập đó. Checkout nhận `sourceViewId`
+đã được backend xác nhận, trong cùng phiên và trong 24 giờ. Web/mobile ưu tiên lượt bấm
+gợi ý đã xác nhận nếu không có lượt bấm tìm kiếm mới hơn. Không suy diễn chuyển đổi từ dữ liệu cũ thiếu liên kết.
+Admin hiển thị báo cáo riêng trong tab phân tích nhu cầu; CVR lượt xem gói hiện tại vẫn giữ nguyên.
+
+## Trợ lý đặt lịch OpenAI
+
+Web và mobile dùng chung `POST /api/v1/ai/chat` với body
+`{ "message": "Tìm lịch khám mắt" }` ở lượt đầu. Các lượt tiếp theo gửi thêm `sessionId` đã nhận.
+Backend trả `sessionId`, `message`, `step` và các thẻ dịch vụ, bác sĩ hoặc đề xuất lịch.
+Giữ `sessionId` cho các lượt tiếp theo; mở phiên mới khi đổi tài khoản.
+
+Chatbot chỉ tư vấn và tra cứu, không tạo lịch, giữ chỗ hay thanh toán trong chat.
+Nút “Tiếp tục đặt lịch” chuyển lựa chọn cơ sở, dịch vụ/bác sĩ, ngày và giờ sang luồng đặt lịch chung.
+Trang/màn hình đặt lịch tải lại danh mục và lịch trống, chỉ điền sẵn lựa chọn còn hợp lệ.
+Người dùng kiểm tra thông tin, chọn hồ sơ rồi xác nhận và thanh toán tại luồng chung;
+backend vẫn kiểm tra quyền sở hữu hồ sơ, tính giá và kiểm tra slot khi checkout.
+Endpoint `POST /api/v1/ai/booking/confirm` đã được bỏ; cập nhật web và mobile cùng backend.
+
+Trợ lý dùng `OPENAI_API_KEY`, `OPENAI_MODEL` từ cấu hình `openai` hiện có;
+không dùng Gemini. API key chỉ đặt ở backend. Nếu thiếu key, chat trả 503.
+Hội thoại lưu trong PostgreSQL, không dùng Map trong RAM; không cần migration mới.
+Đề xuất có hạn tham khảo 15 phút, không giữ slot và không bảo đảm còn chỗ khi chuyển trang.
+Không truyền giá, thông tin bệnh nhân hoặc cờ tự checkout qua URL chuyển tiếp.
+Redis giới hạn 20 tin nhắn/phút theo tài khoản hoặc IP khi được bật.
+Các route chat/stream cũ đã được hợp nhất: deploy backend, web và bản mobile cùng phiên bản.
+
+Mỗi tin nhắn được OpenAI phân luồng bằng JSON Schema trước khi chạy tools:
+
+- `DIRECT`: yêu cầu dịch vụ/thông tin rõ ràng, tiếp tục tra cứu ngay.
+- `CLARIFY`: mô tả triệu chứng còn thiếu thông tin, hỏi tối đa 1–2 câu mỗi lượt; không chạy tools tìm dịch vụ/lịch.
+- `READY`: đủ ngữ cảnh để hỗ trợ định hướng chuyên khoa, tra cứu dịch vụ thực tế; chưa cho tìm lịch cho đến khi người dùng chọn dịch vụ/bác sĩ.
+- `URGENT`: dừng tra cứu và hướng dẫn tìm hỗ trợ y tế khẩn cấp.
+
+Quy tắc và schema nằm trong `src/modules/ai-assistant/ai-intake.ts`. Phân luồng dùng
+ngữ cảnh 12 tin nhắn gần nhất, không ép hỏi đủ số câu; đánh giá lại khi đổi triệu chứng/người khám.
+Đây là hỗ trợ chọn dịch vụ, không phải chẩn đoán hay xác nhận tình trạng an toàn.
+Mỗi lượt chat có thêm một lần gọi OpenAI để phân luồng, dùng chung giới hạn 45 giây
+với bước tra cứu. Phản hồi phân luồng lỗi, thiếu hoặc bị từ chối sẽ trả 503, không tự bỏ qua để tìm lịch.
+
 ## Yêu cầu
 
 - Node.js 22+

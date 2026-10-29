@@ -2,10 +2,10 @@ import { BadRequestException, Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../infrastructure/database/prisma/prisma.service.js';
-import { AnalyticsInteractionDto } from './search-analytics.dto.js';
+import { AnalyticsInteractionDto, RecommendationMetricsQueryDto } from './search-analytics.dto.js';
 import { createHash, createHmac, randomUUID, timingSafeEqual } from 'node:crypto';
 import { normalizeSearch, parseSearchIntent } from '../../common/utils/search-query.js';
-import { vietnamDateKey } from './analytics-time.js';
+import { analyticsRange, vietnamDateKey } from './analytics-time.js';
 import { SUCCESSFUL_BOOKING_STATUSES, conversionPercent } from './demand-telemetry.js';
 
 interface RecommendationReceipt {
@@ -14,6 +14,13 @@ interface RecommendationReceipt {
   accountId?: string;
   issuedAt: number;
   packages: Array<{ packageId: string; sourceType?: string }>;
+}
+
+export interface SearchContext {
+  sessionId?: string;
+  accountId?: string;
+  searchRequestId?: string;
+  branchId?: string;
 }
 
 @Injectable()
@@ -71,23 +78,28 @@ export class SearchAnalyticsService {
     return { success: true, ...(dto.eventType === 'RECOMMEND_CLICK' ? { sourceViewId: clickId } : {}) };
   }
 
-  async recordSearch(query: string, context: { sessionId?: string; accountId?: string }, result: {
+  async recordSearch(query: string, context: SearchContext, result: {
     branchId?: string; packages: Array<{ id: string }>; doctors: Array<{ id: string }>; branches: Array<{ id: string }>;
     partial?: boolean;
   } | null, latencyMs: number) {
-    const id = randomUUID();
+    // Scope the execution ID to its owner, query and branch; retries share one database row.
+    const key = context.searchRequestId && context.sessionId
+      ? createHash('sha256').update(JSON.stringify([context.searchRequestId, context.sessionId, context.accountId,
+        query.trim().toLowerCase(), context.branchId])).digest('hex') : undefined;
+    const id = key ? `${key.slice(0, 8)}-${key.slice(8, 12)}-4${key.slice(13, 16)}-a${key.slice(17, 20)}-${key.slice(20, 32)}` : randomUUID();
     const status = result ? result.partial ? 'PARTIAL' : result.packages.length + result.doctors.length + result.branches.length ? 'SUCCESS' : 'EMPTY' : 'ERROR';
-    await this.prisma.$transaction(async tx => {
-      await tx.searchRequest.create({ data: {
+    const created = await this.prisma.$transaction(async tx => {
+      const inserted = await tx.searchRequest.createMany({ skipDuplicates: true, data: [{
         id, sessionId: context.sessionId || `legacy_${id}`, accountId: context.accountId,
-        branchId: result?.branchId, query: query.slice(0, 200), normalizedQuery: normalizeSearch(query),
+        branchId: result?.branchId || context.branchId, query: query.slice(0, 200), normalizedQuery: normalizeSearch(query),
         intent: JSON.parse(JSON.stringify(parseSearchIntent(query))),
         resultKeys: result ? [
           ...result.packages.map(item => `PACKAGE:${item.id}`), ...result.doctors.map(item => `DOCTOR:${item.id}`), ...result.branches.map(item => `BRANCH:${item.id}`),
         ] : [],
         status, packageCount: result?.packages.length || 0, doctorCount: result?.doctors.length || 0,
         branchCount: result?.branches.length || 0, latencyMs: Math.max(0, Math.round(latencyMs)),
-      } });
+      }] });
+      if (!inserted.count) return false;
       if (status === 'SUCCESS' || status === 'EMPTY') {
         const keyword = query.trim().toLowerCase();
         const dateKey = vietnamDateKey(new Date());
@@ -95,8 +107,9 @@ export class SearchAnalyticsService {
         await tx.searchLog.upsert({ where: { keyword_dateKey_hasResults: { keyword, dateKey, hasResults } },
           update: { count: { increment: 1 } }, create: { keyword, dateKey, hasResults, count: 1 } });
       }
+      return true;
     });
-    return id;
+    return { id, created };
   }
 
   async recordInteraction(dto: AnalyticsInteractionDto, accountId?: string) {
@@ -173,9 +186,18 @@ export class SearchAnalyticsService {
     return { searchId, sourceViewId };
   }
 
-  async recommendationMetrics(query: { start?: string; end?: string }) {
-    const end = query.end ? new Date(query.end) : new Date();
-    const start = query.start ? new Date(query.start) : new Date(end.getTime() - 30 * 86400_000);
+  async recommendationMetrics(query: RecommendationMetricsQueryDto) {
+    let start: Date, end: Date;
+    try {
+      if (query.start || query.end) {
+        end = query.end ? new Date(query.end) : new Date();
+        start = query.start ? new Date(query.start) : new Date(end.getTime() - 30 * 86400_000);
+      } else {
+        ({ start, end } = analyticsRange(query));
+      }
+    } catch {
+      throw new BadRequestException('Khoảng ngày báo cáo không hợp lệ.');
+    }
     if (!Number.isFinite(+start) || !Number.isFinite(+end) || +start >= +end || +end - +start > 90 * 86400_000) {
       throw new BadRequestException('Khoảng thống kê phải lớn hơn 0 và không quá 90 ngày.');
     }

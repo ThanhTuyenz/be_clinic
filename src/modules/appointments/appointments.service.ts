@@ -63,6 +63,16 @@ export class AppointmentsService {
   async receptionAppointments(userId: string, query: Record<string, string | undefined>) {
     const actor = await loadAppointmentActor(this.prisma, userId, RECEPTION_ROLES);
     const filters: Prisma.AppointmentWhereInput[] = [appointmentScope(actor), appointmentStatusFilter(query.status, true)];
+    if (query.paymentChannel === 'counter') {
+      filters.push({ OR: [
+        { invoice: { payments: { some: {
+          provider: 'CLINIC_COUNTER', status: 'SUCCESS', method: { in: ['CASH', 'VIETQR'] },
+        } } } },
+        { status: { in: ['HOLD', 'CONFIRMED'] }, invoice: {
+          status: 'UNPAID', payments: { none: { status: 'SUCCESS' } },
+        } },
+      ] });
+    }
     const start = query.from ? parseAppointmentDate(query.from) : undefined;
     const end = query.to ? parseAppointmentDate(query.to) : undefined;
     if (start && end && start > end) throw new BadRequestException('Ngày bắt đầu phải trước hoặc bằng ngày kết thúc');

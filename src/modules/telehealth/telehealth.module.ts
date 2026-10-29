@@ -4,11 +4,12 @@ import { TelehealthService } from './telehealth.service.js';
 import { TelehealthController } from './telehealth.controller.js';
 import { JwtAuthCoreModule } from '../auth/jwt-auth-core/jwt-auth-core.module.js';
 import { ConfigModule } from '@nestjs/config';
+import { TelehealthChatCache } from './telehealth-chat-cache.service.js';
 
 @Module({
   imports: [JwtAuthCoreModule, ConfigModule],
   controllers: [TelehealthController],
-  providers: [TelehealthGateway, TelehealthService],
+  providers: [TelehealthGateway, TelehealthService, TelehealthChatCache],
   exports: [TelehealthGateway, TelehealthService],
 })
 export class TelehealthModule {}

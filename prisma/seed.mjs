@@ -532,7 +532,7 @@ async function main() {
         adviceImg: 'https://images.unsplash.com/photo-1582750433449-648ed127bb54?w=800&auto=format&fit=crop&q=80',
       },
       'noi-tong-quat': {
-        symptoms: ['Kiểm tra sức khỏe định kỳ', 'Mệt mỏi suy nhược', 'Sụt cân không rõ nguyên nhân', 'Đau đầu mất ngủ'],
+        symptoms: ['Mệt mỏi suy nhược', 'Sụt cân không rõ nguyên nhân', 'Sốt kéo dài', 'Kiểm tra sức khỏe định kỳ'],
         notes: 'Nhịn ăn sáng ít nhất 6-8 tiếng để lấy máu xét nghiệm đường huyết, mỡ máu và men gan. Không uống nước ngọt, sữa hay cà phê.',
         standardDesc: 'Khám lâm sàng toàn diện các cơ quan nội khoa, đánh giá chỉ số sinh hiệu và tầm soát sớm các bệnh lý lối sống.',
         followupDesc: 'Đánh giá lại các chỉ số xét nghiệm bất thường, theo dõi tiến triển sức khỏe định kỳ và tư vấn cải thiện.',
@@ -557,7 +557,12 @@ async function main() {
 
     for (const spec of specialtiesBySlug.values()) {
       const codeSuffix = `${branch.code.replace('VC-', '')}-${String(spec.id).padStart(3, '0')}`;
-      const specMeta = SPECIALTY_EXTRA_METADATA[spec.slug] || SPECIALTY_EXTRA_METADATA.tong_quat;
+      const specMeta = SPECIALTY_EXTRA_METADATA[spec.slug] || {
+        symptoms: spec.symptoms || [],
+        standardDesc: spec.description || `Khám chuyên khoa ${spec.name}.`,
+        followupDesc: `Theo dõi sau lần khám trước tại chuyên khoa ${spec.name}. ${spec.description || ''}`.trim(),
+        notes: 'Mang theo hồ sơ và kết quả khám trước đây (nếu có).',
+      };
 
       const specialtyServices = [
         {

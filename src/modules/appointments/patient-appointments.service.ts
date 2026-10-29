@@ -155,7 +155,9 @@ export class PatientAppointmentsService {
         doctorId: doctorSlot?.schedule?.doctorId ?? null,
         specialty: doctorSlot?.schedule?.doctor?.specialties?.[0]?.specialty?.name ?? null,
         service: row.servicePackage ? { id: row.servicePackage.id, name: row.servicePackage.name } : null,
-        healthPackage: row.servicePackage ? { id: row.servicePackage.id, name: row.servicePackage.name } : null,
+        healthPackage: bookingMethod?.code === 'HEALTH_PACKAGE' && row.servicePackage
+          ? { id: row.servicePackage.id, name: row.servicePackage.name }
+          : null,
         branch: branch ? { id: branch.id, name: branch.name, address: branch.address } : null,
         branchId: branch?.id ?? row.branchId,
         room: !isTelehealth && room ? { id: room.id, code: room.code, name: room.name } : null,

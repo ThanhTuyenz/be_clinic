@@ -56,6 +56,7 @@ export class AppointmentsController {
   @ApiQuery({ name: 'to', required: false, example: '2026-08-31' })
   @ApiQuery({ name: 'status', required: false, enum: ['all', 'pending', 'confirmed', 'cancelled'] })
   @ApiQuery({ name: 'q', required: false, description: 'Từ khóa tìm kiếm' })
+  @ApiQuery({ name: 'paymentChannel', required: false, enum: ['counter'], description: 'Lọc thu phí tiền mặt/chuyển khoản tại quầy và hóa đơn chưa thu' })
   listReceptionAppointments(@Req() req: Request) {
     return this.appointments.receptionAppointments(req.user!.id, req.query as Record<string, string | undefined>);
   }

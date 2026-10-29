@@ -3,7 +3,7 @@ import { ConfigService } from '@nestjs/config';
 import OpenAI from 'openai';
 import { createHash } from 'node:crypto';
 import { RedisService } from '../redis/redis.service.js';
-import { matchesSearchConstraints, parseSearchIntent, searchTextScore } from '../../common/utils/search-query.js';
+import { matchesSearchConstraints, matchesSearchExclusions, normalizeSearch, parseSearchIntent, searchTextScore } from '../../common/utils/search-query.js';
 
 export interface PackageForRetrieval {
   id: string;
@@ -20,6 +20,7 @@ export interface PackageForRetrieval {
   maxAge?: number | null;
   branchId?: string;
   bookingMethodCode?: string;
+  isFollowUp?: boolean;
 }
 
 export interface ScoredPackage {
@@ -42,6 +43,7 @@ export function mapPackageForRetrieval(pkg: PackageEmbeddingSource): PackageForR
     description: [pkg.description, pkg.specialty?.description].filter(Boolean).join(' - '),
     symptoms: [...new Set([...(pkg.symptoms || []), ...(pkg.specialty?.symptoms || [])])],
     targetGender: pkg.targetGender, minAge: pkg.minAge, maxAge: pkg.maxAge,
+    isFollowUp: pkg.isFollowUp === true || /(?:^|-)FOLLOWUP$/i.test(pkg.code) || /\btai kham\b/.test(normalizeSearch(pkg.name)),
   };
 }
 
@@ -403,38 +405,42 @@ export class EmbeddingService {
     finally { this.pendingQueryVectors.delete(text); }
   }
 
-  /** Phrase matching first; semantic-only matches require similarity >= 0.82. */
+  /** Combine field matches and semantic hits after applying explicit constraints. */
   async searchByNaturalLanguage(queryText: string, packages: PackageForRetrieval[], topK = 10, options: { strictSemantic?: boolean } = {}): Promise<ScoredPackage[]> {
     const intent = parseSearchIntent(queryText);
     if ((!intent.text && !intent.hasConstraints) || packages.length === 0) return [];
-    const candidates = packages.filter(pkg => matchesSearchConstraints(intent, pkg));
+    const candidates = packages.filter(pkg => matchesSearchConstraints(intent, pkg)
+      && matchesSearchExclusions(intent, [pkg.name, pkg.specialtyName, pkg.description, ...(pkg.symptoms || [])]));
     if (candidates.length === 0) return [];
     const textScores = new Map<string, number>();
     for (const pkg of candidates) {
-      const score = intent.text ? Math.max(
-        searchTextScore(intent.text, pkg.name) * 1.3,
-        searchTextScore(intent.text, pkg.specialtyName) * 1.1,
-        ...(pkg.symptoms || []).map(symptom => searchTextScore(intent.text, symptom) * 1.2),
-        searchTextScore(intent.text, pkg.description) * 0.7,
-      ) : 1;
+      const score = intent.text
+        ? searchTextScore(intent.text, pkg.name) * 1.3
+          + searchTextScore(intent.text, pkg.specialtyName) * 1.1
+          + Math.max(0, ...(pkg.symptoms || []).map(symptom => searchTextScore(intent.text, symptom))) * 1.2
+          + searchTextScore(intent.text, pkg.description) * 0.3
+        : 1;
       if (score > 0) textScores.set(pkg.id, score);
     }
     const vectorScores = new Map<string, number>();
-    // Short queries and explicit negation require a real phrase match.
-    if (intent.text.split(' ').length > 4 && intent.excluded.length === 0 && textScores.size === 0) {
-      const vector = await this.embedSearchQuery(intent.text);
+    const minSemanticScore = 0.82;
+    // Preserve accents for embeddings. Exclusions are already enforced on candidates.
+    if (intent.text) {
+      const vector = await this.embedSearchQuery(queryText.trim().toLowerCase().replace(/\s+/g, ' '));
       if (vector) {
         const hits = await this.searchWithRedisSearch(vector, candidates, Math.min(20, candidates.length));
-        if (hits === null && options.strictSemantic) throw new Error('Semantic index unavailable');
-        for (const hit of hits || []) if (hit.score >= 0.82) vectorScores.set(hit.package.id, hit.score);
-      } else if (options.strictSemantic) throw new Error('Search embedding unavailable');
+        if (hits === null && options.strictSemantic && textScores.size === 0) throw new Error('Semantic index unavailable');
+        for (const hit of hits || []) if (hit.score >= minSemanticScore) vectorScores.set(hit.package.id, hit.score);
+      } else if (options.strictSemantic && textScores.size === 0) throw new Error('Search embedding unavailable');
     }
     return candidates.flatMap(pkg => {
       const textScore = textScores.get(pkg.id) || 0;
       const vectorScore = vectorScores.get(pkg.id) || 0;
-      if (textScore === 0 && vectorScore < 0.82) return [];
+      if (textScore === 0 && vectorScore < minSemanticScore) return [];
       return [{ package: pkg, score: Number((textScore * 1.5 + vectorScore * 1.2).toFixed(3)) }];
-    }).sort((a, b) => b.score - a.score || a.package.price - b.package.price).slice(0, topK);
+    }).sort((a, b) => (intent.followUp === undefined ? Number(Boolean(a.package.isFollowUp)) - Number(Boolean(b.package.isFollowUp)) : 0)
+      || b.score - a.score
+      || a.package.price - b.package.price || a.package.id.localeCompare(b.package.id)).slice(0, topK);
   }
 
   private fallbackKeywordMatcher(
@@ -442,34 +448,15 @@ export class EmbeddingService {
     candidates: PackageForRetrieval[],
     topK: number,
   ): ScoredPackage[] {
-    const qNorm = this.normalizeVietnamese(query);
-    const scored = candidates.map((pkg) => {
-      const nameNorm = this.normalizeVietnamese(pkg.name || '');
-      const descNorm = this.normalizeVietnamese(pkg.description || '');
-      const specNorm = this.normalizeVietnamese(pkg.specialtyName || '');
-      const symNorm = (pkg.symptoms || []).map((s) => this.normalizeVietnamese(s)).join(' ');
-      const targetText = `${nameNorm} ${specNorm} ${descNorm} ${symNorm}`;
-
-      // Profile retrieval ranks broad histories; unlike search, it need not match the entire history.
-      const tokens = [...new Set(parseSearchIntent(qNorm).text.split(' ').filter(Boolean))];
-      const targetTokens = new Set(targetText.split(/\W+/));
-      const score = searchTextScore(parseSearchIntent(query).text, targetText) ||
-        tokens.filter(token => targetTokens.has(token)).length / Math.max(tokens.length, 1);
+    const text = normalizeSearch(parseSearchIntent(query).text);
+    const tokens = [...new Set(text.split(' ').filter(Boolean))];
+    return candidates.map(pkg => {
+      const target = normalizeSearch([pkg.name, pkg.specialtyName, pkg.description, ...(pkg.symptoms || [])].join(' '));
+      const words = new Set(target.split(' '));
+      // Profile histories may match part of the text; search uses stricter matching.
+      const score = searchTextScore(text, target) ||
+        tokens.filter(token => words.has(token)).length / Math.max(tokens.length, 1);
       return { package: pkg, score };
-    });
-
-    scored.sort((a, b) => b.score - a.score);
-    return scored.slice(0, topK);
-  }
-
-  private normalizeVietnamese(str: string): string {
-    if (!str) return '';
-    return str
-      .normalize('NFD')
-      .replace(/[\u0300-\u036f]/g, '')
-      .replace(/đ/g, 'd')
-      .replace(/Đ/g, 'D')
-      .toLowerCase()
-      .trim();
+    }).sort((a, b) => b.score - a.score).slice(0, topK);
   }
 }

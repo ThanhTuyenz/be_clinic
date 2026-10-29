@@ -1,6 +1,6 @@
 {
   "compilerOptions": {
-    "module": "commonjs",
+    "module": "NodeNext",
     "declaration": true,
     "removeComments": true,
     "emitDecoratorMetadata": true,
@@ -9,16 +9,17 @@
     "target": "es2022",
     "sourceMap": true,
     "outDir": "./dist",
-    "baseUrl": ".",
+    "rootDir": "./src",
     "incremental": true,
+    "tsBuildInfoFile": "./dist/tsconfig.tsbuildinfo",
     "skipLibCheck": true,
     "strict": false,
     "esModuleInterop": true,
     "allowJs": true,
     "resolveJsonModule": true,
-    "moduleResolution": "node",
+    "moduleResolution": "NodeNext",
     "paths": {
-      "src/*": ["src/*"]
+      "src/*": ["./src/*"]
     },
     "types": ["node"]
   },

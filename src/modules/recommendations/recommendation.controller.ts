@@ -4,6 +4,7 @@ import { JwtPayloadType } from '../auth/auth-local/types/index.js';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { Public } from '../../common/decorators/public.decorator.js';
 import { RecommendationService } from './recommendation.service.js';
+import { SemanticSearchService } from './services/semantic-search.service.js';
 import {
   HomeRecommendationQueryDto,
   HomeRecommendationResponseDto,
@@ -20,7 +21,10 @@ type RecommendationRequest = Request & { user?: JwtPayloadType };
 export class RecommendationController {
   private readonly logger = new Logger(RecommendationController.name);
 
-  constructor(private readonly recommendationService: RecommendationService) {}
+  constructor(
+    private readonly recommendationService: RecommendationService,
+    private readonly semanticSearchService: SemanticSearchService,
+  ) {}
 
   @Get('home')
   @Public()
@@ -57,7 +61,7 @@ export class RecommendationController {
     @Req() req: RecommendationRequest,
   ) {
     this.logger.log(`[API GET] /semantic-search?q="${query.q}"${query.branchId ? ` (branchId: ${query.branchId})` : ''}`);
-    return this.recommendationService.semanticSearchPackages(query.q, query.branchId, { sessionId: query.sessionId, accountId: req.user?.id });
+    return this.semanticSearchService.semanticSearchPackages(query.q, query.branchId, { sessionId: query.sessionId, accountId: req.user?.id, searchRequestId: query.searchRequestId });
   }
 
   @Post('patient-profile/:profileId/refresh')

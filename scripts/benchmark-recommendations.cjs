@@ -141,7 +141,7 @@ async function main() {
     const ai = new AiRankingService(config());
     providerInstrumentation(ai, embedding);
     const analytics = new SearchAnalyticsService(prisma, config());
-    const recommendations = new RecommendationService(prisma, redis, telemetry, retrieval, ai, {}, analytics);
+    const recommendations = new RecommendationService(prisma, redis, telemetry, retrieval, ai, analytics);
     const catalog = await retrieval.loadActivePackages();
     if (!catalog.length) throw new Error('No active deployed packages');
     const { TEST_CASES, buildEvaluationLabels } = await import(pathToFileURL(path.join(root, 'scripts/evaluate-accuracy.mjs')).href);
@@ -239,7 +239,7 @@ async function main() {
     for (let i = 0; i < 30; i++) await measured('DEFAULT-' + i, 'NO_CONTEXT', () => recommendations.getHomeRecommendations({}));
     const fallbackAI = new AiRankingService({ get: () => undefined });
     fallbackAI.aiClient = null;
-    const fallback = new RecommendationService(prisma, redis, telemetry, retrieval, fallbackAI, {}, analytics);
+    const fallback = new RecommendationService(prisma, redis, telemetry, retrieval, fallbackAI, analytics);
     for (let i = 0; i < 10; i++) {
       await redis.delete(TELEMETRY_CONFIG.CACHE_PREFIX + ':profile:' + fixtures[i % fixtures.length].profileId);
       await measured('FALLBACK-' + i, 'FORCED_AI_UNAVAILABLE', () => fallback.getHomeRecommendations({ profileId: fixtures[i % fixtures.length].profileId }, owner.id));

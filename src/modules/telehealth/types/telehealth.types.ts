@@ -16,10 +16,10 @@ export interface TelehealthRoomState {
   startedAt?: Date;
   endedAt?: Date;
   status: 'WAITING' | 'IN_CALL' | 'COMPLETED';
-  messages?: ChatMessagePayload[];
 }
 
 export interface ChatMessagePayload {
+  id?: string;
   appointmentId: string;
   senderId: string;
   senderName: string;

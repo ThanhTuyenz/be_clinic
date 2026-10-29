@@ -7,7 +7,6 @@ import { CandidatePoolItem, RecommendationPackage, TELEMETRY_CONFIG } from './co
 import { BehaviorTelemetryService } from './services/behavior-telemetry.service.js';
 import { CandidateRetrievalService, ProfileRecommendationContext } from './services/candidate-retrieval.service.js';
 import { AiRankingService, RankingContext } from './services/ai-ranking.service.js';
-import { SemanticSearchService } from './services/semantic-search.service.js';
 import { SearchAnalyticsService } from '../search-analytics/search-analytics.service.js';
 
 interface CachedRanking {
@@ -30,7 +29,6 @@ export class RecommendationService {
     private readonly behaviorTelemetryService: BehaviorTelemetryService,
     private readonly candidateRetrievalService: CandidateRetrievalService,
     private readonly aiRankingService: AiRankingService,
-    private readonly semanticSearchService: SemanticSearchService,
     private readonly analytics: SearchAnalyticsService,
   ) {}
 
@@ -232,10 +230,6 @@ export class RecommendationService {
 
   trackUserBehavior(dto: TrackBehaviorDto, userId?: string) {
     return this.behaviorTelemetryService.trackUserBehavior(dto, userId);
-  }
-
-  semanticSearchPackages(query: string, branchId?: string, context: { sessionId?: string; accountId?: string } = {}) {
-    return this.semanticSearchService.semanticSearchPackages(query, branchId, context);
   }
 
   suggestSymptomsForPackage(name: string, specialtyName?: string) {
