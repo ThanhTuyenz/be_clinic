@@ -54,18 +54,8 @@ export enum AppPermission {
   PATIENT_MANAGE = 'patient:manage',
   SYSTEM_CONFIG_MANAGE = 'system:config_manage',
 }
-export type PermissionGroup = 'appointment' | 'patient' | 'clinical' | 'operation' | 'service' | 'finance' | 'report' | 'system'
+type PermissionGroup = 'appointment' | 'patient' | 'clinical' | 'operation' | 'service' | 'finance' | 'report' | 'system'
 export interface PermissionItem { code: AppPermission | string; label: string; description: string; group: PermissionGroup }
-export const PERMISSION_GROUP_CONFIG: Record<PermissionGroup, { label: string; badgeTone: 'emerald' | 'blue' | 'purple' | 'amber' | 'slate' }> = {
-  appointment: { label: 'Lịch hẹn & Tiếp đón', badgeTone: 'blue' },
-  patient: { label: 'Hồ sơ Bệnh nhân', badgeTone: 'emerald' },
-  clinical: { label: 'Khám bệnh & Bệnh án', badgeTone: 'purple' },
-  operation: { label: 'Vận hành & Cơ sở vật chất', badgeTone: 'emerald' },
-  service: { label: 'Chuyên môn & Dịch vụ', badgeTone: 'blue' },
-  finance: { label: 'Tài chính & Thu phí', badgeTone: 'amber' },
-  report: { label: 'Thống kê', badgeTone: 'purple' },
-  system: { label: 'Nhân sự & Hệ thống', badgeTone: 'slate' },
-}
 export const PERMISSION_CATALOG: PermissionItem[] = [
   { code: AppPermission.USER_READ, label: "Xem tài khoản", description: "Xem tài khoản trong phạm vi được phân công.", group: 'system' },
   { code: AppPermission.USER_CREATE, label: "Tạo tài khoản", description: "Tạo tài khoản trong phạm vi được phân công.", group: 'system' },
@@ -112,7 +102,7 @@ export const PERMISSION_CATALOG: PermissionItem[] = [
   { code: AppPermission.INTEGRATION_VERIFY, label: "Kiểm tra kết nối tích hợp", description: "Kiểm tra kết nối SMTP; không gửi email và không sửa khóa.", group: 'system' },
   { code: AppPermission.SYSTEM_LOG_READ, label: "Xem nhật ký hệ thống", description: "Xem audit log, lịch sử đăng nhập và lỗi hệ thống.", group: 'system' },
 ]
-export const LEGACY_PERMISSION_MAP: Record<string, readonly string[]> = {
+const LEGACY_PERMISSION_MAP: Record<string, readonly string[]> = {
   "clinical:write": [],
   "user:manage": [
     "user:create",
@@ -154,8 +144,8 @@ export const LEGACY_PERMISSION_MAP: Record<string, readonly string[]> = {
     "system_log:read"
   ]
 }
-export const ALL_APP_PERMISSIONS = Object.freeze(PERMISSION_CATALOG.map((item) => item.code as AppPermission))
-export const VALID_PERMISSIONS_SET = new Set<string>(ALL_APP_PERMISSIONS)
+const ALL_APP_PERMISSIONS = Object.freeze(PERMISSION_CATALOG.map((item) => item.code as AppPermission))
+const VALID_PERMISSIONS_SET = new Set<string>(ALL_APP_PERMISSIONS)
 
 const SCHEDULE_WRITE_PERMISSIONS = [
   AppPermission.SCHEDULE_CREATE,
@@ -188,13 +178,13 @@ export const ROLE_DEFAULT_PERMISSIONS: Record<string, AppPermission[]> = {
   receptionist: [AppPermission.APPOINTMENT_READ, AppPermission.APPOINTMENT_CREATE, AppPermission.APPOINTMENT_CHECKIN, AppPermission.APPOINTMENT_CANCEL, AppPermission.PATIENT_READ, AppPermission.PATIENT_CREATE, AppPermission.PATIENT_UPDATE, AppPermission.BRANCH_READ, AppPermission.ROOM_READ, AppPermission.SPECIALTY_READ, AppPermission.SERVICE_READ, AppPermission.BOOKING_METHOD_READ, AppPermission.SCHEDULE_READ, AppPermission.FINANCE_COLLECT],
   patient: [AppPermission.APPOINTMENT_READ, AppPermission.APPOINTMENT_CREATE, AppPermission.PATIENT_READ, AppPermission.PATIENT_CREATE, AppPermission.PATIENT_UPDATE, AppPermission.CLINICAL_READ, AppPermission.SCHEDULE_READ],
 }
-export interface CustomPermissionsPayload { granted?: string[]; revoked?: string[] }
+interface CustomPermissionsPayload { granted?: string[]; revoked?: string[] }
 
-export function normalizePermissionCodes(values: unknown): AppPermission[] {
+function normalizePermissionCodes(values: unknown): AppPermission[] {
   if (!Array.isArray(values)) return []
   return [...new Set(values.flatMap((value) => LEGACY_PERMISSION_MAP[String(value)] || [String(value)]).filter((code) => VALID_PERMISSIONS_SET.has(code)))] as AppPermission[]
 }
-export function normalizeCustomPermissions(input: unknown): Required<CustomPermissionsPayload> {
+function normalizeCustomPermissions(input: unknown): Required<CustomPermissionsPayload> {
   let payload: any = input
   if (typeof payload === 'string') {
     try { payload = JSON.parse(payload) } catch { payload = null }

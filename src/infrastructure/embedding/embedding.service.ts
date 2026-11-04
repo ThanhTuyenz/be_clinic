@@ -3,7 +3,7 @@ import { ConfigService } from '@nestjs/config';
 import OpenAI from 'openai';
 import { createHash } from 'node:crypto';
 import { RedisService } from '../redis/redis.service.js';
-import { matchesSearchConstraints, matchesSearchExclusions, normalizeSearch, parseSearchIntent, searchTextScore } from '../../common/utils/search-query.js';
+import { matchesSearchConstraints, matchesSearchExclusions, normalizeSearch, parseSearchIntent, searchTextScore, searchTypoScore } from '../../common/utils/search-query.js';
 
 export interface PackageForRetrieval {
   id: string;
@@ -272,6 +272,11 @@ export class EmbeddingService {
   /**
    *  redis serch hnsw
    */
+  /** Low-level access only; search and recommendation own their ranking policies. */
+  async retrieveVectorCandidates(queryVector: number[], candidates: PackageForRetrieval[], topK: number): Promise<ScoredPackage[] | null> {
+    return this.searchWithRedisSearch(queryVector, candidates, topK);
+  }
+
   private async searchWithRedisSearch(
     queryVector: number[],
     candidates: PackageForRetrieval[],
@@ -416,11 +421,20 @@ export class EmbeddingService {
     for (const pkg of candidates) {
       const score = intent.text
         ? searchTextScore(intent.text, pkg.name) * 1.3
+          + searchTextScore(intent.text, pkg.code) * 1.4
           + searchTextScore(intent.text, pkg.specialtyName) * 1.1
           + Math.max(0, ...(pkg.symptoms || []).map(symptom => searchTextScore(intent.text, symptom))) * 1.2
           + searchTextScore(intent.text, pkg.description) * 0.3
         : 1;
       if (score > 0) textScores.set(pkg.id, score);
+    }
+    // Do not dilute exact matches or loosen clinical exclusions/price constraints.
+    // Only rescue an otherwise empty text result with a bounded title/specialty typo.
+    if (intent.text && textScores.size === 0) {
+      for (const pkg of candidates) {
+        const score = Math.max(searchTypoScore(intent.text, pkg.name), searchTypoScore(intent.text, pkg.specialtyName));
+        if (score > 0) textScores.set(pkg.id, score);
+      }
     }
     const vectorScores = new Map<string, number>();
     const minSemanticScore = 0.82;

@@ -18,7 +18,7 @@ Không ép đủ 2–3 câu hay lặp lại thông tin đã có; hiểu câu tr�
 Nếu người dùng từ chối chia sẻ hoặc không thể trả lời, không lặp hỏi: giải thích chưa đủ thông tin và đề nghị gặp bác sĩ đánh giá trực tiếp, không tự chọn gói thay họ.
 3. READY: triệu chứng đã có đủ ngữ cảnh để hỗ trợ định hướng chuyên khoa, không đồng nghĩa đã xác định bệnh hay bảo đảm an toàn.
 Người dùng đã cung cấp đủ từ đầu thì chuyển READY ngay. Nếu thay đổi triệu chứng hoặc người đi khám, đánh giá lại thông tin còn thiếu.
-4. DIRECT: hỏi thông tin phòng khám, tìm bác sĩ/lịch hoặc yêu cầu dịch vụ rõ ràng, không yêu cầu định hướng từ triệu chứng đang có.
+4. DIRECT: hỏi thông tin phòng khám, tìm bác sĩ/lịch, xem lịch đã đặt, hủy/đổi lịch, kiểm tra thanh toán/hoàn tiền hoặc yêu cầu dịch vụ rõ ràng, không yêu cầu định hướng từ triệu chứng đang có.
 Ví dụ: “Có gói khám tổng quát nào?”, “Khám mắt giá bao nhiêu?”, “Tìm lịch bác sĩ tôi đã chọn”. Không bắt người này trả lời bộ câu hỏi triệu chứng.
 Sau khi đã định hướng, nếu người dùng chọn rõ dịch vụ/bác sĩ và yêu cầu tìm lịch, chuyển DIRECT; không hỏi lại triệu chứng trừ khi họ báo triệu chứng mới.
 Nếu vừa xin gợi ý gói vừa mô tả triệu chứng, ưu tiên URGENT/CLARIFY/READY, không dùng DIRECT để bỏ qua hỏi thêm.

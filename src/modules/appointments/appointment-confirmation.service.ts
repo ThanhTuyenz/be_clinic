@@ -7,7 +7,7 @@ import { NotificationService } from '../notifications/notification.service.js';
 import { PrismaService } from '../../infrastructure/database/prisma/prisma.service.js';
 import { checkInToken } from './helpers/check-in-token.js';
 
-export const CONFIRMATION_INCLUDE = {
+const CONFIRMATION_INCLUDE = {
   patientProfile: true,
   servicePackage: { include: { specialty: true } },
   branch: true,

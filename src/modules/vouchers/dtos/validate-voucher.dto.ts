@@ -1,6 +1,6 @@
-import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { ApiProperty } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
-import { IsNotEmpty, IsNumber, IsOptional, IsString, Min } from 'class-validator';
+import { IsNotEmpty, IsNumber, IsString, Min } from 'class-validator';
 
 export class ValidateVoucherDto {
   @ApiProperty({ description: 'Mã giảm giá (ví dụ: MEDPRO10, CHAOBANMOI)', example: 'CHAOBANMOI' })

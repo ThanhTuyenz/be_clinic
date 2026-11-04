@@ -28,9 +28,3 @@ export interface ChatMessagePayload {
   timestamp: string;
   fileUrl?: string;
 }
-
-export interface MediaTogglePayload {
-  appointmentId: string;
-  isAudioMuted?: boolean;
-  isVideoOff?: boolean;
-}

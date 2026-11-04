@@ -74,11 +74,16 @@ export class PaymentSettlementService {
       };
     }
 
+    if (payment.invoice.status === 'PAID') {
+      const appointments = payment.invoice.appointment ? [payment.invoice.appointment] : payment.invoice.bookingOrder?.appointments ?? [];
+      return this.markRefundRequired(tx, payment.id, payment.invoiceId, appointments, provider, dto, payment.invoice.bookingOrderId ?? undefined, true);
+    }
+
     // Xử lý đơn tổng BookingOrder (Batch Payment)
     const bookingOrder = payment.invoice.bookingOrder;
     if (bookingOrder) {
       if (!bookingOrder.appointments.length || bookingOrder.appointments.some(appt => appt.status !== 'HOLD')) {
-        return this.markRefundRequired(tx, payment.id, payment.invoiceId, bookingOrder.appointments, provider, dto, bookingOrder.id, payment.invoice.status === 'PAID');
+        return this.markRefundRequired(tx, payment.id, payment.invoiceId, bookingOrder.appointments, provider, dto, bookingOrder.id);
       }
       return this.confirmPaidBatch(tx, payment.id, payment.invoiceId, bookingOrder.id, bookingOrder.appointments, provider, dto, snapshots);
     }

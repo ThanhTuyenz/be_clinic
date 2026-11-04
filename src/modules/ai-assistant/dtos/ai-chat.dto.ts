@@ -1,5 +1,6 @@
 import { IsNotEmpty, IsOptional, IsString, IsUUID, MaxLength } from 'class-validator';
 import { Transform } from 'class-transformer';
+import type { AiPaymentStatusResult } from '../ai-payment-status.service.js';
 
 export class AiChatMessageDto {
   @Transform(({ value }) => typeof value === 'string' ? value.trim() : value)
@@ -11,9 +12,13 @@ export class AiChatMessageDto {
   @IsOptional()
   @IsUUID()
   sessionId?: string;
+
+  @IsOptional()
+  @IsUUID()
+  paymentAppointmentId?: string;
 }
 
-export interface DoctorCardRecommendation {
+interface DoctorCardRecommendation {
   id: string;
   fullName: string;
   title?: string;
@@ -23,7 +28,7 @@ export interface DoctorCardRecommendation {
   consultationFee: number;
 }
 
-export interface PackageCardRecommendation {
+interface PackageCardRecommendation {
   id: string;
   code: string;
   name: string;
@@ -61,4 +66,6 @@ export interface AiAgentChatResponse {
   proposedPackages?: PackageCardRecommendation[];
   doctors?: DoctorCardRecommendation[];
   quickSuggestions?: string[];
+  showAppointments?: boolean;
+  paymentStatus?: AiPaymentStatusResult;
 }

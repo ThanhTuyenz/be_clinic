@@ -8,7 +8,7 @@ export type AppConfig = {
   apiPrefix: string;
 };
 
-export type DatabaseConfig = {
+type DatabaseConfig = {
   url?: string;
   type?: string;
   host?: string;

@@ -1,0 +1,4 @@
+{
+  "entry": ["src/main.ts", "src/types/**/*.d.ts", "prisma.config.ts", "prisma/*.mjs", "scripts/*.mjs"],
+  "project": ["src/**/*.ts", "prisma/**/*.mjs", "scripts/**/*.mjs", "prisma.config.ts"]
+}

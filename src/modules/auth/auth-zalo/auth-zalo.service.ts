@@ -1,6 +1,4 @@
 import { HttpException, HttpStatus, Injectable, Logger } from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
-import { AllConfigType } from '../../../config/config.type';
 import { AuthZaloLoginDto } from './dtos/auth-zalo-login.dto';
 import { SocialType } from '../../../common/utils/social.type';
 import { IAuthZaloService } from './auth-zalo';
@@ -20,8 +18,6 @@ interface ZaloGraphResponse {
 @Injectable()
 export class AuthZaloService implements IAuthZaloService {
   private readonly logger = new Logger(AuthZaloService.name);
-
-  constructor(private readonly configService: ConfigService<AllConfigType>) {}
 
   async getProfileByToken(loginDto: AuthZaloLoginDto): Promise<SocialType> {
     const isMock =

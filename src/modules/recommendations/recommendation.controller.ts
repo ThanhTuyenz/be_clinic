@@ -4,12 +4,10 @@ import { JwtPayloadType } from '../auth/auth-local/types/index.js';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { Public } from '../../common/decorators/public.decorator.js';
 import { RecommendationService } from './recommendation.service.js';
-import { SemanticSearchService } from './services/semantic-search.service.js';
 import {
   HomeRecommendationQueryDto,
   HomeRecommendationResponseDto,
   ProfileRecommendationResponseDto,
-  SemanticSearchQueryDto,
   TrackBehaviorDto,
 } from './recommendation.dto.js';
 
@@ -23,7 +21,6 @@ export class RecommendationController {
 
   constructor(
     private readonly recommendationService: RecommendationService,
-    private readonly semanticSearchService: SemanticSearchService,
   ) {}
 
   @Get('home')
@@ -52,17 +49,6 @@ export class RecommendationController {
   }
 
 
-
-  @Get('semantic-search')
-  @Public()
-  @ApiOperation({ summary: 'Tìm kiếm gói khám bằng ngôn ngữ tự nhiên / triệu chứng y khoa' })
-  async semanticSearch(
-    @Query() query: SemanticSearchQueryDto,
-    @Req() req: RecommendationRequest,
-  ) {
-    this.logger.log(`[API GET] /semantic-search?q="${query.q}"${query.branchId ? ` (branchId: ${query.branchId})` : ''}`);
-    return this.semanticSearchService.semanticSearchPackages(query.q, query.branchId, { sessionId: query.sessionId, accountId: req.user?.id, searchRequestId: query.searchRequestId });
-  }
 
   @Post('patient-profile/:profileId/refresh')
   @ApiBearerAuth('access-token')

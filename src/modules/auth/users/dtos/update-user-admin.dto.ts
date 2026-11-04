@@ -1,5 +1,5 @@
 import { ApiPropertyOptional } from '@nestjs/swagger';
-import { Transform, Type } from 'class-transformer';
+import { Transform } from 'class-transformer';
 import {
   IsBoolean,
   IsEmail,
@@ -8,7 +8,6 @@ import {
   IsString,
   MinLength,
   IsArray,
-  ValidateNested,
   IsNumber,
   IsInt,
   Min,
@@ -18,7 +17,6 @@ import {
 import { lowerCaseTransformer } from 'src/common/utils/transformers/lower-case.transformer';
 
 import { UserRole, UserStatus } from '../entities/user.entity';
-import { RolePermissionDto } from './role-permission.dto';
 import { DoctorProfileDto } from './doctor-profile.dto';
 
 export class UpdateUserAdminDto extends DoctorProfileDto {

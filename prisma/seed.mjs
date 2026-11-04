@@ -6,6 +6,7 @@ import path from 'node:path';
 import fs from 'node:fs';
 import bcrypt from 'bcrypt';
 import { seedDashboardData, demoDate } from './seed-dashboard-data.mjs';
+import { basicSpecialtyPackage } from './package-catalog-data.mjs';
 
 // 1. Cấu hình biến môi trường & kết nối database
 const envFile = process.env.ENV_FILE || '.env.development';
@@ -588,12 +589,10 @@ async function main() {
           methodCode: 'AFTER_HOURS',
         },
         {
-          code: `CONSULT-${codeSuffix}-FOLLOWUP`,
-          name: `Tái khám ${spec.name} (${branch.name})`,
+          code: `CONSULT-${codeSuffix}-BASIC`,
+          ...basicSpecialtyPackage(spec.name, branch.name),
           price: 180000,
           durationMin: 20,
-          description: specMeta.followupDesc || `Theo dõi diễn tiến điều trị và kiểm tra đơn thuốc ${spec.name}.`,
-          notes: `Bắt buộc mang theo đơn thuốc và kết quả xét nghiệm của lần khám trước để Bác sĩ đối chiếu hiệu quả điều trị. ${specMeta.notes}`,
           symptoms: specMeta.symptoms,
           imageUrl: specMeta.followupImg || spec.iconUrl || null,
           methodCode: 'SPECIALTY_EXAM',

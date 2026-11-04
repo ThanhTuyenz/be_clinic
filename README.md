@@ -2,6 +2,8 @@
 
 Backend NestJS cho hệ thống phòng khám. PostgreSQL/Prisma lưu dữ liệu nghiệp vụ; Redis dùng cho cache; RabbitMQ dùng cho hàng đợi.
 
+Tài liệu nghiệp vụ và kiến trúc được tập trung tại [docs/README.md](docs/README.md).
+
 ## Hiệu quả gói khám gợi ý
 
 `GET /api/v1/analytics/recommendations` dành cho `CHAIN_MANAGER`/`SUPER_ADMIN`,

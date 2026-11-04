@@ -110,7 +110,7 @@ async function run() {
         newImageUrl = mapping.standard;
       } else if (code.endsWith('-AFTER') || code.includes('AFTER')) {
         newImageUrl = mapping.after;
-      } else if (code.endsWith('-FOLLOWUP') || code.includes('FOLLOWUP')) {
+      } else if (code.endsWith('-BASIC') || code.endsWith('-FOLLOWUP') || code.includes('FOLLOWUP')) {
         newImageUrl = mapping.followup;
       } else if (code.endsWith('-ADVICE') || code.includes('ADVICE')) {
         newImageUrl = mapping.advice;

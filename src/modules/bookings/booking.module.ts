@@ -1,4 +1,5 @@
 import { Module } from '@nestjs/common';
+import { AnalyticsModule } from '../analytics/analytics.module.js';
 import { RecommendationModule } from '../recommendations/recommendation.module.js';
 import { VouchersModule } from '../vouchers/vouchers.module.js';
 import { BookingFlowController } from './booking-flow.controller.js';
@@ -13,6 +14,7 @@ import { PatientsModule } from '../patients/patients.module.js';
 
 @Module({
   imports: [
+    AnalyticsModule,
     PatientsModule,
     RecommendationModule,
     VouchersModule,

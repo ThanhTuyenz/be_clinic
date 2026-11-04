@@ -11,12 +11,13 @@ import { RedisService } from '../../infrastructure/redis/redis.service.js';
 import { normalizeSearch } from '../../common/utils/search-query.js';
 import { BookingFlowService } from '../bookings/booking-flow.service.js';
 import { BookingSlotsDto } from '../bookings/dtos/booking-slots.dto.js';
-import { PackagesService } from '../specialties/packages.service.js';
+import { PackagesService } from '../catalog/packages.service.js';
 import { AI_TOOLS } from './ai-tools.js';
 import { INTAKE_FORMAT, INTAKE_INSTRUCTIONS, parseIntake } from './ai-intake.js';
 import { AiChatMessageDto, AiAgentChatResponse } from './dtos/ai-chat.dto.js';
+import { AiPaymentStatusService } from './ai-payment-status.service.js';
 
-type State = Pick<AiAgentChatResponse, 'proposal' | 'proposedPackages' | 'doctors'>;
+type State = Pick<AiAgentChatResponse, 'proposal' | 'proposedPackages' | 'doctors' | 'showAppointments' | 'paymentStatus'>;
 const TTL = 15 * 60_000;
 const sanitize = (text: string) => text
   .replace(/\b(?:\+84|0)\d{9,10}\b/g, '[SĐT]')
@@ -36,6 +37,7 @@ export class AiAssistantService {
     private readonly redis: RedisService,
     private readonly flow: BookingFlowService,
     private readonly packages: PackagesService,
+    private readonly paymentStatuses: AiPaymentStatusService,
   ) {
     const key = config.get<string>('openai.apiKey');
     this.model = config.getOrThrow<string>('openai.model');
@@ -43,12 +45,12 @@ export class AiAssistantService {
   }
 
   async chat(dto: AiChatMessageDto, userId?: string, ip = 'unknown'): Promise<AiAgentChatResponse> {
-    if (!this.client) throw new ServiceUnavailableException('Trợ lý AI chưa được cấu hình. Vui lòng đặt lịch trực tiếp.');
+    if (!this.client && !dto.paymentAppointmentId) throw new ServiceUnavailableException('Trợ lý AI chưa được cấu hình. Vui lòng đặt lịch trực tiếp.');
     await this.rateLimit(userId || ip);
     const conversation = await this.conversation(dto.sessionId, userId);
     if (conversation.isClosed) throw new ConflictException('Phiên đã giữ chỗ. Vui lòng mở cuộc trò chuyện mới.');
     const rows = await this.prisma.aIMessage.findMany({
-      where: { conversationId: conversation.id },
+      where: { conversationId: conversation.id, sender: { in: ['USER', 'ASSISTANT'] } },
       orderBy: { createdAt: 'desc' }, take: 12,
       select: { sender: true, content: true, structuredResponse: true },
     });
@@ -60,6 +62,18 @@ export class AiAssistantService {
       role: row.sender === 'USER' ? 'user' as const : 'assistant' as const, content: sanitize(row.content),
     }));
     input.push({ role: 'user', content: message });
+    if (dto.paymentAppointmentId) {
+      await this.runTool('getMyPaymentStatus', { appointmentReference: dto.paymentAppointmentId, refresh: true }, state, userId);
+      const payment = state.paymentStatus;
+      const response: AiAgentChatResponse = {
+        sessionId: conversation.id, step: 'COLLECTING_INFO', ...state,
+        message: payment ? `Lịch hẹn ${payment.bookingCode || payment.appointmentId}: ${payment.label}.`
+          + (payment.freshness === 'GATEWAY_UNAVAILABLE' ? ' Chưa đồng bộ được với PayOS; đây là trạng thái hệ thống đang ghi nhận.' : '')
+          : 'Vui lòng đăng nhập và chọn lịch hẹn để kiểm tra thanh toán.',
+      };
+      await this.saveTurn(conversation.id, message, response, userId, conversation.updatedAt);
+      return response;
+    }
     const signal = AbortSignal.timeout(45_000);
     const assessment = await this.respond({
       instructions: INTAKE_INSTRUCTIONS, input, text: { format: INTAKE_FORMAT }, max_output_tokens: 1200,
@@ -77,21 +91,24 @@ export class AiAssistantService {
     }
     const instructions = [
       'Bạn là trợ lý đặt lịch của VitaCare, trả lời ngắn gọn bằng tiếng Việt.',
+      'Khi hỏi đã thanh toán/nhận tiền/hoàn tiền chưa, phải dùng getMyPaymentStatus để tra trạng thái hiện tại, không suy ra từ lịch sử hội thoại. Không biết mã lịch thì truyền null và yêu cầu chọn lịch trong danh sách. Không hỏi số tài khoản, mã giao dịch ngân hàng hay ảnh chuyển khoản. Chỉ nêu kết quả đúng label từ tool. GATEWAY_UNAVAILABLE nghĩa là chưa đồng bộ được PayOS, chỉ có trạng thái database; không khẳng định ngân hàng chưa nhận tiền. AWAITING_RECONCILIATION không phải thất bại. REFUND_REQUIRED chưa phải đã hoàn tiền. scope BOOKING_ORDER là tổng hóa đơn nhóm, không phải phí riêng một người.',
+      'Khi người dùng muốn xem lịch đã đặt, hủy hoặc đổi lịch, dùng showMyAppointments để mở danh sách trong chat. Người dùng chọn đúng lịch và bấm xác nhận trên giao diện. Không tự nhận đã hủy/đổi lịch từ tin nhắn. Đổi lịch giữ nguyên bác sĩ, cơ sở, dịch vụ và hình thức khám, tối đa 2 lần; backend kiểm tra điều kiện thời gian. Hủy lịch đã thanh toán chỉ ghi nhận yêu cầu hoàn tiền, không hứa đã hoàn tiền hay mức hoàn tiền.',
       'Chỉ hỗ trợ thông tin phòng khám, định hướng chuyên khoa và tra cứu lịch. Không chẩn đoán, kê thuốc hoặc hướng dẫn liều dùng.',
       'Nếu có dấu hiệu nguy hiểm, khuyến nghị liên hệ cấp cứu và dừng đề xuất đặt lịch.',
       'Thông tin tên cơ sở, bác sĩ, giá và lịch phải lấy từ tools. Không tự tạo ID hoặc khẳng định đã giữ chỗ.',
       'Quy định thời gian đặt lịch hiện tại: ' + this.flow.getBookingDateRange().notice,
       'Nếu ngày yêu cầu chưa được phép đặt, giải thích ngắn theo đúng thông báo backend, rồi hỏi người dùng có muốn chọn ngày sớm nhất không. Khi backend xác nhận đã qua 16h30, nói trực tiếp “Đã qua 16h30 nên không thể đặt lịch khám ngày ...”, giữ đúng ngày backend cung cấp; không dùng lý do này khi chưa qua mốc đó. Không dùng cụm “ngoài khoảng thời gian cho phép tra cứu”, “chưa thể xác nhận” hay “chưa kiểm tra được lịch”, không gọi đó là hết chỗ. Không thêm giá hoặc nội dung thanh toán trong trường hợp này. Ngày được phép đặt chưa có nghĩa là còn lịch trống; cần tools kiểm tra sau khi người dùng đồng ý. Không tự đổi ngày, buổi hoặc cơ sở.',
-      'Chỉ tư vấn và tra cứu. Khi có lịch đề xuất, hướng dẫn bấm “Tiếp tục đặt lịch” để sang luồng đặt lịch chung, kiểm tra thông tin, chọn hồ sơ rồi xác nhận và thanh toán. Chat không giữ chỗ, không tạo lịch và không nhận xác nhận bằng tin nhắn. Không tự bịa chính sách hoàn tiền, bảo hiểm hoặc khuyến mãi.',
+      'Bạn tra cứu và đề xuất; người dùng chọn hồ sơ, kiểm tra hình thức khám và chi phí, rồi bấm nút xác nhận trong chat để hệ thống giữ chỗ và tạo mã VietQR PayOS. Không nhận xác nhận đặt lịch bằng tin nhắn, không tự khẳng định đã tạo lịch hay thanh toán. Không tự bịa chính sách hoàn tiền, bảo hiểm hoặc khuyến mãi.',
       'Dùng getClinicCatalog để xác định ID trước khi tìm. Khi gợi ý dịch vụ có thể tra cứu mọi cơ sở; chỉ cần hỏi cơ sở, hình thức và ngày giờ trước khi tìm lịch.',
       intake.route === 'READY'
         ? 'Người dùng đã mô tả đủ để định hướng khám. Dựa trên ngữ cảnh để chọn chuyên khoa thực tế từ danh mục, tìm dịch vụ phù hợp bằng tools và giải thích ngắn lý do gợi ý. Không hỏi lại triệu chứng đã có, không chẩn đoán, khẳng định an toàn hay tự chỉ định xét nghiệm. Chỉ tìm lịch sau khi người dùng chọn dịch vụ/bác sĩ.'
         : 'Người dùng đang hỏi thông tin hoặc yêu cầu dịch vụ rõ ràng. Tra cứu trực tiếp, không bắt trả lời bộ câu hỏi triệu chứng.',
       'Không có dịch vụ phù hợp thì nói rõ, không lấy gói không liên quan thay thế. Khi gợi ý, nêu đây là hỗ trợ chọn dịch vụ; bác sĩ sẽ đánh giá và quyết định chuyên môn.',
       'Dùng searchServicePackages với từ khóa ngắn, không gửi toàn bộ câu hỏi. Gói khám sức khỏe dùng trang đặt lịch thông thường.',
-      'Giá và lịch trong đề xuất chỉ để tham khảo; trang đặt lịch sẽ kiểm tra lại lịch trống và tính tổng tiền. Không yêu cầu đăng nhập hoặc chọn hồ sơ trong chat.',
+      'Giá và lịch trong đề xuất chỉ để tham khảo; thẻ xác nhận trong chat sẽ kiểm tra lại và tính tổng tiền. Tra cứu không cần đăng nhập; khi đặt lịch người dùng cần đăng nhập và chọn hồ sơ trên giao diện.',
+      'Phải xác định rõ hình thức khám trước khi tìm lịch: khám theo bác sĩ (CONSULTATION), trực tuyến (ONLINE_CONSULTATION), chuyên khoa (SPECIALTY_EXAM), ngoài giờ (AFTER_HOURS). Nếu chưa rõ, hỏi người dùng chọn; không tự chọn thay. Khi người dùng đã nói rõ thì không hỏi lại. Luôn nêu hình thức trong đề xuất.',
       'Chỉ tìm tối đa một đề xuất lịch trong mỗi lượt. Khi thiếu dữ liệu hãy hỏi, không gọi tool lặp lại vô hạn.',
-      'Người dùng chọn hồ sơ ở trang đặt lịch; không hỏi CCCD, số điện thoại hay bệnh án trong chat.',
+      'Người dùng chọn hồ sơ trên giao diện; không hỏi CCCD, số điện thoại hay bệnh án trong chat.',
       'Hôm nay: ' + new Date().toLocaleDateString('sv-SE', { timeZone: 'Asia/Ho_Chi_Minh' }) + ' (Asia/Ho_Chi_Minh).',
       'Đề xuất trước đó để tham khảo, cần tìm lại nếu muốn hiển thị thẻ mới: ' + JSON.stringify(previousProposal),
     ].join('\n');
@@ -113,7 +130,7 @@ export class AiAssistantService {
           if (dateRejected) throw new BadRequestException('Cần người dùng chọn lại ngày trước khi tiếp tục tìm lịch.');
           if (!tools.some(tool => tool.name === call.name)) throw new BadRequestException('Hãy chọn dịch vụ hoặc bác sĩ trước khi tìm lịch.');
           const args = JSON.parse(call.arguments);
-          output = await this.runTool(call.name, args, state);
+          output = await this.runTool(call.name, args, state, userId);
         } catch (error) {
           const details = error instanceof HttpException ? error.getResponse() : null;
           if (details && typeof details === 'object' && 'code' in details && details.code === 'BOOKING_DATE_OUT_OF_RANGE') {
@@ -152,7 +169,22 @@ export class AiAssistantService {
     return result;
   }
 
-  private async runTool(name: string, args: Record<string, unknown>, state: State) {
+  private async runTool(name: string, args: Record<string, unknown>, state: State, userId?: string) {
+    if (name === 'getMyPaymentStatus') {
+      state.paymentStatus = undefined;
+      if (!userId || !args.appointmentReference) {
+        state.showAppointments = true;
+        return { requiresLogin: !userId, requiresSelection: true, message: 'Hãy đăng nhập và chọn lịch trong danh sách để kiểm tra thanh toán. Chưa tra cứu giao dịch nào.' };
+      }
+      if (typeof args.appointmentReference !== 'string' || (args.refresh !== true && args.refresh !== false)) throw new BadRequestException('Yêu cầu tra cứu thanh toán không hợp lệ.');
+      state.paymentStatus = await this.paymentStatuses.lookup(userId, args.appointmentReference, args.refresh);
+      state.showAppointments = false;
+      return state.paymentStatus;
+    }
+    if (name === 'showMyAppointments') {
+      state.showAppointments = true;
+      return { action: 'SHOW_MY_APPOINTMENTS', message: 'Giao diện sẽ tải lịch hẹn bằng phiên đăng nhập của người dùng. Chưa có lịch nào được hủy hay thay đổi.' };
+    }
     const value = (key: string) => typeof args[key] === 'string' && args[key] ? String(args[key]).trim().slice(0, 200) : undefined;
     if (name === 'getClinicCatalog') {
       const data = await this.flow.getBookingInit({});

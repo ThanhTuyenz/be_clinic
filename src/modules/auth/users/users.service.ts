@@ -1,4 +1,4 @@
-import { BadRequestException, HttpException, HttpStatus, Injectable, NotFoundException, Inject } from '@nestjs/common';
+import { BadRequestException, HttpException, HttpStatus, Injectable, NotFoundException } from '@nestjs/common';
 import { Prisma, User as PrismaUser } from '@prisma/client';
 import { EntityCondition } from '../../../common/utils/types/entity-condition.type.js';
 import { NullableType } from '../../../common/utils/types/nullable.type.js';

@@ -8,6 +8,10 @@ const tool = (name: string, description: string, properties: Record<string, unkn
 });
 
 export const AI_TOOLS = [
+  tool('getMyPaymentStatus', 'Tra cứu thanh toán/hoàn tiền của lịch hẹn thuộc tài khoản đang đăng nhập. Chỉ dùng mã lịch hẹn hoặc UUID người dùng cung cấp; không đoán ID. Chưa rõ lịch nào thì truyền null để mở danh sách chọn. refresh true đồng bộ giao dịch chờ với PayOS khi cần.', {
+    appointmentReference: text, refresh: { type: 'boolean' },
+  }),
+  tool('showMyAppointments', 'Mở danh sách lịch hẹn trong chat để người dùng xem, hủy hoặc đổi lịch. Yêu cầu đăng nhập và bấm xác nhận trên giao diện; tool này không thay đổi lịch.', {}),
   tool('getClinicCatalog', 'Lấy cơ sở, chuyên khoa và hình thức khám hiện có. Dùng ID từ kết quả này cho các lần tra cứu sau.', {}),
   tool('searchServicePackages', 'Tìm gói khám/dịch vụ và giá thực tế theo từ khóa.', {
     query: { type: 'string' }, branchId: text, specialtyId: text,

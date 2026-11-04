@@ -50,7 +50,7 @@ export class BookingSlotsDto {
   servicePackageId?: string;
 
   @ApiPropertyOptional({
-    description: 'Số ngày tương lai tìm kiếm ngày có lịch khám khả dụng (mặc định 30 ngày)',
+    description: 'Số ngày tương lai tìm lịch khám khả dụng (mặc định 30, giới hạn từ 7 đến 60 ngày)',
     example: '30',
   })
   @IsOptional()

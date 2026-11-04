@@ -1,8 +1,6 @@
 import 'reflect-metadata'
-// Trigger reload: RabbitMQ & Redis enabled
 import { join } from 'node:path'
 import { NestFactory } from '@nestjs/core'
-import express from 'express'
 import { VersioningType, ValidationPipe } from '@nestjs/common'
 import { type NestExpressApplication } from '@nestjs/platform-express'
 import { ConfigService } from '@nestjs/config'
@@ -18,35 +16,23 @@ import { TimeoutInterceptor } from './common/interceptors/timeout.interceptor.js
 import { TransformInterceptor } from './common/interceptors/transform.interceptor.js'
 import validationOptions from './common/utils/validation-options.js'
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger'
-
-type AppConfigValue = {
-  apiPrefix?: string
-  frontendDomain?: string
-  port?: number
-}
+import type { AppConfig } from './config/config.type.js'
 
 async function bootstrap() {
   try {
-    const app = await NestFactory.create<NestExpressApplication>(AppModule)
+    const app = await NestFactory.create<NestExpressApplication>(AppModule, { rawBody: true })
     const expressApp = app.getHttpAdapter().getInstance()
     const configService = app.get(ConfigService)
-    const appConfig = configService.get<AppConfigValue>('app')
+    const { apiPrefix, frontendDomain, port, nodeEnv } = configService.getOrThrow<AppConfig>('app')
     const allowedOrigins = configService.get<string>('ALLOWED_ORIGINS') || '*'
-    const nodeEnv = configService.get<string>('NODE_ENV') || 'development'
-    const port = appConfig?.port || configService.get<number>('PORT') || 5000
     const mediaLocalDir = configService.get<string>('MEDIA_LOCAL_DIR') || 'uploads'
 
-    const corsAllowlist = [
-      process.env.CORS_ORIGIN,
-      appConfig?.frontendDomain,
-      allowedOrigins,
-    ]
-      .filter(Boolean)
-      .join(',')
-      .split(',')
-      .map((value) => value.trim())
-      .filter(Boolean)
-      .filter((value, index, origins) => origins.indexOf(value) === index)
+    const corsAllowlist = [...new Set(
+      [configService.get<string>('CORS_ORIGIN'), frontendDomain, allowedOrigins]
+        .flatMap((origins) => origins?.split(',') || [])
+        .map((origin) => origin.trim())
+        .filter(Boolean),
+    )]
 
     expressApp.set('etag', false)
     expressApp.set('trust proxy', 1)
@@ -101,24 +87,19 @@ async function bootstrap() {
 
     app.use(morgan('combined', { skip: () => nodeEnv === 'test' }))
 
-    app.use(
-      express.json({
-        limit: '10mb',
-        verify: (req: any, _res, buf: Buffer) => {
-          req.rawBody = buf
-        },
-      }),
-    )
-    app.use(express.urlencoded({ extended: true, limit: '10mb' }))
+    app.useBodyParser('json', { limit: '10mb' })
+    app.useBodyParser('urlencoded', { extended: true, limit: '10mb' })
 
-    app.use('/api', (_req, res, next) => {
+    app.use(`/${apiPrefix}`, (_req, res, next) => {
       res.setHeader('Cache-Control', 'no-store')
       next()
     })
 
-    app.use(`/${mediaLocalDir}`, express.static(join(process.cwd(), mediaLocalDir)))
+    for (const directory of new Set([mediaLocalDir, 'uploads'])) {
+      app.useStaticAssets(join(process.cwd(), directory), { prefix: `/${directory}` })
+    }
 
-    app.setGlobalPrefix(appConfig?.apiPrefix || 'api')
+    app.setGlobalPrefix(apiPrefix)
 
     app.enableVersioning({
       type: VersioningType.URI,
@@ -140,16 +121,13 @@ async function bootstrap() {
         },
         'access-token',
       )
-      .addTag('System', 'Kiểm tra trạng thái hệ thống')
       .addTag('Auth', 'Đăng ký, đăng nhập và quản lý phiên')
       .addTag('Users', 'Quản lý người dùng và phân quyền')
       .addTag('Appointments', 'Đặt lịch và quản lý lịch khám')
       .addTag('Doctors', 'Danh sách bác sĩ')
       .addTag('Clinic rooms', 'Danh sách phòng khám')
-      .addTag('Medical visits', 'Hồ sơ từng lần khám')
       .addTag('Permissions', 'Quyền của người dùng hiện tại')
       .addTag('Payments', 'Thanh toán phí khám và webhook')
-      .addTag('Check-in', 'Quét QR và cấp số thứ tự')
       .addTag('Branches', 'Danh sách cơ sở')
       .addTag('Patient profiles', 'Hồ sơ bệnh nhân và người thân')
       .build()
@@ -166,9 +144,7 @@ async function bootstrap() {
 
     app.useGlobalPipes(new ValidationPipe(validationOptions))
 
-    app.useStaticAssets(join(process.cwd(), 'uploads'), {
-      prefix: '/uploads',
-    })
+    app.enableShutdownHooks(['SIGTERM', 'SIGINT'])
 
     await app.listen(port)
 
@@ -176,16 +152,6 @@ async function bootstrap() {
     console.log(`Environment: ${nodeEnv}`)
     console.log(`API Allows Using: ${corsAllowlist.join(', ')}`)
     console.log(`Swagger documentation: http://localhost:${port}/docs`)
-
-    const signals = ['SIGTERM', 'SIGINT']
-    signals.forEach((signal) => {
-      process.on(signal, async () => {
-        console.log(`${signal} received, shutting down gracefully`)
-        await app.close()
-        console.log('Process terminated')
-        process.exit(0)
-      })
-    })
   } catch (error) {
     console.error('Error starting application:', error)
     process.exit(1)

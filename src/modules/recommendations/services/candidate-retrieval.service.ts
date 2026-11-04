@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../../../infrastructure/database/prisma/prisma.service.js';
 import { Prisma } from '@prisma/client';
+import { containsSearchPhrase } from '../../../common/utils/search-query.js';
 import { EmbeddingService, mapPackageForRetrieval, PackageForRetrieval } from '../../../infrastructure/embedding/embedding.service.js';
 import { BehaviorTelemetryService } from './behavior-telemetry.service.js';
 import { CandidatePoolItem, RecommendationPackage, RECOMMENDATION_PACKAGE_INCLUDE, TELEMETRY_CONFIG } from '../constants/recommendation.constants.js';
@@ -18,7 +19,6 @@ export interface ProfileRecommendationContext {
   medicalHistory: string;
   allergies: string;
   recentlyCompletedPackageIds: string[];
-  followUpSpecialtyId: number | null;
 }
 
 @Injectable()
@@ -32,7 +32,7 @@ export class CandidateRetrievalService {
   async getProfileContext(profileId?: string): Promise<ProfileRecommendationContext> {
     const empty: ProfileRecommendationContext = {
       profile: null, age: null, gender: 'OTHER', bmi: null, medicalHistory: '', allergies: '',
-      recentlyCompletedPackageIds: [], followUpSpecialtyId: null,
+      recentlyCompletedPackageIds: [],
     };
     if (!profileId) return empty;
     const profile = await this.prisma.patientProfile.findUnique({ where: { id: profileId }, select: PROFILE_SELECT });
@@ -42,12 +42,9 @@ export class CandidateRetrievalService {
     const height = Number(profile.height || 0), weight = Number(profile.weight || 0);
     const history = await this.prisma.appointment.findMany({
       where: { patientProfileId: profileId, status: 'COMPLETED' },
-      select: { servicePackageId: true, createdAt: true, servicePackage: { select: { specialtyId: true, followUpAfterDays: true } } },
+      select: { servicePackageId: true, createdAt: true },
       orderBy: { createdAt: 'desc' }, take: 20,
     });
-    const latest = history[0];
-    const followUpDue = latest && Date.now() - latest.createdAt.getTime()
-      >= (latest.servicePackage?.followUpAfterDays ?? TELEMETRY_CONFIG.FOLLOW_UP_DEFAULT_DAYS) * 86400000;
     return {
       profile, age, gender: profile.gender || 'OTHER',
       bmi: height > 50 && weight > 10 ? +(weight / ((height / 100) ** 2)).toFixed(1) : null,
@@ -55,7 +52,6 @@ export class CandidateRetrievalService {
       recentlyCompletedPackageIds: [...new Set(history
         .filter(item => Date.now() - item.createdAt.getTime() <= TELEMETRY_CONFIG.RECENCY_SUPPRESSION_DAYS * 86400000)
         .map(item => item.servicePackageId).filter((id): id is string => Boolean(id)))],
-      followUpSpecialtyId: followUpDue ? latest.servicePackage?.specialtyId ?? null : null,
     };
   }
 
@@ -64,20 +60,19 @@ export class CandidateRetrievalService {
     const eligible = packages.filter(pkg => this.isPackageEligibleForProfile(pkg, context)
       && !context.recentlyCompletedPackageIds.includes(pkg.id));
     const candidates: CandidatePoolItem[] = [];
-    if (context.followUpSpecialtyId) {
-      const followUp = eligible.find(pkg => pkg.specialtyId === context.followUpSpecialtyId && this.isFollowUpPackage(pkg));
-      if (followUp) candidates.push({ pkg: followUp, origin: 'PROFILE', isFollowUp: true });
-    }
-    const screening = eligible.filter(pkg => !this.isFollowUpPackage(pkg));
     const text = this.embeddingService.buildPatientEmbeddingText({
       age: context.age, gender: context.gender, bmi: context.bmi,
       medicalHistory: context.medicalHistory, allergies: context.allergies,
     });
-    const matches = await this.embeddingService.retrieveTopPackages(text, screening.map(pkg => this.mapToRetrievalPackage(pkg)),
-      TELEMETRY_CONFIG.CANDIDATE_POOL_TARGET - candidates.length);
+    const matches = await this.embeddingService.retrieveTopPackages(text, eligible.map(mapPackageForRetrieval),
+      TELEMETRY_CONFIG.CANDIDATE_POOL_TARGET);
     for (const match of matches) {
-      const pkg = screening.find(item => item.id === match.package.id);
-      if (pkg && !candidates.some(item => item.pkg.id === pkg.id)) candidates.push({ pkg, origin: 'PROFILE' });
+      const pkg = eligible.find(item => item.id === match.package.id);
+      if (pkg && !candidates.some(item => item.pkg.id === pkg.id)) candidates.push({ pkg, origin: 'PROFILE',
+        retrievalScore: match.score,
+        evidenceSignals: [pkg.specialty?.name, ...(pkg.symptoms || [])].filter((value): value is string =>
+          Boolean(value && value.length >= 3 && containsSearchPhrase(context.medicalHistory, value))),
+      });
     }
     return candidates;
   }
@@ -89,13 +84,10 @@ export class CandidateRetrievalService {
     preloadedPackages?: RecommendationPackage[],
     telemetry?: Awaited<ReturnType<BehaviorTelemetryService['getBehaviorTelemetryContext']>>,
   ): Promise<{
-    topSpecialties: Array<{ specialtyId: number; specialtyName: string; score: number }>;
-    lastSearchQuery?: string;
-    dropOffPkgId?: string;
-    candidates: Array<{ pkg: RecommendationPackage; sourceType: 'SEARCH_INTENT' | 'DROP_OFF' | 'RECENT_VIEW' }>;
+    candidates: Array<{ pkg: RecommendationPackage; sourceType: 'SEARCH_INTENT' | 'DROP_OFF' | 'RECENT_VIEW' | 'SPECIALTY_INTEREST'; viewCount?: number; lastViewedAt?: number; searchQuery?: string }>;
   }> {
     const context = telemetry ?? await this.behaviorTelemetryService.getBehaviorTelemetryContext(userId, sessionId);
-    const candidates: Array<{ pkg: RecommendationPackage; sourceType: 'SEARCH_INTENT' | 'DROP_OFF' | 'RECENT_VIEW' }> = [];
+    const candidates: Array<{ pkg: RecommendationPackage; sourceType: 'SEARCH_INTENT' | 'DROP_OFF' | 'RECENT_VIEW' | 'SPECIALTY_INTEREST'; viewCount?: number; lastViewedAt?: number; searchQuery?: string }> = [];
     const addedPackageIds = new Set<string>();
 
     const allPackages = preloadedPackages ?? await this.loadActivePackages();
@@ -109,9 +101,27 @@ export class CandidateRetrievalService {
       }
     }
 
-    // 2. Tìm kiếm ngữ nghĩa theo từ khóa tìm kiếm gần nhất
+    // Reserve candidate space for actual views before semantic search can fill
+    // the pool. With both signals, views use at most half the candidate budget.
+    const catalogById = new Map(allPackages.map(pkg => [pkg.id, pkg]));
+    const viewWeight = (view: { viewCount: number; lastViewedAt: number }) =>
+      Math.log1p(view.viewCount) / (1 + Math.max(0, Date.now() - view.lastViewedAt) / 86400000);
+    const viewLimit = context.lastSearchQuery
+      ? Math.ceil(TELEMETRY_CONFIG.CANDIDATE_POOL_TARGET / 2) : TELEMETRY_CONFIG.CANDIDATE_POOL_TARGET;
+    const views = [...(context.recentViews || [])].filter(view => catalogById.has(view.packageId))
+      .sort((a, b) => viewWeight(b) - viewWeight(a) || b.lastViewedAt - a.lastViewedAt || a.packageId.localeCompare(b.packageId))
+      .slice(0, viewLimit);
+    for (const view of views) {
+      const pkg = catalogById.get(view.packageId)!;
+      if (!addedPackageIds.has(pkg.id)) {
+        candidates.push({ pkg, sourceType: 'RECENT_VIEW', viewCount: view.viewCount, lastViewedAt: view.lastViewedAt });
+        addedPackageIds.add(pkg.id);
+      }
+    }
+
+    // Tìm kiếm ngữ nghĩa theo từ khóa tìm kiếm gần nhất.
     if (context.lastSearchQuery && context.lastSearchQuery.length >= 2) {
-      const candidateObjects: PackageForRetrieval[] = allPackages.map((p) => this.mapToRetrievalPackage(p));
+      const candidateObjects: PackageForRetrieval[] = allPackages.map(mapPackageForRetrieval);
       const searchMatches = await this.embeddingService.searchByNaturalLanguage(
         context.lastSearchQuery,
         candidateObjects,
@@ -122,14 +132,14 @@ export class CandidateRetrievalService {
         if (!addedPackageIds.has(sm.package.id)) {
           const matchPkg = allPackages.find((p) => p.id === sm.package.id);
           if (matchPkg) {
-            candidates.push({ pkg: matchPkg, sourceType: 'SEARCH_INTENT' });
+            candidates.push({ pkg: matchPkg, sourceType: 'SEARCH_INTENT', searchQuery: context.lastSearchQuery });
             addedPackageIds.add(matchPkg.id);
           }
         }
       }
     }
 
-    // 3. Trích xuất gói từ các chuyên khoa có điểm quan tâm cao
+    // 3. Related alternatives are never labelled as packages the user viewed.
     const qualifiedSpecialties = context.topSpecialties
       .filter((s) => s.score >= TELEMETRY_CONFIG.MIN_QUALIFIED_SCORE)
       .slice(0, TELEMETRY_CONFIG.MAX_TOP_SPECIALTIES);
@@ -140,15 +150,12 @@ export class CandidateRetrievalService {
         .slice(0, TELEMETRY_CONFIG.MAX_PACKAGES_PER_SPECIALTY);
 
       for (const p of specPackages) {
-        candidates.push({ pkg: p, sourceType: 'RECENT_VIEW' });
+        candidates.push({ pkg: p, sourceType: 'SPECIALTY_INTEREST' });
         addedPackageIds.add(p.id);
       }
     }
 
     return {
-      topSpecialties: context.topSpecialties,
-      lastSearchQuery: context.lastSearchQuery,
-      dropOffPkgId: context.dropOffPkgId,
       candidates: candidates.slice(0, TELEMETRY_CONFIG.CANDIDATE_POOL_TARGET),
     };
   }
@@ -195,12 +202,6 @@ export class CandidateRetrievalService {
     return true;
   }
 
-  private isFollowUpPackage(pkg: RecommendationPackage): boolean {
-    return pkg.isFollowUp === true ||
-      String(pkg.code || '').toUpperCase().endsWith('-FOLLOWUP') ||
-      String(pkg.name || '').toLowerCase().includes('tái khám');
-  }
-
   isPackageAppropriateForAge(name: string, description: string, age: number | null): boolean {
     const text = `${name} ${description}`.toLowerCase();
     if (age === null) return !['nhi khoa', 'sơ sinh', 'trẻ em', 'lão khoa', 'tiền mãn kinh', 'mãn kinh', 'tuyến tiền liệt', 'tiền hôn nhân'].some(keyword => text.includes(keyword));
@@ -212,10 +213,6 @@ export class CandidateRetrievalService {
       if (adultKeywords.some((kw) => text.includes(kw))) return false;
     }
     return true;
-  }
-
-  mapToRetrievalPackage(p: RecommendationPackage): PackageForRetrieval {
-    return mapPackageForRetrieval(p);
   }
 
 }

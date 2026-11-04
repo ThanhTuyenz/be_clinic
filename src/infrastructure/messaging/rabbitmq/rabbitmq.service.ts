@@ -4,7 +4,6 @@ import * as amqp from 'amqplib';
 import QRCode from 'qrcode';
 import { RabbitMqConfig } from '../../../config/config.type.js';
 import { checkInToken } from '../../../modules/appointments/helpers/check-in-token.js';
-import { BookingService } from '../../../modules/bookings/booking.service.js';
 import { PaymentReconciliationService } from '../../../modules/payments/payment-reconciliation.service.js';
 import { RecommendationService } from '../../../modules/recommendations/recommendation.service.js';
 import { PrismaService } from '../../database/prisma/prisma.service.js';
@@ -24,7 +23,6 @@ export class RabbitMqService implements OnModuleInit, OnModuleDestroy {
   constructor(
     private readonly config: ConfigService,
     private readonly prisma: PrismaService,
-    private readonly bookingService: BookingService,
     private readonly mailsService: MailsService,
     private readonly recommendationService: RecommendationService,
     private readonly httpSmsService: HttpSmsService,

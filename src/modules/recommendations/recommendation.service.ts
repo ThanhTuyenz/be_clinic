@@ -7,7 +7,7 @@ import { CandidatePoolItem, RecommendationPackage, TELEMETRY_CONFIG } from './co
 import { BehaviorTelemetryService } from './services/behavior-telemetry.service.js';
 import { CandidateRetrievalService, ProfileRecommendationContext } from './services/candidate-retrieval.service.js';
 import { AiRankingService, RankingContext } from './services/ai-ranking.service.js';
-import { SearchAnalyticsService } from '../search-analytics/search-analytics.service.js';
+import { AnalyticsService } from '../analytics/analytics.service.js';
 
 interface CachedRanking {
   fingerprint: string;
@@ -29,28 +29,37 @@ export class RecommendationService {
     private readonly behaviorTelemetryService: BehaviorTelemetryService,
     private readonly candidateRetrievalService: CandidateRetrievalService,
     private readonly aiRankingService: AiRankingService,
-    private readonly analytics: SearchAnalyticsService,
+    private readonly analytics: AnalyticsService,
   ) {}
 
   async getHomeRecommendations(query: HomeRecommendationQueryDto, userId?: string, userRole?: string): Promise<HomeRecommendationResponseDto> {
     if (query.profileId) await this.assertProfileAccess(query.profileId, userId, userRole);
-    const [catalog, profile, behavior] = await Promise.all([
+    const [catalog, profile] = await Promise.all([
       this.candidateRetrievalService.loadActivePackages(),
       this.candidateRetrievalService.getProfileContext(query.profileId),
-      userId ? this.behaviorTelemetryService.getBehaviorTelemetryContext(userId, query.sessionId) : undefined,
     ]);
+    const behavior = userId ? await this.behaviorTelemetryService.getBehaviorTelemetryContext(userId, query.sessionId) : undefined;
+    const hasBehavior = Boolean(behavior && (behavior.lastSearchQuery || behavior.dropOffPkgId
+      || behavior.recentViews?.length || behavior.topSpecialties.some(item => item.score >= TELEMETRY_CONFIG.MIN_QUALIFIED_SCORE)));
     const catalogVersion = this.catalogFingerprint(catalog);
     const [profileRanking, behaviorRanking] = await Promise.all([
       profile.profile ? this.getProfileRanking(profile, catalog, catalogVersion) : undefined,
-      behavior ? this.getBehaviorRanking(behavior, catalog, catalogVersion, userId, query.sessionId) : undefined,
+      hasBehavior && behavior ? this.getBehaviorRanking(behavior, catalog, catalogVersion, userId, query.sessionId) : undefined,
     ]);
     // Recheck current catalog/profile constraints even when both rankings came from cache.
     const merged = await this.mergeRankings(profileRanking?.packages || [], behaviorRanking?.packages || [], catalog, profile);
+    // Discovery is a separate cold-start response, never padding for personal rankings.
+    const hasPersonalContext = Boolean(profile.profile || hasBehavior);
+    if (!hasPersonalContext) {
+      const eligible = catalog.filter(pkg => this.candidateRetrievalService.isPackageEligibleForProfile(pkg, profile)
+        && !profile.recentlyCompletedPackageIds.includes(pkg.id));
+      merged.packages = (await this.getFeaturedFallback(eligible)).slice(0, TELEMETRY_CONFIG.HOME_FINAL_PACKAGES_LIMIT);
+    }
     const source = merged.hasProfile && merged.hasBehavior ? 'HYBRID'
       : merged.hasProfile ? 'AI_PROFILE' : merged.hasBehavior ? 'BEHAVIOR' : 'FALLBACK';
     const activeRankings = [
-      ...(merged.hasProfile && profileRanking ? [profileRanking] : []),
-      ...(merged.hasBehavior && behaviorRanking ? [behaviorRanking] : []),
+      ...(profileRanking ? [profileRanking] : []),
+      ...(behaviorRanking ? [behaviorRanking] : []),
     ];
     const fromCache = activeRankings.length > 0 && activeRankings.every(item => item.fromCache);
     const event = source === 'HYBRID' ? 'MERGE_PROFILE_BEHAVIOR'
@@ -61,9 +70,13 @@ export class RecommendationService {
       source, event, triggerEvent: event,
       triggerReason: source === 'HYBRID' ? 'Kết hợp hai danh sách được phân tích độc lập theo hồ sơ và hành vi'
         : source === 'AI_PROFILE' ? 'Gợi ý theo hồ sơ sức khỏe'
-        : source === 'BEHAVIOR' ? 'Gợi ý theo quan tâm gần đây' : 'Gói khám nổi bật và được khám nhiều trong 90 ngày gần nhất',
+        : source === 'BEHAVIOR' ? 'Gợi ý theo quan tâm gần đây'
+        : hasPersonalContext ? 'Chưa có gợi ý phù hợp với hồ sơ hoặc quan tâm gần đây'
+        : 'Gói khám nổi bật và được khám nhiều trong 90 ngày gần nhất',
       dataOrigin: fromCache ? 'CACHE' : 'NEW', isCached: fromCache, fromCache,
       packages: merged.packages,
+      profilePackages: merged.profilePackages,
+      behaviorPackages: merged.behaviorPackages,
       trackingToken: this.analytics.createRecommendationToken(merged.packages, query.sessionId, userId),
     };
   }
@@ -83,9 +96,7 @@ export class RecommendationService {
   }
 
   private getBehaviorRanking(behavior: BehaviorContext, catalog: RecommendationPackage[], catalogVersion: string, userId?: string, sessionId?: string) {
-    if ((!userId && !sessionId) || (!behavior.lastSearchQuery && !behavior.dropOffPkgId
-      && !behavior.topSpecialties.some(item => item.score >= TELEMETRY_CONFIG.MIN_QUALIFIED_SCORE))) return undefined;
-    const owner = userId ? 'u:' + userId + ':sess:' + (sessionId || 'none') : 'sess:' + sessionId;
+    const owner = userId ? 'u:' + userId : 'sess:' + sessionId;
     const context = { ...behavior, topSpecialties: [...behavior.topSpecialties].sort((a, b) => b.score - a.score || a.specialtyId - b.specialtyId) };
     return this.getSourceRanking(
       TELEMETRY_CONFIG.CACHE_PREFIX + ':behavior:' + owner,
@@ -94,6 +105,7 @@ export class RecommendationService {
         const retrieved = await this.candidateRetrievalService.getBehaviorCandidates(userId, sessionId, catalog, context);
         const candidates: CandidatePoolItem[] = retrieved.candidates.map(item => ({
           pkg: item.pkg, origin: 'BEHAVIOR', behaviorSourceType: item.sourceType,
+          viewCount: item.viewCount, lastViewedAt: item.lastViewedAt, searchQuery: item.searchQuery,
         }));
         return this.rankSource(candidates, { source: 'BEHAVIOR', behavior: {
           topSpecialties: context.topSpecialties.map(item => item.specialtyName + ' (' + item.score + ' điểm)').join(', '),
@@ -110,11 +122,21 @@ export class RecommendationService {
       name: item.pkg.name, description: item.pkg.description || '', price: Number(item.pkg.price),
       specialtyName: item.pkg.specialty?.name || 'Đa khoa', specialtyId: item.pkg.specialtyId,
       durationMin: item.pkg.durationMin, origin: item.origin, behaviorSourceType: item.behaviorSourceType,
+      symptoms: item.pkg.symptoms || [], retrievalScore: item.retrievalScore, evidenceSignals: item.evidenceSignals,
+      viewCount: item.viewCount, lastViewedAt: item.lastViewedAt, searchQuery: item.searchQuery,
     })) };
-    let packages = this.aiRankingService.isAiAvailable() && candidates.length
-      ? await this.aiRankingService.rankWithOpenAI(rankingContext) : [];
-    const source = packages.length ? 'AI_OPENAI' as const : 'RULE_FALLBACK' as const;
-    if (!packages.length) packages = this.aiRankingService.rankWithRules(candidates, context.source === 'PROFILE' ? context.profile.medicalHistory : '');
+    let packages: RecommendedPackageItemDto[] = [];
+    let source: CachedRanking['source'] = 'RULE_FALLBACK';
+    if (!candidates.length) return { source, updatedAt: new Date().toISOString(), packages };
+    try {
+      if (!this.aiRankingService.isAiAvailable()) throw new Error('AI unavailable');
+      packages = await this.aiRankingService.rankWithOpenAI(rankingContext);
+      source = 'AI_OPENAI'; // A successful empty selection is a valid answer.
+    } catch {
+      const grounded = candidates.filter(item => item.origin !== 'PROFILE'
+        || (item.pkg.specialty?.name && item.evidenceSignals?.includes(item.pkg.specialty.name)));
+      packages = this.aiRankingService.rankWithRules(grounded, context.source === 'PROFILE' ? context.profile.medicalHistory : '');
+    }
     return { source, updatedAt: new Date().toISOString(), packages: packages.slice(0, TELEMETRY_CONFIG.SOURCE_PACKAGES_LIMIT) };
   }
 
@@ -144,8 +166,10 @@ export class RecommendationService {
     const eligible = catalog.filter(pkg => this.candidateRetrievalService.isPackageEligibleForProfile(pkg, profile)
       && !profile.recentlyCompletedPackageIds.includes(pkg.id));
     const catalogById = new Map(eligible.map(pkg => [pkg.id, pkg]));
+    const accountCatalogById = new Map(catalog.map(pkg => [pkg.id, pkg]));
     const hydrate = (rows: RecommendedPackageItemDto[], source: 'PROFILE' | 'BEHAVIOR') => rows.flatMap(item => {
-      const pkg = catalogById.get(item.packageId);
+      // Account interests do not describe the selected patient's medical needs.
+      const pkg = (source === 'PROFILE' ? catalogById : accountCatalogById).get(item.packageId);
       if (!pkg) return [];
       return [{ ...item, code: pkg.code, slug: pkg.slug || undefined, name: pkg.name, price: Number(pkg.price),
         durationMin: pkg.durationMin, specialtyId: pkg.specialtyId, specialtyName: pkg.specialty?.name || 'Đa khoa',
@@ -166,10 +190,9 @@ export class RecommendationService {
     for (let index = 0; index < Math.max(profiles.length, behaviors.length); index++) {
       add(profiles[index]); add(behaviors[index]);
     }
-    if (packages.length < TELEMETRY_CONFIG.HOME_FINAL_PACKAGES_LIMIT) {
-      for (const item of await this.getFeaturedFallback(eligible)) add(item);
-    }
-    return { packages, hasProfile: profiles.length > 0, hasBehavior: behaviors.length > 0 };
+    // The final limit is a maximum, not a target. Do not append unrelated catalog items.
+    return { packages, profilePackages: profiles, behaviorPackages: behaviors,
+      hasProfile: profiles.length > 0, hasBehavior: behaviors.length > 0 };
   }
 
   private async getFeaturedFallback(eligible: RecommendationPackage[]): Promise<RecommendedPackageItemDto[]> {
@@ -243,6 +266,7 @@ export class RecommendationService {
   private fingerprint(value: unknown) {
     return createHash('sha256').update(JSON.stringify({
       model: process.env.OPENAI_MODEL || 'gpt-6-luna',
+      policy: TELEMETRY_CONFIG.POLICY_VERSION,
       embeddingModel: process.env.OPENAI_EMBEDDING_MODEL || 'text-embedding-3-small',
       candidateLimit: TELEMETRY_CONFIG.CANDIDATE_POOL_TARGET,
       resultLimit: TELEMETRY_CONFIG.SOURCE_PACKAGES_LIMIT, value,
@@ -255,7 +279,6 @@ export class RecommendationService {
       id: pkg.id, code: pkg.code, slug: pkg.slug, name: pkg.name, description: pkg.description,
       price: Number(pkg.price), durationMin: pkg.durationMin, specialty: pkg.specialty, symptoms: pkg.symptoms,
       targetGender: pkg.targetGender, minAge: pkg.minAge, maxAge: pkg.maxAge, isPediatric: pkg.isPediatric,
-      isFollowUp: pkg.isFollowUp, followUpAfterDays: pkg.followUpAfterDays,
     })));
   }
 

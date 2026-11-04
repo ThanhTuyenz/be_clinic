@@ -25,7 +25,6 @@ export class BehaviorTelemetryService {
 
       await Promise.allSettled([
         this.recordPersonalInterests(userKeys, dto, resolvedSpecialtyId),
-        this.recordGlobalAnalytics(dto, resolvedSpecialtyId),
         this.persistDatabaseAnalytics(dto),
       ]);
       await this.invalidateBehaviorRecommendationCache(dto.sessionId, userId);
@@ -59,7 +58,8 @@ export class BehaviorTelemetryService {
     const key = `rec:dropoff:${appointment.bookingOrderId || appointment.id}:${appointment.servicePackageId}`;
     const recorded = await this.redis.getClient()?.set(key, '1', 'EX', TELEMETRY_CONFIG.BEHAVIOR_TTL_SECONDS, 'NX');
     if (!recorded) return;
-    await this.trackUserBehavior({ sessionId, actionType: TrackingActionType.DROP_OFF, targetPackageId: appointment.servicePackageId }, userId);
+    await this.trackUserBehavior({ sessionId,
+      actionType: TrackingActionType.DROP_OFF, targetPackageId: appointment.servicePackageId }, userId);
   }
 
   /**
@@ -84,11 +84,9 @@ export class BehaviorTelemetryService {
    * Lấy danh sách Redis keys đại diện cho hồ sơ hành vi của người dùng (User / Guest)
    */
   private getUserTelemetryKeys(sessionId?: string, userId?: string): string[] {
-    const keys = sessionId ? [`rec:guest_interest:${sessionId}`] : [];
-    if (userId) {
-      keys.push(`rec:user_interest:${userId}`);
-    }
-    return keys;
+    // Logged-in accounts never read/write a shared browser's anonymous interests.
+    if (userId) return [`rec:user_interest:${userId}`];
+    return sessionId ? [`rec:guest_interest:${sessionId}`] : [];
   }
 
   /**
@@ -119,6 +117,20 @@ export class BehaviorTelemetryService {
 
       const pipeline = client.pipeline();
       const eventAt = Date.now().toString();
+      if (dto.actionType === TrackingActionType.VIEW_PACKAGE && dto.targetPackageId) {
+        // One atomic update keeps recency and frequency consistent under concurrent views.
+        await client.eval(`local countKey = KEYS[2]
+          redis.call('ZADD', KEYS[1], ARGV[1], ARGV[2])
+          redis.call('HINCRBY', countKey, ARGV[2], 1)
+          local extra = redis.call('ZCARD', KEYS[1]) - tonumber(ARGV[3])
+          if extra > 0 then
+            local removed = redis.call('ZRANGE', KEYS[1], 0, extra - 1)
+            for _, id in ipairs(removed) do redis.call('ZREM', KEYS[1], id); redis.call('HDEL', countKey, id) end
+          end
+          redis.call('EXPIRE', KEYS[1], ARGV[4]); redis.call('EXPIRE', countKey, ARGV[4]); return 1`,
+          2, key + ':package_views', key + ':package_view_counts', eventAt, dto.targetPackageId,
+          TELEMETRY_CONFIG.MAX_RECENT_PACKAGE_VIEWS, TELEMETRY_CONFIG.BEHAVIOR_TTL_SECONDS);
+      }
       // 2. Lưu từ khóa tìm kiếm gần nhất
       if (dto.actionType === TrackingActionType.SEARCH && dto.searchQuery?.trim()) {
         pipeline.hset(key, 'last_search_query', dto.searchQuery.trim().toLowerCase());
@@ -136,27 +148,6 @@ export class BehaviorTelemetryService {
       pipeline.expire(key, TELEMETRY_CONFIG.BEHAVIOR_TTL_SECONDS);
       await pipeline.exec();
     }
-  }
-
-  /**
-   * Cập nhật các bảng thống kê tần suất toàn hệ thống (Global Analytics Sorted Sets)
-   */
-  private async recordGlobalAnalytics(dto: BehaviorEvent, specialtyId?: number): Promise<void> {
-    const client = this.redis.getClient();
-    if (!client) return;
-
-    const pipeline = client.pipeline();
-
-    if (specialtyId) {
-      pipeline.zincrby('rec:global:popular_specialties', 1, specialtyId.toString());
-    }
-    if (dto.actionType === TrackingActionType.VIEW_PACKAGE && dto.targetPackageId) {
-      pipeline.zincrby('rec:global:package_views', 1, dto.targetPackageId);
-      pipeline.zincrby('rec:global:popular_packages', 1, dto.targetPackageId);
-    }
-    // Executed searches are counted by SemanticSearchService, not again by behavior tracking.
-
-    await pipeline.exec();
   }
 
   /**
@@ -184,10 +175,10 @@ export class BehaviorTelemetryService {
     try {
       const deletePromises: Promise<any>[] = [];
       if (userId) {
-        deletePromises.push(this.redis.deletePattern(`${TELEMETRY_CONFIG.CACHE_PREFIX}:behavior:u:${userId}:*`));
+        deletePromises.push(this.redis.delete(`${TELEMETRY_CONFIG.CACHE_PREFIX}:behavior:u:${userId}`));
       }
-      if (sessionId) {
-        deletePromises.push(this.redis.deletePattern(`${TELEMETRY_CONFIG.CACHE_PREFIX}:behavior:sess:${sessionId}`));
+      if (sessionId && !userId) {
+        deletePromises.push(this.redis.delete(`${TELEMETRY_CONFIG.CACHE_PREFIX}:behavior:sess:${sessionId}`));
       }
       if (deletePromises.length > 0) {
         await Promise.all(deletePromises);
@@ -207,14 +198,14 @@ export class BehaviorTelemetryService {
     topSpecialties: Array<{ specialtyId: number; specialtyName: string; score: number }>;
     lastSearchQuery?: string;
     dropOffPkgId?: string;
+    recentViews?: Array<{ packageId: string; viewCount: number; lastViewedAt: number }>;
   }> {
     if (!this.redis.isEnabled() || (!userId && !sessionId)) {
-      return { topSpecialties: [] };
+      return { topSpecialties: [], recentViews: [] };
     }
 
-    const keys: string[] = [];
-    if (userId) keys.push(`rec:user_interest:${userId}`);
-    if (sessionId) keys.push(`rec:guest_interest:${sessionId}`);
+    const keys = this.getUserTelemetryKeys(sessionId, userId);
+    const recentViews: Array<{ packageId: string; viewCount: number; lastViewedAt: number }> = [];
 
     const specialtyScoreMap = new Map<number, number>();
     let lastSearchQuery: string | undefined;
@@ -224,6 +215,17 @@ export class BehaviorTelemetryService {
 
     for (const key of keys) {
       try {
+        const client = this.redis.getClient();
+        const [viewed, counts] = await Promise.all([
+          client.zrevrange(key + ':package_views', 0, TELEMETRY_CONFIG.MAX_RECENT_PACKAGE_VIEWS - 1, 'WITHSCORES'),
+          client.hgetall(key + ':package_view_counts'),
+        ]);
+        for (let index = 0; index < viewed.length; index += 2) {
+          const lastViewedAt = Number(viewed[index + 1]);
+          if (Number.isFinite(lastViewedAt) && lastViewedAt >= Date.now() - TELEMETRY_CONFIG.BEHAVIOR_TTL_SECONDS * 1000) {
+            recentViews.push({ packageId: viewed[index], viewCount: Math.max(1, Number(counts[viewed[index]]) || 1), lastViewedAt });
+          }
+        }
         const hashData = (await this.redis.hgetall(key)) as Record<string, string> | null;
         if (!hashData || typeof hashData !== 'object') continue;
 
@@ -269,6 +271,6 @@ export class BehaviorTelemetryService {
       topSpecialties.sort((a, b) => b.score - a.score);
     }
 
-    return { topSpecialties, lastSearchQuery, dropOffPkgId };
+    return { topSpecialties, lastSearchQuery, dropOffPkgId, recentViews };
   }
 }

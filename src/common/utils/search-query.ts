@@ -97,8 +97,11 @@ export function parseSearchIntent(query: string): SearchIntent {
 export function searchTextScore(query: string, target: string): number {
   if (!query.trim() || !target.trim()) return 0;
   const accented = foldSearch(query) !== query.toLowerCase().normalize('NFC');
-  const q = cleanSearchText(accented ? query : normalizeSearch(query));
-  const t = cleanSearchText(accented ? target : normalizeSearch(target));
+  // The common Vietnamese name and the catalog term denote the same condition.
+  // Canonicalize whole phrases on both sides; retain the original accent policy.
+  const canonical = (value: string) => replaceSearchText(value, /\btieu duong\b/g, () => 'đái tháo đường');
+  const q = cleanSearchText(accented ? canonical(query) : normalizeSearch(canonical(query)));
+  const t = cleanSearchText(accented ? canonical(target) : normalizeSearch(canonical(target)));
   if (q === t) return 5;
   if (` ${t} `.includes(` ${q} `)) return 4;
   if (t.split(' ').length >= 2 && ` ${q} `.includes(` ${t} `)) return 3.5;
@@ -106,6 +109,32 @@ export function searchTextScore(query: string, target: string): number {
   const targetTokens = new Set(t.split(' '));
   // All meaningful query words must match; one generic "đau" cannot match "đau đầu".
   return tokens.length > 1 && tokens.every(token => targetTokens.has(token)) ? 2.5 : 0;
+}
+
+/** Conservative typo fallback: one edit, one changed word, and a specific exact anchor. */
+export function searchTypoScore(query: string, target: string): number {
+  const q = normalizeSearch(query);
+  // Accented clinical words retain strict matching (e.g. tai/tái and dày/dây).
+  if (cleanSearchText(query) !== q || q.length > 60) return 0;
+  const tokens = [...new Set(q.split(' ').filter(Boolean))];
+  if (tokens.length < 2 || tokens.length > 5) return 0;
+  const words = new Set(normalizeSearch(target).split(' '));
+  const generic = new Set(['kham', 'khoa', 'goi', 'dich', 'vu', 'tong', 'quat', 'benh', 'dau']);
+  if (!tokens.some(token => token.length >= 3 && !generic.has(token) && words.has(token))) return 0;
+  const missing = tokens.filter(token => !words.has(token));
+  if (missing.length !== 1 || missing[0].length < 3) return 0;
+  const oneEdit = (a: string, b: string): boolean => {
+    if (b.length < 4 || Math.abs(a.length - b.length) > 1) return false;
+    let i = 0, j = 0, edits = 0;
+    while (i < a.length && j < b.length) {
+      if (a[i] === b[j]) { i++; j++; continue; }
+      if (++edits > 1) return false;
+      if (a.length >= b.length) i++;
+      if (b.length >= a.length) j++;
+    }
+    return edits + (i < a.length || j < b.length ? 1 : 0) === 1;
+  };
+  return [...words].some(word => oneEdit(missing[0], word)) ? 1.25 : 0;
 }
 
 export function matchesSearchConstraints(intent: SearchIntent, item: {

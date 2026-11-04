@@ -1,6 +1,6 @@
 import { BadRequestException, ForbiddenException, Injectable, Logger } from '@nestjs/common'
-import { analyticsRange } from '../search-analytics/analytics-time.js'
-import { conversionPercent, demandTelemetry, SUCCESSFUL_BOOKING_STATUSES } from '../search-analytics/demand-telemetry.js'
+import { analyticsRange } from '../analytics/analytics-time.js'
+import { conversionPercent, demandTelemetry, SUCCESSFUL_BOOKING_STATUSES } from './analytics/demand-telemetry.js'
 import { ConfigService } from '@nestjs/config'
 import { GoogleGenAI } from '@google/genai'
 import { createHash } from 'node:crypto'

@@ -10,8 +10,12 @@ export type RecommendationPackage = Prisma.ServicePackageGetPayload<{ include: t
 export interface CandidatePoolItem {
   pkg: RecommendationPackage;
   origin: 'PROFILE' | 'BEHAVIOR' | 'POPULAR';
-  behaviorSourceType?: 'SEARCH_INTENT' | 'DROP_OFF' | 'RECENT_VIEW';
-  isFollowUp?: boolean;
+  behaviorSourceType?: 'SEARCH_INTENT' | 'DROP_OFF' | 'RECENT_VIEW' | 'SPECIALTY_INTEREST';
+  retrievalScore?: number;
+  evidenceSignals?: string[];
+  viewCount?: number;
+  lastViewedAt?: number;
+  searchQuery?: string;
 }
 
 /**
@@ -40,7 +44,9 @@ export const TELEMETRY_CONFIG = {
   SEMANTIC_SEARCH_LIMIT: 20,
 
   // Mỗi nguồn xếp hạng tối đa 20 ứng viên; danh sách cuối tối đa 10 gói.
-  CACHE_PREFIX: 'rec:v5:openai',
+  CACHE_PREFIX: 'rec:v7:account',
+  POLICY_VERSION: 'grounded-independent-account-v3',
+  MAX_RECENT_PACKAGE_VIEWS: 50,
   SOURCE_PACKAGES_LIMIT: 10,
   HOME_FINAL_PACKAGES_LIMIT: 10,
   POPULARITY_WINDOW_DAYS: 90,
@@ -48,5 +54,4 @@ export const TELEMETRY_CONFIG = {
   RULE_CACHE_TTL_SECONDS: 5 * 60, // Thử lại AI sau lỗi tạm thời, không giữ fallback 7 ngày.
   PROFILE_CACHE_TTL_SECONDS: 7 * 24 * 60 * 60, // 7 ngày cho hồ sơ bệnh án
   RECENCY_SUPPRESSION_DAYS: 90,
-  FOLLOW_UP_DEFAULT_DAYS: 180,
 } as const;

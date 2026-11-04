@@ -1,3 +1,5 @@
+import { resolveBranchId } from '../../common/utils/booking-date-rules.utils.js';
+import { onlineBookingDateRange } from './helpers/booking-date.helper.js';
 import { clinicPeriod } from '../../common/constants/clinic-sessions.js';
 import { bookingMethodAcceptsSlot, packageAcceptsSlot } from './helpers/package-reception.helper.js';
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
@@ -33,6 +35,18 @@ const PACKAGE_DEPLOYMENT_SELECT = {
   branch: { select: { id: true, code: true, slug: true, name: true, address: true, isActive: true } },
   bookingMethod: { select: { id: true, code: true, name: true, isActive: true } },
 } satisfies Prisma.BranchBookingMethodSelect;
+
+const BOOKING_PACKAGE_SELECT = {
+  id: true, code: true, slug: true, name: true, description: true, price: true, durationMin: true,
+  receptionSchedules: { select: { branchId: true, dayOfWeek: true, sessions: true } },
+  specialtyId: true,
+  branchBookingMethod: { select: PACKAGE_DEPLOYMENT_SELECT },
+  branchBookingMethods: {
+    where: { branchBookingMethod: { isEnabled: true, bookingMethod: { isActive: true } } },
+    select: { branchBookingMethod: { select: PACKAGE_DEPLOYMENT_SELECT } },
+  },
+} satisfies Prisma.ServicePackageSelect;
+type BookingInitPackage = Prisma.ServicePackageGetPayload<{ select: typeof BOOKING_PACKAGE_SELECT }>;
 
 type BookingDoctor = Prisma.DoctorGetPayload<{ select: typeof BOOKING_DOCTOR_SELECT }>;
 
@@ -103,7 +117,7 @@ export class BookingFlowService {
 
   async getBookingInit(dto: BookingInitDto) {
     const rawFlow = (dto.flow || 'all').toLowerCase().trim();
-    const effectiveBranchId = await this.resolveBranchId(dto.branchId);
+    const effectiveBranchId = await resolveBranchId(this.prisma, dto.branchId);
     const parsedSpecialtyId = await this.resolveSpecialtyId(dto.specialtyId);
 
     const methodCodeMap: Record<string, string> = {
@@ -120,6 +134,7 @@ export class BookingFlowService {
       followup: 'CONSULTATION',
     };
     const requiredMethodCode = methodCodeMap[rawFlow];
+    const doctorFlow = ['doctor', 'bac-si', 'online-consultation', 'online', 'followup'].includes(rawFlow);
 
     const branchWhere: Prisma.BranchWhereInput = {
       isActive: true,
@@ -161,7 +176,7 @@ export class BookingFlowService {
           route: true,
         },
       }),
-      this.prisma.servicePackage.findMany({
+      doctorFlow ? Promise.resolve<BookingInitPackage[]>([]) : this.prisma.servicePackage.findMany({
         where: {
           isActive: true,
           OR: [
@@ -184,33 +199,7 @@ export class BookingFlowService {
           ],
         },
         orderBy: [{ price: 'asc' }, { name: 'asc' }],
-        select: {
-          id: true,
-          code: true,
-          slug: true,
-          name: true,
-          description: true,
-          price: true,
-          durationMin: true,
-          receptionSchedules: { select: { branchId: true, dayOfWeek: true, sessions: true } },
-          specialtyId: true,
-          branchBookingMethod: {
-            select: PACKAGE_DEPLOYMENT_SELECT,
-          },
-          branchBookingMethods: {
-            where: {
-              branchBookingMethod: {
-                isEnabled: true,
-                bookingMethod: { isActive: true },
-              },
-            },
-            select: {
-              branchBookingMethod: {
-                select: PACKAGE_DEPLOYMENT_SELECT,
-              },
-            },
-          },
-        },
+        select: BOOKING_PACKAGE_SELECT,
       }),
     ]);
 
@@ -264,7 +253,7 @@ export class BookingFlowService {
     };
 
     // 2. Tùy biến gom dữ liệu chuẩn theo luồng (flow)
-    if (rawFlow === 'doctor' || rawFlow === 'bac-si' || rawFlow === 'online-consultation' || rawFlow === 'online' || rawFlow === 'followup') {
+    if (doctorFlow) {
       const doctors = await this.prisma.doctor.findMany({
         where: {
           isActive: true,
@@ -430,7 +419,7 @@ export class BookingFlowService {
       };
     }
 
-    // Default / All / Facility flow: Trả về đầy đủ danh mục tổng quan cho wizard
+    // Default / All: Trả về đầy đủ danh mục tổng quan cho wizard
     const [specialties, featuredDoctors] = await Promise.all([
       this.prisma.specialty.findMany({
         where: {
@@ -468,7 +457,7 @@ export class BookingFlowService {
     ]);
 
     return {
-      flow: 'facility',
+      flow: 'all',
       bookingMethodCode: requiredMethodCode || 'SPECIALTY_EXAM',
       ...commonData,
       specialties: specialties.map(({ _count, ...s }) => ({
@@ -483,17 +472,16 @@ export class BookingFlowService {
 
 // khung giừo khả dụng
   async getBookingSlots(dto: BookingSlotsDto) {
-    const effectiveBranchId = await this.resolveBranchId(dto.branchId);
+    const effectiveBranchId = await resolveBranchId(this.prisma, dto.branchId);
     const parsedSpecialtyId = await this.resolveSpecialtyId(dto.specialtyId);
     const doctorId = dto.doctorId || undefined;
-    const daysForward = Math.min(Math.max(Number(dto.days) || 30, 7), 60);
     const servicePackage = await this.resolveBookingSlotPackage(dto.servicePackageId, effectiveBranchId, dto.bookingMethodCode);
     const packageSpecialtyId = servicePackage?.specialtyId ?? undefined;
     if (parsedSpecialtyId !== undefined && packageSpecialtyId !== undefined && parsedSpecialtyId !== packageSpecialtyId) {
       throw new BadRequestException('Dịch vụ khám không thuộc chuyên khoa đã chọn');
     }
     const targetSpecialtyId = parsedSpecialtyId ?? packageSpecialtyId;
-    const bookingDates = this.getBookingDateRange(daysForward);
+    const bookingDates = this.getBookingDateRange(Number(dto.days));
     const { minDate, maxDate } = bookingDates;
     const slotWhere: Prisma.DoctorScheduleSlotWhereInput = {
       isActive: true,
@@ -579,21 +567,6 @@ export class BookingFlowService {
     };
   }
 
-  /**
-   * Phân giải identifier (UUID, slug hoặc code) thành branchId chuẩn
-   */
-  private async resolveBranchId(identifier?: string): Promise<string | undefined> {
-    if (!identifier) return undefined;
-    if (/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(identifier)) {
-      return identifier;
-    }
-    const branch = await this.prisma.branch.findFirst({
-      where: { OR: [{ slug: identifier }, { code: identifier }], isActive: true },
-      select: { id: true },
-    });
-    return branch?.id ?? identifier;
-  }
-
   private async resolveSpecialtyId(identifier?: string): Promise<number | undefined> {
     if (!identifier) return undefined;
     const value = identifier.trim();
@@ -632,46 +605,7 @@ export class BookingFlowService {
       })),
     };
   }
-
-  getBookingDateRange(daysForward = 30) {
-    const nowVn = new Date(Date.now() + 7 * 60 * 60 * 1000);
-    const [year, month, day] = nowVn.toISOString().slice(0, 10).split('-').map(Number);
-    // Không đặt trong ngày; từ 16:30 chỉ nhận lịch từ ngày mốt.
-    const minLeadDays = nowVn.getUTCHours() > 16 || (nowVn.getUTCHours() === 16 && nowVn.getUTCMinutes() >= 30) ? 2 : 1;
-    const minDate = new Date(Date.UTC(year, month - 1, day + minLeadDays));
-    const maxDate = new Date(Date.UTC(year, month - 1, day + daysForward));
-    const earliestDate = minDate.toISOString().slice(0, 10);
-    const latestDate = maxDate.toISOString().slice(0, 10);
-    const tomorrowLabel = new Date(Date.UTC(year, month - 1, day + 1)).toLocaleDateString('vi-VN', { timeZone: 'UTC' });
-    const notice = (minLeadDays === 2
-      ? 'Đã qua 16h30 nên không thể đặt lịch khám cho ngày mai (' + tomorrowLabel + ').'
-      : 'Không thể đặt lịch khám trong ngày hôm nay.')
-      + ' Bạn có thể chọn lịch từ ngày ' + minDate.toLocaleDateString('vi-VN', { timeZone: 'UTC' }) + '.';
-
-    return {
-      minDate,
-      maxDate,
-      notice,
-      resolveDate(value: string) {
-        const [year, month, day] = value.split('-').map(Number);
-        const requestedDate = new Date(Date.UTC(year, month - 1, day));
-        if (Number.isNaN(requestedDate.getTime()) || requestedDate.toISOString().slice(0, 10) !== value) {
-          throw new BadRequestException('Ngày khám không hợp lệ');
-        }
-        if (requestedDate < minDate || requestedDate > maxDate) {
-          throw new BadRequestException({
-            code: 'BOOKING_DATE_OUT_OF_RANGE', earliestDate, latestDate,
-            message: requestedDate < minDate ? notice
-              : 'Chỉ có thể đặt lịch đến ngày ' + maxDate.toLocaleDateString('vi-VN', { timeZone: 'UTC' }) + '. Vui lòng chọn ngày trong khoảng cho phép.',
-          });
-        }
-        return {
-          requestedDate,
-          endOfTargetDate: new Date(requestedDate.getTime() + 24 * 60 * 60 * 1000 - 1),
-        };
-      },
-    };
-  }
+  getBookingDateRange(daysForward = 30) { return onlineBookingDateRange(daysForward); }
 
   private formatBookingSlots(slots: BookingSlot[], servicePackage: BookingSlotPackage | null, bookingMethodCode?: string) {
     const timeSlotMap = new Map<string, BookingTimeSlot>();

@@ -112,22 +112,3 @@ export class HttpExceptionFilter implements ExceptionFilter {
     }
   }
 }
-
-@Catch()
-export class AllExceptionsFilter implements ExceptionFilter {
-  catch(exception: unknown, host: ArgumentsHost) {
-    const ctx = host.switchToHttp();
-    const response = ctx.getResponse<Response>();
-    const request = ctx.getRequest<Request>();
-
-    console.error('Unhandled exception:', exception);
-
-    response.status(500).json({
-      statusCode: 500,
-      errorCode: ErrorCode.INTERNAL_SERVER_ERROR,
-      message: exception instanceof Error ? exception.message : 'Internal server error',
-      timestamp: new Date().toISOString(),
-      path: request.url,
-    });
-  }
-}

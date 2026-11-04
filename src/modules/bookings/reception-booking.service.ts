@@ -1,3 +1,4 @@
+import { reserveBookingSlot } from './helpers/slot-reservation.helper.js';
 import { BadRequestException, ConflictException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { randomUUID } from 'node:crypto';
@@ -76,12 +77,7 @@ export class ReceptionBookingService {
       }
       const patientProfileId = await this.patients.resolveReceptionProfile(tx, input);
       await assertPatientSlotAvailable(tx, patientProfileId, slot);
-      const reserved = await tx.$executeRaw`
-        UPDATE "doctor_schedule_slots"
-        SET "occupied_count" = "occupied_count" + 1, "updated_at" = NOW()
-        WHERE "id" = ${slot.id}::uuid AND "is_active" = TRUE
-          AND "slot_status" = 'AVAILABLE' AND "occupied_count" < "capacity"
-      `;
+      const reserved = await reserveBookingSlot(tx, slot.id);
       if (reserved !== 1) throw new ConflictException('Khung giờ vừa hết chỗ, vui lòng chọn lại');
 
       const appointmentId = randomUUID();

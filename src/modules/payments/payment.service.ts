@@ -1,5 +1,6 @@
 import {
 BadRequestException,
+ConflictException,
 Injectable,
 InternalServerErrorException,
 Logger,
@@ -7,6 +8,8 @@ NotFoundException
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { PayOS } from '@payos/node';
+import { createHash } from 'node:crypto';
+import { isUuid } from '../../common/utils/staff.utils.js';
 import { PrismaService } from '../../infrastructure/database/prisma/prisma.service.js';
 import { BookingService } from '../bookings/booking.service.js';
 import { PaymentLinkResponse } from './dtos/payment.dto.js';
@@ -104,6 +107,22 @@ export class PaymentService {
     customDescription?: string,
     accountId?: string,
   ): Promise<PaymentLinkResponse> {
+    if (!isUuid(appointmentId)) throw new BadRequestException('Mã lịch hẹn không hợp lệ.');
+    const invoice = await this.prisma.invoice.findFirst({
+      where: {
+        OR: [{ appointmentId }, { payments: { some: { id: appointmentId } } }, { bookingOrderId: appointmentId }],
+        ...(accountId ? { AND: [{ OR: [{ appointment: { patientProfile: { accountId } } }, { bookingOrder: { accountId } }] }] } : {}),
+      }, select: { id: true },
+    });
+    if (!invoice) throw new NotFoundException('Không tìm thấy hóa đơn của bạn.');
+    // Serialize gateway creation across processes without holding invoice row locks during network I/O.
+    return this.prisma.$transaction(async lock => {
+      await lock.$queryRaw`SELECT 1 AS locked FROM pg_advisory_xact_lock(hashtextextended(${invoice.id}, 0))`;
+      return this.createPaymentUrlLocked(appointmentId, amount, customDescription, accountId);
+    }, { maxWait: 5000, timeout: 45_000 });
+  }
+
+  private async createPaymentUrlLocked(appointmentId: string, amount: number, customDescription?: string, accountId?: string): Promise<PaymentLinkResponse> {
     const payos = this.getPayOSInstance();
 
     // 1. Kiểm tra lịch hẹn hoặc payment transaction trong DB
@@ -173,7 +192,9 @@ export class PaymentService {
       };
     }
 
-    const orderCode = this.generateOrderCode();
+    // A stable code lets retries recover a link even if the gateway succeeded before a timeout.
+    let orderCode = pendingLink?.providerTransactionId ? Number(pendingLink.providerTransactionId)
+      : Number.parseInt(createHash('sha256').update(invoice.id).digest('hex').slice(0, 12), 16);
     const description = this.sanitizeDescription(
       customDescription || `KHAM ${orderCode}`,
       orderCode,
@@ -182,8 +203,10 @@ export class PaymentService {
     // CHẾ ĐỘ AN TOÀN DEMO/TEST: Ép số tiền thanh toán sang PayOS luôn là 1.000 VNĐ
     // để bạn có thể quét bằng App ngân hàng thật mà không lo bị trừ số tiền lớn.
     const configuredDemoAmount = this.configService.get<string>('PAYOS_TEST_AMOUNT');
-    const payAmount = Number(configuredDemoAmount || 1000);
-    this.logger.warn(
+    const invoiceAmount = Number(invoice.totalAmount);
+    const payAmount = configuredDemoAmount === '0' ? invoiceAmount : Number(configuredDemoAmount || 1000);
+    if (!Number.isSafeInteger(payAmount) || payAmount < 1000) throw new BadRequestException('Số tiền PayOS không hợp lệ.');
+    if (configuredDemoAmount !== '0') this.logger.warn(
       `[AN TOÀN DEMO] Số tiền gốc ${amount.toLocaleString('vi-VN')} VNĐ được ghi đè thành ${payAmount.toLocaleString('vi-VN')} VNĐ trên link thanh toán PayOS.`,
     );
 
@@ -201,55 +224,69 @@ export class PaymentService {
         `Đang tạo link PayOS cho Appointment [${targetAppointmentId}] - OrderCode: ${orderCode} - Số tiền: ${payAmount} VNĐ`,
       );
 
-      // 2. Gọi SDK tạo link thanh toán (hỗ trợ cả paymentRequests.create và createPaymentLink)
-      const paymentLink: any = typeof (payos as any).createPaymentLink === 'function'
-        ? await (payos as any).createPaymentLink(paymentLinkData)
-        : await payos.paymentRequests.create(paymentLinkData);
-
-      // 3. Lưu vết OrderCode và Payment Link vào database
-      await this.prisma.$transaction(async (tx) => {
-        if (invoice.id) {
-          const existingPendingPayment = invoice.payments?.find(
-            (p) => p.status === 'PENDING',
-          );
-
-          if (existingPendingPayment) {
-            await tx.paymentTransaction.update({
-              where: { id: existingPendingPayment.id },
-              data: {
-                provider: 'PAYOS',
-                providerTransactionId: String(orderCode),
-                method: 'VIETQR',
-                amount: payAmount,
-                rawPayload: {
-                  orderCode,
-                  paymentLinkId: paymentLink.paymentLinkId,
-                  checkoutUrl: paymentLink.checkoutUrl,
-                  qrCode: paymentLink.qrCode,
-                },
-              },
-            });
-          } else {
-            await tx.paymentTransaction.create({
-              data: {
-                invoiceId: invoice.id,
-                amount: payAmount,
-                provider: 'PAYOS',
-                providerTransactionId: String(orderCode),
-                idempotencyKey: `payos-${orderCode}-${Date.now()}`,
-                method: 'VIETQR',
-                status: 'PENDING',
-                rawPayload: {
-                  orderCode,
-                  paymentLinkId: paymentLink.paymentLinkId,
-                  checkoutUrl: paymentLink.checkoutUrl,
-                  qrCode: paymentLink.qrCode,
-                },
-              },
-            });
-          }
-        }
+      let pendingPayment = invoice.payments.find(payment => payment.status === 'PENDING');
+      if (!pendingPayment) throw new BadRequestException('Không có giao dịch chờ thanh toán.');
+      const reserved = await this.prisma.paymentTransaction.updateMany({
+        where: { id: pendingPayment.id, status: 'PENDING' },
+        data: { provider: 'PAYOS', providerTransactionId: String(orderCode), method: 'VIETQR', amount: payAmount },
       });
+      if (!reserved.count) throw new ConflictException('Giao dịch đã thay đổi. Vui lòng kiểm tra lại trạng thái.');
+      // Persist the gateway identity first so an early webhook can find the payment.
+      let paymentLink: any;
+      try {
+        paymentLink = typeof (payos as any).createPaymentLink === 'function'
+          ? await (payos as any).createPaymentLink(paymentLinkData)
+          : await payos.paymentRequests.create(paymentLinkData, { timeout: 10_000, maxRetries: 0 });
+      } catch (createError) {
+        let recovered: any;
+        try {
+          recovered = typeof (payos as any).getPaymentLinkInformation === 'function'
+            ? await (payos as any).getPaymentLinkInformation(orderCode)
+            : await payos.paymentRequests.get(orderCode, { timeout: 5000, maxRetries: 0 });
+        } catch { throw createError; }
+        if (recovered.status === 'PAID') {
+          await this.syncPayosPaymentStatus(orderCode, accountId);
+          throw new ConflictException('Giao dịch đã thanh toán. Vui lòng kiểm tra lại trạng thái.');
+        }
+        if (!['PENDING', 'CANCELLED', 'EXPIRED'].includes(recovered.status)) throw createError;
+        if (expiredAt <= Math.floor(Date.now() / 1000)) throw new BadRequestException('Đã hết thời gian giữ chỗ. Vui lòng đặt lịch lại.');
+        // GET does not return QR data. Retire an orphaned link before replacing it.
+        if (recovered.status === 'PENDING') {
+          const cancelled = typeof (payos as any).cancelPaymentLink === 'function'
+            ? await (payos as any).cancelPaymentLink(orderCode, 'Khoi phuc ma thanh toan')
+            : await payos.paymentRequests.cancel(orderCode, 'Khoi phuc ma thanh toan', { timeout: 5000, maxRetries: 0 });
+          if (cancelled.status !== 'CANCELLED') throw new ConflictException('Giao dịch đang được xử lý. Vui lòng kiểm tra lại trạng thái.');
+        }
+        orderCode = this.generateOrderCode();
+        const previousId = pendingPayment.id;
+        pendingPayment = await this.prisma.$transaction(async tx => {
+          const previous = await tx.paymentTransaction.updateMany({
+            where: { id: previousId, status: 'PENDING', invoice: { status: 'UNPAID' } }, data: { status: 'CANCELLED' },
+          });
+          if (!previous.count) throw new ConflictException('Giao dịch đã thay đổi. Vui lòng kiểm tra lại trạng thái.');
+          // Keep old gateway references so late webhooks remain traceable.
+          return tx.paymentTransaction.create({ data: {
+            invoiceId: invoice.id, provider: 'PAYOS', providerTransactionId: String(orderCode),
+            idempotencyKey: `payos:${invoice.id}:${orderCode}`, method: 'VIETQR', amount: payAmount,
+          } });
+        });
+        paymentLinkData.orderCode = orderCode;
+        paymentLink = typeof (payos as any).createPaymentLink === 'function'
+          ? await (payos as any).createPaymentLink(paymentLinkData)
+          : await payos.paymentRequests.create(paymentLinkData, { timeout: 10_000, maxRetries: 0 });
+      }
+
+      // Never overwrite settlement evidence if a webhook has already completed the payment.
+      const saved = await this.prisma.paymentTransaction.updateMany({
+        where: { id: pendingPayment.id, status: 'PENDING' },
+        data: { rawPayload: {
+          orderCode, paymentLinkId: paymentLink.paymentLinkId,
+          checkoutUrl: paymentLink.checkoutUrl, qrCode: paymentLink.qrCode,
+          description, accountNumber: paymentLink.accountNumber || '',
+          accountName: paymentLink.accountName || '', bin: paymentLink.bin || '',
+        } },
+      });
+      if (!saved.count) throw new ConflictException('Giao dịch đã cập nhật. Vui lòng kiểm tra lại trạng thái.');
 
       return {
         orderCode: paymentLink.orderCode,
@@ -264,6 +301,7 @@ export class PaymentService {
         holdExpiresAt: holdExpiresAt.toISOString(),
       };
     } catch (error: any) {
+      if (error instanceof ConflictException || error instanceof BadRequestException) throw error;
       this.logger.error(`Lỗi khi gọi createPaymentLink PayOS: ${error.message}`, error.stack);
       throw new InternalServerErrorException(
         error.message || 'Không thể khởi tạo phiên thanh toán PayOS',
@@ -487,8 +525,8 @@ export class PaymentService {
         bookingMethod: { select: { code: true, name: true } },
         telehealthSession: { select: { id: true } },
         queueNumber: true,
-        bookingOrder: { select: { invoice: { select: { payments: { select: { status: true }, orderBy: { createdAt: 'desc' }, take: 1 } } } } },
-        invoice: { select: { payments: { select: { status: true }, orderBy: { createdAt: 'desc' }, take: 1 } } },
+        bookingOrder: { select: { invoice: { select: { status: true, payments: { select: { status: true }, orderBy: { createdAt: 'desc' }, take: 1 } } } } },
+        invoice: { select: { status: true, payments: { select: { status: true }, orderBy: { createdAt: 'desc' }, take: 1 } } },
         qrToken: { select: { id: true } },
         branch: { select: { id: true, name: true, address: true } },
         scheduleSlot: {
@@ -514,7 +552,7 @@ export class PaymentService {
           groupType: true,
           status: true,
           totalAmount: true,
-          invoice: { select: { payments: { select: { status: true }, orderBy: { createdAt: 'desc' }, take: 1 } } },
+          invoice: { select: { status: true, payments: { select: { status: true }, orderBy: { createdAt: 'desc' }, take: 1 } } },
           appointments: {
             select: {
               id: true,
@@ -535,7 +573,7 @@ export class PaymentService {
         orderCode: order.orderCode,
         groupType: order.groupType,
         status: order.status,
-        paymentStatus: order.invoice?.payments[0]?.status ?? null,
+        paymentStatus: order.invoice?.status === 'PAID' ? 'SUCCESS' : order.invoice?.payments[0]?.status ?? null,
         totalAmount: Number(order.totalAmount),
         appointments: order.appointments.map((a: any) => ({
           appointmentId: a.id,
@@ -583,7 +621,7 @@ export class PaymentService {
       bookingOrderId: row.bookingOrderId,
       status: row.status,
       holdExpiresAt: row.holdExpiresAt,
-      paymentStatus: row.invoice?.payments[0]?.status ?? row.bookingOrder?.invoice?.payments[0]?.status ?? null,
+      paymentStatus: row.invoice?.status === 'PAID' || row.bookingOrder?.invoice?.status === 'PAID' ? 'SUCCESS' : row.invoice?.payments[0]?.status ?? row.bookingOrder?.invoice?.payments[0]?.status ?? null,
       hasQr: Boolean(row.qrToken),
       bookingCode: row.bookingCode,
       isTelehealth,

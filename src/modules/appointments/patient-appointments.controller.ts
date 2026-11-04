@@ -5,6 +5,7 @@ import type { Request, Response } from 'express';
 import { SkipPermissions } from '../../common/decorators/skip-permissions.decorator.js';
 import { AppointmentConfirmationService } from './appointment-confirmation.service.js';
 import { RescheduleAppointmentDto } from './dtos/reschedule-appointment.dto.js';
+import { CancelAppointmentDto } from './dtos/cancel-appointment.dto.js';
 import { buildGoogleCalendarUrl, buildIcsContent } from './helpers/calendar.helper.js';
 import { PatientAppointmentsService } from './patient-appointments.service.js';
 
@@ -28,7 +29,7 @@ export class PatientAppointmentsController {
   cancelAppointment(
     @Req() request: Request,
     @Param('id') id: string,
-    @Body() body: { reason?: string; refundBank?: { bankCode?: string; bankName?: string; bankBin?: string; accountNumber?: string; accountName?: string } },
+    @Body() body: CancelAppointmentDto,
   ) {
     return this.appointments.cancelMyAppointment(request.user!.id, id, body);
   }

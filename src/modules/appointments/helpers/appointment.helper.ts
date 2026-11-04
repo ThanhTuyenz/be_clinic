@@ -2,10 +2,11 @@ import { BadRequestException, ConflictException, ForbiddenException } from '@nes
 import { AppointmentStatus, Prisma, UserRole } from '@prisma/client';
 import { formatTime } from '../../../common/utils/staff.utils.js';
 import { PrismaService } from '../../../infrastructure/database/prisma/prisma.service.js';
-import { assertPackageReception, PACKAGE_RECEPTION_SELECT } from '../../bookings/helpers/package-reception.helper.js';
+import { assertBookingMethodSlot, assertPackageReception, PACKAGE_RECEPTION_SELECT } from '../../bookings/helpers/package-reception.helper.js';
+import { reserveBookingSlot } from '../../bookings/helpers/slot-reservation.helper.js';
 
 // Access control
-export const APPOINTMENT_ACTOR_SELECT = {
+const APPOINTMENT_ACTOR_SELECT = {
   id: true, role: true, doctor: { select: { id: true } },
   branchAssignments: { select: { branchId: true } },
 } satisfies Prisma.UserSelect;
@@ -48,12 +49,11 @@ export function assertAppointmentAccess(actor: AppointmentActor, appointment: {
 export async function computeQueueNumber(
   tx: Prisma.TransactionClient,
   appointmentId: string,
-  scheduleSlotId?: string | null,
+  scheduleSlot?: string | { id: string; scheduleId: string; startTime: Date } | null,
 ): Promise<number> {
-  if (scheduleSlotId) {
-    const currSlot = await tx.doctorScheduleSlot.findUnique({
-      where: { id: scheduleSlotId },
-    });
+  if (scheduleSlot) {
+    const currSlot = typeof scheduleSlot === 'string'
+      ? await tx.doctorScheduleSlot.findUnique({ where: { id: scheduleSlot } }) : scheduleSlot;
     if (currSlot) {
       const earlierSlots = await tx.doctorScheduleSlot.findMany({
         where: {
@@ -86,14 +86,16 @@ export function assertRescheduleDestination(
     branchId: string; scheduleSlotId: string | null;
     scheduleSlot?: { schedule: { doctorId: string } } | null;
     servicePackage?: ReceptionPackage | null;
+    bookingMethod?: { code: string } | null;
   },
   slot: {
-    id: string; isActive: boolean; startTime: Date;
+    id: string; isActive: boolean; startTime: Date; slotStatus?: string;
     schedule: { doctorId: string; branchId: string; status: string; workDate: Date; doctor: { isActive: boolean } };
   },
   now = new Date(),
 ) {
-  if (!slot.isActive || slot.schedule.status !== 'OPEN' || !slot.schedule.doctor.isActive) throw new BadRequestException('Khung giờ khám mới không khả dụng');
+  if (!slot.isActive || (slot.slotStatus && slot.slotStatus !== 'AVAILABLE') || slot.schedule.status !== 'OPEN' || !slot.schedule.doctor.isActive) throw new BadRequestException('Khung giờ khám mới không khả dụng');
+  if (appointment.bookingMethod) assertBookingMethodSlot(appointment.bookingMethod.code, slot);
   if (slot.id === appointment.scheduleSlotId) throw new BadRequestException('Khung giờ mới trùng với khung giờ hiện tại');
   if (!appointment.scheduleSlot || slot.schedule.doctorId !== appointment.scheduleSlot.schedule.doctorId) throw new BadRequestException('Đổi lịch phải giữ nguyên bác sĩ phụ trách');
   if (slot.schedule.branchId !== appointment.branchId) throw new BadRequestException('Đổi lịch phải giữ nguyên cơ sở khám');
@@ -119,13 +121,14 @@ export async function releaseAppointmentSlot(tx: Prisma.TransactionClient, slotI
 /** The caller supplies its policy checks; all slot transfers share one atomic mutation. */
 export async function transferAppointmentSlot(
   tx: Prisma.TransactionClient,
-  appointment: { id: string; status: AppointmentStatus; scheduleSlotId: string | null; rescheduleCount: number },
-  newSlot: { id: string; schedule: { branchId: string } },
+  appointment: { id: string; patientProfileId: string; status: AppointmentStatus; scheduleSlotId: string | null; rescheduleCount: number },
+  newSlot: { id: string; scheduleId: string; startTime: Date; endTime: Date; schedule: { branchId: string; workDate: Date } },
   actorId: string,
   reason: string,
 ) {
   if (appointment.scheduleSlotId === newSlot.id) throw new BadRequestException('Khung giờ mới trùng với khung giờ hiện tại');
   if (!['HOLD', 'CONFIRMED'].includes(appointment.status)) throw new BadRequestException('Lịch hẹn không còn ở trạng thái có thể đổi lịch');
+  await assertPatientSlotAvailable(tx, appointment.patientProfileId, newSlot, appointment.id);
   const claimed = await tx.appointment.updateMany({
     where: {
       id: appointment.id, status: appointment.status,
@@ -134,14 +137,10 @@ export async function transferAppointmentSlot(
     data: { scheduleSlotId: newSlot.id, branchId: newSlot.schedule.branchId, rescheduleCount: { increment: 1 }, reminderSent24h: false, reminderSent2h: false },
   });
   if (claimed.count !== 1) throw new ConflictException('Lịch hẹn vừa được cập nhật, vui lòng tải lại');
-  const reserved = await tx.$executeRaw`
-    UPDATE "doctor_schedule_slots"
-    SET "occupied_count" = "occupied_count" + 1, "updated_at" = NOW()
-    WHERE "id" = ${newSlot.id}::uuid AND "is_active" = TRUE AND "occupied_count" < "capacity"
-  `;
+  const reserved = await reserveBookingSlot(tx, newSlot.id);
   if (reserved !== 1) throw new ConflictException('Khung giờ mới vừa hết chỗ, vui lòng chọn khung giờ khác');
   await releaseAppointmentSlot(tx, appointment.scheduleSlotId);
-  const queueNumber = await computeQueueNumber(tx, appointment.id, newSlot.id);
+  const queueNumber = await computeQueueNumber(tx, appointment.id, newSlot);
   return tx.appointment.update({
     where: { id: appointment.id },
     data: {
@@ -214,7 +213,7 @@ export function reminderSlotWindows(now: Date, hoursAhead: 2 | 24) {
 }
 
 // Response serialization
-export function statusForClient(status: string) {
+function statusForClient(status: string) {
   if (status === 'HOLD') return 'pending'
   if (['CONFIRMED', 'CHECKED_IN'].includes(status)) return 'confirmed'
   if (status === 'COMPLETED') return 'examined'
@@ -416,10 +415,12 @@ export async function assertPatientSlotAvailable(
   tx: Prisma.TransactionClient,
   patientProfileId: string,
   slot: { startTime: Date; endTime: Date; schedule: { workDate: Date } },
+  excludingAppointmentId?: string,
 ) {
   const conflict = await tx.appointment.findFirst({
     where: {
       patientProfileId,
+      ...(excludingAppointmentId ? { id: { not: excludingAppointmentId } } : {}),
       status: { in: ['HOLD', 'CONFIRMED', 'CHECKED_IN', 'IN_EXAMINATION'] },
       scheduleSlot: {
         startTime: { lt: slot.endTime }, endTime: { gt: slot.startTime },

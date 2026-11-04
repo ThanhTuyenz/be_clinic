@@ -1,6 +1,5 @@
 import { registerAs } from '@nestjs/config';
-import { Transform } from 'class-transformer';
-import { IsBoolean, IsInt, IsOptional, IsString, Max, Min } from 'class-validator';
+import { IsInt, IsOptional, IsString, Max, Min } from 'class-validator';
 import validateConfig from '../common/utils/validate-config.js';
 import { RabbitMqConfig } from './config.type.js';
 

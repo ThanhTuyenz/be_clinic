@@ -9,7 +9,7 @@ import { RedisService } from '../../../../infrastructure/redis/redis.service.js'
 
 export type OtpPurpose = 'reg' | 'link';
 
-export interface OtpData {
+interface OtpData {
   hash: string;
   attempts: number;
 }

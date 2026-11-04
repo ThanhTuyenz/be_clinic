@@ -1,3 +1,4 @@
+import { appointmentTransaction, releaseCancelledHoldVoucher } from './helpers/appointment-mutation.helper.js';
 import { BadRequestException, ConflictException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { createHash } from 'node:crypto';
@@ -181,7 +182,7 @@ export class AppointmentsService {
     const requestedQueue = input.visitQueueNumber == null ? current.queueNumber : Number(input.visitQueueNumber);
     if (requestedQueue != null && (!Number.isInteger(requestedQueue) || requestedQueue < 1)) throw new BadRequestException('Số thứ tự phải là số nguyên dương');
     let refundRequested = false;
-    const row = await this.prisma.$transaction(async tx => {
+    const row = await appointmentTransaction(this.prisma, async tx => {
       if (current.status === 'HOLD' && status === 'CONFIRMED') {
         const paid = await tx.invoice.findFirst({
           where: { status: 'PAID', OR: [{ appointmentId }, ...(current.bookingOrderId ? [{ bookingOrderId: current.bookingOrderId }] : [])] }, select: { id: true },
@@ -205,6 +206,7 @@ export class AppointmentsService {
           appointmentId, bookingOrderId: current.bookingOrderId, bookingCode: current.bookingCode,
           reason: input.cancelReason?.trim() || 'Phòng khám hủy lịch khám', isClinicCancelled: true,
         });
+        await releaseCancelledHoldVoucher(tx, current, refundRequested);
       }
       await tx.appointmentStatusHistory.create({
         data: {
@@ -213,7 +215,7 @@ export class AppointmentsService {
         }
       });
       return tx.appointment.findUniqueOrThrow({ where: { id: appointmentId }, include: appointmentInclude() });
-    }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
+    });
     if (status === 'CANCELLED') {
       const email = current.patientProfile.account?.email;
       if (email) {
@@ -266,17 +268,18 @@ export class AppointmentsService {
 
   private async rescheduleForActor(actor: AppointmentActor, appointmentId: string, body: { newSlotId: string; note?: string }) {
     if (!isUuid(body.newSlotId)) throw new BadRequestException('Vui lòng chọn khung giờ khám mới hợp lệ');
-    return this.prisma.$transaction(async tx => {
+    return appointmentTransaction(this.prisma, async tx => {
       const appointment = await tx.appointment.findUnique({
         where: { id: appointmentId }, include: {
           scheduleSlot: { select: { schedule: { select: { doctorId: true } } } }, servicePackage: { select: PACKAGE_RECEPTION_SELECT },
+          bookingMethod: { select: { code: true } },
         }
       });
       if (!appointment) throw new NotFoundException('Không tìm thấy lịch hẹn');
       assertAppointmentAccess(actor, appointment);
       const slot = await tx.doctorScheduleSlot.findUnique({
         where: { id: body.newSlotId }, include: {
-          schedule: { include: { doctor: { select: { id: true, isActive: true, user: { select: { fullName: true } } } }, branch: { select: { id: true } } } },
+          schedule: { select: { doctorId: true, branchId: true, workDate: true, status: true, doctor: { select: { id: true, isActive: true, user: { select: { fullName: true } } } } } },
         }
       });
       if (!slot) throw new NotFoundException('Không tìm thấy khung giờ khám mới');
@@ -296,6 +299,6 @@ export class AppointmentsService {
         success: true, appointmentId, newDoctorName: slot.schedule.doctor.user.fullName,
         newDate: slot.schedule.workDate.toISOString().slice(0, 10), newTime: slot.startTime.toISOString().slice(11, 16)
       };
-    }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
+    });
   }
 }

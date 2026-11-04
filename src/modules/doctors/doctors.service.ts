@@ -1,4 +1,4 @@
-import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ForbiddenException, Injectable } from '@nestjs/common';
 import { PrismaService } from '../../infrastructure/database/prisma/prisma.service.js';
 import { isUuid, parseDate as parseDateUtil, parseDateRange } from '../../common/utils/staff.utils.js';
 
@@ -19,7 +19,7 @@ export class DoctorsService {
 
   async doctors(
     branchIdentifier?: string,
-    departmentId?: number,
+    _departmentId?: number, // Legacy positional argument; keep specialtyId and later arguments aligned.
     specialtyId?: number,
     q?: string,
     featuredOnly = false,

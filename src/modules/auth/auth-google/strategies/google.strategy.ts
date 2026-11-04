@@ -12,7 +12,7 @@ import { SocialType } from '../../../../common/utils/social.type.js';
 export class GoogleStrategy extends PassportStrategy(Strategy) {
   constructor(
     @Inject(Services.AUTH) private readonly authService: IAuthService,
-    private readonly configService: ConfigService<AllConfigType>,
+    configService: ConfigService<AllConfigType>,
   ) {
     super({
       clientID:
@@ -30,7 +30,7 @@ export class GoogleStrategy extends PassportStrategy(Strategy) {
     });
   }
 
-  async validate(accessToken: string, refreshToken: string, profile: Profile) {
+  async validate(_accessToken: string, _refreshToken: string, profile: Profile) {
     const primaryEmail = profile.emails?.[0]?.value;
 
     // Ưu tiên displayName để giữ đúng trật tự họ tên tiếng Việt
