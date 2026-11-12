@@ -20,10 +20,7 @@ export class AuthZaloService implements IAuthZaloService {
   private readonly logger = new Logger(AuthZaloService.name);
 
   async getProfileByToken(loginDto: AuthZaloLoginDto): Promise<SocialType> {
-    const isMock =
-      loginDto.accessToken.startsWith('mock_') ||
-      loginDto.accessToken.startsWith('test_') ||
-      process.env.NODE_ENV !== 'production';
+    const isMock = process.env.NODE_ENV !== 'production';
 
     // 1. Thử gọi Zalo Graph API thật nếu token không phải mock rõ ràng
     if (!loginDto.accessToken.startsWith('mock_')) {

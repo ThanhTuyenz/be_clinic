@@ -24,7 +24,7 @@ export class ScheduleAvailabilityService {
     const today = new Date(Date.now() + 7 * 60 * 60 * 1000).toISOString().slice(0, 10);
     const currentTime = new Date(Date.now() + 7 * 60 * 60 * 1000).toISOString().slice(11, 19);
     const scoped = !['CHAIN_MANAGER', 'DOCTOR'].includes(actor.role);
-    const staffBranches = actor.branchAssignments.map(link => link.branchId);
+    const staffBranches = actor.branchId ? [actor.branchId] : [];
     if (scoped && (!staffBranches.length || (options.branchId && !staffBranches.includes(options.branchId)))) {
       throw new ForbiddenException('Chỉ được xem lịch tại chi nhánh phụ trách');
     }

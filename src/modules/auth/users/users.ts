@@ -4,6 +4,7 @@ import { User } from './entities/user.entity';
 import { NullableType } from 'src/common/utils/types/nullable.type';
 import { IPaginationOptions } from 'src/common/utils/types/pagination-options';
 import { DoctorProfileDto } from './dtos/doctor-profile.dto';
+import type { OAuthProvider, SocialType } from '../../../common/utils/social.type';
 
 export type UserUpdate = Omit<Partial<User>, 'customPermissions'> & DoctorProfileDto & {
   customPermissions?: unknown[] | null;
@@ -36,6 +37,7 @@ export interface IUsersService {
   createUser(createUserDto: CreateUserDto): Promise<User>;
   findOneUser(options: EntityCondition<User>): Promise<NullableType<User>>;
   findByEmail(email: string): Promise<NullableType<User>>;
+  resolveOAuthUser(provider: OAuthProvider, profile: SocialType): Promise<User>;
   /**
    * Tìm user theo nhiều biến thể số điện thoại trong 1 query (thay thế N+1 queries).
    * @param variants Mảng các biến thể SĐT (e.g., ['0912...', '+84912...'])
@@ -47,7 +49,4 @@ export interface IUsersService {
   updateUser(id: User['id'], payload: UserUpdate): Promise<User>;
   deleteUser(id: User['id']): Promise<void>;
   saveUser(user: User): Promise<User>;
-  assignRole(userId: string, roleId: string): Promise<User>;
-  removeRole(userId: string): Promise<User>;
 }
-

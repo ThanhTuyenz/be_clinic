@@ -160,10 +160,10 @@ export class SpecialtiesService {
         specialties: { some: { specialtyId } },
         user: {
           ...(term ? { fullName: { contains: term, mode: 'insensitive' } } : {}),
-          ...(effectiveBranchId ? { branchAssignments: { some: { branchId: effectiveBranchId } } } : {}),
+          ...(effectiveBranchId ? { branchId: effectiveBranchId } : {}),
         },
       },
-      orderBy: [{ isFeatured: 'desc' }, { ratingAverage: 'desc' }, { user: { fullName: 'asc' } }],
+      orderBy: [{ isFeatured: 'desc' }, { experienceYears: 'desc' }, { user: { fullName: 'asc' } }],
       take: 50,
       select: {
         id: true,
@@ -173,8 +173,6 @@ export class SpecialtiesService {
         avatarUrl: true,
         consultationFee: true,
         onlineConsultationFee: true,
-        ratingAverage: true,
-        ratingCount: true,
         isFeatured: true,
         specialties: {
           select: {
@@ -185,13 +183,7 @@ export class SpecialtiesService {
         user: {
           select: {
             fullName: true,
-            branchAssignments: {
-              where: effectiveBranchId ? { branchId: effectiveBranchId } : undefined,
-              select: {
-                isPrimary: true,
-                branch: { select: { id: true, code: true, slug: true, name: true, address: true } },
-              },
-            },
+            branch: { select: { id: true, code: true, slug: true, name: true, address: true } },
           },
         },
       },
@@ -201,7 +193,7 @@ export class SpecialtiesService {
       fullName: user.fullName || 'Bác sĩ',
       consultationFee: Number(doctor.consultationFee),
       onlineConsultationFee: Number(doctor.onlineConsultationFee ?? doctor.consultationFee),
-      branchAssignments: user.branchAssignments,
+      branchAssignments: user.branch ? [{ isPrimary: true, branch: user.branch }] : [],
     }));
   }
 
@@ -237,7 +229,7 @@ export class SpecialtiesService {
    */
   async getHomepage(branchIdentifier?: string) {
     const effectiveBranchId = await resolveBranchId(this.prisma, branchIdentifier);
-    const cacheKey = `cache:public:homepage:${effectiveBranchId || 'all'}`;
+    const cacheKey = `cache:public:homepage:v3:${effectiveBranchId || 'all'}`;
 
     if (this.redis.isEnabled()) {
       try {
@@ -250,7 +242,8 @@ export class SpecialtiesService {
       }
     }
 
-    const [specialties, branches, healthPackagesRes, specialtyPackagesRes, featuredDoctors] = await Promise.all([
+    let featuredDoctorsUnavailable = false;
+    const [specialties, branches, healthPackagesRes, specialtyPackagesRes, featuredPackagesRes, featuredDoctors] = await Promise.all([
       this.getSpecialties(),
       this.prisma.branch.findMany({
         where: { isActive: true },
@@ -268,16 +261,17 @@ export class SpecialtiesService {
       }),
       this.packagesService.getPackages({ type: 'health-package', limit: 12, needPagination: false }),
       this.packagesService.getPackages({ type: 'specialty', limit: 12, needPagination: false }),
+      this.packagesService.getPackages({ type: 'all', sortBy: 'views-desc', limit: 12, branchId: effectiveBranchId }),
       this.prisma.doctor.findMany({
         where: {
           isActive: true,
           isFeatured: true,
           ...(effectiveBranchId
-            ? { user: { branchAssignments: { some: { branchId: effectiveBranchId } } } }
+            ? { user: { branchId: effectiveBranchId } }
             : {}),
         },
         take: 8,
-        orderBy: [{ ratingAverage: 'desc' }],
+        orderBy: [{ experienceYears: 'desc' }],
         select: {
           id: true,
           academicRank: true,
@@ -286,10 +280,15 @@ export class SpecialtiesService {
           avatarUrl: true,
           consultationFee: true,
           onlineConsultationFee: true,
-          ratingAverage: true,
-          ratingCount: true,
           isFeatured: true,
-          user: { select: { fullName: true } },
+          user: {
+            select: {
+              fullName: true,
+              branch: {
+                select: { id: true, code: true, slug: true, name: true, address: true, phoneNumber: true },
+              },
+            },
+          },
           specialties: {
             select: {
               isPrimary: true,
@@ -297,6 +296,10 @@ export class SpecialtiesService {
             },
           },
         },
+      }).catch((error: unknown) => {
+        featuredDoctorsUnavailable = true;
+        this.logger.error('Không thể tải bác sĩ nổi bật trên trang chủ', error instanceof Error ? error.stack : String(error));
+        return [];
       }),
     ]);
 
@@ -316,14 +319,14 @@ export class SpecialtiesService {
         consultationFee: Number(d.consultationFee) || 0,
         onlineConsultationFee: Number(d.onlineConsultationFee ?? d.consultationFee) || 0,
         avatarUrl: d.avatarUrl,
-        ratingAverage: Number(d.ratingAverage) || 5.0,
-        ratingCount: d.ratingCount,
         isFeatured: d.isFeatured,
         specialties: d.specialties,
-        branchAssignments: [],
+        branch: d.user?.branch ?? null,
+        branchAssignments: d.user?.branch ? [{ isPrimary: true, branch: d.user.branch }] : [],
       })),
       specialtyPackages: specialtyPackagesRes.data || [],
       healthPackages: healthPackagesRes.data || [],
+      featuredPackages: featuredPackagesRes.data || [],
       bookingMethods: [],
       stats: {
         doctorCount: featuredDoctors.length,
@@ -334,9 +337,9 @@ export class SpecialtiesService {
       },
     };
 
-    if (this.redis.isEnabled()) {
+    if (this.redis.isEnabled() && !featuredDoctorsUnavailable) {
       try {
-        await this.redis.set(cacheKey, result, 600); // 10 minutes cache
+        await this.redis.set(cacheKey, result, 60); // Keep the most-viewed packages current.
       } catch (err: any) {
         this.logger.warn(`Redis set failed for homepage cache: ${err?.message}`);
       }

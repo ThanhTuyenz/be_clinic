@@ -3,6 +3,7 @@ import { Gender, Prisma } from '@prisma/client';
 import { getStaffUser } from '../../common/utils/staff.utils.js';
 import { PrismaService } from '../../infrastructure/database/prisma/prisma.service.js';
 import { resolvePatientCode } from './patient-code.js';
+import { formatPatientAddress, normalizePatientAddressInput } from './patient-address.js';
 
 @Injectable()
 export class PatientDirectoryService {
@@ -40,7 +41,9 @@ export class PatientDirectoryService {
           healthInsuranceNumber: true,
           dateOfBirth: true,
           gender: true,
-          address: true,
+          streetAddress: true,
+          wardName: true,
+          provinceName: true,
           createdAt: true,
           account: { select: { id: true, email: true, phoneNumber: true } },
         },
@@ -54,6 +57,7 @@ export class PatientDirectoryService {
     return {
       patients: rows.map((row) => ({
         ...row,
+        address: formatPatientAddress(row),
         patientCode: row.patientCode || row.nationalId || row.id,
         phone: row.phoneNumber || row.account?.phoneNumber || '',
         email: row.account?.email || '',
@@ -85,6 +89,7 @@ export class PatientDirectoryService {
     return {
       patient: {
         ...row,
+        address: formatPatientAddress(row),
         patientCode: row.patientCode || row.nationalId || row.id,
         phone: row.phoneNumber || row.account?.phoneNumber,
         email: row.account?.email,
@@ -115,7 +120,14 @@ export class PatientDirectoryService {
           gender: patient.gender && Object.values(Gender).includes(String(patient.gender).toUpperCase() as Gender)
             ? String(patient.gender).toUpperCase() as Gender
             : null,
-          address: patient.address || null,
+          ...normalizePatientAddressInput({
+            streetAddress: patient.streetAddress,
+            wardCode: patient.wardCode,
+            wardName: patient.wardName,
+            provinceCode: patient.provinceCode,
+            provinceName: patient.provinceName,
+            address: patient.address,
+          }),
         },
       })
       patientProfileId = created.id

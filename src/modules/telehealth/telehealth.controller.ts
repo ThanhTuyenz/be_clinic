@@ -1,4 +1,4 @@
-import { Controller, Get, Param, Post, Body, Req } from '@nestjs/common';
+import { Controller, Get, Param, Post, Req } from '@nestjs/common';
 import { Request } from 'express';
 import { ApiOperation, ApiTags } from '@nestjs/swagger';
 import { SkipPermissions } from '../../common/decorators/index.js';
@@ -28,25 +28,21 @@ export class TelehealthController {
   @ApiOperation({ summary: 'Bác sĩ phụ trách kết thúc phiên tư vấn trực tuyến và lưu hồ sơ' })
   async endRoomSession(
     @Param('appointmentId') appointmentId: string,
-    @Body() body: { diagnosis?: string; prescriptionNotes?: string; endedByUserId?: string },
     @Req() req: Request,
   ) {
     const session = await this.telehealthService.endRoomSession(appointmentId, {
-      diagnosis: body.diagnosis,
-      prescriptionNotes: body.prescriptionNotes,
       endedByUserId: req.user!.id,
-      endReason: 'REST',
     }, req.user!.role);
     this.telehealthGateway.notifyRoomEnded(appointmentId, 'DOCTOR');
     return {
       success: true,
-      message: 'Đã kết thúc buổi tư vấn và lưu hồ sơ bệnh án thành công.',
+      message: 'Đã kết thúc buổi tư vấn và lưu lịch sử trò chuyện thành công.',
       data: session,
     };
   }
 
   @Get('room/:appointmentId/session')
-  @ApiOperation({ summary: 'Lấy lịch sử phiên tư vấn (kết quả khám, đơn thuốc, nội dung chat)' })
+  @ApiOperation({ summary: 'Lấy lịch sử phiên tư vấn (thời gian và nội dung chat)' })
   async getSessionHistory(@Req() req: Request, @Param('appointmentId') appointmentId: string) {
     const data = await this.telehealthService.getSessionHistory(appointmentId, req.user!.id, req.user!.role);
     return {

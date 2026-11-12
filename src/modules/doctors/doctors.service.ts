@@ -40,12 +40,12 @@ export class DoctorsService {
         specialties: specialtyId ? { some: { specialtyId } } : undefined,
         user: {
           fullName: term ? { contains: term, mode: 'insensitive' } : undefined,
-          ...(branchId ? { branchAssignments: { some: { branchId } } } : {}),
+          ...(branchId ? { branchId } : {}),
         },
       },
       orderBy: featuredOnly
-        ? [{ ratingAverage: 'desc' }, { user: { fullName: 'asc' } }]
-        : [{ isFeatured: 'desc' }, { ratingAverage: 'desc' }, { user: { fullName: 'asc' } }],
+        ? [{ experienceYears: 'desc' }, { user: { fullName: 'asc' } }]
+        : [{ isFeatured: 'desc' }, { experienceYears: 'desc' }, { user: { fullName: 'asc' } }],
       take: effectiveLimit,
       select: {
         id: true,
@@ -56,19 +56,11 @@ export class DoctorsService {
         consultationFee: true,
         onlineConsultationFee: true,
         isOnlineConsultationEnabled: true,
-        ratingAverage: true,
-        ratingCount: true,
         isFeatured: true,
         user: {
           select: {
             fullName: true,
-            branchAssignments: {
-              where: branchId ? { branchId } : undefined,
-              select: {
-                isPrimary: true,
-                branch: { select: { id: true, name: true, address: true } },
-              },
-            },
+            branch: { select: { id: true, name: true, address: true } },
           },
         },
         specialties: {
@@ -85,7 +77,7 @@ export class DoctorsService {
       fullName: user.fullName || 'Bác sĩ',
       consultationFee: Number(doctor.consultationFee),
       onlineConsultationFee: Number(doctor.onlineConsultationFee ?? doctor.consultationFee),
-      branchAssignments: user.branchAssignments,
+      branchAssignments: user.branch ? [{ isPrimary: true, branch: user.branch }] : [],
     }));
   }
 

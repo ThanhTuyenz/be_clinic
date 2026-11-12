@@ -37,6 +37,7 @@ interface PackageCardRecommendation {
   branchId?: string;
   specialtyId?: number;
   bookingMethodCode?: string;
+  branches?: Array<{ id: string; name: string; receptionHours: Array<{ days: number[]; startTime: string; endTime: string }> }>;
 }
 
 export interface AiAgentBookingProposal {
@@ -64,6 +65,7 @@ export interface AiAgentChatResponse {
   step: 'GREETING' | 'COLLECTING_INFO' | 'PROPOSED' | 'ERROR';
   proposal?: AiAgentBookingProposal | null;
   proposedPackages?: PackageCardRecommendation[];
+  selectPackageForSchedule?: boolean;
   doctors?: DoctorCardRecommendation[];
   quickSuggestions?: string[];
   showAppointments?: boolean;

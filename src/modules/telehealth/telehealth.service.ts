@@ -51,7 +51,7 @@ export class TelehealthService {
     const role: 'DOCTOR' | 'PATIENT' =
       user.role === 'DOCTOR' || Boolean(user.doctor) ? 'DOCTOR' : 'PATIENT';
     const appointment = await this.authorizeAppointment(appointmentId, userId, role);
-    if (!['CONFIRMED', 'CHECKED_IN', 'IN_EXAMINATION'].includes(appointment.status)) {
+    if (!['CONFIRMED', 'CHECKED_IN'].includes(appointment.status)) {
       throw new ForbiddenException('Lịch hẹn chưa được xác nhận hoặc đã kết thúc.');
     }
     if (
@@ -297,7 +297,7 @@ export class TelehealthService {
     const text = typeof message.text === 'string' ? message.text.trim() : '';
     if (!text || text.length > 2000) throw new BadRequestException('Tin nhắn phải có từ 1 đến 2000 ký tự.');
     const appointment = await this.authorizeAppointment(appointmentId, message.senderId, message.senderRole);
-    if (!['CONFIRMED', 'CHECKED_IN', 'IN_EXAMINATION'].includes(appointment.status)) {
+    if (!['CONFIRMED', 'CHECKED_IN'].includes(appointment.status)) {
       throw new ConflictException('Phiên tư vấn chưa bắt đầu hoặc đã kết thúc.');
     }
     const savedMessage = { ...message, id: randomUUID(), text, timestamp: new Date().toISOString() };
@@ -310,7 +310,7 @@ export class TelehealthService {
    */
   async endRoomSession(
     appointmentId: string,
-    data?: { diagnosis?: string; prescriptionNotes?: string; endedByUserId?: string; endReason?: string },
+    data?: { endedByUserId?: string },
     role?: string,
   ) {
     if (!data?.endedByUserId) throw new ForbiddenException('Thiếu người kết thúc phiên tư vấn.');
@@ -350,21 +350,13 @@ export class TelehealthService {
             appointmentId,
             startedAt: sessionStartedAt,
             endedAt: now,
-            durationSeconds: sessionDurationSeconds,
-            diagnosis: data.diagnosis?.trim() || null,
-            prescriptionNotes: data.prescriptionNotes?.trim() || null,
             chatMessages,
             endedByUserId: data.endedByUserId,
-            endReason: data.endReason || 'CALL_ENDED',
           },
           update: {
             chatMessages,
             endedAt: now,
-            durationSeconds: sessionDurationSeconds,
-            diagnosis: data.diagnosis?.trim() || undefined,
-            prescriptionNotes: data.prescriptionNotes?.trim() || undefined,
             endedByUserId: data.endedByUserId,
-            endReason: data.endReason || 'CALL_ENDED',
           },
         });
         if (current.status !== 'COMPLETED') {
@@ -401,7 +393,7 @@ export class TelehealthService {
       }
 
       this.logger.log(
-        `[Telehealth] Session saved to DB for appointment ${appointmentId}. Duration: ${session.durationSeconds}s, Messages: ${Array.isArray(session.chatMessages) ? session.chatMessages.length : 0}`,
+        `[Telehealth] Session saved to DB for appointment ${appointmentId}. Messages: ${Array.isArray(session.chatMessages) ? session.chatMessages.length : 0}`,
       );
 
       return session;
@@ -412,7 +404,7 @@ export class TelehealthService {
   }
 
   /**
-   * Lấy lịch sử ca tư vấn đã hoàn thành (kết quả khám + đơn thuốc + tin nhắn chat)
+   * Lấy thời gian và tin nhắn của ca tư vấn đã hoàn thành.
    */
   async getSessionHistory(appointmentId: string, userId: string, role?: string) {
     await this.authorizeAppointment(appointmentId, userId, role);
@@ -457,9 +449,9 @@ export class TelehealthService {
       appointmentId: session.appointmentId,
       startedAt: session.startedAt,
       endedAt: session.endedAt,
-      durationSeconds: session.durationSeconds,
-      diagnosis: session.diagnosis,
-      prescriptionNotes: session.prescriptionNotes,
+      durationSeconds: session.startedAt && session.endedAt
+        ? Math.max(0, Math.round((session.endedAt.getTime() - session.startedAt.getTime()) / 1000))
+        : null,
       chatMessages: session.chatMessages,
       doctor: doctor?.user
         ? {

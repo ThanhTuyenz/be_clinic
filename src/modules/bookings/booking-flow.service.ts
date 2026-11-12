@@ -17,8 +17,6 @@ const BOOKING_DOCTOR_SELECT = {
   consultationFee: true,
   onlineConsultationFee: true,
   isOnlineConsultationEnabled: true,
-  ratingAverage: true,
-  ratingCount: true,
   isFeatured: true,
   user: { select: { fullName: true } },
   specialties: {
@@ -259,35 +257,30 @@ export class BookingFlowService {
           isActive: true,
           ...(requiredMethodCode === 'ONLINE_CONSULTATION' ? { isOnlineConsultationEnabled: true } : {}),
           ...(effectiveBranchId
-            ? { user: { branchAssignments: { some: { branchId: effectiveBranchId } } } }
+            ? { user: { branchId: effectiveBranchId } }
             : {}),
           ...(parsedSpecialtyId
             ? { specialties: { some: { specialtyId: parsedSpecialtyId } } }
             : {}),
         },
-        orderBy: [{ isFeatured: 'desc' }, { ratingAverage: 'desc' }, { user: { fullName: 'asc' } }],
+        orderBy: [{ isFeatured: 'desc' }, { experienceYears: 'desc' }, { user: { fullName: 'asc' } }],
         select: {
           ...BOOKING_DOCTOR_SELECT,
           user: {
             select: {
               fullName: true,
-              branchAssignments: {
-                select: {
-                  isPrimary: true,
-                  branch: { select: { id: true, code: true, slug: true, name: true, address: true, isActive: true } },
-                },
-              },
+              branch: { select: { id: true, code: true, slug: true, name: true, address: true, isActive: true } },
             },
           },
         },
       });
 
-      const formattedDoctors = doctors.filter((d) => d.user.branchAssignments.length === 1 && d.user.branchAssignments[0].branch.isActive).map((d) => {
-        const primaryBranch = d.user.branchAssignments[0].branch;
+      const formattedDoctors = doctors.filter((d) => d.user.branch?.isActive).map((d) => {
+        const primaryBranch = d.user.branch;
         return {
           ...this.formatBookingDoctor(d),
           branchId: primaryBranch?.id || '',
-          branches: d.user?.branchAssignments.map((b) => b.branch) || [],
+          branches: primaryBranch ? [primaryBranch] : [],
         };
       });
 
@@ -447,11 +440,11 @@ export class BookingFlowService {
         where: {
           isActive: true,
           ...(effectiveBranchId
-            ? { user: { branchAssignments: { some: { branchId: effectiveBranchId } } } }
+            ? { user: { branchId: effectiveBranchId } }
             : {}),
         },
         take: 50,
-        orderBy: [{ isFeatured: 'desc' }, { ratingAverage: 'desc' }],
+        orderBy: [{ isFeatured: 'desc' }, { experienceYears: 'desc' }],
         select: BOOKING_DOCTOR_SELECT,
       }),
     ]);
@@ -592,8 +585,6 @@ export class BookingFlowService {
       consultationFee: Number(d.consultationFee) || 0,
       onlineConsultationFee: Number(d.onlineConsultationFee ?? d.consultationFee) || 0,
       isOnlineConsultationEnabled: d.isOnlineConsultationEnabled,
-      ratingAverage: Number(d.ratingAverage) || 5.0,
-      ratingCount: d.ratingCount,
       isFeatured: d.isFeatured,
       specialtyID: primarySpec ? String(primarySpec.id) : '',
       specialtyName: primarySpec?.name || '',

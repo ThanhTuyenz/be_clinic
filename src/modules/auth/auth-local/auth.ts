@@ -2,8 +2,7 @@ import { NullableType } from 'src/common/utils/types/nullable.type';
 import { AuthEmailLoginDto, AuthRegisterDto } from './dtos/index.js';
 import { LoginResponseType, JwtPayloadType, JwtRefreshPayloadType } from './types/index.js';
 import { User } from '../users/entities/user.entity';
-import { AuthProvidersEnum } from './enums/auth-providers.enum';
-import { SocialType } from '../../../common/utils/social.type';
+import { OAuthProvider, SocialType } from '../../../common/utils/social.type';
 
 export interface IAuthService {
   validateLogin(loginDto: AuthEmailLoginDto): Promise<LoginResponseType>;
@@ -16,7 +15,7 @@ export interface IAuthService {
   forgotPassword(email: string): Promise<void>;
   resetPassword(hash: string, password: string): Promise<void>;
   validateSocialLogin(
-    authProvider: AuthProvidersEnum,
+    authProvider: OAuthProvider,
     socialData: SocialType,
   ): Promise<LoginResponseType>;
   refreshToken(

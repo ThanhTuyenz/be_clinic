@@ -14,30 +14,12 @@ function reciprocalRankFusion(lists: string[][], constant = 60): Map<string, num
 @Injectable()
 export class SearchRankingService {
   private readonly logger = new Logger(SearchRankingService.name);
-  private readonly queryVectors = new Map<string, { expiresAt: number; vector: number[] }>();
-  private readonly pending = new Map<string, Promise<number[] | null>>();
   private readonly minSimilarity = 0.82;
   private readonly vectorWindow = 50;
 
   constructor(private readonly embedding: EmbeddingService) {}
 
-  private async queryVector(query: string): Promise<number[] | null> {
-    const key = query.trim().toLowerCase().replace(/\s+/g, ' ');
-    const cached = this.queryVectors.get(key);
-    if (cached && cached.expiresAt > Date.now()) return cached.vector;
-    if (this.pending.has(key)) return this.pending.get(key)!;
-    const request = this.embedding.embedText(key).then(vector => {
-      if (vector?.length) {
-        if (this.queryVectors.size >= 200) this.queryVectors.delete(this.queryVectors.keys().next().value!);
-        this.queryVectors.set(key, { vector, expiresAt: Date.now() + 300_000 });
-      }
-      return vector;
-    }).catch(() => null);
-    this.pending.set(key, request);
-    try { return await request; } finally { this.pending.delete(key); }
-  }
-
-  async rank(query: string, packages: PackageForRetrieval[], limit = 10): Promise<ScoredPackage[]> {
+  async rank(query: string, packages: PackageForRetrieval[], limit = 10, options: { semantic?: boolean } = {}): Promise<ScoredPackage[]> {
     const intent = parseSearchIntent(query);
     if ((!intent.text && !intent.hasConstraints) || !packages.length) return [];
     const candidates = packages.filter(pkg => matchesSearchConstraints(intent, pkg)
@@ -57,10 +39,10 @@ export class SearchRankingService {
     const lexical = keyword.filter(item => item.score > 0)
       .sort((a, b) => b.score - a.score || tieBreak(a.package, b.package));
     let semantic: ScoredPackage[] = [];
-    if (intent.text) {
+    if (intent.text && options.semantic !== false) {
       let hits: ScoredPackage[] | null = null;
       try {
-        const vector = await this.queryVector(query);
+        const vector = await this.embedding.embedSearchQuery(query);
         if (vector) hits = await this.embedding.retrieveVectorCandidates(vector, candidates, Math.min(this.vectorWindow, candidates.length));
       } catch { /* Keep usable lexical results during a vector outage. */ }
       if (hits === null && !lexical.length) throw new ServiceUnavailableException('Không thể tải kết quả tìm kiếm. Vui lòng thử lại.');

@@ -41,7 +41,7 @@ export function isUuid(value: string): boolean {
 export async function getStaffUser(prisma: PrismaService, userId: string) {
   const user = await prisma.user.findUnique({
     where: { id: userId },
-    select: { id: true, role: true, branchAssignments: { select: { branchId: true } } },
+    select: { id: true, role: true, branchId: true },
   })
   if (!user || user.role === 'PATIENT') {
     throw new ForbiddenException('Chi nhan vien phong kham moi co quyen truy cap')
@@ -50,15 +50,14 @@ export async function getStaffUser(prisma: PrismaService, userId: string) {
 }
 
 export function resolveBranchId(
-  user: { role: string; branchAssignments: { branchId: string }[] },
+  user: { role: string; branchId: string | null },
   requestedBranchId?: string,
 ): string | undefined {
-  const branchIds = user.branchAssignments.map((b) => b.branchId)
   if (user.role === 'CHAIN_MANAGER') {
     return requestedBranchId && requestedBranchId !== 'all' ? requestedBranchId : undefined
   }
-  if (requestedBranchId && requestedBranchId !== 'all' && branchIds.includes(requestedBranchId)) {
+  if (requestedBranchId && requestedBranchId !== 'all' && user.branchId === requestedBranchId) {
     return requestedBranchId
   }
-  return branchIds[0] || undefined
+  return user.branchId || undefined
 }

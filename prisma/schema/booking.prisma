@@ -148,12 +148,8 @@ model TelehealthSession {
   appointmentId     String       @unique @map("appointment_id") @db.Uuid
   startedAt         DateTime?    @map("started_at") @db.Timestamptz(3)
   endedAt           DateTime?    @map("ended_at") @db.Timestamptz(3)
-  durationSeconds   Int          @default(0) @map("duration_seconds")
-  diagnosis         String?      @db.Text
-  prescriptionNotes String?      @map("prescription_notes") @db.Text
   chatMessages      Json?        @map("chat_messages")
   endedByUserId     String?      @map("ended_by_user_id") @db.Uuid
-  endReason         String?      @map("end_reason") @db.VarChar(50)
   createdAt         DateTime     @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt         DateTime     @updatedAt @map("updated_at") @db.Timestamptz(3)
 

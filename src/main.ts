@@ -20,7 +20,10 @@ import type { AppConfig } from './config/config.type.js'
 
 async function bootstrap() {
   try {
-    const app = await NestFactory.create<NestExpressApplication>(AppModule, { rawBody: true })
+    const logLevels = (process.env.LOG_LEVEL || 'log')
+      .split(',')
+      .map(l => l.trim()) as ('log' | 'error' | 'warn' | 'debug' | 'verbose')[];
+    const app = await NestFactory.create<NestExpressApplication>(AppModule, { rawBody: true, logger: logLevels })
     const expressApp = app.getHttpAdapter().getInstance()
     const configService = app.get(ConfigService)
     const { apiPrefix, frontendDomain, port, nodeEnv } = configService.getOrThrow<AppConfig>('app')

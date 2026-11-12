@@ -6,11 +6,12 @@ import { mapPackageForRetrieval, PackageForRetrieval } from '../../../infrastruc
 import { SearchRankingService } from './search-ranking.service.js';
 import { AnalyticsService, type SearchContext } from '../../analytics/analytics.service.js';
 import { vietnamDateKey } from '../../analytics/analytics-time.js';
-import { BehaviorTelemetryService } from '../../recommendations/services/behavior-telemetry.service.js';
+import { RecommendationService } from '../../recommendations/recommendation.service.js';
 import { TrackingActionType } from '../../recommendations/recommendation.dto.js';
 
 export interface SemanticSearchResult {
   query: string;
+  behaviorRecorded?: boolean;
   searchId?: string;
   branchId?: string;
   total: number;
@@ -35,7 +36,6 @@ export interface SemanticSearchResult {
     specialties: string[];
     experienceYears: number;
     avatarUrl: string | null;
-    ratingAverage: number;
   }>;
   branches: Array<{
     id: string;
@@ -56,7 +56,7 @@ export class SearchService {
     private readonly redis: RedisService,
     private readonly ranking: SearchRankingService,
     private readonly analytics: AnalyticsService,
-    private readonly behaviorTelemetry: BehaviorTelemetryService,
+    private readonly recommendations: RecommendationService,
   ) { }
 
   /**
@@ -74,16 +74,21 @@ export class SearchService {
     const tracked = await this.analytics.recordSearch(query, { ...context, branchId }, result, performance.now() - start)
       .catch(() => { this.logger.warn('Không thể lưu lượt tìm kiếm'); return undefined; });
     result.searchId = tracked?.id;
+    result.behaviorRecorded = false;
     if (tracked?.created && !result.partial) {
       setImmediate(() => void this.recordTelemetryAsync(query, result.total > 0)
         .catch(() => this.logger.debug('Không thể cập nhật xếp hạng tìm kiếm')));
     }
     if (tracked?.created && !result.partial && query.trim().length >= 2 && (context.sessionId || context.accountId)) {
-      // Record the user's words, not specialties inferred from RRF results.
-      // Recommendation interprets this intent through its unchanged retrieval policy.
-      await this.behaviorTelemetry.trackUserBehavior({
+      // Reuse the actual search ranking for behavior recommendations.
+      const behavior = await this.recommendations.trackUserBehavior({
         sessionId: context.sessionId, actionType: TrackingActionType.SEARCH, searchQuery: query.trim(),
-      }, context.accountId).catch(() => this.logger.debug('Không thể cập nhật hành vi tìm kiếm'));
+        searchPackageIds: result.packages.map(pkg => pkg.id),
+      }, context.accountId).catch(() => {
+        this.logger.debug('Không thể cập nhật hành vi tìm kiếm');
+        return undefined;
+      });
+      result.behaviorRecorded = behavior?.recorded === true;
     }
     return result;
   }
@@ -178,14 +183,13 @@ export class SearchService {
       const matched = await this.prisma.doctor.findMany({
         where: {
           isActive: true,
-          ...(branchId ? { user: { branchAssignments: { some: { branchId } } } } : {}),
+          ...(branchId ? { user: { branchId } } : {}),
         },
         select: {
           id: true,
           academicRank: true,
           experienceYears: true,
           avatarUrl: true,
-          ratingAverage: true,
           consultationFee: true,
           user: { select: { fullName: true } }, // Chỉ lấy fullName, loại bỏ phoneNumber và email nhạy cảm
           specialties: { select: { specialty: { select: { name: true } } } },
@@ -206,7 +210,6 @@ export class SearchService {
         specialties: doc.specialties.map((s) => s.specialty?.name).filter(Boolean) as string[],
         experienceYears: doc.experienceYears || 0,
         avatarUrl: doc.avatarUrl || null,
-        ratingAverage: doc.ratingAverage,
       }));
     } catch (err: any) {
       this.logger.warn(`[SemanticSearch] searchDoctors error: ${err?.message}`);

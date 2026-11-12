@@ -21,7 +21,7 @@ export class ReceptionBookingService {
   async createReception(userId: string, input: CreateReceptionAppointmentDto) {
     const user = await getStaffUser(this.prisma, userId);
     if (!RECEPTION_ROLES.includes(user.role)) throw new ForbiddenException('Không có quyền đặt lịch tại quầy');
-    const branchIds = user.branchAssignments.map(link => link.branchId);
+    const branchIds = user.branchId ? [user.branchId] : [];
     if (user.role !== 'CHAIN_MANAGER' && (!branchIds.length || (input.branchId && !branchIds.includes(input.branchId)))) {
       throw new ForbiddenException('Chỉ được tạo lịch tại chi nhánh phụ trách');
     }
@@ -97,7 +97,6 @@ export class ReceptionBookingService {
         data: {
           appointmentId, issuedBranchId: slot.schedule.branchId,
           subtotal: service.price, totalAmount: service.price,
-          items: { create: { description: service.name, quantity: 1, unitPrice: service.price, amount: service.price } },
         },
       });
       return tx.appointment.findUniqueOrThrow({ where: { id: appointmentId }, include: appointmentInclude() });

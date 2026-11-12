@@ -1,7 +1,6 @@
 import type { FunctionTool } from 'openai/resources/responses/responses';
 
 const text = { type: ['string', 'null'] };
-const methods = ['CONSULTATION', 'ONLINE_CONSULTATION', 'SPECIALTY_EXAM', 'AFTER_HOURS'];
 const tool = (name: string, description: string, properties: Record<string, unknown>): FunctionTool => ({
   type: 'function', name, description, strict: true,
   parameters: { type: 'object', properties, required: Object.keys(properties), additionalProperties: false },
@@ -12,17 +11,11 @@ export const AI_TOOLS = [
     appointmentReference: text, refresh: { type: 'boolean' },
   }),
   tool('showMyAppointments', 'Mở danh sách lịch hẹn trong chat để người dùng xem, hủy hoặc đổi lịch. Yêu cầu đăng nhập và bấm xác nhận trên giao diện; tool này không thay đổi lịch.', {}),
-  tool('getClinicCatalog', 'Lấy cơ sở, chuyên khoa và hình thức khám hiện có. Dùng ID từ kết quả này cho các lần tra cứu sau.', {}),
   tool('searchServicePackages', 'Tìm gói khám/dịch vụ và giá thực tế theo từ khóa.', {
     query: { type: 'string' }, branchId: text, specialtyId: text,
   }),
   tool('searchDoctors', 'Tìm bác sĩ theo tên, chuyên khoa, cơ sở và hình thức khám.', {
     query: text, branchId: text, specialtyId: text,
     bookingMethodCode: { type: 'string', enum: ['CONSULTATION', 'ONLINE_CONSULTATION'] },
-  }),
-  tool('searchAvailableSlots', 'Tìm lịch còn trống. Chọn đúng cơ sở và hình thức; dịch vụ cần servicePackageId. Ngày null lấy ngày khả dụng sớm nhất. Kết quả chỉ là đề xuất, chưa giữ chỗ.', {
-    branchId: { type: 'string' }, specialtyId: text, doctorId: text, servicePackageId: text, date: text, startTime: text,
-    bookingMethodCode: { type: 'string', enum: methods },
-    period: { type: ['string', 'null'], enum: ['MORNING', 'AFTERNOON', 'EVENING', null] },
   }),
 ];

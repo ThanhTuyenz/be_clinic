@@ -188,7 +188,7 @@ export class AppointmentConfirmationService {
     });
     if (!row) throw new NotFoundException('Không tìm thấy lịch hẹn');
     const isTelehealth = Boolean(row.telehealthSession || row.bookingMethod?.code === 'ONLINE_CONSULTATION');
-    if (!(isTelehealth ? ['CONFIRMED', 'CHECKED_IN', 'IN_EXAMINATION', 'COMPLETED'] : ['CONFIRMED', 'CHECKED_IN']).includes(row.status)) throw new ConflictException('Lịch hẹn chưa được xác nhận');
+    if (!(isTelehealth ? ['CONFIRMED', 'CHECKED_IN', 'COMPLETED'] : ['CONFIRMED', 'CHECKED_IN']).includes(row.status)) throw new ConflictException('Lịch hẹn chưa được xác nhận');
     const doctorSlot = row.scheduleSlot;
     const room = doctorSlot?.schedule.room;
     const branch = doctorSlot?.schedule.branch ?? row.branch;

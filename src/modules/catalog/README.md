@@ -2,6 +2,10 @@
 
 Owns branch, specialty and service-package catalog reads and administration.
 
+VitaCare is a single clinic chain. `Branch` represents each operating location directly;
+there is no parent `Clinic` entity or `Branch.clinicId`. Creating or editing a branch
+does not require a clinic record.
+
 - `BranchesController`: existing `/branches` endpoints.
 - `SpecialtiesController`: existing public navigation, homepage, specialty and package endpoints.
 - `SystemCatalogController`: existing `/admin/catalog` endpoints and permissions.

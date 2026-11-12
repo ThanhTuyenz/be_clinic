@@ -18,6 +18,7 @@ Appointments dùng transaction Serializable cho các thao tác hủy/đổi tr�
 - [Thanh toán PayOS và đối soát](payment-background-demo.md).
 - [Dữ liệu demo](demo-seed.md).
 - [Rà soát schema database](database-schema-audit.md): báo cáo rà soát, cần đối chiếu schema hiện tại trước khi áp dụng.
+- [Class diagram Clinical](class-diagram-clinical.puml): sơ đồ PlantUML trực quan cho quan hệ clinical và booking configuration.
 
 API được mô tả từ controller bằng Swagger tại `/docs` (đối chiếu cấu hình bootstrap trong `src/main.ts`). Không duy trì bản danh sách Postman thủ công đã lỗi thời.
 

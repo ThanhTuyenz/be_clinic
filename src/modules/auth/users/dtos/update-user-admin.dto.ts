@@ -7,7 +7,6 @@ import {
   IsOptional,
   IsString,
   MinLength,
-  IsArray,
   IsNumber,
   IsInt,
   Min,
@@ -40,11 +39,6 @@ export class UpdateUserAdminDto extends DoctorProfileDto {
   @IsOptional()
   @IsEnum(UserStatus, { message: 'Trạng thái không hợp lệ' })
   status?: UserStatus;
-
-  @ApiPropertyOptional({ description: 'Role ID to assign to user' })
-  @IsOptional()
-  @IsString()
-  roleId?: string | null;
 
   @ApiPropertyOptional({
     description: 'Custom permissions for user ({ granted?: string[], revoked?: string[] } or array)',
@@ -84,15 +78,6 @@ export class UpdateUserAdminDto extends DoctorProfileDto {
   @ApiPropertyOptional({ description: 'ID cơ sở làm việc' })
   @IsOptional()
   branchId?: string | null;
-
-  @ApiPropertyOptional({ description: 'Danh sách ID cơ sở làm việc / quản lý', type: [String] })
-  @IsOptional()
-  @IsArray()
-  branchIds?: string[];
-
-  @ApiPropertyOptional({ description: 'ID cơ sở chính' })
-  @IsOptional()
-  primaryBranchId?: string | null;
 
   @ApiPropertyOptional({ description: 'ID chuyên khoa chính (Bác sĩ)' })
   @IsOptional()

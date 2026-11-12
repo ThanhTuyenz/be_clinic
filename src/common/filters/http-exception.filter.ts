@@ -70,10 +70,6 @@ export class HttpExceptionFilter implements ExceptionFilter {
 
     for (const value of Object.values(errors as Record<string, unknown>)) {
       if (typeof value !== 'string') continue;
-      if (value.startsWith('needLoginViaProvider:')) {
-        const provider = value.split(':')[1];
-        return `Tài khoản này cần đăng nhập bằng ${provider}`;
-      }
       return messages[value] ?? value;
     }
 

@@ -202,7 +202,7 @@ export class PatientAppointmentsService {
     const isOwner = appointment.bookingOrder?.accountId === accountId || appointment.patientProfile?.accountId === accountId;
     if (!isOwner) throw new ForbiddenException('Bạn không có quyền hủy lịch hẹn này');
 
-    // Chỉ cho phép hủy khi đang ở trạng thái BOOKED hoặc PENDING_PAYMENT
+    // Chỉ cho phép hủy khi lịch đã giữ chỗ hoặc xác nhận
     if (!['CONFIRMED', 'HOLD'].includes(appointment.status)) {
       throw new BadRequestException(`Không thể hủy lịch hẹn đang ở trạng thái «${appointment.status}»`);
     }
@@ -316,7 +316,7 @@ export class PatientAppointmentsService {
       const isOwner = appointment.bookingOrder?.accountId === accountId || appointment.patientProfile?.accountId === accountId;
       if (!isOwner) throw new ForbiddenException('Bạn không có quyền đổi lịch hẹn này');
 
-      // 2. Chỉ cho phép đổi khi đang ở trạng thái BOOKED
+      // 2. Chỉ cho phép đổi khi lịch đã xác nhận
       if (appointment.status !== 'CONFIRMED') {
         throw new BadRequestException(`Không thể đổi lịch hẹn đang ở trạng thái «${appointment.status}». Chỉ áp dụng cho lịch đã xác nhận.`);
       }

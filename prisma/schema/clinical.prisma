@@ -16,12 +16,9 @@ model PatientProfile {
   // Địa chỉ 3 cấp hành chính + Địa chỉ chi tiết
   provinceCode          String?       @map("province_code") @db.VarChar(20)
   provinceName          String?       @map("province_name") @db.VarChar(100)
-  districtCode          String?       @map("district_code") @db.VarChar(20)
-  districtName          String?       @map("district_name") @db.VarChar(100)
   wardCode              String?       @map("ward_code") @db.VarChar(20)
   wardName              String?       @map("ward_name") @db.VarChar(100)
-  streetAddress         String?       @map("street_address") @db.VarChar(255)
-  address               String?
+  streetAddress         String?       @map("street_address") @db.Text
 
   // Thông tin hành chính Bộ Y tế
   ethnicity             String?       @map("ethnicity") @db.VarChar(50)
@@ -36,6 +33,12 @@ model PatientProfile {
   // Thông tin sức khỏe & tiền sử y tế hỗ trợ phân tích AI/CDSS
   medicalHistory        String?       @map("medical_history") @db.Text
   allergies             String?       @map("allergies") @db.Text
+  familyHistory         String?       @map("family_history") @db.Text
+  smokingStatus         String?       @map("smoking_status") @db.VarChar(20)
+  alcoholUse            String?       @map("alcohol_use") @db.VarChar(20)
+  activityLevel         String?       @map("activity_level") @db.VarChar(20)
+  pregnancyStatus       String?       @map("pregnancy_status") @db.VarChar(20)
+  isBreastfeeding       Boolean?      @map("is_breastfeeding")
   bloodGroup            String?       @map("blood_group") @db.VarChar(10)
   height                Float?        @map("height")
   weight                Float?        @map("weight")
@@ -93,8 +96,6 @@ model Doctor {
   onlineConsultationFee Decimal?            @map("online_consultation_fee") @db.Decimal(12, 2)
   isOnlineConsultationEnabled Boolean        @default(false) @map("is_online_consultation_enabled")
   slotDuration    Int                       @default(30) @map("slot_duration")
-  ratingAverage   Float                     @default(0.0) @map("rating_average")
-  ratingCount     Int                       @default(0) @map("rating_count")
   isFeatured      Boolean                   @default(false) @map("is_featured")
   isActive        Boolean                   @default(true) @map("is_active")
   createdAt       DateTime                  @default(now()) @map("created_at") @db.Timestamptz(3)
@@ -170,8 +171,8 @@ model ServicePackage {
   branchBookingMethod   BranchBookingMethod?                @relation(fields: [branchBookingMethodId], references: [id], onDelete: SetNull)
   specialty             Specialty?                          @relation(fields: [specialtyId], references: [id], onDelete: Restrict)
   appointments          Appointment[]
-  branchBookingMethods  ServicePackageBranchBookingMethod[]
-  receptionSchedules    PackageReceptionSchedule[]
+  branchBookingMethods  PackageBranchMethod[]
+  receptionSchedules    PackageReceptionTime[]
 
   @@index([branchBookingMethodId, specialtyId, isActive])
   @@map("service_packages")
@@ -183,7 +184,7 @@ enum PackageSession {
   EVENING
 }
 
-model PackageReceptionSchedule {
+model PackageReceptionTime {
   id               String           @id @default(uuid()) @db.Uuid
   servicePackageId String           @map("service_package_id") @db.Uuid
   branchId         String           @map("branch_id") @db.Uuid
@@ -199,7 +200,7 @@ model PackageReceptionSchedule {
   @@map("package_reception_schedules")
 }
 
-model ServicePackageBranchBookingMethod {
+model PackageBranchMethod {
   id                    String              @id @default(uuid()) @db.Uuid
   servicePackageId      String              @map("service_package_id") @db.Uuid
   branchBookingMethodId String              @map("branch_booking_method_id") @db.Uuid

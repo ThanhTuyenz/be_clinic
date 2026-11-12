@@ -11,7 +11,8 @@ flowchart LR
   Search --> RRF[SearchRankingService: RRF]
   Catalog[GET /public/packages] --> RRF
   RRF --> Vector[Low-level embeddings and vector index]
-  Home[GET /recommendations/home] --> Rec[RecommendationService]
+  Profile[GET /recommendations/patient-profile/:profileId] --> Rec[RecommendationService]
+  Interests[GET /recommendations/behavior] --> Rec
   Rec --> Candidate[CandidateRetrievalService]
   Candidate --> Legacy[Existing recommendation retrieval policy]
   Legacy --> Vector
@@ -21,7 +22,7 @@ flowchart LR
 
 `SearchModule` imports `RecommendationModule` only to use its exported behavior
 telemetry boundary. Recommendation does not import the search module or its ranker.
-Its profile retrieval, behavior candidate retrieval, AI ranking and merge logic
+Its profile retrieval, behavior candidate retrieval and AI ranking
 keep their existing policies. Low-level infrastructure and catalog metadata are
 shared, so this is ranking isolation rather than separate infrastructure.
 

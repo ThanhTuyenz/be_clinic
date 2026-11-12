@@ -14,7 +14,7 @@ export class CounterPaymentsService {
     if (!['BRANCH_MANAGER', 'RECEPTIONIST'].includes(user.role)) {
       throw new ForbiddenException('Không có quyền xem lịch sử thu tiền tại quầy');
     }
-    const branchIds = user.branchAssignments.map(link => link.branchId);
+    const branchIds = user.branchId ? [user.branchId] : [];
     if (!branchIds.length) throw new ForbiddenException('Tài khoản chưa được phân công chi nhánh');
     const date = query.date || new Date(Date.now() + 7 * 60 * 60 * 1000).toISOString().slice(0, 10);
     const from = new Date(`${date}T00:00:00+07:00`);
@@ -76,7 +76,7 @@ export class CounterPaymentsService {
       include: { appointment: true, payments: { where: { status: 'SUCCESS' }, take: 1 } },
     })
     if (!invoice) throw new NotFoundException('Không tìm thấy hóa đơn của lịch khám')
-    if (user.role !== 'CHAIN_MANAGER' && !user.branchAssignments.some(link => link.branchId === invoice.issuedBranchId)) throw new ForbiddenException('Chỉ được thu tiền tại chi nhánh phụ trách')
+    if (user.role !== 'CHAIN_MANAGER' && user.branchId !== invoice.issuedBranchId) throw new ForbiddenException('Chỉ được thu tiền tại chi nhánh phụ trách')
     if (!invoice.appointment || !['HOLD', 'CONFIRMED'].includes(invoice.appointment.status)) throw new BadRequestException('Lịch khám không ở trạng thái có thể thanh toán')
     if (invoice.status === 'PAID' || invoice.payments.length) throw new BadRequestException('Lịch khám đã được thanh toán')
     const amount = Number(input.amount ?? invoice.totalAmount)

@@ -15,7 +15,6 @@ export type StatusCounts = {
   cancelled: number
   hold: number
   checkedIn: number
-  inExamination: number
   noShow: number
 }
 
@@ -58,21 +57,8 @@ export class AdminDashboardService {
       select: {
         id: true,
         role: true,
-        branchAssignments: {
-          select: {
-            branchId: true,
-            isPrimary: true,
-            branch: {
-              select: {
-                id: true,
-                code: true,
-                name: true,
-                address: true,
-                phoneNumber: true,
-              },
-            },
-          },
-        },
+        branchId: true,
+        branch: { select: { id: true, code: true, name: true, address: true, phoneNumber: true } },
         doctor: { select: { id: true } },
       },
     })
@@ -83,7 +69,7 @@ export class AdminDashboardService {
   }
 
   private resolveBranchScope(user: any, requestedBranchId?: string) {
-    const branchIds = user.branchAssignments.map((b: any) => b.branchId)
+    const branchIds = user.branchId ? [user.branchId] : []
     const scope: Record<string, any> = {}
 
     if (user.role === 'DOCTOR') {
@@ -136,17 +122,14 @@ export class AdminDashboardService {
     const examined = count('COMPLETED')
     const cancelled = count('CANCELLED')
     const noShow = count('NO_SHOW')
-    const inExamination = count('IN_EXAMINATION')
-
     return {
-      total: hold + confirmed + checkedIn + inExamination + examined + cancelled + noShow,
+      total: hold + confirmed + checkedIn + examined + cancelled + noShow,
       pending: hold,
       confirmed: confirmed + checkedIn,
       examined,
       cancelled,
       hold,
       checkedIn,
-      inExamination,
       noShow,
     }
   }
@@ -603,11 +586,8 @@ export class AdminDashboardService {
       }),
       branchComparison,
       totalAppointments: todayCounts.total,
-      currentBranch:
-        user.branchAssignments.find((b: any) => b.isPrimary)?.branch ||
-        user.branchAssignments[0]?.branch ||
-        null,
-      managedBranches: user.branchAssignments.map((b: any) => b.branch).filter(Boolean),
+      currentBranch: user.branch || null,
+      managedBranches: user.branch ? [user.branch] : [],
     }
   }
 
@@ -763,13 +743,12 @@ export class AdminDashboardService {
         where: {
           isActive: true,
           ...(scope.doctorId ? { id: scope.doctorId } : {}),
-          ...(scope.branchId ? { user: { branchAssignments: { some: { branchId: scope.branchId } } } } : {}),
+          ...(scope.branchId ? { user: { branchId: scope.branchId } } : {}),
         },
         select: {
           id: true,
           academicRank: true,
           consultationFee: true,
-          ratingAverage: true,
           user: { select: { fullName: true } },
           specialties: { select: { specialty: { select: { name: true } } }, take: 1 },
         },
@@ -1286,7 +1265,7 @@ export class AdminDashboardService {
   ) {
     const user = await this.getStaffUser(userId)
     if (!['CHAIN_MANAGER', 'BRANCH_MANAGER'].includes(user.role)) throw new ForbiddenException('Chỉ quản trị viên và quản lý cơ sở được xem phân tích tìm kiếm')
-    if (user.role === 'BRANCH_MANAGER' && filter.branchId && filter.branchId !== 'all' && !user.branchAssignments.some(assignment => assignment.branchId === filter.branchId)) {
+    if (user.role === 'BRANCH_MANAGER' && filter.branchId && filter.branchId !== 'all' && user.branchId !== filter.branchId) {
       throw new ForbiddenException('Bạn chỉ được xem phân tích của cơ sở được phân công')
     }
     const branchScope = this.resolveBranchScope(user, filter.branchId)
@@ -1683,11 +1662,7 @@ Hãy phân tích sắc bén, sâu sắc theo góc nhìn y khoa và quản trị 
           role: true,
           status: true,
           lastLoginAt: true,
-          branchAssignments: {
-            select: {
-              branch: { select: { id: true, name: true, code: true } },
-            },
-          },
+          branch: { select: { id: true, name: true, code: true } },
         },
       }),
       this.prisma.branch.count({ where: { isActive: true } }),
@@ -1742,8 +1717,8 @@ Hãy phân tích sắc bén, sâu sắc theo góc nhìn y khoa và quản trị 
       role: u.role,
       status: u.status,
       loginAt: u.lastLoginAt,
-      branchName: u.branchAssignments[0]?.branch?.name || 'Toàn hệ thống',
-      branchCode: u.branchAssignments[0]?.branch?.code || 'SYS',
+      branchName: u.branch?.name || 'Toàn hệ thống',
+      branchCode: u.branch?.code || 'SYS',
     }))
 
     // 1. Health check thực tế Database
@@ -1822,4 +1797,3 @@ Hãy phân tích sắc bén, sâu sắc theo góc nhìn y khoa và quản trị 
     }
   }
 }
-

@@ -87,10 +87,17 @@ export class EmbeddingService {
       if (!/unknown index|no such index/i.test(error?.message || '')) throw error;
     }
     const prefix = `${client.options.keyPrefix || ''}${this.vectorKeyPrefix}`;
+    
     try {
-      await client.call('FT.CREATE', this.vectorIndexName, 'ON', 'HASH', 'PREFIX', 1, prefix,
-        'SCHEMA', 'packageId', 'TAG', 'vector', 'VECTOR', 'HNSW', 6, 'TYPE', 'FLOAT32',
-        'DIM', this.vectorDimensions, 'DISTANCE_METRIC', 'COSINE');
+      await client.call(
+        'FT.CREATE', this.vectorIndexName, 
+        'ON', 'HASH', 'PREFIX', 1, prefix,
+        'SCHEMA', 
+        'packageId', 'TAG', 
+        'vector', 'VECTOR', 'HNSW', 6, 
+        'TYPE', 'FLOAT32',
+        'DIM', this.vectorDimensions, 
+        'DISTANCE_METRIC', 'COSINE');
     } catch (error: any) {
       if (!/index already exists/i.test(error?.message || '')) throw error;
     }
@@ -116,25 +123,6 @@ export class EmbeddingService {
   }
 
   /**
-   * Tính Cosine Similarity giữa 2 vector nhiều chiều
-   */
-  cosineSimilarity(vecA: number[], vecB: number[]): number {
-    if (vecA.length !== vecB.length || vecA.length === 0) return 0;
-    let dotProduct = 0;
-    let normA = 0;
-    let normB = 0;
-
-    for (let i = 0; i < vecA.length; i++) {
-      dotProduct += vecA[i] * vecB[i];
-      normA += vecA[i] * vecA[i];
-      normB += vecB[i] * vecB[i];
-    }
-
-    if (normA === 0 || normB === 0) return 0;
-    return dotProduct / (Math.sqrt(normA) * Math.sqrt(normB));
-  }
-
-  /**
    * emveeding cho goi kham benh
    */
   buildPackageEmbeddingText(pkg: { name: string; specialtyName?: string; description?: string; symptoms?: string[] }): string {
@@ -156,6 +144,7 @@ export class EmbeddingService {
     bmi: number | null;
     medicalHistory?: string;
     allergies?: string;
+    familyHistory?: string | null;
   }): string {
     const genderVi = profile.gender === 'MALE' ? 'Nam' : profile.gender === 'FEMALE' ? 'Nữ' : 'Khác';
     const bmiText = profile.bmi ? `Chỉ số thể trạng BMI: ${profile.bmi}.` : '';
@@ -165,7 +154,8 @@ export class EmbeddingService {
     const allergy = profile.allergies?.trim() ? `Tiền sử dị ứng: ${profile.allergies}.` : '';
 
     const ageText = profile.age === null ? 'chưa ghi nhận độ tuổi' : `${profile.age} tuổi`;
-    return `Bệnh nhân ${genderVi}, ${ageText}. ${bmiText} ${med} ${allergy}`.trim();
+    const family = profile.familyHistory ? `Tiền sử gia đình: ${profile.familyHistory}.` : '';
+    return `Bệnh nhân ${genderVi}, ${ageText}. ${bmiText} ${med} ${allergy} ${family}`.trim();
   }
 
   /**
@@ -258,7 +248,7 @@ export class EmbeddingService {
 
     // 2. Truy vấn trực tiếp qua RediSearch HNSW (< 1ms)
     if (patientVector) {
-      const redisSearchResults = await this.searchWithRedisSearch(patientVector, candidates, topK);
+      const redisSearchResults = await this.retrieveVectorCandidates(patientVector, candidates, topK);
       if (redisSearchResults && redisSearchResults.length > 0) {
         return redisSearchResults;
       }
@@ -269,15 +259,8 @@ export class EmbeddingService {
     return this.fallbackKeywordMatcher(patientEmbeddingText, candidates, topK);
   }
 
-  /**
-   *  redis serch hnsw
-   */
-  /** Low-level access only; search and recommendation own their ranking policies. */
-  async retrieveVectorCandidates(queryVector: number[], candidates: PackageForRetrieval[], topK: number): Promise<ScoredPackage[] | null> {
-    return this.searchWithRedisSearch(queryVector, candidates, topK);
-  }
-
-  private async searchWithRedisSearch(
+  // danh sách sau khi so sánh vector
+  async retrieveVectorCandidates(
     queryVector: number[],
     candidates: PackageForRetrieval[],
     topK: number,
@@ -319,58 +302,27 @@ export class EmbeddingService {
 
       if (!Array.isArray(rawResult)) return null;
 
-      let resultsList: any[] = [];
-      for (let i = 0; i < rawResult.length; i += 2) {
-        if (rawResult[i] === 'results' && Array.isArray(rawResult[i + 1])) {
-          resultsList = rawResult[i + 1];
-          break;
-        }
-      }
+      // Redis fields arrive as [name, value, name, value, ...].
+      const toFields = (values: unknown[]): Record<string, unknown> => Object.fromEntries(
+        Array.from({ length: Math.floor(values.length / 2) }, (_, i) => [String(values[i * 2]), values[i * 2 + 1]]),
+      );
+      const responseFields = toFields(rawResult);
+      const attributes = Array.isArray(responseFields.results)
+        ? responseFields.results.map(item => Array.isArray(item) ? toFields(item).extra_attributes : null)
+        : rawResult.filter((_, index) => index >= 2 && index % 2 === 0);
 
-      if (resultsList.length === 0) {
-        for (let i = 1; i < rawResult.length; i += 2) {
-          if (Array.isArray(rawResult[i + 1])) {
-            resultsList.push(['id', rawResult[i], 'extra_attributes', rawResult[i + 1]]);
-          }
-        }
-      }
+      if (!attributes.length) return rawResult[0] === 0 || responseFields.total_results === 0 ? [] : null;
 
-      if (resultsList.length === 0) return rawResult[0] === 0 ? [] : null;
-
-      const candidateMap = new Map<string, PackageForRetrieval>();
-      for (const c of candidates) {
-        candidateMap.set(c.id, c);
-      }
-
-      const scoredList: ScoredPackage[] = [];
-
-      for (const item of resultsList) {
-        if (!Array.isArray(item)) continue;
-        let packageId = '';
-        let dist = 1.0;
-
-        for (let j = 0; j < item.length; j += 2) {
-          if (item[j] === 'extra_attributes' && Array.isArray(item[j + 1])) {
-            const attrs = item[j + 1];
-            for (let k = 0; k < attrs.length; k += 2) {
-              if (attrs[k] === 'packageId') packageId = String(attrs[k + 1]);
-              if (attrs[k] === 'score') {
-                const parsed = Number(attrs[k + 1]);
-                dist = Number.isFinite(parsed) ? parsed : 1;
-              }
-            }
-          }
-        }
-
-        if (packageId && candidateMap.has(packageId)) {
-          const pkg = candidateMap.get(packageId)!;
-          const similarityScore = Math.max(0, 1 - dist);
-          scoredList.push({
-            package: pkg,
-            score: similarityScore,
-          });
-        }
-      }
+      const candidateMap = new Map(candidates.map(pkg => [pkg.id, pkg]));
+      const scoredList: ScoredPackage[] = attributes.flatMap(attrs => {
+        if (!Array.isArray(attrs)) return [];
+        const { packageId, score } = toFields(attrs);
+        const pkg = candidateMap.get(String(packageId ?? ''));
+        if (!pkg) return [];
+        const parsed = Number(score);
+        const distance = Number.isFinite(parsed) ? parsed : 1;
+        return [{ package: pkg, score: Math.max(0, 1 - distance) }];
+      });
 
       if (scoredList.length > 0) {
         this.logger.log(
@@ -386,28 +338,31 @@ export class EmbeddingService {
     }
   }
 
-  /** Query embeddings are bounded, deduplicated and have a short request budget. */
-  private async embedSearchQuery(text: string): Promise<number[] | null> {
-    const cached = this.queryVectors.get(text);
+  /** Shared query cache and in-flight deduplication for search and recommendations. */
+  async embedSearchQuery(text: string): Promise<number[] | null> {
+    const key = text.normalize('NFC').trim().toLowerCase().replace(/\s+/g, ' ');
+    if (!key) return null;
+    const cached = this.queryVectors.get(key);
     if (cached && cached.expiresAt > Date.now()) return cached.vector;
-    const pending = this.pendingQueryVectors.get(text);
+    if (cached) this.queryVectors.delete(key);
+    const pending = this.pendingQueryVectors.get(key);
     if (pending) return pending;
     if (!this.aiClient) return null;
     const request = (async () => {
       try {
-        const vector = await this.embedText(text);
+        const vector = await this.embedText(key);
         if (!vector?.length) return null;
         if (this.queryVectors.size >= 200) this.queryVectors.delete(this.queryVectors.keys().next().value!);
-        this.queryVectors.set(text, { vector, expiresAt: Date.now() + 300_000 });
+        this.queryVectors.set(key, { vector, expiresAt: Date.now() + 300_000 });
         return vector;
       } catch {
         this.logger.debug('Search embedding unavailable; using text matches.');
         return null;
       }
     })();
-    this.pendingQueryVectors.set(text, request);
+    this.pendingQueryVectors.set(key, request);
     try { return await request; }
-    finally { this.pendingQueryVectors.delete(text); }
+    finally { this.pendingQueryVectors.delete(key); }
   }
 
   /** Combine field matches and semantic hits after applying explicit constraints. */
@@ -440,9 +395,9 @@ export class EmbeddingService {
     const minSemanticScore = 0.82;
     // Preserve accents for embeddings. Exclusions are already enforced on candidates.
     if (intent.text) {
-      const vector = await this.embedSearchQuery(queryText.trim().toLowerCase().replace(/\s+/g, ' '));
+      const vector = await this.embedSearchQuery(queryText);
       if (vector) {
-        const hits = await this.searchWithRedisSearch(vector, candidates, Math.min(20, candidates.length));
+        const hits = await this.retrieveVectorCandidates(vector, candidates, Math.min(20, candidates.length));
         if (hits === null && options.strictSemantic && textScores.size === 0) throw new Error('Semantic index unavailable');
         for (const hit of hits || []) if (hit.score >= minSemanticScore) vectorScores.set(hit.package.id, hit.score);
       } else if (options.strictSemantic && textScores.size === 0) throw new Error('Search embedding unavailable');

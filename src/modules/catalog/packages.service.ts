@@ -11,6 +11,8 @@ export interface GetPackagesQueryDto {
   branchId?: string;
   specialtyId?: number | string;
   search?: string;
+  /** Internal caller option; public search keeps hybrid ranking by default. */
+  searchMode?: 'hybrid' | 'lexical';
   minPrice?: number | string;
   maxPrice?: number | string;
   sortBy?: string;
@@ -52,7 +54,7 @@ export class PackagesService {
 
     // Page 1 Cache Key: Cache trang 1 khi không có từ khóa tìm kiếm tùy biến phức tạp
     const isCacheablePage1 = page === 1 && !search;
-    const cacheKey = `cache:public:packages:p1:${effectiveBranchId || 'all'}:${specialtyId || 'all'}:${type}:${sortBy}:${minPrice ?? 'none'}:${maxPrice ?? 'none'}:${limit}`;
+    const cacheKey = `cache:public:packages:p1:v3:${effectiveBranchId || 'all'}:${specialtyId || 'all'}:${type}:${sortBy}:${minPrice ?? 'none'}:${maxPrice ?? 'none'}:${limit}`;
 
     if (isCacheablePage1 && this.redis.isEnabled()) {
       try {
@@ -97,6 +99,8 @@ export class PackagesService {
       orderBy = [{ price: 'desc' }];
     } else if (sortBy === 'name-asc') {
       orderBy = [{ name: 'asc' }];
+    } else if (sortBy === 'views-desc') {
+      orderBy = [{ viewCount: 'desc' }, { id: 'asc' }];
     }
 
     const where = { AND: conditions };
@@ -116,6 +120,7 @@ export class PackagesService {
       });
       const ranked = await this.searchRanking.rank(
         search, candidates.map(mapPackageForRetrieval), candidates.length,
+        { semantic: query.searchMode !== 'lexical' },
       );
       rankedIds = ranked.map(item => item.package.id);
       conditions.push({ id: { in: rankedIds } });
@@ -123,6 +128,8 @@ export class PackagesService {
 
     const packageSelect = {
       id: true,
+      isFeatured: true,
+      viewCount: true,
       code: true,
       slug: true,
       name: true,
@@ -213,7 +220,7 @@ export class PackagesService {
 
     if (isCacheablePage1 && this.redis.isEnabled()) {
       try {
-        await this.redis.set(cacheKey, result, 600); // 10 minutes TTL
+        await this.redis.set(cacheKey, result, sortBy === 'views-desc' ? 60 : 600);
       } catch (err: any) {
         this.logger.warn(`Redis set failed for packages cache: ${err?.message}`);
       }
@@ -271,8 +278,6 @@ export class PackagesService {
                     biography: true,
                     avatarUrl: true,
                     consultationFee: true,
-                    ratingAverage: true,
-                    ratingCount: true,
                     user: { select: { fullName: true } },
                   },
                 },
@@ -337,8 +342,6 @@ export class PackagesService {
         biography: d.doctor.biography,
         avatarUrl: d.doctor.avatarUrl,
         consultationFee: Number(d.doctor.consultationFee) || 0,
-        ratingAverage: Number(d.doctor.ratingAverage),
-        ratingCount: d.doctor.ratingCount || 0,
         isPrimary: d.isPrimary,
       })) || [];
 

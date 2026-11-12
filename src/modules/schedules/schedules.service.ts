@@ -7,7 +7,7 @@ const ASSIGNED_DOCTOR_SELECT = {
   id: true,
   isActive: true,
   specialties: { where: { specialty: { isActive: true } }, select: { specialtyId: true } },
-  user: { select: { branchAssignments: { select: { branchId: true, branch: { select: { isActive: true } } } } } },
+  user: { select: { branchId: true, branch: { select: { isActive: true } } } },
 } as const;
 
 const ASSIGNED_ROOM_SELECT = {
@@ -35,11 +35,10 @@ export class SchedulesService {
 
   private assertDoctorBranch(doctor: {
     isActive: boolean;
-    user: { branchAssignments: { branchId: string; branch: { isActive: boolean } }[] };
+    user: { branchId: string | null; branch: { isActive: boolean } | null };
   }, branchId: string) {
     if (!doctor.isActive) throw new BadRequestException('Bác sĩ đã ngừng hoạt động.');
-    const assignments = doctor.user.branchAssignments;
-    if (assignments.length !== 1 || assignments[0].branchId !== branchId || !assignments[0].branch.isActive) {
+    if (doctor.user.branchId !== branchId || !doctor.user.branch?.isActive) {
       throw new BadRequestException('Chỉ được phân lịch tại chi nhánh làm việc duy nhất của bác sĩ.');
     }
   }

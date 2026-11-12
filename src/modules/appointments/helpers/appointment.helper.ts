@@ -2,13 +2,13 @@ import { BadRequestException, ConflictException, ForbiddenException } from '@nes
 import { AppointmentStatus, Prisma, UserRole } from '@prisma/client';
 import { formatTime } from '../../../common/utils/staff.utils.js';
 import { PrismaService } from '../../../infrastructure/database/prisma/prisma.service.js';
+import { formatPatientAddress } from '../../patients/patient-address.js';
 import { assertBookingMethodSlot, assertPackageReception, PACKAGE_RECEPTION_SELECT } from '../../bookings/helpers/package-reception.helper.js';
 import { reserveBookingSlot } from '../../bookings/helpers/slot-reservation.helper.js';
 
 // Access control
 const APPOINTMENT_ACTOR_SELECT = {
-  id: true, role: true, doctor: { select: { id: true } },
-  branchAssignments: { select: { branchId: true } },
+  id: true, role: true, branchId: true, doctor: { select: { id: true } },
 } satisfies Prisma.UserSelect;
 
 export type AppointmentActor = Prisma.UserGetPayload<{ select: typeof APPOINTMENT_ACTOR_SELECT }>;
@@ -27,9 +27,8 @@ export function appointmentScope(actor: AppointmentActor): Prisma.AppointmentWhe
     if (!actor.doctor) throw new ForbiddenException('Tài khoản chưa được gán hồ sơ bác sĩ');
     return { scheduleSlot: { schedule: { doctorId: actor.doctor.id } } };
   }
-  const branchIds = actor.branchAssignments.map(link => link.branchId);
-  if (!branchIds.length) throw new ForbiddenException('Tài khoản chưa được phân công chi nhánh');
-  return { branchId: { in: branchIds } };
+  if (!actor.branchId) throw new ForbiddenException('Tài khoản chưa được phân công chi nhánh');
+  return { branchId: actor.branchId };
 }
 
 export function assertAppointmentAccess(actor: AppointmentActor, appointment: {
@@ -40,7 +39,7 @@ export function assertAppointmentAccess(actor: AppointmentActor, appointment: {
     if (!actor.doctor || appointment.scheduleSlot?.schedule.doctorId !== actor.doctor.id) {
       throw new ForbiddenException('Lịch khám không thuộc bác sĩ hiện tại');
     }
-  } else if (!actor.branchAssignments.some(link => link.branchId === appointment.branchId)) {
+  } else if (actor.branchId !== appointment.branchId) {
     throw new ForbiddenException('Lịch khám không thuộc chi nhánh phụ trách');
   }
 }
@@ -152,13 +151,12 @@ export async function transferAppointmentSlot(
 
 // Appointment statuses
 const ALIASES: Record<string, AppointmentStatus> = {
-  PENDING: 'HOLD', BOOKED: 'CONFIRMED', EXAMINED: 'COMPLETED',
+  PENDING: 'HOLD', EXAMINED: 'COMPLETED',
 };
 const TRANSITIONS: Partial<Record<AppointmentStatus, AppointmentStatus[]>> = {
   HOLD: ['HOLD', 'CONFIRMED', 'CANCELLED'],
   CONFIRMED: ['CONFIRMED', 'CHECKED_IN', 'COMPLETED', 'CANCELLED'],
   CHECKED_IN: ['CHECKED_IN', 'COMPLETED', 'CANCELLED'],
-  IN_EXAMINATION: ['IN_EXAMINATION', 'COMPLETED'],
   COMPLETED: ['COMPLETED'], CANCELLED: ['CANCELLED'],
 };
 
@@ -274,7 +272,7 @@ export function serialize(row: any) {
       gender: row.patientProfile.gender?.toLowerCase(),
       email: row.patientProfile.account?.email,
       phone: row.patientProfile.phoneNumber || row.patientProfile.account?.phoneNumber || '',
-      address: row.patientProfile.address || '',
+      address: formatPatientAddress(row.patientProfile) || '',
       nationalId: row.patientProfile.nationalId,
       healthInsuranceNumber: row.patientProfile.healthInsuranceNumber,
     },
@@ -299,13 +297,6 @@ export function serialize(row: any) {
       totalAmount: Number(invoice.totalAmount),
       status: invoice.status,
       paidAt: invoice.paidAt,
-      items: (invoice.items || []).map((item: any) => ({
-        id: String(item.id),
-        description: item.description,
-        quantity: item.quantity,
-        unitPrice: Number(item.unitPrice),
-        amount: Number(item.amount),
-      })),
     } : null,
     payment: invoice ? {
       status: invoice.status === 'PAID' ? 'paid' : (invoice.status === 'REFUNDED' ? 'refunded' : 'unpaid'),
@@ -421,7 +412,7 @@ export async function assertPatientSlotAvailable(
     where: {
       patientProfileId,
       ...(excludingAppointmentId ? { id: { not: excludingAppointmentId } } : {}),
-      status: { in: ['HOLD', 'CONFIRMED', 'CHECKED_IN', 'IN_EXAMINATION'] },
+      status: { in: ['HOLD', 'CONFIRMED', 'CHECKED_IN'] },
       scheduleSlot: {
         startTime: { lt: slot.endTime }, endTime: { gt: slot.startTime },
         schedule: { workDate: slot.schedule.workDate },

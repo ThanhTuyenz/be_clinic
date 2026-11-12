@@ -7,6 +7,7 @@ import fs from 'node:fs';
 import bcrypt from 'bcrypt';
 import { seedDashboardData, demoDate } from './seed-dashboard-data.mjs';
 import { basicSpecialtyPackage } from './package-catalog-data.mjs';
+import { upsertSharedSeedPackage } from './shared-package-catalog.mjs';
 
 // 1. Cấu hình biến môi trường & kết nối database
 const envFile = process.env.ENV_FILE || '.env.development';
@@ -157,36 +158,29 @@ async function main() {
     const user = await prisma.user.upsert({
       where: { email: staff.email },
       update: { fullName: staff.fullName, role: staff.role, status: 'ACTIVE', isBlocked: false, isDeleted: false },
-      create: { email: staff.email, fullName: staff.fullName, role: staff.role, status: 'ACTIVE', provider: 'EMAIL', password: defaultPassword },
+      create: { email: staff.email, fullName: staff.fullName, role: staff.role, status: 'ACTIVE', password: defaultPassword },
     });
     usersMap.set(staff.email, user);
   }
 
-  // 2. Khởi tạo Phòng khám & Chi nhánh (từ branches.json)
+  // 2. Khởi tạo Chi nhánh (từ branches.json)
   console.log('2. Nạp dữ liệu Chi nhánh phòng khám...');
-  const clinic = await prisma.clinic.upsert({
-    where: { slug: 'vitacare-clinic' },
-    update: { name: 'Phòng khám Đa khoa VitaCare', isActive: true },
-    create: { name: 'Phòng khám Đa khoa VitaCare', slug: 'vitacare-clinic' },
-  });
-
   const branchesMap = new Map();
   for (const b of branchesData) {
     const branch = await prisma.branch.upsert({
       where: { code: b.code },
-      update: { ...b, clinicId: clinic.id, isActive: true },
-      create: { ...b, clinicId: clinic.id, isActive: true },
+      update: { ...b, isActive: true },
+      create: { ...b, isActive: true },
     });
     branchesMap.set(b.code, branch);
   }
 
-  // Gán cơ sở làm việc chính cho Quản lý & Lễ tân
+  // Gán cơ sở làm việc cho Quản lý & Lễ tân
   const centralBranch = branchesMap.get('VC-CENTRAL');
   for (const email of ['manager@vitacare.local', 'receptionist@vitacare.local']) {
-    await prisma.userBranchAssignment.upsert({
-      where: { userId_branchId: { userId: usersMap.get(email).id, branchId: centralBranch.id } },
-      update: { isPrimary: true },
-      create: { userId: usersMap.get(email).id, branchId: centralBranch.id, isPrimary: true },
+    await prisma.user.update({
+      where: { id: usersMap.get(email).id },
+      data: { branchId: centralBranch.id },
     });
   }
 
@@ -315,7 +309,6 @@ async function main() {
         avatarUrl: docData.avatarUrl || null,
         role: 'DOCTOR',
         status: 'ACTIVE',
-        provider: 'EMAIL',
         password: defaultPassword,
       },
     });
@@ -330,8 +323,6 @@ async function main() {
       onlineConsultationFee: docData.onlineConsultationFee ?? Math.round((docData.consultationFee || 0) * 0.8 / 10000) * 10000,
       isOnlineConsultationEnabled: docData.isOnlineConsultationEnabled ?? true,
       avatarUrl: docData.avatarUrl,
-      ratingAverage: docData.ratingAverage || 4.9,
-      ratingCount: docData.ratingCount || 100,
       isFeatured: docData.isFeatured ?? false,
       isActive: true,
     };
@@ -356,10 +347,9 @@ async function main() {
     if (!targetBranch) throw new Error('Chi nhánh bác sĩ không hợp lệ: ' + docData.email);
     const targetRoom = roomsByBranchAndCode.get(`${targetBranch.code}:${docData.roomCode}`);
     if (!targetRoom) throw new Error('Phòng khám bác sĩ không thuộc chi nhánh: ' + docData.email);
-    await prisma.userBranchAssignment.upsert({
-      where: { userId_branchId: { userId: user.id, branchId: targetBranch.id } },
-      update: { isPrimary: true },
-      create: { userId: user.id, branchId: targetBranch.id, isPrimary: true },
+    await prisma.user.update({
+      where: { id: user.id },
+      data: { branchId: targetBranch.id },
     });
 
     // Lịch cố định tại một chi nhánh, đủ 30 ngày đặt trước và cả cuối tuần.
@@ -557,7 +547,7 @@ async function main() {
     SPECIALTY_EXTRA_METADATA.tong_quat = SPECIALTY_EXTRA_METADATA['noi-tong-quat'];
 
     for (const spec of specialtiesBySlug.values()) {
-      const codeSuffix = `${branch.code.replace('VC-', '')}-${String(spec.id).padStart(3, '0')}`;
+      const codeSuffix = String(spec.id).padStart(3, '0');
       const specMeta = SPECIALTY_EXTRA_METADATA[spec.slug] || {
         symptoms: spec.symptoms || [],
         standardDesc: spec.description || `Khám chuyên khoa ${spec.name}.`,
@@ -568,7 +558,7 @@ async function main() {
       const specialtyServices = [
         {
           code: `CONSULT-${codeSuffix}-STANDARD`,
-          name: `Khám ${spec.name} trong giờ (${branch.name})`,
+          name: `Khám ${spec.name} trong giờ`,
           price: 220000,
           durationMin: 30,
           description: specMeta.standardDesc || `Khám chẩn đoán bệnh lý ${spec.name} trong giờ hành chính.`,
@@ -579,7 +569,7 @@ async function main() {
         },
         {
           code: `CONSULT-${codeSuffix}-AFTER`,
-          name: `Khám ${spec.name} ngoài giờ (${branch.name})`,
+          name: `Khám ${spec.name} ngoài giờ`,
           price: 270000,
           durationMin: 30,
           description: specMeta.standardDesc || `Khám chẩn đoán bệnh lý ${spec.name} ngoài giờ hành chính.`,
@@ -590,7 +580,7 @@ async function main() {
         },
         {
           code: `CONSULT-${codeSuffix}-BASIC`,
-          ...basicSpecialtyPackage(spec.name, branch.name),
+          ...basicSpecialtyPackage(spec.name),
           price: 180000,
           durationMin: 20,
           symptoms: specMeta.symptoms,
@@ -603,7 +593,7 @@ async function main() {
         const branchBookingMethod = methodByCode.get(service.methodCode);
         if (!branchBookingMethod) continue;
         const slug = toSlug(service.name);
-        await prisma.servicePackage.upsert({
+        await upsertSharedSeedPackage(prisma, {
           where: { code: service.code },
           update: {
             code: service.code,
@@ -645,11 +635,11 @@ async function main() {
     const healthPackageMethod = methodByCode.get('HEALTH_PACKAGE');
     if (healthPackageMethod) {
       for (const pkg of healthPackagesData) {
-        const fullCode = `PKG-${pkg.codeSuffix}-${branch.code}`;
-        const fullName = `${pkg.name} (${branch.name})`;
+        const fullCode = `PKG-${pkg.codeSuffix}`;
+        const fullName = pkg.name;
         const slug = toSlug(fullName);
 
-        await prisma.servicePackage.upsert({
+        await upsertSharedSeedPackage(prisma, {
           where: { code: fullCode },
           update: {
             name: fullName,
@@ -692,7 +682,7 @@ async function main() {
     const user = await prisma.user.upsert({
       where: { email: patientData.email },
       update: { fullName: patientData.fullName, phoneNumber: patientData.phoneNumber, role: 'PATIENT', status: 'ACTIVE', isBlocked: false, isDeleted: false },
-      create: { email: patientData.email, fullName: patientData.fullName, phoneNumber: patientData.phoneNumber, role: 'PATIENT', status: 'ACTIVE', provider: 'EMAIL', password: defaultPassword },
+      create: { email: patientData.email, fullName: patientData.fullName, phoneNumber: patientData.phoneNumber, role: 'PATIENT', status: 'ACTIVE', password: defaultPassword },
     });
     usersMap.set(patientData.email, user);
 
@@ -707,12 +697,9 @@ async function main() {
         gender: p.gender,
         provinceCode: p.provinceCode ?? null,
         provinceName: p.provinceName ?? null,
-        districtCode: p.districtCode ?? null,
-        districtName: p.districtName ?? null,
         wardCode: p.wardCode ?? null,
         wardName: p.wardName ?? null,
-        streetAddress: p.streetAddress ?? null,
-        address: p.address,
+        streetAddress: p.streetAddress ?? p.address ?? null,
         ethnicity: p.ethnicity ?? 'Kinh',
         nationality: p.nationality ?? 'Việt Nam',
         occupation: p.occupation ?? null,
@@ -758,15 +745,9 @@ async function main() {
     });
   }
 
-  // 11. Bổ trợ đánh giá & OAuth mẫu
-  console.log('11. Cập nhật thông số bác sĩ & tài khoản OAuth mẫu...');
+  // 11. Tài khoản OAuth mẫu
+  console.log('11. Nạp tài khoản OAuth mẫu...');
   const cardioDoc = doctorsMap.get('doctor.cardio@vitacare.local');
-  if (cardioDoc) {
-    await prisma.doctor.update({
-      where: { id: cardioDoc.id },
-      data: { ratingAverage: 4.9, ratingCount: 28 },
-    });
-  }
 
   const mainPatient = usersMap.get('patient@vitacare.local');
   if (mainPatient) {

@@ -10,7 +10,7 @@ export class ReceptionSummaryService {
     const user = await getStaffUser(this.prisma, userId)
     if (!['CHAIN_MANAGER', 'BRANCH_MANAGER', 'RECEPTIONIST'].includes(user.role)) throw new ForbiddenException('Không có quyền xem thống kê tiếp nhận')
     const requestedBranchId = query?.branchId?.trim()
-    const assignedBranchIds = user.branchAssignments.map(link => link.branchId)
+    const assignedBranchIds = user.branchId ? [user.branchId] : []
     let branchId: string | undefined
     if (user.role === 'CHAIN_MANAGER') {
       branchId = requestedBranchId && requestedBranchId !== 'all' ? requestedBranchId : undefined

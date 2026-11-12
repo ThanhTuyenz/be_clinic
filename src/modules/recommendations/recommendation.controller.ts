@@ -1,14 +1,15 @@
-import { Body, Controller, ForbiddenException, Get, Logger, Param, Post, Query, Req, SetMetadata } from '@nestjs/common';
+import { Body, Controller, Get, Logger, Param, Post, Query, Req, SetMetadata } from '@nestjs/common';
 import { Request } from 'express';
 import { JwtPayloadType } from '../auth/auth-local/types/index.js';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { Public } from '../../common/decorators/public.decorator.js';
 import { RecommendationService } from './recommendation.service.js';
 import {
-  HomeRecommendationQueryDto,
-  HomeRecommendationResponseDto,
   ProfileRecommendationResponseDto,
   TrackBehaviorDto,
+  RecommendationSessionQueryDto,
+  RecommendationSectionDto,
+  ProfileRecommendationSectionDto,
 } from './recommendation.dto.js';
 
 type RecommendationRequest = Request & { user?: JwtPayloadType };
@@ -21,24 +22,7 @@ export class RecommendationController {
 
   constructor(
     private readonly recommendationService: RecommendationService,
-  ) {}
-
-  @Get('home')
-  @Public()
-  @ApiOperation({ summary: 'Gộp gợi ý từ hai nguồn hồ sơ và hành vi được phân tích, cache độc lập' })
-  async getHomeRecommendations(
-    @Query() query: HomeRecommendationQueryDto,
-    @Req() req: RecommendationRequest,
-  ): Promise<HomeRecommendationResponseDto> {
-    const userId = req?.user?.id;
-    if (query.profileId && !userId) {
-      throw new ForbiddenException('Cần đăng nhập để nhận gợi ý theo hồ sơ bệnh nhân.');
-    }
-    this.logger.log(
-      `[API GET] /home (profileId: ${query.profileId || 'none'}, sessionId: ${query.sessionId || 'none'}, userId: ${userId || 'guest'})`,
-    );
-    return this.recommendationService.getHomeRecommendations(query, userId, req?.user?.role);
-  }
+  ) { }
 
   @Post('track')
   @Public()
@@ -48,7 +32,26 @@ export class RecommendationController {
     return this.recommendationService.trackUserBehavior(dto, userId);
   }
 
+  @Get('behavior')
+  @Public()
+  @ApiOperation({ summary: 'Gợi ý theo tìm kiếm, lượt xem và đặt khám chưa hoàn tất của tài khoản hoặc phiên khách' })
+  getBehaviorRecommendations(
+    @Query() query: RecommendationSessionQueryDto,
+    @Req() req: RecommendationRequest,
+  ): Promise<RecommendationSectionDto> {
+    return this.recommendationService.getBehaviorRecommendations(query.sessionId, req.user?.id);
+  }
 
+  @Get('patient-profile/:profileId')
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Gợi ý riêng theo hồ sơ sức khỏe, kiểm tra quyền sở hữu trước khi đọc cache' })
+  getProfileRecommendations(
+    @Param('profileId') profileId: string,
+    @Query() query: RecommendationSessionQueryDto,
+    @Req() req: RecommendationRequest,
+  ): Promise<ProfileRecommendationSectionDto> {
+    return this.recommendationService.getProfileRecommendations(profileId, query.sessionId, req.user?.id, req.user?.role);
+  }
 
   @Post('patient-profile/:profileId/refresh')
   @ApiBearerAuth('access-token')

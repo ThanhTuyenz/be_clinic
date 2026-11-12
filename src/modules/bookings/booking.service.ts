@@ -5,7 +5,7 @@ import { isUuid } from '../../common/utils/staff.utils.js';
 import { RabbitMqConfig } from '../../config/config.type.js';
 import { PrismaService } from '../../infrastructure/database/prisma/prisma.service.js';
 import { assertPatientSlotAvailable, releaseAppointmentSlot } from '../appointments/helpers/appointment.helper.js';
-import { BehaviorTelemetryService } from '../recommendations/services/behavior-telemetry.service.js';
+import { RecommendationService } from '../recommendations/recommendation.service.js';
 import { AnalyticsService } from '../analytics/analytics.service.js';
 import { releaseVoucherUsage, VoucherCalculationResult, VouchersService } from '../vouchers/vouchers.service.js';
 import { AppointmentItemDto, BatchCheckoutDto, CheckoutAppointmentDto } from './dtos/checkout-appointment.dto.js';
@@ -43,7 +43,7 @@ export class BookingService {
     private readonly config: ConfigService,
     private readonly vouchersService: VouchersService,
     private readonly analytics: AnalyticsService,
-    private readonly behaviorTelemetry: BehaviorTelemetryService,
+    private readonly recommendations: RecommendationService,
   ) { }
   async checkout(accountId: string, dto: CheckoutAppointmentDto, transaction?: Prisma.TransactionClient) {
     this.validateBookingItem(dto);
@@ -54,7 +54,7 @@ export class BookingService {
         });
         if (!profile) throw new NotFoundException('Không tìm thấy hồ sơ bệnh nhân');
         const prepared = await this.prepareCheckoutItem(tx, dto);
-        const { slot, servicePackage, bookingMethodId, price, description } = prepared;
+        const { slot, servicePackage, bookingMethodId, price } = prepared;
         await this.reserveForPatient(tx, profile.id, slot);
         const { now, expiresAt } = await this.getHoldWindow(tx);
         const pricing = await this.calculateCheckoutTotals(tx, accountId, Number(price), dto.voucherCode);
@@ -73,7 +73,7 @@ export class BookingService {
           },
         });
         return this.completeSingleCheckout(tx, accountId, appointment, {
-          branchId: slot.schedule.branchId, slotId: slot.id, price, description, now, expiresAt,
+          branchId: slot.schedule.branchId, slotId: slot.id, price, now, expiresAt,
         }, pricing);
       };
       return transaction ? await execute(transaction) : await this.prisma.$transaction(execute, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
@@ -99,7 +99,7 @@ export class BookingService {
       }
       return true;
     }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
-    if (expired) await this.behaviorTelemetry?.recordAbandonedBooking(appointmentId).catch(() => {});
+    if (expired) await this.recommendations.recordAbandonedBooking(appointmentId).catch(() => {});
     return expired;
   }
 
@@ -169,7 +169,7 @@ export class BookingService {
       await releaseVoucherUsage(tx, payment.invoice.bookingOrderId ? { bookingOrderId: payment.invoice.bookingOrderId } : { appointmentId: payment.invoice.appointmentId! });
       return true;
     }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
-    await Promise.allSettled(abandonedIds.map(id => this.behaviorTelemetry?.recordAbandonedBooking(id)));
+    await Promise.allSettled(abandonedIds.map(id => this.recommendations.recordAbandonedBooking(id)));
     return cancelled;
   }
 
@@ -198,12 +198,10 @@ export class BookingService {
 
         let totalAmount = new Prisma.Decimal(0);
         const appointmentData: Prisma.AppointmentUncheckedCreateInput[] = [];
-        const invoiceItems: Prisma.InvoiceItemCreateWithoutInvoiceInput[] = [];
-
         const bookingDates = new Set<string>();
         for (const item of dto.items) {
           const profile = profiles.find((p) => p.id === item.patientProfileId)!;
-          const { slot, servicePackage, bookingMethodId, price, description } = await this.prepareCheckoutItem(tx, item, profile.fullName);
+          const { slot, servicePackage, bookingMethodId, price } = await this.prepareCheckoutItem(tx, item, profile.fullName);
           bookingDates.add(slot.schedule.workDate.toISOString().slice(0, 10));
           if (bookingDates.size > 1) throw new BadRequestException('Các thành viên trong đơn gia đình phải khám cùng ngày.');
           await this.reserveForPatient(tx, profile.id, slot, profile.fullName);
@@ -219,13 +217,10 @@ export class BookingService {
             servicePrice: price, symptomsDescription: item.symptomsDescription,
             bookedViaAi: item.bookedViaAi ?? false, holdExpiresAt: expiresAt,
           });
-          invoiceItems.push({ description: description + ' – ' + profile.fullName, quantity: 1, unitPrice: price, amount: price });
         }
 
         const pricing = await this.calculateCheckoutTotals(tx, accountId, Number(totalAmount), dto.voucherCode);
         const { subtotal, serviceFee, discountAmount, totalAmount: finalTotalAmount, voucherApplied } = pricing;
-
-        this.appendCheckoutCharges(invoiceItems, pricing, 'Phí tiện ích dịch vụ (Ưu đãi đơn nhóm)');
 
         // Tạo BookingOrder tổng
         const orderCode = `ORD-${Date.now().toString(36).toUpperCase()}`;
@@ -267,7 +262,6 @@ export class BookingService {
             discountAmount: new Prisma.Decimal(discountAmount),
             voucherCode: voucherApplied?.code ?? null,
             totalAmount: new Prisma.Decimal(finalTotalAmount),
-            items: { create: invoiceItems },
           },
         });
 
@@ -347,35 +341,14 @@ export class BookingService {
     }
   }
 
-  private appendCheckoutCharges(
-    items: Prisma.InvoiceItemCreateWithoutInvoiceInput[],
-    pricing: CheckoutPricing,
-    feeDescription = 'Phí tiện ích dịch vụ',
-  ) {
-    items.push({
-      description: feeDescription, quantity: 1,
-      unitPrice: new Prisma.Decimal(pricing.serviceFee), amount: new Prisma.Decimal(pricing.serviceFee),
-    });
-    if (pricing.discountAmount > 0 && pricing.voucherApplied) {
-      items.push({
-        description: `Mã ưu đãi (${pricing.voucherApplied.code})`, quantity: 1,
-        unitPrice: new Prisma.Decimal(-pricing.discountAmount), amount: new Prisma.Decimal(-pricing.discountAmount),
-      });
-    }
-  }
-
   private async completeSingleCheckout(
     tx: Prisma.TransactionClient,
     accountId: string,
     appointment: { id: string; status: AppointmentStatus },
-    details: { branchId: string; slotId: string; price: Prisma.Decimal; description: string; now: Date; expiresAt: Date },
+    details: { branchId: string; slotId: string; price: Prisma.Decimal; now: Date; expiresAt: Date },
     pricing: CheckoutPricing,
   ) {
     const { subtotal, serviceFee, discountAmount, totalAmount, voucherApplied } = pricing;
-    const invoiceItems: Prisma.InvoiceItemCreateWithoutInvoiceInput[] = [{
-      description: details.description, quantity: 1, unitPrice: details.price, amount: details.price,
-    }];
-    this.appendCheckoutCharges(invoiceItems, pricing);
     const invoice = await tx.invoice.create({
       data: {
         appointmentId: appointment.id,
@@ -385,7 +358,6 @@ export class BookingService {
         discountAmount: new Prisma.Decimal(discountAmount),
         voucherCode: voucherApplied?.code ?? null,
         totalAmount: new Prisma.Decimal(totalAmount),
-        items: { create: invoiceItems },
       },
     });
     if (voucherApplied && discountAmount > 0) {
@@ -463,8 +435,7 @@ export class BookingService {
     const price = servicePackage ? servicePackage.price : item.bookingMethodCode === 'ONLINE_CONSULTATION'
       ? slot.schedule.doctor.onlineConsultationFee ?? slot.schedule.doctor.consultationFee
       : slot.schedule.doctor.consultationFee;
-    const description = servicePackage ? servicePackage.name : 'Khám với ' + (slot.schedule.doctor.user?.fullName || 'bác sĩ');
-    return { slot, servicePackage, bookingMethodId, price, description };
+    return { slot, servicePackage, bookingMethodId, price };
   }
 
   private rethrowCheckoutError(error: unknown): never {

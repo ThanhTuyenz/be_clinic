@@ -21,17 +21,13 @@ export class User extends EntityHelper {
   email: string | null;
 
   @Exclude({ toPlainOnly: true })
-  password: string;
+  password: string | null;
 
-  provider: string;
   status: UserStatus;
   role: UserRole;
-  socialId: string | null;
-  zaloId: string | null;
   fullName: string | null;
   phoneNumber: string | null;
   avatarUrl: string | null;
-  roleId: string | null;
   customPermissions: Array<{
     resourceType: string;
     action: string;
@@ -43,7 +39,6 @@ export class User extends EntityHelper {
   hash: string | null;
 
   isBlocked: boolean;
-  blockedAt: Date | null;
   isDeleted: boolean;
   lastLoginAt: Date | null;
   createdAt: Date;

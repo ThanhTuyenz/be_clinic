@@ -44,19 +44,16 @@ export async function seedDashboardData(prisma, { passwordHash }) {
   for (const [index, [email, fullName, role, phoneNumber, branchCode, state]] of demoStaff.entries()) {
     const isBlocked = state === 'LOCKED';
     const fields = { fullName, role, phoneNumber, status: state === 'INACTIVE' ? 'INACTIVE' : 'ACTIVE',
-      isBlocked, blockedAt: isBlocked ? new Date(now.getTime() - DAY) : null,
+      isBlocked,
       isDeleted: false, lastLoginAt: new Date(now.getTime() - (isBlocked ? DAY * 2 : (index + 1) * 180_000)) };
     const user = await prisma.user.upsert({
       where: { email }, update: fields,
-      create: { email, ...fields, password: passwordHash, provider: 'EMAIL' },
+      create: { email, ...fields, password: passwordHash },
     });
     accounts.set(email, user);
     if (branchCode) {
       const branchId = branchMap.get(branchCode).id;
-      await prisma.userBranchAssignment.upsert({
-        where: { userId_branchId: { userId: user.id, branchId } },
-        update: { isPrimary: true }, create: { userId: user.id, branchId, isPrimary: true },
-      });
+      await prisma.user.update({ where: { id: user.id }, data: { branchId } });
     }
     if (role === 'RECEPTIONIST') {
       const data = { employeeCode: 'LT-DEMO-' + String(index).padStart(3, '0'), deskNumber: index % 2 ? 'Quầy 2' : 'Quầy 1', isActive: !isBlocked && state !== 'INACTIVE' };
@@ -87,9 +84,8 @@ export async function seedDashboardData(prisma, { passwordHash }) {
       patientCode: 'BN-DEMO-' + String(i + 1).padStart(3, '0'),
       fullName: names[i], phoneNumber, nationalId, dateOfBirth: new Date(Date.UTC(1980 + i, i % 12, 10)),
       healthInsuranceNumber: 'GD47979' + String(31000000 + i), gender: i % 2 ? 'FEMALE' : 'MALE',
-      provinceCode: '79', provinceName: 'Thành phố Hồ Chí Minh', districtCode: '760', districtName: 'Quận 1',
-      wardCode: '26734', wardName: 'Phường Bến Thành', streetAddress: (20 + i) + ' Lê Lợi',
-      address: (20 + i) + ' Lê Lợi, Phường Bến Thành, Quận 1, TP.HCM',
+      provinceCode: '79', provinceName: 'Thành phố Hồ Chí Minh',
+      wardCode: '26734', wardName: 'Phường Bến Thành', streetAddress: (20 + i) + ' Lê Lợi, Quận 1',
       ethnicity: 'Kinh', nationality: 'Việt Nam', occupation: i % 2 ? 'Nhân viên văn phòng' : 'Kỹ sư',
       guardianName: 'Nguyễn Thanh Bình', guardianPhone: '0974999999', guardianRelationship: 'Người thân',
       bloodGroup: ['O+', 'A+', 'B+', 'AB+'][i % 4], allergies: 'Không ghi nhận',
@@ -103,8 +99,8 @@ export async function seedDashboardData(prisma, { passwordHash }) {
   const lockedProfile = { fullName: lockedPatient.fullName, phoneNumber: lockedPatient.phoneNumber, nationalId: '079190999999',
     patientCode: 'BN-DEMO-LOCK', dateOfBirth: new Date('1990-04-12'), gender: 'MALE',
     healthInsuranceNumber: 'GD4797931999999', provinceCode: '79', provinceName: 'Thành phố Hồ Chí Minh',
-    districtCode: '760', districtName: 'Quận 1', wardCode: '26734', wardName: 'Phường Bến Thành',
-    streetAddress: '88 Lê Lợi', address: '88 Lê Lợi, Phường Bến Thành, Quận 1, TP.HCM',
+    wardCode: '26734', wardName: 'Phường Bến Thành',
+    streetAddress: '88 Lê Lợi, Quận 1',
     ethnicity: 'Kinh', nationality: 'Việt Nam', occupation: 'Kinh doanh', guardianName: 'Nguyễn Thị Hoa',
     guardianPhone: '0974999998', guardianRelationship: 'Vợ', bloodGroup: 'O+', height: 170, weight: 65,
     allergies: 'Không ghi nhận', medicalHistory: 'Không ghi nhận', relationshipToAccount: 'SELF', isMainProfile: true };
@@ -233,11 +229,10 @@ export async function seedDashboardData(prisma, { passwordHash }) {
   }
   for (const id of touchedSlots) {
     const occupiedCount = await prisma.appointment.count({ where: { scheduleSlotId: id,
-      status: { in: ['HOLD', 'PENDING_PAYMENT', 'BOOKED', 'CONFIRMED', 'CHECKED_IN', 'IN_EXAMINATION', 'COMPLETED', 'NO_SHOW'] } } });
+      status: { in: ['HOLD', 'PENDING_PAYMENT', 'BOOKED', 'CONFIRMED', 'CHECKED_IN', 'COMPLETED', 'NO_SHOW'] } } });
     const slot = await prisma.doctorScheduleSlot.findUniqueOrThrow({ where: { id }, select: { capacity: true } });
-    const reserved = await prisma.appointment.aggregate({ where: { scheduleSlotId: id }, _max: { queueNumber: true } });
     await prisma.doctorScheduleSlot.update({ where: { id }, data: { occupiedCount,
-      nextQueueNumber: (reserved._max.queueNumber || 0) + 1, slotStatus: occupiedCount >= slot.capacity ? 'FULL' : 'AVAILABLE' } });
+      slotStatus: occupiedCount >= slot.capacity ? 'FULL' : 'AVAILABLE' } });
   }
 
   // Audit examples are visibly labeled synthetic. No login or integration action is actually executed.

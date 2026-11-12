@@ -39,7 +39,7 @@ export class AppointmentReminderTask {
     const now = new Date();
     const flagField = hoursAhead === 24 ? 'reminderSent24h' : 'reminderSent2h';
 
-    // Tìm tất cả lịch hẹn BOOKED chưa được nhắc, có giờ khám trong cửa sổ
+    // Tìm tất cả lịch hẹn đã xác nhận chưa được nhắc, có giờ khám trong cửa sổ
     const appointments = await this.prisma.appointment.findMany({
       where: {
         status: { in: ['CONFIRMED', 'CHECKED_IN'] },

@@ -217,8 +217,6 @@ export class TelehealthGateway
     payload: {
       appointmentId: string;
       endedByRole?: 'DOCTOR' | 'PATIENT';
-      diagnosis?: string;
-      prescriptionNotes?: string;
     },
     @ConnectedSocket() client: Socket,
   ) {
@@ -235,10 +233,7 @@ export class TelehealthGateway
 
     try {
       await this.telehealthService.endRoomSession(payload.appointmentId, {
-        diagnosis: payload.diagnosis,
-        prescriptionNotes: payload.prescriptionNotes,
         endedByUserId: participant.userId,
-        endReason: 'SOCKET',
       }, participant.role);
       this.notifyRoomEnded(payload.appointmentId, participant.role);
       return { success: true };

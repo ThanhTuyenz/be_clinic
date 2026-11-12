@@ -34,7 +34,6 @@ model DoctorScheduleSlot {
   endTime         DateTime       @map("end_time") @db.Time(0)
   capacity        Int            @default(1)
   occupiedCount   Int            @default(0) @map("occupied_count")
-  nextQueueNumber Int            @default(1) @map("next_queue_number")
   slotStatus      SlotStatus     @default(AVAILABLE) @map("slot_status")
   isActive        Boolean        @default(true) @map("is_active")
   createdAt       DateTime       @default(now()) @map("created_at") @db.Timestamptz(3)

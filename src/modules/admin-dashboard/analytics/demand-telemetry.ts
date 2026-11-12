@@ -1,7 +1,7 @@
 import { AppointmentStatus, Prisma } from '@prisma/client';
 import { PrismaService } from '../../../infrastructure/database/prisma/prisma.service.js';
 
-export const SUCCESSFUL_BOOKING_STATUSES: AppointmentStatus[] = ['BOOKED', 'CONFIRMED', 'CHECKED_IN', 'IN_EXAMINATION', 'COMPLETED', 'NO_SHOW'];
+export const SUCCESSFUL_BOOKING_STATUSES: AppointmentStatus[] = ['CONFIRMED', 'CHECKED_IN', 'COMPLETED', 'NO_SHOW'];
 export const conversionPercent = (converted: number, total: number): number | null => total > 0 ? +(converted * 100 / total).toFixed(1) : null;
 
 /** All conversions belong to the same view/search cohort; unrelated bookings never inflate CVR. */

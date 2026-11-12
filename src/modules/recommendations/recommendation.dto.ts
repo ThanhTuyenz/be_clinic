@@ -1,4 +1,4 @@
-import { IsIn, IsNotEmpty, IsNumber, IsOptional, IsString } from 'class-validator';
+import { IsIn, IsNotEmpty, IsOptional, IsString, Matches, MaxLength } from 'class-validator';
 
 export type RecommendationPriority = 'HIGH' | 'MEDIUM' | 'LOW';
 
@@ -14,7 +14,7 @@ export interface RecommendedPackageItemDto {
   priority: RecommendationPriority;
   badge: string;
   clinicalReason: string;
-  sourceType?: 'DROP_OFF' | 'SEARCH_INTENT' | 'RECENT_VIEW' | 'SPECIALTY_INTEREST' | 'PROFILE_AI' | 'POPULAR' | 'BOTH';
+  sourceType?: 'DROP_OFF' | 'SEARCH_INTENT' | 'RECENT_VIEW' | 'PROFILE_AI';
 }
 
 export interface ProfileRecommendationResponseDto {
@@ -37,14 +37,12 @@ export enum TrackingActionType {
 export class TrackBehaviorDto {
   @IsString()
   @IsNotEmpty({ message: 'sessionId không được để trống' })
+  @MaxLength(100)
+  @Matches(/^[A-Za-z0-9_-]+$/, { message: 'sessionId không hợp lệ' })
   sessionId: string;
 
   @IsIn([TrackingActionType.VIEW_PACKAGE], { message: 'Client chỉ được ghi nhận lượt xem gói khám' })
   actionType: TrackingActionType;
-
-  @IsNumber()
-  @IsOptional()
-  targetSpecialtyId?: number;
 
   @IsString()
   @IsOptional()
@@ -52,30 +50,24 @@ export class TrackBehaviorDto {
 
 }
 
-export class HomeRecommendationQueryDto {
+export class RecommendationSessionQueryDto {
   @IsString()
   @IsOptional()
+  @MaxLength(100)
+  @Matches(/^[A-Za-z0-9_-]+$/, { message: 'sessionId không hợp lệ' })
   sessionId?: string;
-
-  @IsString()
-  @IsOptional()
-  profileId?: string;
 }
 
-export interface HomeRecommendationResponseDto {
-  profilePackages: RecommendedPackageItemDto[];
-  behaviorPackages: RecommendedPackageItemDto[];
-  trackingToken?: string;
-  profileId?: string;
-  profileName?: string;
+export interface RecommendationSectionDto {
+  status: 'READY' | 'EMPTY' | 'PENDING';
   updatedAt: string;
-  // HYBRID describes a backend merge of independent rankings, never a shared LLM prompt.
-  source: 'HYBRID' | 'AI_PROFILE' | 'BEHAVIOR' | 'FALLBACK';
-  event?: string;
-  triggerEvent?: string;
-  triggerReason?: string;
-  dataOrigin: 'CACHE' | 'NEW';
-  isCached: boolean;
   fromCache: boolean;
   packages: RecommendedPackageItemDto[];
+  trackingToken?: string;
 }
+
+export interface ProfileRecommendationSectionDto extends RecommendationSectionDto {
+  profileId: string;
+  profileName?: string;
+}
+

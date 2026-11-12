@@ -21,24 +21,52 @@ waits for authentication initialization before tracking/search.
 Immediate duplicate view events are debounced for three seconds in the client.
 
 Atomic Redis updates retain package ID, frequency and recency in a sorted set/hash,
-bounded to 50 IDs with 14-day TTL. Actual viewed packages enter candidates before
-related specialty alternatives. Sources distinguish DROP_OFF, SEARCH_INTENT,
-RECENT_VIEW (actual IDs) and SPECIALTY_INTEREST (other related packages). Trusted
+bounded to 50 IDs with 14-day TTL. Behavior uses three histories: up to 50 viewed
+packages, five distinct searches and three verified abandoned packages. Sources
+distinguish DROP_OFF, SEARCH_INTENT and RECENT_VIEW (actual IDs). No separate
+specialty score or specialty-only candidate expansion is maintained. Trusted
 source metadata generates behavior badges/reasons. LLM prose cannot invent views.
 Verified abandoned bookings belong to the booking account (patient account is
 used only when the order has no account).
 
-Activity invalidates only the account behavior cache. Profile analysis remains
-independent. Switching profiles or browser sessions reuses account behavior.
-Prefix `rec:v7:account` and policy version `grounded-independent-account-v3`
-prevent reuse of old rankings. Missing
-historical view IDs are not inferred from specialty-only telemetry.
+Behavior ranking is deterministic and never calls the LLM or embedding provider.
+Search tracking stores actual ordered result IDs (up to 20 per query); home reuses
+those IDs rather than searching again. Legacy query-only history contributes no
+search candidates until searched again. Profile analysis still uses its AI worker.
 
-The home response includes independent `profilePackages` and `behaviorPackages`,
-plus one deduplicated/interleaved `packages` list with source labels. Profile
-eligibility/completion filters apply to profile recommendations; account interests
-are not interpreted as the selected patient's medical needs. Booking validates
-the chosen patient separately. No unrelated packages are added to fill the limit.
+Behavior has no trigger threshold, cooldown or Outbox/RabbitMQ analysis job.
+Home checks a fingerprint of current history, active catalog and current minute.
+New activity is reflected on the next home request; unchanged inputs reuse cache.
+Rebooking qualification runs before fingerprinting to remove obsolete drop-offs.
+Rules caches use the separate `behavior-rules` namespace and `BEHAVIOR_RULES`
+source. Old AI behavior caches are never read.
+
+The web home page renders two independent sections:
+
+- `GET /recommendations/patient-profile/:profileId?sessionId=...` checks profile
+  access, reads only the profile ranking and returns `profileId`, `profileName`,
+  `status`, `packages`, `updatedAt`, `fromCache` and a section-specific `trackingToken`.
+- `GET /recommendations/behavior?sessionId=...` reads only the signed-in account's
+  behavior, or the anonymous session's behavior. It never reads a patient profile.
+  It returns the same section fields without patient information.
+
+`READY` means the section has results, `EMPTY` means no relevant results and
+`PENDING` means profile analysis has been queued. Pending reads enqueue at most
+one analysis per profile per minute on each server process. The client polls a
+pending profile at ten-second intervals for up to two minutes and offers a manual
+refresh. Profile selection and refresh never refetch the behavior section.
+
+Each section retains its ranking, reasons and ten-item limit. The same package may
+appear in both sections with different factual reasons and distinct analytics
+tokens/positions. There is no shared `BOTH` source, priority boost or interleaving.
+Profile eligibility/completion filters apply only to profile recommendations;
+account interests are not interpreted as the selected patient's medical needs.
+Neither section uses popular packages to fill empty results. Public discovery
+stays in the existing catalog sections below. Booking validates the chosen patient.
+
+The former `GET /recommendations/home` endpoint and its combined response have
+been removed. Web and mobile clients use the two section endpoints directly.
+There is no combined ranking, cross-source deduplication or popular-package fallback.
 
 Removed obsolete profile-scoped tracking, SELF fallback, automatic follow-up
 package promotion/default interval, unused candidate-context return fields,
@@ -48,15 +76,18 @@ server, so the model is not asked to generate discarded prose. Three write-only
 global Redis specialty/package counters are removed; personal view history and
 the database package view counter are retained.
 
-When both search and views are present, up to half the candidate pool is reserved
-for actual viewed packages before adding semantic search results. Neither signal
-can monopolize the pool. The final merged display is capped separately, so an
-individual behavior subtype need not appear in every visible result set.
+Behavior points: first view = 2, each additional view adds 1, capped at 8; search = 3
+discounted by result position; verified drop-off = 5. All signals decay with a
+six-hour half-life. Scores for the same ID accumulate before deduplication; the
+strongest signal supplies the badge and factual reason. Up to three most recent
+viewed IDs retain places in the ten-item behavior list even with many search results.
+The behavior section displays its own full result list independently of profile results.
 
 Validation:
 
 ```powershell
 npx tsc --noEmit
+node --test scripts/test-recommendation-searches.cjs
 ```
 
 The browser suite in `e2e` checks refresh/cache, actual views, account isolation,
