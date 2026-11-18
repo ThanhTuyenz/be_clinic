@@ -12,14 +12,14 @@ interface RecommendationReceipt {
   sessionId: string;
   accountId?: string;
   issuedAt: number;
-  packages: Array<{ packageId: string; sourceType?: string }>;
+  packages: Array<{ packageId: number; sourceType?: string }>;
 }
 
 export interface SearchContext {
   sessionId?: string;
   accountId?: string;
   searchRequestId?: string;
-  branchId?: string;
+  branchId?: number;
 }
 
 @Injectable()
@@ -60,45 +60,53 @@ export class AnalyticsService {
       || dto.targetType !== 'PACKAGE' || position < 0 || dto.position !== position + 1) {
       throw new BadRequestException('Gợi ý đã hết hạn hoặc không thuộc phiên hiện tại.');
     }
-    const eventId = (type: string) => {
-      const hex = createHash('sha256').update(`${receipt.id}:${dto.targetId}:${type}`).digest('hex');
-      return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-4${hex.slice(13, 16)}-a${hex.slice(17, 20)}-${hex.slice(20, 32)}`;
-    };
     const data = {
       sessionId: receipt.sessionId, accountId, targetType: 'PACKAGE', targetId: dto.targetId,
       recommendationId: receipt.id, recommendationSource: receipt.packages[position].sourceType || 'POPULAR',
       position: position + 1, occurredAt,
     };
     // A fast click also proves visibility. One package contributes once per response, including retries.
-    const events = [{ ...data, id: eventId('IMPRESSION'), eventType: 'RECOMMEND_IMPRESSION' }];
-    const clickId = eventId('CLICK');
-    if (dto.eventType === 'RECOMMEND_CLICK') events.push({ ...data, id: clickId, eventType: 'RECOMMEND_CLICK' });
-    await this.prisma.analyticsInteraction.createMany({ data: events, skipDuplicates: true });
-    return { success: true, ...(dto.eventType === 'RECOMMEND_CLICK' ? { sourceViewId: clickId } : {}) };
+    const events = [{ ...data, eventType: 'RECOMMEND_IMPRESSION' }];
+    if (dto.eventType === 'RECOMMEND_CLICK') events.push({ ...data, eventType: 'RECOMMEND_CLICK' });
+    return this.prisma.$transaction(async tx => {
+      await tx.analyticsInteraction.createMany({ data: events, skipDuplicates: true });
+      const click = dto.eventType === 'RECOMMEND_CLICK' ? await tx.analyticsInteraction.findFirst({
+        where: { recommendationId: receipt.id, targetId: dto.targetId, eventType: 'RECOMMEND_CLICK' },
+        select: { id: true },
+      }) : null;
+      return { success: true, ...(click ? { sourceViewId: click.id } : {}) };
+    });
   }
 
   async recordSearch(query: string, context: SearchContext, result: {
-    branchId?: string; packages: Array<{ id: string }>; doctors: Array<{ id: string }>; branches: Array<{ id: string }>;
+    branchId?: number; packages: Array<{ id: number }>; doctors: Array<{ id: string }>; branches: Array<{ id: number }>;
     partial?: boolean;
   } | null, latencyMs: number) {
     // Scope the execution ID to its owner, query and branch; retries share one database row.
     const key = context.searchRequestId && context.sessionId
       ? createHash('sha256').update(JSON.stringify([context.searchRequestId, context.sessionId, context.accountId,
         query.trim().toLowerCase(), context.branchId])).digest('hex') : undefined;
-    const id = key ? `${key.slice(0, 8)}-${key.slice(8, 12)}-4${key.slice(13, 16)}-a${key.slice(17, 20)}-${key.slice(20, 32)}` : randomUUID();
     const status = result ? result.partial ? 'PARTIAL' : result.packages.length + result.doctors.length + result.branches.length ? 'SUCCESS' : 'EMPTY' : 'ERROR';
-    const created = await this.prisma.$transaction(async tx => {
-      const inserted = await tx.searchRequest.createMany({ skipDuplicates: true, data: [{
-        id, sessionId: context.sessionId || `legacy_${id}`, accountId: context.accountId,
+    return this.prisma.$transaction(async tx => {
+      // Serialize retries without overriding the database-generated integer ID.
+      if (key) {
+        await tx.$queryRaw`SELECT 1 AS locked FROM pg_advisory_xact_lock(hashtext(${key}))`;
+        const existing = await tx.searchRequest.findFirst({
+          where: { intent: { path: ['requestKey'], equals: key } },
+          select: { id: true },
+        });
+        if (existing) return { id: existing.id, created: false };
+      }
+      const inserted = await tx.searchRequest.create({ data: {
+        sessionId: context.sessionId || `legacy_${randomUUID()}`, accountId: context.accountId,
         branchId: result?.branchId || context.branchId, query: query.slice(0, 200), normalizedQuery: normalizeSearch(query),
-        intent: JSON.parse(JSON.stringify(parseSearchIntent(query))),
+        intent: JSON.parse(JSON.stringify({ ...parseSearchIntent(query), ...(key ? { requestKey: key } : {}) })),
         resultKeys: result ? [
           ...result.packages.map(item => `PACKAGE:${item.id}`), ...result.doctors.map(item => `DOCTOR:${item.id}`), ...result.branches.map(item => `BRANCH:${item.id}`),
         ] : [],
         status, packageCount: result?.packages.length || 0, doctorCount: result?.doctors.length || 0,
         branchCount: result?.branches.length || 0, latencyMs: Math.max(0, Math.round(latencyMs)),
-      }] });
-      if (!inserted.count) return false;
+      }, select: { id: true } });
       if (status === 'SUCCESS' || status === 'EMPTY') {
         const keyword = query.trim().toLowerCase();
         const dateKey = vietnamDateKey(new Date());
@@ -106,12 +114,14 @@ export class AnalyticsService {
         await tx.searchLog.upsert({ where: { keyword_dateKey_hasResults: { keyword, dateKey, hasResults } },
           update: { count: { increment: 1 } }, create: { keyword, dateKey, hasResults, count: 1 } });
       }
-      return true;
+      return { id: inserted.id, created: true };
     });
-    return { id, created };
   }
 
   async recordInteraction(dto: AnalyticsInteractionDto, accountId?: string) {
+    if (dto.targetType === 'DOCTOR' ? (!dto.targetDoctorId || dto.targetId != null) : (!dto.targetId || dto.targetDoctorId != null)) {
+      throw new BadRequestException('Bác sĩ sử dụng targetDoctorId UUID; gói khám và chi nhánh sử dụng targetId số nguyên.');
+    }
     if (dto.eventType === 'RECOMMEND_IMPRESSION' || dto.eventType === 'RECOMMEND_CLICK') {
       return this.recordRecommendationInteraction(dto, accountId);
     }
@@ -124,7 +134,7 @@ export class AnalyticsService {
         where: { id: dto.searchId, sessionId: dto.sessionId, createdAt: { gte: new Date(Date.now() - 24 * 3600_000) } },
         select: { accountId: true, branchId: true, resultKeys: true },
       });
-      const key = `${dto.targetType}:${dto.targetId}`;
+      const key = `${dto.targetType}:${dto.targetType === 'DOCTOR' ? dto.targetDoctorId : dto.targetId}`;
       if (!search || (search.accountId && search.accountId !== accountId) ||
         !Array.isArray(search.resultKeys) || !search.resultKeys.includes(key)) {
         throw new BadRequestException('Kết quả tìm kiếm không còn hợp lệ.');
@@ -143,24 +153,36 @@ export class AnalyticsService {
         select: { id: true, branchBookingMethod: { select: { branchId: true } }, branchBookingMethods: { select: { branchBookingMethod: { select: { branchId: true } } } } },
       });
       if (!pkg) throw new BadRequestException('Không tìm thấy gói khám.');
-      const ids = [...new Set([pkg.branchBookingMethod?.branchId, ...pkg.branchBookingMethods.map(link => link.branchBookingMethod.branchId)].filter((id): id is string => !!id))];
+      const ids = [...new Set([pkg.branchBookingMethod?.branchId, ...pkg.branchBookingMethods.map(link => link.branchBookingMethod.branchId)].filter((id): id is number => id != null))];
       if (branchId && !ids.includes(branchId)) throw new BadRequestException('Gói khám không thuộc cơ sở này.');
       branchId = branchId || (ids.length === 1 ? ids[0] : undefined);
     } else if (dto.eventType === 'PACKAGE_VIEW') {
       throw new BadRequestException('Loại lượt xem không hợp lệ.');
     }
-    await this.prisma.analyticsInteraction.createMany({ data: [{ ...data, occurredAt, branchId, accountId }], skipDuplicates: true });
-    return { success: true };
+    return this.prisma.$transaction(async tx => {
+      // Retries retain their timestamp and target; IDs are generated by the database.
+      const eventKey = JSON.stringify([dto.sessionId, dto.eventType, dto.targetType, dto.targetId, dto.targetDoctorId, occurredAt]);
+      await tx.$queryRaw`SELECT 1 AS locked FROM pg_advisory_xact_lock(hashtext(${eventKey}))`;
+      const existing = await tx.analyticsInteraction.findFirst({
+        where: { sessionId: dto.sessionId, accountId: accountId ?? null, eventType: dto.eventType,
+          targetType: dto.targetType, targetId: dto.targetId ?? null, targetDoctorId: dto.targetDoctorId ?? null, occurredAt },
+        select: { id: true },
+      });
+      const interaction = existing || await tx.analyticsInteraction.create({
+        data: { ...data, id: undefined, occurredAt, branchId, accountId }, select: { id: true },
+      });
+      return { success: true, ...(dto.eventType === 'PACKAGE_VIEW' ? { sourceViewId: interaction.id } : {}) };
+    });
   }
 
   /** Attribution is optional and never creates a conversion from an unrelated/stale event. */
   async attribution(tx: Prisma.TransactionClient, accountId: string, source: {
-    analyticsSessionId?: string; searchId?: string; sourceViewId?: string;
-  }, target: { branchId: string; packageId?: string | null; doctorId?: string }) {
+    analyticsSessionId?: string; searchId?: number; sourceViewId?: number;
+  }, target: { branchId: number; packageId?: number | null; doctorId?: string }) {
     const since = new Date(Date.now() - 24 * 3600_000);
     const owner = { sessionId: source.analyticsSessionId || '', AND: [{ OR: [{ accountId: null }, { accountId }] }] };
-    let searchId: string | undefined;
-    let sourceViewId: string | undefined;
+    let searchId: number | undefined;
+    let sourceViewId: number | undefined;
     if (source.searchId && source.analyticsSessionId) {
       const search = await tx.searchRequest.findFirst({ where: { id: source.searchId, ...owner, createdAt: { gte: since } }, select: { id: true } });
       if (search) {
@@ -168,7 +190,7 @@ export class AnalyticsService {
           searchId: search.id, ...owner, eventType: 'RESULT_CLICK',
           OR: [
             ...(target.packageId ? [{ targetType: 'PACKAGE', targetId: target.packageId }] : []),
-            ...(target.doctorId ? [{ targetType: 'DOCTOR', targetId: target.doctorId }] : []),
+            ...(target.doctorId ? [{ targetType: 'DOCTOR', targetDoctorId: target.doctorId }] : []),
             { targetType: 'BRANCH', targetId: target.branchId },
           ],
         }, select: { id: true } });

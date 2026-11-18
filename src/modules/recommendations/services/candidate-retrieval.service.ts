@@ -28,7 +28,7 @@ export interface ProfileRecommendationContext extends ProfileHealthContext {
   bmi: number | null;
   medicalHistory: string;
   allergies: string;
-  recentlyCompletedPackageIds: string[];
+  recentlyCompletedPackageIds: number[];
 }
 
 export interface BehaviorCandidate {
@@ -75,7 +75,7 @@ export class CandidateRetrievalService {
       pregnancyStatus: profile.pregnancyStatus, isBreastfeeding: profile.isBreastfeeding,
       recentlyCompletedPackageIds: [...new Set(history
         .filter(item => Date.now() - item.createdAt.getTime() <= TELEMETRY_CONFIG.RECENCY_SUPPRESSION_DAYS * 86400000)
-        .map(item => item.servicePackageId).filter((id): id is string => Boolean(id)))],
+        .map(item => item.servicePackageId).filter((id): id is number => id !== null))],
     };
   }
 
@@ -85,7 +85,7 @@ export class CandidateRetrievalService {
       && !context.recentlyCompletedPackageIds.includes(pkg.id));
     const candidates: CandidatePoolItem[] = [];
     const limit = TELEMETRY_CONFIG.CANDIDATE_POOL_TARGET;
-    const added = new Set<string>();
+    const added = new Set<number>();
     const add = (pkg: RecommendationPackage, score?: number) => {
       if (added.has(pkg.id) || candidates.length >= limit) return;
       added.add(pkg.id);
@@ -124,7 +124,7 @@ export class CandidateRetrievalService {
     const catalogById = new Map(allPackages.map(pkg => [pkg.id, pkg]));
     
     const candidates: BehaviorCandidate[] = [];
-    const add = (id: string, signal: Omit<BehaviorCandidate, 'pkg'>) => {
+    const add = (id: number, signal: Omit<BehaviorCandidate, 'pkg'>) => {
       const pkg = catalogById.get(id);
       if (pkg) candidates.push({ pkg, ...signal });
     };

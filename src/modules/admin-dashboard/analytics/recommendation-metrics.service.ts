@@ -25,7 +25,7 @@ export class RecommendationMetricsService {
       throw new BadRequestException('Khoảng thống kê phải lớn hơn 0 và không quá 90 ngày.');
     }
     const rows = await this.prisma.$queryRaw<Array<{
-      source: string; packageId: string; packageName: string | null;
+      source: string; packageId: number; packageName: string | null;
       impressions: bigint; clicks: bigint; checkouts: bigint; bookings: bigint; paid: bigint;
     }>>(Prisma.sql`
       SELECT i.recommendation_source AS source, i.target_id AS "packageId", p.name AS "packageName",
@@ -34,13 +34,12 @@ export class RecommendationMetricsService {
         COUNT(DISTINCT c.id) FILTER (WHERE a.id IS NOT NULL) AS checkouts,
         COUNT(DISTINCT c.id) FILTER (WHERE a.status::text IN (${Prisma.join(SUCCESSFUL_BOOKING_STATUSES)})) AS bookings,
         COUNT(DISTINCT c.id) FILTER (WHERE a.status::text IN (${Prisma.join(SUCCESSFUL_BOOKING_STATUSES)})
-          AND (inv.status::text = 'PAID' OR group_inv.status::text = 'PAID')) AS paid
+          AND group_inv.status::text = 'PAID') AS paid
       FROM analytics_interactions i
       LEFT JOIN service_packages p ON p.id = i.target_id
       LEFT JOIN analytics_interactions c ON c.recommendation_id = i.recommendation_id
         AND c.target_id = i.target_id AND c.event_type = 'RECOMMEND_CLICK'
       LEFT JOIN appointments a ON a.source_view_id = c.id AND a.service_package_id = i.target_id
-      LEFT JOIN invoices inv ON inv.appointment_id = a.id
       LEFT JOIN invoices group_inv ON group_inv.booking_order_id = a.booking_order_id
       WHERE i.event_type = 'RECOMMEND_IMPRESSION' AND i.occurred_at >= ${start} AND i.occurred_at < ${end}
       GROUP BY i.recommendation_source, i.target_id, p.name ORDER BY i.recommendation_source, i.target_id
@@ -60,14 +59,14 @@ export class RecommendationMetricsService {
       impressions: sum.impressions + row.impressions, clicks: sum.clicks + row.clicks,
       checkouts: sum.checkouts + row.checkouts, bookings: sum.bookings + row.bookings, paid: sum.paid + row.paid,
     });
-    const sources = new Map<string, Counts>(), packages = new Map<string, Counts & { packageName: string | null }>();
+    const sources = new Map<string, Counts>(), packages = new Map<number, Counts & { packageName: string | null }>();
     for (const row of counts) {
       sources.set(row.source, add(sources.get(row.source) || zero(), row));
       packages.set(row.packageId, { ...add(packages.get(row.packageId) || zero(), row), packageName: row.packageName });
     }
     const bySource = [...sources].map(([source, values]) => ({ source, ...rates(values) }));
     const byPackage = [...packages].map(([packageId, { packageName, ...values }]) => ({ packageId, packageName, ...rates(values) }))
-      .sort((a, b) => b.impressions - a.impressions || a.packageId.localeCompare(b.packageId));
+      .sort((a, b) => b.impressions - a.impressions || a.packageId - b.packageId);
     return { start: start.toISOString(), end: end.toISOString(), attributionWindowHours: 24,
       totals: rates(counts.reduce(add, zero())), bySource, byPackage };
   }

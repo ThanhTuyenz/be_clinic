@@ -80,7 +80,7 @@ export class AppointmentsController {
   @ApiOperation({ summary: 'Thực hiện dời lịch thông minh tự động' })
   smartReschedule(
     @Req() request: Request,
-    @Body() body: { items: Array<{ appointmentId: string; newSlotId: string }> },
+    @Body() body: { items: Array<{ appointmentId: string; newSlotId: number }> },
   ) {
     return this.appointments.executeSmartReschedule(request.user!.id, body);
   }
@@ -90,7 +90,7 @@ export class AppointmentsController {
   adminReschedule(
     @Req() request: Request,
     @Param('id') id: string,
-    @Body() body: { newSlotId: string; note?: string },
+    @Body() body: { newSlotId: number; note?: string },
   ) {
     return this.appointments.adminReschedule(request.user!.id, id, body);
   }

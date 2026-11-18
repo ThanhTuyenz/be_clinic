@@ -12,12 +12,12 @@ import { TrackingActionType } from '../../recommendations/recommendation.dto.js'
 export interface SemanticSearchResult {
   query: string;
   behaviorRecorded?: boolean;
-  searchId?: string;
-  branchId?: string;
+  searchId?: number;
+  branchId?: number;
   total: number;
   partial?: boolean;
   packages: Array<{
-    id: string;
+    id: number;
     code: string;
     name: string;
     price: number;
@@ -25,7 +25,7 @@ export interface SemanticSearchResult {
     specialtyName: string;
     similarityScore: number;
     description: string;
-    branchId?: string;
+    branchId?: number;
     bookingMethodCode?: string;
     specialtyId?: number | null;
   }>;
@@ -38,7 +38,7 @@ export interface SemanticSearchResult {
     avatarUrl: string | null;
   }>;
   branches: Array<{
-    id: string;
+    id: number;
     code: string;
     name: string;
     address: string;
@@ -62,7 +62,7 @@ export class SearchService {
   /**
    * Tìm kiếm thông minh đa thực thể (Gói khám, Bác sĩ, Cơ sở) bằng Vector Embeddings & Heuristic Matcher
    */
-  async find(query: string, branchId?: string, context: SearchContext = {}): Promise<SemanticSearchResult> {
+  async find(query: string, branchId?: number, context: SearchContext = {}): Promise<SemanticSearchResult> {
     const start = performance.now();
     let result: SemanticSearchResult;
     try {
@@ -93,7 +93,7 @@ export class SearchService {
     return result;
   }
 
-  private async runSearch(query: string, branchId?: string): Promise<SemanticSearchResult> {
+  private async runSearch(query: string, branchId?: number): Promise<SemanticSearchResult> {
     if (!query || !query.trim()) {
       return { query: '', total: 0, packages: [], doctors: [], branches: [] };
     }
@@ -145,7 +145,7 @@ export class SearchService {
   /**
    * 1. Tìm kiếm và phân tích ngữ nghĩa Gói khám với Cache & Threshold
    */
-  private async searchPackages(q: string, branchId?: string) {
+  private async searchPackages(q: string, branchId?: number) {
     try {
       const candidatePackages = await this.getCachedCandidatePackages(branchId);
       if (!candidatePackages || candidatePackages.length === 0) return [];
@@ -176,7 +176,7 @@ export class SearchService {
   /**
    * 2. Tìm kiếm Bác sĩ (Bảo vệ thông tin nhạy cảm: Không select phone/email)
    */
-  private async searchDoctors(q: string, branchId?: string) {
+  private async searchDoctors(q: string, branchId?: number) {
     try {
       const intent = parseSearchIntent(q);
       if (!intent.text) return [];
@@ -231,8 +231,8 @@ export class SearchService {
   /**
    * Lấy danh sách gói khám ứng viên (Được đệm Cache Redis 5 phút để tránh quét DB liên tục)
    */
-  private async getCachedCandidatePackages(branchId?: string): Promise<PackageForRetrieval[]> {
-    const cacheKey = `search:cache:candidates:v1:${branchId || 'all'}`;
+  private async getCachedCandidatePackages(branchId?: number): Promise<PackageForRetrieval[]> {
+    const cacheKey = `search:cache:candidates:v2:${branchId || 'all'}`;
 
     if (this.redis.isEnabled()) {
       try {

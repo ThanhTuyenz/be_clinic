@@ -3,7 +3,7 @@ import type { RecommendedPackageItemDto } from '../recommendation.dto.js';
 import { TELEMETRY_CONFIG } from '../constants/recommendation.constants.js';
 
 export function rankBehaviorCandidates(candidates: BehaviorCandidate[], now = Date.now()): RecommendedPackageItemDto[] {
-  const ranked = new Map<string, { candidate: BehaviorCandidate; score: number; strongest: number; latest: number }>();
+  const ranked = new Map<number, { candidate: BehaviorCandidate; score: number; strongest: number; latest: number }>();
 
   const at = (item: BehaviorCandidate) => item.abandonedAt ?? item.searchedAt ?? item.lastViewedAt ?? 0;
 
@@ -32,11 +32,11 @@ export function rankBehaviorCandidates(candidates: BehaviorCandidate[], now = Da
     } else ranked.set(candidate.pkg.id, { candidate, score, strongest: score, latest: timestamp });
   }
   const sorted = [...ranked.values()].sort((a, b) => b.score - a.score || b.latest - a.latest
-    || a.candidate.pkg.id.localeCompare(b.candidate.pkg.id));
-  const selected = new Set<string>();
+    || a.candidate.pkg.id - b.candidate.pkg.id);
+  const selected = new Set<number>();
 
   candidates.filter(item => item.sourceType === 'RECENT_VIEW' && ranked.has(item.pkg.id))
-    .sort((a, b) => at(b) - at(a) || a.pkg.id.localeCompare(b.pkg.id)).slice(0, 3)
+    .sort((a, b) => at(b) - at(a) || a.pkg.id - b.pkg.id).slice(0, 3)
     .forEach(item => selected.add(item.pkg.id));
   for (const item of sorted) {
     if (selected.size >= TELEMETRY_CONFIG.SOURCE_PACKAGES_LIMIT) break;

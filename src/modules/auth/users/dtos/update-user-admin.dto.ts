@@ -1,5 +1,5 @@
 import { ApiPropertyOptional } from '@nestjs/swagger';
-import { Transform } from 'class-transformer';
+import { Transform, Type } from 'class-transformer';
 import {
   IsBoolean,
   IsEmail,
@@ -77,10 +77,16 @@ export class UpdateUserAdminDto extends DoctorProfileDto {
 
   @ApiPropertyOptional({ description: 'ID cơ sở làm việc' })
   @IsOptional()
-  branchId?: string | null;
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  branchId?: number | null;
 
   @ApiPropertyOptional({ description: 'ID chuyên khoa chính (Bác sĩ)' })
   @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
   specialtyId?: number | null;
 
   @ApiPropertyOptional({ example: 'BS. CKI' })

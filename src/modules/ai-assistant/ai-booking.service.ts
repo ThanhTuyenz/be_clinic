@@ -107,7 +107,7 @@ export class AiBookingService {
         });
         // The receipt is committed atomically with the hold. Retries never reserve another slot.
         if (previous) {
-          if ((previous.extractedParams as { quoteId?: string })?.quoteId !== dto.quoteId) {
+          if ((previous.extractedParams as { quoteId?: number })?.quoteId !== dto.quoteId) {
             throw new ConflictException('Phiên này đã xác nhận một lựa chọn khác. Vui lòng kiểm tra lịch đã tạo.');
           }
           return previous.extractedParams;

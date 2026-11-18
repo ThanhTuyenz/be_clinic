@@ -11,6 +11,8 @@ import { ReceptionBookingController } from './reception-booking.controller.js';
 import { ReceptionBookingService } from './reception-booking.service.js';
 
 import { PatientsModule } from '../patients/patients.module.js';
+import { PackageReceptionSlotsController } from './package-reception-slots.controller.js';
+import { PackageReceptionSlotsService } from './package-reception-slots.service.js';
 
 @Module({
   imports: [
@@ -23,11 +25,13 @@ import { PatientsModule } from '../patients/patients.module.js';
     BookingController,
     ReceptionBookingController,
     BookingFlowController,
+    PackageReceptionSlotsController,
   ],
   providers: [
     BookingService,
     ReceptionBookingService,
     BookingFlowService,
+    PackageReceptionSlotsService,
   ],
   exports: [BookingService, BookingFlowService],
 })

@@ -18,7 +18,7 @@ model User {
   updatedAt                DateTime                   @updatedAt @map("updated_at") @db.Timestamptz(3)
 
   oauthAccounts            OAuthAccount[]
-  branchId                 String?                    @map("branch_id") @db.Uuid
+  branchId                 Int?                       @map("branch_id")
   branch                   Branch?                    @relation(fields: [branchId], references: [id], onDelete: SetNull)
   patientProfiles          PatientProfile[]
   doctor                   Doctor?

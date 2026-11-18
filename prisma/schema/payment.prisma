@@ -4,9 +4,8 @@
 
 model Invoice {
   id             String               @id @default(uuid()) @db.Uuid
-  appointmentId  String?              @unique @map("appointment_id") @db.Uuid
-  bookingOrderId String?              @unique @map("booking_order_id") @db.Uuid
-  issuedBranchId String               @map("issued_branch_id") @db.Uuid
+  bookingOrderId String               @unique @map("booking_order_id") @db.Uuid
+  issuedBranchId Int                  @map("issued_branch_id")
   subtotal       Decimal              @default(0) @map("subtotal") @db.Decimal(12, 2)
   serviceFee     Decimal              @default(0) @map("service_fee") @db.Decimal(12, 2)
   discountAmount Decimal              @default(0) @map("discount_amount") @db.Decimal(12, 2)
@@ -16,8 +15,7 @@ model Invoice {
   paidAt         DateTime?            @map("paid_at") @db.Timestamptz(3)
   createdAt      DateTime             @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt      DateTime             @updatedAt @map("updated_at") @db.Timestamptz(3)
-  appointment    Appointment?         @relation(fields: [appointmentId], references: [id], onDelete: Restrict)
-  bookingOrder   BookingOrder?        @relation(fields: [bookingOrderId], references: [id], onDelete: Restrict)
+  bookingOrder   BookingOrder         @relation(fields: [bookingOrderId], references: [id], onDelete: Restrict)
   issuedBranch   Branch               @relation(fields: [issuedBranchId], references: [id], onDelete: Restrict)
   payments       PaymentTransaction[]
 

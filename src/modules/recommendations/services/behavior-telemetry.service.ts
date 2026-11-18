@@ -4,10 +4,10 @@ import { RedisService } from '../../../infrastructure/redis/redis.service.js';
 import { TrackBehaviorDto, TrackingActionType } from '../recommendation.dto.js';
 import { TELEMETRY_CONFIG } from '../constants/recommendation.constants.js';
 
-export type BehaviorEvent = Omit<TrackBehaviorDto, 'sessionId'> & { sessionId?: string; searchQuery?: string; searchPackageIds?: string[]; abandonedAt?: number };
-type RecentSearch = { query: string; searchedAt: number; packageIds?: string[] };
-type RecentView = { packageId: string; viewCount: number; lastViewedAt: number };
-type RecentDropOff = { packageId: string; abandonedAt: number };
+export type BehaviorEvent = Omit<TrackBehaviorDto, 'sessionId'> & { sessionId?: string; searchQuery?: string; searchPackageIds?: number[]; abandonedAt?: number };
+type RecentSearch = { query: string; searchedAt: number; packageIds?: number[] };
+type RecentView = { packageId: number; viewCount: number; lastViewedAt: number };
+type RecentDropOff = { packageId: number; abandonedAt: number };
 interface BehaviorTelemetryContext {
   recentSearches: RecentSearch[];
   recentViews: RecentView[];
@@ -43,7 +43,7 @@ export class BehaviorTelemetryService {
   }
 
   /** Only a committed, unpaid HOLD cancellation is an abandoned booking. */
-  async recordAbandonedBooking(appointmentId: string): Promise<{ userId?: string; packageId: string } | undefined> {
+  async recordAbandonedBooking(appointmentId: string): Promise<{ userId?: string; packageId: number } | undefined> {
     if (!this.redis.isEnabled()) return;
     const appointment = await this.prisma.appointment.findFirst({
       where: {
@@ -54,7 +54,6 @@ export class BehaviorTelemetryService {
         id: true, bookingOrderId: true, servicePackageId: true,
         patientProfile: { select: { accountId: true } },
         bookingOrder: { select: { accountId: true, invoice: { select: { payments: { where: { paidAt: { not: null } }, select: { id: true }, take: 1 } } } } },
-        invoice: { select: { payments: { where: { paidAt: { not: null } }, select: { id: true }, take: 1 } } },
         sourceView: { select: { sessionId: true } },
         statusHistories: {
           where: { fromStatus: 'HOLD', toStatus: 'CANCELLED', reason: { in: ['PAYMENT_HOLD_TIMEOUT', 'PAYMENT_CANCELLED'] } },
@@ -62,7 +61,7 @@ export class BehaviorTelemetryService {
         },
       },
     });
-    if (!appointment?.servicePackageId || appointment.invoice?.payments.length || appointment.bookingOrder?.invoice?.payments.length) return;
+    if (!appointment?.servicePackageId || appointment.bookingOrder.invoice?.payments.length) return;
     const userId = appointment.bookingOrder?.accountId || appointment.patientProfile.accountId || undefined;
     const sessionId = appointment.sourceView?.sessionId;
     if (!userId && !sessionId) return;
@@ -198,7 +197,7 @@ export class BehaviorTelemetryService {
     const recentViews: RecentView[] = [];
 
     const searches = new Map<string, number>();
-    const dropOffs = new Map<string, number>();
+    const dropOffs = new Map<number, number>();
     const now = Date.now();
     const cutoff = now - TELEMETRY_CONFIG.BEHAVIOR_TTL_SECONDS * 1000;
     const isRecent = (at: number) => Number.isSafeInteger(at) && at >= cutoff && at <= now;
@@ -208,8 +207,8 @@ export class BehaviorTelemetryService {
         searches.set(query, Math.max(searches.get(query) || 0, searchedAt));
       }
     };
-    const addDropOff = (packageId: string, abandonedAt: number) => {
-      if (packageId && isRecent(abandonedAt)) {
+    const addDropOff = (packageId: number, abandonedAt: number) => {
+      if (Number.isInteger(packageId) && packageId > 0 && isRecent(abandonedAt)) {
         dropOffs.set(packageId, Math.max(dropOffs.get(packageId) || 0, abandonedAt));
       }
     };
@@ -224,16 +223,16 @@ export class BehaviorTelemetryService {
       read('search results', () => client.hgetall(key + ':search_results'), {}),
     ]);
     for (let index = 0; index < abandoned.length; index += 2) {
-      addDropOff(abandoned[index], Number(abandoned[index + 1]));
+      addDropOff(Number(abandoned[index]), Number(abandoned[index + 1]));
     }
     for (let index = 0; index < recentQueries.length; index += 2) {
       addSearch(recentQueries[index], Number(recentQueries[index + 1]));
     }
     for (let index = 0; index < viewed.length; index += 2) {
       const lastViewedAt = Number(viewed[index + 1]);
-      if (viewed[index] && isRecent(lastViewedAt)) {
+      if (Number.isInteger(Number(viewed[index])) && Number(viewed[index]) > 0 && isRecent(lastViewedAt)) {
         const count = Number(counts[viewed[index]]);
-        recentViews.push({ packageId: viewed[index], viewCount: Number.isSafeInteger(count) && count > 0 ? count : 1, lastViewedAt });
+        recentViews.push({ packageId: Number(viewed[index]), viewCount: Number.isSafeInteger(count) && count > 0 ? count : 1, lastViewedAt });
       }
     }
     // Read legacy data during migration; new events only write sorted sets.
@@ -241,14 +240,14 @@ export class BehaviorTelemetryService {
       addSearch(hashData.last_search_query, Number(hashData.last_search_at || 0));
     }
     if (hashData.drop_off_verified === '1' && hashData.drop_off_pkg) {
-      addDropOff(hashData.drop_off_pkg, Number(hashData.drop_off_at || 0));
+      addDropOff(Number(hashData.drop_off_pkg), Number(hashData.drop_off_at || 0));
     }
 
     const recentSearches = [...searches].map(([query, searchedAt]) => {
-      let packageIds: string[] = [];
+      let packageIds: number[] = [];
       try {
         const parsed: unknown = JSON.parse(searchResults[query] || '[]');
-        if (Array.isArray(parsed)) packageIds = parsed.filter((id): id is string => typeof id === 'string')
+        if (Array.isArray(parsed)) packageIds = parsed.map(Number).filter((id) => Number.isInteger(id) && id > 0)
           .slice(0, TELEMETRY_CONFIG.SEMANTIC_SEARCH_LIMIT);
       } catch { /* Ignore malformed or legacy result snapshots. */ }
       return { query, searchedAt, ...(searchResults[query] ? { packageIds } : {}) };
@@ -256,7 +255,7 @@ export class BehaviorTelemetryService {
       .sort((a, b) => b.searchedAt - a.searchedAt || a.query.localeCompare(b.query))
       .slice(0, TELEMETRY_CONFIG.MAX_RECENT_SEARCHES);
     const recentDropOffs = [...dropOffs].map(([packageId, abandonedAt]) => ({ packageId, abandonedAt }))
-      .sort((a, b) => b.abandonedAt - a.abandonedAt || a.packageId.localeCompare(b.packageId))
+      .sort((a, b) => b.abandonedAt - a.abandonedAt || a.packageId - b.packageId)
       .slice(0, TELEMETRY_CONFIG.MAX_RECENT_DROP_OFFS);
     const qualifiedDropOffs = await read('rebooked drop-offs', () => this.excludeRebookedDropOffs(recentDropOffs, userId, sessionId), []);
     return { recentViews, recentSearches, recentDropOffs: qualifiedDropOffs };
@@ -286,7 +285,7 @@ export class BehaviorTelemetryService {
         orderBy: { createdAt: 'desc' }, take: 1, select: { createdAt: true },
       } },
     });
-    const confirmedAt = new Map<string, number>();
+    const confirmedAt = new Map<number, number>();
     for (const booking of bookings) {
       const at = Math.max(booking.createdAt.getTime(), booking.statusHistories[0]?.createdAt.getTime() || 0);
       if (booking.servicePackageId) {

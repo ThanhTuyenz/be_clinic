@@ -12,7 +12,7 @@ const invoiceSelect = {
 } satisfies Prisma.InvoiceSelect;
 const select = {
   id: true, bookingCode: true, status: true, holdExpiresAt: true, bookingOrderId: true,
-  invoice: { select: invoiceSelect }, bookingOrder: { select: { invoice: { select: invoiceSelect } } },
+  bookingOrder: { select: { invoice: { select: invoiceSelect } } },
   statusHistories: { where: { toStatus: 'CANCELLED' as const }, orderBy: { createdAt: 'desc' as const }, take: 1, select: { reason: true } },
 } satisfies Prisma.AppointmentSelect;
 
@@ -21,6 +21,7 @@ const PAYMENT_LABELS = {
   CANCELLED: 'Đã hủy', EXPIRED: 'Đã hết hạn', FAILED: 'Thanh toán chưa thành công',
   MANUAL_REVIEW: 'Giao dịch đang chờ kiểm tra',
   REFUND_REQUIRED: 'Yêu cầu hoàn tiền đang chờ xử lý', REFUNDED: 'Đã hoàn tiền',
+  NOT_REFUNDABLE: 'Lịch đã hủy, không hoàn tiền theo chính sách',
   AWAITING_RECONCILIATION: 'Đã hết thời gian giữ chỗ, hệ thống đang đối soát thanh toán',
 } as const;
 export interface AiPaymentStatusResult {
@@ -45,7 +46,7 @@ export class AiPaymentStatusService {
     const read = () => this.prisma.appointment.findFirst({ where, select });
     let row = await read();
     if (!row) throw new NotFoundException('Không tìm thấy lịch hẹn thuộc tài khoản của bạn.');
-    let invoice = row.invoice ?? row.bookingOrder?.invoice;
+    let invoice = row.bookingOrder.invoice;
     let freshness: AiPaymentStatusResult['freshness'] = 'DATABASE';
     const pending = invoice?.payments.find(payment => payment.provider === 'PAYOS'
       && payment.providerTransactionId && ['PENDING', 'FAILED'].includes(payment.status));
@@ -57,9 +58,14 @@ export class AiPaymentStatusService {
       } catch { freshness = 'GATEWAY_UNAVAILABLE'; }
       row = await read();
       if (!row) throw new NotFoundException('Không tìm thấy lịch hẹn thuộc tài khoản của bạn.');
-      invoice = row.invoice ?? row.bookingOrder?.invoice;
+      invoice = row.bookingOrder.invoice;
     }
     const payments = invoice?.payments ?? [];
+    const notRefundable = payments.some(payment => {
+      const payload = payment.rawPayload as Record<string, unknown> | null;
+      const requests = payload?.appointmentRefunds as Record<string, { approvalStatus?: string }> | undefined;
+      return requests?.[row.id]?.approvalStatus === 'NOT_ELIGIBLE';
+    });
     const refund = payments.find(payment => {
       if (!['REFUND_REQUIRED', 'REFUNDED'].includes(payment.status)) return false;
       if (!row.bookingOrderId) return true;
@@ -69,7 +75,8 @@ export class AiPaymentStatusService {
       return !requests || (typeof requests === 'object' && Object.hasOwn(requests, row.id));
     });
     let status: AiPaymentStatusResult['status'];
-    if (refund) status = refund.status as 'REFUND_REQUIRED' | 'REFUNDED';
+    if (notRefundable) status = 'NOT_REFUNDABLE';
+    else if (refund) status = refund.status as 'REFUND_REQUIRED' | 'REFUNDED';
     else if (invoice?.status === 'REFUNDED') status = 'REFUNDED';
     else if (invoice?.status === 'PAID') status = 'PAID';
     else if (payments.some(payment => ['SUCCESS', 'LATE_SUCCESS', 'MANUAL_REVIEW'].includes(payment.status))) status = 'MANUAL_REVIEW';

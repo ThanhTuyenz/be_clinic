@@ -17,7 +17,6 @@
     "prisma:deploy": "prisma migrate deploy",
     "prisma:studio": "prisma studio",
     "prisma:seed": "node prisma/seed.mjs",
-    "prisma:seed:verify": "node scripts/verify-demo-seed.mjs",
     "prisma:seed:prod": "node -e \"process.env.ENV_FILE='.env.production'; require('child_process').execSync('node prisma/seed.mjs', {stdio: 'inherit', env: process.env})\"",
     "redis:search:sync": "node scripts/sync-redis-search.mjs"
   },

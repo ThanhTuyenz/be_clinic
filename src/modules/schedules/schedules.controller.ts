@@ -1,3 +1,4 @@
+import { ParseIntPipe } from '@nestjs/common';
 import { Body, Controller, Delete, Get, Param, Patch, Post, Query, UseGuards } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiParam, ApiQuery, ApiTags } from '@nestjs/swagger';
 import { Public } from '../../common/decorators/public.decorator.js';
@@ -18,7 +19,7 @@ export class SchedulesController {
   @Get(['booking-methods', 'public/booking-methods'])
   @ApiOperation({ summary: 'Hình thức đặt khám đang bật tại một chi nhánh hoặc toàn hệ thống' })
   @ApiQuery({ name: 'branchId', required: false })
-  bookingMethods(@Query('branchId') branchId?: string) {
+  bookingMethods(@Query('branchId', new ParseIntPipe({ optional: true })) branchId?: number) {
     return this.schedulesService.bookingMethods(branchId);
   }
 
@@ -27,7 +28,7 @@ export class SchedulesController {
   @ApiOperation({ summary: 'Danh sách ca làm việc (có thể lọc theo doctorId, branchId, ngày, withSlots, availableOnly)' })
   findAll(
     @Query('doctorId') doctorId?: string,
-    @Query('branchId') branchId?: string,
+    @Query('branchId', new ParseIntPipe({ optional: true })) branchId?: number,
     @Query('startDate') startDate?: string,
     @Query('endDate') endDate?: string,
     @Query('withSlots') withSlots?: string,
@@ -79,7 +80,7 @@ export class SchedulesController {
   @Patch(':id')
   @RequirePermissions(AppPermission.SCHEDULE_UPDATE)
   @ApiOperation({ summary: 'Cập nhật ca trực (tái sinh slot nếu thay đổi thời gian/capacity)' })
-  update(@Param('id') id: string, @Body() body: any) {
+  update(@Param('id', ParseIntPipe) id: number, @Body() body: any) {
     return this.schedulesService.update(id, body);
   }
 
@@ -89,7 +90,7 @@ export class SchedulesController {
   @Delete(':id')
   @RequirePermissions(AppPermission.SCHEDULE_DELETE)
   @ApiOperation({ summary: 'Xóa ca trực (cascade xóa slot)' })
-  remove(@Param('id') id: string) {
+  remove(@Param('id', ParseIntPipe) id: number) {
     return this.schedulesService.remove(id);
   }
 
@@ -104,7 +105,7 @@ export class SchedulesController {
   getAvailableSlots(
     @Param('doctorId') doctorId: string,
     @Query('date') date: string,
-    @Query('branchId') branchId?: string,
+    @Query('branchId', new ParseIntPipe({ optional: true })) branchId?: number,
   ) {
     return this.schedulesService.getAvailableSlots(doctorId, date, branchId);
   }

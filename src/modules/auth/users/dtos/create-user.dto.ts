@@ -66,10 +66,16 @@ export class CreateUserDto extends DoctorProfileDto {
 
   @ApiProperty({ description: 'ID cơ sở làm việc', required: false })
   @IsOptional()
-  branchId?: string | null;
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  branchId?: number | null;
 
   @ApiProperty({ description: 'ID chuyên khoa chính (Bác sĩ)', required: false })
   @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
   specialtyId?: number | null;
 
   @ApiProperty({ example: 'BS. CKI', required: false })

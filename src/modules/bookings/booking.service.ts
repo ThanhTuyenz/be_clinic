@@ -13,6 +13,7 @@ import { assertBookingMethodSlot, assertPackageReception, PACKAGE_RECEPTION_SELE
 
 import { MAX_BOOKING_DAYS, onlineBookingDateRange } from './helpers/booking-date.helper.js';
 import { reserveBookingSlot } from './helpers/slot-reservation.helper.js';
+import { randomUUID } from 'node:crypto';
 
 const CHECKOUT_SLOT_SELECT = {
   id: true, isActive: true, slotStatus: true, startTime: true, endTime: true,
@@ -25,6 +26,12 @@ const CHECKOUT_SLOT_SELECT = {
   } },
 } satisfies Prisma.DoctorScheduleSlotSelect;
 type CheckoutSlot = Prisma.DoctorScheduleSlotGetPayload<{ select: typeof CHECKOUT_SLOT_SELECT }>;
+type PreparedBooking = {
+  slot: CheckoutSlot | null;
+  receptionSlot: Prisma.PackageReceptionSlotGetPayload<{}> | null;
+  servicePackage: Prisma.ServicePackageGetPayload<{ select: typeof PACKAGE_RECEPTION_SELECT }> | null;
+  bookingMethodId: number; price: Prisma.Decimal; branchId: number; workDate: Date;
+};
 
 const BOOKING_SERVICE_FEE = 10_000;
 
@@ -54,18 +61,23 @@ export class BookingService {
         });
         if (!profile) throw new NotFoundException('Không tìm thấy hồ sơ bệnh nhân');
         const prepared = await this.prepareCheckoutItem(tx, dto);
-        const { slot, servicePackage, bookingMethodId, price } = prepared;
-        await this.reserveForPatient(tx, profile.id, slot);
+        const { slot, receptionSlot, servicePackage, bookingMethodId, price, branchId } = prepared;
+        await this.reservePrepared(tx, profile.id, prepared);
         const { now, expiresAt } = await this.getHoldWindow(tx);
         const pricing = await this.calculateCheckoutTotals(tx, accountId, Number(price), dto.voucherCode);
+        const bookingOrder = await tx.bookingOrder.create({ data: {
+          accountId, orderCode: `ORD-${randomUUID().replace(/-/g, '').slice(0, 24).toUpperCase()}`,
+          groupType: 'SINGLE', totalAmount: new Prisma.Decimal(pricing.totalAmount),
+        } });
         const appointment = await tx.appointment.create({
           data: {
-            patientProfileId: profile.id, branchId: slot.schedule.branchId,
+            bookingOrderId: bookingOrder.id,
+            patientProfileId: profile.id, branchId,
             ...await this.analytics.attribution(tx, accountId, dto, {
-              branchId: slot.schedule.branchId,
-              ...(servicePackage ? { packageId: servicePackage.id } : { doctorId: slot.schedule.doctor.id }),
+              branchId,
+              ...(servicePackage ? { packageId: servicePackage.id } : { doctorId: slot!.schedule.doctor.id }),
             }),
-            bookingMethodId, scheduleSlotId: slot.id,
+            bookingMethodId, scheduleSlotId: slot?.id, receptionSlotId: receptionSlot?.id,
             ...(servicePackage ? { servicePackageId: servicePackage.id } : {}),
             servicePrice: price, symptomsDescription: dto.symptomsDescription,
             bookedViaAi: dto.bookedViaAi ?? false, holdExpiresAt: expiresAt,
@@ -73,7 +85,7 @@ export class BookingService {
           },
         });
         return this.completeSingleCheckout(tx, accountId, appointment, {
-          branchId: slot.schedule.branchId, slotId: slot.id, price, now, expiresAt,
+          branchId, orderCode: bookingOrder.orderCode, slotId: slot?.id ?? null, receptionSlotId: receptionSlot?.id, price, now, expiresAt,
         }, pricing);
       };
       return transaction ? await execute(transaction) : await this.prisma.$transaction(execute, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
@@ -90,12 +102,14 @@ export class BookingService {
         data: { status: 'CANCELLED' },
       });
       if (changed.count !== 1) return false;
-      await releaseAppointmentSlot(tx, appointment.scheduleSlotId);
+      await releaseAppointmentSlot(tx, appointment.scheduleSlotId, appointment.receptionSlotId);
 
-      await tx.paymentTransaction.updateMany({ where: { invoice: { appointmentId }, status: 'PENDING' }, data: { status: 'FAILED' } });
       await tx.appointmentStatusHistory.create({ data: { appointmentId, fromStatus: 'HOLD', toStatus: 'CANCELLED', reason: 'PAYMENT_HOLD_TIMEOUT' } });
-      if (!appointment.bookingOrderId || await tx.appointment.count({ where: { bookingOrderId: appointment.bookingOrderId, status: 'HOLD' } }) === 0) {
-        await releaseVoucherUsage(tx, appointment.bookingOrderId ? { bookingOrderId: appointment.bookingOrderId } : { appointmentId });
+      if (await tx.appointment.count({ where: { bookingOrderId: appointment.bookingOrderId, status: 'HOLD' } }) === 0) {
+        await tx.paymentTransaction.updateMany({ where: { invoice: { bookingOrderId: appointment.bookingOrderId }, status: 'PENDING' }, data: { status: 'FAILED' } });
+        await tx.invoice.updateMany({ where: { bookingOrderId: appointment.bookingOrderId, status: 'UNPAID' }, data: { status: 'CANCELLED' } });
+        await tx.bookingOrder.updateMany({ where: { id: appointment.bookingOrderId, status: { in: ['UNPAID', 'PENDING_PAYMENT'] } }, data: { status: 'CANCELLED' } });
+        await releaseVoucherUsage(tx, { bookingOrderId: appointment.bookingOrderId });
       }
       return true;
     }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
@@ -110,17 +124,12 @@ export class BookingService {
       const payment = await tx.paymentTransaction.findFirst({
         where: {
           ...(isUuid(providerTransactionId) ? { OR: [{ providerTransactionId }, { id: providerTransactionId }] } : { providerTransactionId }),
-          invoice: {
-            OR: [
-              { appointment: { patientProfile: { accountId } } },
-              { bookingOrder: { accountId } },
-            ]
-          },
+          invoice: { bookingOrder: { accountId } },
         },
         select: {
           id: true, invoiceId: true, status: true, paidAt: true, invoice: {
             select: {
-              status: true, paidAt: true, appointmentId: true, bookingOrderId: true,
+              status: true, paidAt: true, bookingOrderId: true,
               payments: { where: { paidAt: { not: null } }, select: { id: true }, take: 1 },
             },
           }
@@ -132,11 +141,9 @@ export class BookingService {
 
       const appointments = await tx.appointment.findMany({
         where: {
-          status: 'HOLD', ...(payment.invoice.bookingOrderId
-            ? { bookingOrderId: payment.invoice.bookingOrderId }
-            : { id: payment.invoice.appointmentId! })
+          status: 'HOLD', bookingOrderId: payment.invoice.bookingOrderId,
         },
-        select: { id: true, scheduleSlotId: true },
+        select: { id: true, scheduleSlotId: true, receptionSlotId: true },
         orderBy: { id: 'asc' },
       });
       for (const appointment of appointments) {
@@ -146,7 +153,7 @@ export class BookingService {
         });
         if (!changed.count) continue;
         abandonedIds.push(appointment.id);
-        await releaseAppointmentSlot(tx, appointment.scheduleSlotId);
+        await releaseAppointmentSlot(tx, appointment.scheduleSlotId, appointment.receptionSlotId);
         await tx.appointmentStatusHistory.create({
           data: {
             appointmentId: appointment.id, fromStatus: 'HOLD', toStatus: 'CANCELLED',
@@ -166,7 +173,7 @@ export class BookingService {
           data: { status: 'CANCELLED' },
         });
       }
-      await releaseVoucherUsage(tx, payment.invoice.bookingOrderId ? { bookingOrderId: payment.invoice.bookingOrderId } : { appointmentId: payment.invoice.appointmentId! });
+      await releaseVoucherUsage(tx, { bookingOrderId: payment.invoice.bookingOrderId });
       return true;
     }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
     await Promise.allSettled(abandonedIds.map(id => this.recommendations.recordAbandonedBooking(id)));
@@ -180,6 +187,7 @@ export class BookingService {
     if (dto.items.length > 5) throw new BadRequestException('Đặt khám gia đình hỗ trợ tối đa 5 người.');
     if (new Set(dto.items.map(item => item.patientProfileId)).size !== dto.items.length) throw new BadRequestException('Mỗi người bệnh chỉ được chọn một lần trong đơn gia đình.');
     const groupType = dto.groupType ?? (dto.items.length === 1 ? 'SINGLE' : 'FAMILY');
+    if (groupType === 'SINGLE' && dto.items.length !== 1) throw new BadRequestException('Đơn đặt lịch cá nhân chỉ được có một lịch khám.');
     for (const item of dto.items) this.validateBookingItem(item);
 
     try {
@@ -197,22 +205,23 @@ export class BookingService {
         const { now, expiresAt } = await this.getHoldWindow(tx);
 
         let totalAmount = new Prisma.Decimal(0);
-        const appointmentData: Prisma.AppointmentUncheckedCreateInput[] = [];
+        const appointmentData: Omit<Prisma.AppointmentUncheckedCreateInput, 'bookingOrderId'>[] = [];
         const bookingDates = new Set<string>();
         for (const item of dto.items) {
           const profile = profiles.find((p) => p.id === item.patientProfileId)!;
-          const { slot, servicePackage, bookingMethodId, price } = await this.prepareCheckoutItem(tx, item, profile.fullName);
-          bookingDates.add(slot.schedule.workDate.toISOString().slice(0, 10));
+          const prepared = await this.prepareCheckoutItem(tx, item, profile.fullName);
+          const { slot, receptionSlot, servicePackage, bookingMethodId, price, branchId, workDate } = prepared;
+          bookingDates.add(workDate.toISOString().slice(0, 10));
           if (bookingDates.size > 1) throw new BadRequestException('Các thành viên trong đơn gia đình phải khám cùng ngày.');
-          await this.reserveForPatient(tx, profile.id, slot, profile.fullName);
+          await this.reservePrepared(tx, profile.id, prepared, profile.fullName);
           totalAmount = totalAmount.add(price);
           appointmentData.push({
-            patientProfileId: profile.id, branchId: slot.schedule.branchId,
+            patientProfileId: profile.id, branchId,
             ...await this.analytics.attribution(tx, accountId, item, {
-              branchId: slot.schedule.branchId,
-              ...(servicePackage ? { packageId: servicePackage.id } : { doctorId: slot.schedule.doctor.id }),
+              branchId,
+              ...(servicePackage ? { packageId: servicePackage.id } : { doctorId: slot!.schedule.doctor.id }),
             }),
-            bookingMethodId, scheduleSlotId: slot.id,
+            bookingMethodId, scheduleSlotId: slot?.id, receptionSlotId: receptionSlot?.id,
             ...(servicePackage ? { servicePackageId: servicePackage.id } : {}),
             servicePrice: price, symptomsDescription: item.symptomsDescription,
             bookedViaAi: item.bookedViaAi ?? false, holdExpiresAt: expiresAt,
@@ -223,7 +232,7 @@ export class BookingService {
         const { subtotal, serviceFee, discountAmount, totalAmount: finalTotalAmount, voucherApplied } = pricing;
 
         // Tạo BookingOrder tổng
-        const orderCode = `ORD-${Date.now().toString(36).toUpperCase()}`;
+        const orderCode = `ORD-${randomUUID().replace(/-/g, '').slice(0, 24).toUpperCase()}`;
         const branchIds = new Set(appointmentData.map((item) => item.branchId));
         if (branchIds.size > 1) {
           throw new BadRequestException('Các thành viên trong một đơn gia đình phải khám cùng cơ sở');
@@ -240,17 +249,16 @@ export class BookingService {
         });
 
         // Tạo tất cả Appointment
-        const appointments = await Promise.all(
-          appointmentData.map((appt) =>
-            tx.appointment.create({
+        const appointments: Prisma.AppointmentGetPayload<{}>[] = [];
+        for (const appt of appointmentData) {
+          appointments.push(await tx.appointment.create({
               data: {
                 ...appt,
                 bookingOrderId: bookingOrder.id,
                 statusHistories: { create: { toStatus: 'HOLD', actorId: accountId } },
               },
-            }),
-          ),
-        );
+            }));
+        }
 
         // 1 Invoice duy nhất cho toàn đơn
         const invoice = await tx.invoice.create({
@@ -305,7 +313,7 @@ export class BookingService {
       }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
     } catch (error) { this.rethrowCheckoutError(error); }
   }
-  private async assertBranchBookingMethod(tx: Prisma.TransactionClient, branchId: string, code: string) {
+  private async assertBranchBookingMethod(tx: Prisma.TransactionClient, branchId: number, code: string) {
     const method = await tx.branchBookingMethod.findFirst({
       where: { branchId, isEnabled: true, branch: { isActive: true }, bookingMethod: { code, isActive: true } },
       select: { bookingMethodId: true },
@@ -340,18 +348,27 @@ export class BookingService {
       throw new ConflictException('Khung giờ khám vừa hết chỗ. Vui lòng chọn lại.' + (patientName ? ' (' + patientName + ')' : ''));
     }
   }
+  private async reservePrepared(tx: Prisma.TransactionClient, profileId: string, prepared: PreparedBooking, patientName?: string) {
+    if (prepared.slot) return this.reserveForPatient(tx, profileId, prepared.slot, patientName);
+    const slot = prepared.receptionSlot!;
+    await tx.$queryRaw`SELECT 1 AS locked FROM pg_advisory_xact_lock(hashtextextended(${profileId}, 0))`;
+    await assertPatientSlotAvailable(tx, profileId, { startTime: slot.startTime, endTime: slot.endTime, schedule: { workDate: slot.date } });
+    const reserved = await tx.$executeRaw`UPDATE package_reception_slots SET occupied_count = occupied_count + 1, updated_at = NOW()
+      WHERE id = ${slot.id} AND is_active = true AND occupied_count < capacity`;
+    if (reserved !== 1) throw new ConflictException('Khung tiếp nhận vừa hết chỗ. Vui lòng chọn khung khác');
+  }
 
   private async completeSingleCheckout(
     tx: Prisma.TransactionClient,
     accountId: string,
-    appointment: { id: string; status: AppointmentStatus },
-    details: { branchId: string; slotId: string; price: Prisma.Decimal; now: Date; expiresAt: Date },
+    appointment: { id: string; status: AppointmentStatus; bookingOrderId: string },
+    details: { branchId: number; orderCode: string; slotId: number | null; receptionSlotId?: number; price: Prisma.Decimal; now: Date; expiresAt: Date },
     pricing: CheckoutPricing,
   ) {
     const { subtotal, serviceFee, discountAmount, totalAmount, voucherApplied } = pricing;
     const invoice = await tx.invoice.create({
       data: {
-        appointmentId: appointment.id,
+        bookingOrderId: appointment.bookingOrderId,
         issuedBranchId: details.branchId,
         subtotal: details.price,
         serviceFee: new Prisma.Decimal(serviceFee),
@@ -361,22 +378,23 @@ export class BookingService {
       },
     });
     if (voucherApplied && discountAmount > 0) {
-      await this.vouchersService.recordVoucherUsage(tx, voucherApplied.id, accountId, discountAmount, { appointmentId: appointment.id });
+      await this.vouchersService.recordVoucherUsage(tx, voucherApplied.id, accountId, discountAmount, { bookingOrderId: appointment.bookingOrderId });
     }
     const payment = await tx.paymentTransaction.create({
       data: {
         invoiceId: invoice.id, provider: 'PENDING_SELECTION',
-        idempotencyKey: `checkout:${appointment.id}`, method: 'ONLINE', amount: invoice.totalAmount,
+        idempotencyKey: `checkout:${appointment.bookingOrderId}`, method: 'ONLINE', amount: invoice.totalAmount,
       },
     });
     await tx.outboxEvent.create({
       data: {
         aggregateType: 'Appointment', aggregateId: appointment.id, eventType: 'appointment.hold.created',
-        payload: { appointmentId: appointment.id, doctorSlotId: details.slotId, holdExpiresAt: details.expiresAt.toISOString() },
+        payload: { appointmentId: appointment.id, doctorSlotId: details.slotId, receptionSlotId: details.receptionSlotId ?? null, holdExpiresAt: details.expiresAt.toISOString() },
       },
     });
     return {
-      appointmentId: appointment.id, invoiceId: invoice.id, paymentId: payment.id, status: appointment.status,
+      appointmentId: appointment.id, bookingOrderId: appointment.bookingOrderId, invoiceId: invoice.id, paymentId: payment.id, status: appointment.status,
+      orderCode: details.orderCode, groupType: 'SINGLE' as const,
       holdStartedAt: details.now, holdExpiresAt: details.expiresAt, subtotal, serviceFee, discountAmount, totalAmount,
     };
   }
@@ -395,14 +413,16 @@ export class BookingService {
   }
 
   private validateBookingItem(item: AppointmentItemDto) {
-    if (!item.scheduleSlotId || !isUuid(item.scheduleSlotId)) throw new BadRequestException('Vui lòng chọn khung giờ khám đã được tạo sẵn');
+    if (item.bookingMethodCode === 'HEALTH_PACKAGE') {
+      if (!Number.isInteger(item.receptionSlotId) || item.receptionSlotId < 1 || item.scheduleSlotId) throw new BadRequestException('Vui lòng chọn khung tiếp nhận gói khám, không chọn lịch bác sĩ');
+    } else if (!Number.isInteger(item.scheduleSlotId) || item.scheduleSlotId < 1 || item.receptionSlotId) throw new BadRequestException('Vui lòng chọn khung giờ khám đã được tạo sẵn');
     this.validateBookingMethodCode(item.bookingMethodCode);
     if (this.isDoctorBookingMethod(item.bookingMethodCode) && item.servicePackageId) {
       throw new BadRequestException('Dịch vụ khám phải được đặt bằng hình thức khám theo dịch vụ');
     }
   }
 
-  private async prepareCheckoutItem(tx: Prisma.TransactionClient, item: AppointmentItemDto, patientName?: string) {
+  private async prepareCheckoutItem(tx: Prisma.TransactionClient, item: AppointmentItemDto, patientName?: string): Promise<PreparedBooking> {
     const doctorBooking = this.isDoctorBookingMethod(item.bookingMethodCode);
     const suffix = patientName ? ' (' + patientName + ')' : '';
     if (!doctorBooking && !item.servicePackageId) throw new BadRequestException('Thiếu gói dịch vụ' + suffix);
@@ -410,6 +430,16 @@ export class BookingService {
       where: { id: item.servicePackageId! }, select: PACKAGE_RECEPTION_SELECT,
     });
     if (!doctorBooking && !servicePackage?.isActive) throw new NotFoundException('Gói dịch vụ không khả dụng' + suffix);
+    if (item.bookingMethodCode === 'HEALTH_PACKAGE') {
+      const receptionSlot = await tx.packageReceptionSlot.findUnique({ where: { id: item.receptionSlotId! } });
+      if (!receptionSlot?.isActive || receptionSlot.servicePackageId !== servicePackage!.id) throw new BadRequestException('Khung tiếp nhận không thuộc gói khám hoặc đã ngừng hoạt động');
+      this.validateBookingLeadTime(receptionSlot.date);
+      const bookingMethodId = await this.assertBranchBookingMethod(tx, receptionSlot.branchId, 'HEALTH_PACKAGE');
+      const deployments = [servicePackage!.branchBookingMethod, ...servicePackage!.branchBookingMethods.map(link => link.branchBookingMethod)];
+      if (!deployments.some(method => method?.isEnabled && method.branchId === receptionSlot.branchId && method.bookingMethodId === bookingMethodId)) throw new BadRequestException('Gói khám không được triển khai tại cơ sở đã chọn');
+      assertPackageReception(servicePackage!.receptionSchedules, { startTime: receptionSlot.startTime, schedule: { branchId: receptionSlot.branchId, workDate: receptionSlot.date } });
+      return { slot: null, receptionSlot, servicePackage, bookingMethodId, price: servicePackage!.price, branchId: receptionSlot.branchId, workDate: receptionSlot.date };
+    }
     const slot = await tx.doctorScheduleSlot.findUnique({ where: { id: item.scheduleSlotId! }, select: CHECKOUT_SLOT_SELECT });
     if (!slot || !slot.isActive || slot.slotStatus !== 'AVAILABLE' || slot.schedule.status !== 'OPEN' || !slot.schedule.doctor.isActive) {
       throw new NotFoundException('Khung giờ của bác sĩ không khả dụng' + suffix);
@@ -435,7 +465,7 @@ export class BookingService {
     const price = servicePackage ? servicePackage.price : item.bookingMethodCode === 'ONLINE_CONSULTATION'
       ? slot.schedule.doctor.onlineConsultationFee ?? slot.schedule.doctor.consultationFee
       : slot.schedule.doctor.consultationFee;
-    return { slot, servicePackage, bookingMethodId, price };
+    return { slot, receptionSlot: null, servicePackage, bookingMethodId, price, branchId: slot.schedule.branchId, workDate: slot.schedule.workDate };
   }
 
   private rethrowCheckoutError(error: unknown): never {

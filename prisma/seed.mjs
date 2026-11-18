@@ -5,9 +5,9 @@ import dotenv from 'dotenv';
 import path from 'node:path';
 import fs from 'node:fs';
 import bcrypt from 'bcrypt';
-import { seedDashboardData, demoDate } from './seed-dashboard-data.mjs';
-import { basicSpecialtyPackage } from './package-catalog-data.mjs';
-import { upsertSharedSeedPackage } from './shared-package-catalog.mjs';
+import { createHash } from 'node:crypto';
+
+const SEED_NOW = new Date();
 
 // 1. Cấu hình biến môi trường & kết nối database
 const envFile = process.env.ENV_FILE || '.env.development';
@@ -32,6 +32,7 @@ const doctorsData = loadData('doctors.json');
 const patientsData = loadData('patients.json');
 const healthPackagesData = loadData('services.json');
 const vouchersData = loadData('vouchers.json');
+const DEFAULT_DOCTOR_AVATAR = 'https://images.unsplash.com/photo-1537368910025-700350fe46c7?auto=format&fit=crop&q=80&w=400';
 
 // Tiện ích hỗ trợ ngày giờ
 function dateOnly(daysFromNow) {
@@ -187,27 +188,27 @@ async function main() {
   // 3. Khởi tạo Phương thức đặt khám
   console.log('3. Cấu hình các phương thức đặt khám...');
   const bookingMethodSeeds = [
-    ['SPECIALTY_EXAM', 'Khám Trong Giờ', 'Đặt lịch khám trong giờ hoạt động của phòng khám theo chuyên khoa phù hợp', '/dat-lich?type=specialty', 1],
-    ['CONSULTATION', 'Khám Cùng Bác Sĩ', 'Chủ động chọn bác sĩ CKI - CKII theo học hàm và kinh nghiệm', '/dat-lich?type=doctor', 2],
-    ['ONLINE_CONSULTATION', 'Tư Vấn Online', 'Gọi video 1:1 cùng bác sĩ, đọc kết quả xét nghiệm từ xa', '/dat-lich?type=online-consultation', 3],
-    ['FOLLOWUP_EXAM', 'Tái Khám', 'Đặt lịch tái khám với bác sĩ đã điều trị để theo dõi sức khỏe định kỳ', '/dat-lich?flow=followup', 4],
-    ['FAMILY_BOOKING', 'Khám Gia Đình', 'Chăm sóc ông bà, cha mẹ và con nhỏ trên cùng một tài khoản', '/dat-lich?type=family', 5],
-    ['AFTER_HOURS', 'Khám Ngoài Giờ', 'Khám vào thứ Bảy và Chủ nhật theo lịch tiếp nhận của cơ sở', '/dat-lich?type=after-hours', 6],
-    ['HEALTH_PACKAGE', 'Gói Khám Sức Khỏe', 'Đăng ký gói khám sức khỏe tổng quát và chuyên sâu.', '/dat-lich?type=health-package', 7],
+    ['SPECIALTY_EXAM', 'Khám Trong Giờ', 'Đặt lịch khám trong giờ hoạt động của phòng khám theo chuyên khoa phù hợp', 1],
+    ['CONSULTATION', 'Khám Cùng Bác Sĩ', 'Chủ động chọn bác sĩ CKI - CKII theo học hàm và kinh nghiệm', 2],
+    ['ONLINE_CONSULTATION', 'Tư Vấn Online', 'Gọi video 1:1 cùng bác sĩ, đọc kết quả xét nghiệm từ xa', 3],
+    ['FOLLOWUP_EXAM', 'Tái Khám', 'Đặt lịch tái khám với bác sĩ đã điều trị để theo dõi sức khỏe định kỳ', 4],
+    ['FAMILY_BOOKING', 'Khám Gia Đình', 'Chăm sóc ông bà, cha mẹ và con nhỏ trên cùng một tài khoản', 5],
+    ['AFTER_HOURS', 'Khám Ngoài Giờ', 'Khám vào thứ Bảy và Chủ nhật theo lịch tiếp nhận của cơ sở', 6],
+    ['HEALTH_PACKAGE', 'Gói Khám Sức Khỏe', 'Đăng ký gói khám sức khỏe tổng quát và chuyên sâu.', 7],
   ];
 
   const bookingMethodsMap = new Map();
-  for (const [code, name, description, route] of bookingMethodSeeds) {
+  for (const [code, name, description] of bookingMethodSeeds) {
     const method = await prisma.bookingMethod.upsert({
       where: { code },
-      update: { name, description, route, isActive: true },
-      create: { code, name, description, route, isActive: true },
+      update: { name, description, isActive: true },
+      create: { code, name, description, isActive: true },
     });
     bookingMethodsMap.set(code, method);
   }
 
   for (const branch of branchesMap.values()) {
-    for (const [code, , , , sortOrder] of bookingMethodSeeds) {
+    for (const [code, , , sortOrder] of bookingMethodSeeds) {
       const method = bookingMethodsMap.get(code);
       await prisma.branchBookingMethod.upsert({
         where: { branchId_bookingMethodId: { branchId: branch.id, bookingMethodId: method.id } },
@@ -322,7 +323,7 @@ async function main() {
       consultationFee: docData.consultationFee,
       onlineConsultationFee: docData.onlineConsultationFee ?? Math.round((docData.consultationFee || 0) * 0.8 / 10000) * 10000,
       isOnlineConsultationEnabled: docData.isOnlineConsultationEnabled ?? true,
-      avatarUrl: docData.avatarUrl,
+      avatarUrl: docData.avatarUrl || DEFAULT_DOCTOR_AVATAR,
       isFeatured: docData.isFeatured ?? false,
       isActive: true,
     };
@@ -385,18 +386,10 @@ async function main() {
           },
         });
 
-        for (const slot of shift.slots) {
-          await prisma.doctorScheduleSlot.upsert({
-            where: { scheduleId_startTime: { scheduleId: schedule.id, startTime: slot.startTime } },
-            update: { endTime: slot.endTime, capacity: 10, isActive: true },
-            create: {
-              scheduleId: schedule.id,
-              startTime: slot.startTime,
-              endTime: slot.endTime,
-              capacity: 10,
-            },
-          });
-        }
+        await prisma.doctorScheduleSlot.createMany({
+          data: shift.slots.map(slot => ({ scheduleId: schedule.id, ...slot })),
+          skipDuplicates: true,
+        });
       }
     }
   }
@@ -747,7 +740,6 @@ async function main() {
 
   // 11. Tài khoản OAuth mẫu
   console.log('11. Nạp tài khoản OAuth mẫu...');
-  const cardioDoc = doctorsMap.get('doctor.cardio@vitacare.local');
 
   const mainPatient = usersMap.get('patient@vitacare.local');
   if (mainPatient) {
@@ -758,51 +750,17 @@ async function main() {
     });
   }
 
-  // 12. Khởi tạo Hội thoại Tư vấn AI Sàng lọc triệu chứng mẫu
-  console.log('12. Nạp hội thoại AI Assistant & Kết quả phân tích triệu chứng mẫu...');
-  if (mainPatient && cardioDoc) {
-    const cardioSpec = specialtiesBySlug.get('tim-mach');
-    const centralBranch = branchesMap.get('VC-CENTRAL');
-
-    const conversation = await prisma.aIConversation.create({
-      data: {
-        userId: mainPatient.id,
-        conversationType: 'TRIAGE_CONSULTATION',
-        title: 'Tư vấn triệu chứng đau tức ngực & hồi hộp',
-        isClosed: true,
-      },
-    });
-
-    await prisma.aIMessage.createMany({
-      data: [
-        {
-          conversationId: conversation.id,
-          sender: 'USER',
-          content: 'Chào trợ lý AI, gần đây tôi thường bị đau tức ngực bên trái khi leo cầu thang, đôi khi có cảm giác hồi hộp, tim đập nhanh. Tôi nên đi khám ở đâu?',
-          tokensUsed: 42,
-        },
-        {
-          conversationId: conversation.id,
-          sender: 'ASSISTANT',
-          content: 'Chào bạn Nguyễn Văn An, qua mô tả triệu chứng tức ngực trái khi gắng sức kèm cảm giác hồi hộp, tim đập nhanh, đây là dấu hiệu cảnh báo liên quan đến hệ tim mạch (có thể do thiếu máu cơ tim hoặc rối loạn nhịp tim). VitaCare AI khuyến nghị bạn nên đặt lịch thăm khám sớm tại Chuyên khoa Tim mạch với BS. CKI Nguyễn Minh Tâm tại VitaCare Trung tâm để được đo điện tim ECG và siêu âm tim chuyên sâu.',
-          tokensUsed: 128,
-        },
-      ],
-    });
-
-    if (cardioSpec && centralBranch) {
-      await prisma.aITriageInsight.create({
-        data: {
-          conversationId: conversation.id,
-          extractedSymptoms: 'Đau tức ngực trái khi gắng sức, hồi hộp, tim đập nhanh',
-          preliminaryDiagnosis: 'Theo dõi thiếu máu cơ tim / Rối loạn nhịp tim khi gắng sức',
-          confidenceScore: 0.94,
-          suggestedSpecialtyId: cardioSpec.id,
-          suggestedDoctorId: cardioDoc.id,
-          suggestedBranchId: centralBranch.id,
-        },
-      });
-    }
+  // 12. Trợ lý chỉ minh họa tra cứu dịch vụ và đặt lịch.
+  console.log('12. Nạp hội thoại trợ lý đặt lịch mẫu...');
+  if (mainPatient) {
+    await prisma.aIConversation.create({ data: {
+      userId: mainPatient.id, conversationType: 'BOOKING_ASSISTANCE',
+      title: 'Tìm dịch vụ khám Mắt', isClosed: true,
+      messages: { create: [
+        { sender: 'USER', content: 'Cho tôi xem các dịch vụ khám Mắt tại VitaCare.' },
+        { sender: 'ASSISTANT', content: 'Bạn có thể tìm dịch vụ khám Mắt, chọn cơ sở và xem khung giờ trống để đặt lịch.' },
+      ] },
+    } });
   }
 
   await clearSeedCaches();
@@ -850,6 +808,378 @@ async function clearSeedCaches() {
   } finally {
     redis.disconnect();
   }
+}
+
+/** Shared by the demo seed and the non-destructive catalog conversion. */
+function basicSpecialtyPackage(specialtyName, branchName) {
+  return {
+    name: `Gói khám ${specialtyName} cơ bản${branchName ? ` (${branchName})` : ''}`,
+    description: `Gói khám chuyên khoa ${specialtyName} cơ bản: tiếp nhận thông tin sức khỏe, thăm khám theo nhu cầu và tư vấn các bước chăm sóc tiếp theo.`,
+    notes: 'Mang theo hồ sơ sức khỏe và kết quả khám đã có (nếu có). Các chỉ định bổ sung được bác sĩ tư vấn sau khi thăm khám.',
+    isFollowUp: false,
+    followUpAfterDays: null,
+  };
+}
+
+/** Seed one catalog item, then attach each offering branch without duplicating it. */
+async function upsertSharedSeedPackage(prisma, { where, update, create }) {
+  const { branchBookingMethods, receptionSchedules, ...fields } = create;
+  const { branchBookingMethodId: _legacyMethod, ...updatedFields } = update;
+  return prisma.$transaction(async tx => {
+    const pkg = await tx.servicePackage.upsert({ where, create: fields, update: updatedFields });
+    const branchBookingMethodId = branchBookingMethods.create.branchBookingMethodId;
+    await tx.packageBranchMethod.upsert({
+      where: { servicePackageId_branchBookingMethodId: { servicePackageId: pkg.id, branchBookingMethodId } },
+      create: { servicePackageId: pkg.id, branchBookingMethodId }, update: {},
+    });
+    for (const schedule of receptionSchedules.create) {
+      await tx.packageReceptionTime.upsert({
+        where: { servicePackageId_branchId_dayOfWeek: {
+          servicePackageId: pkg.id, branchId: schedule.branchId, dayOfWeek: schedule.dayOfWeek,
+        } }, create: { servicePackageId: pkg.id, ...schedule }, update: { sessions: schedule.sessions },
+      });
+    }
+    return pkg;
+  });
+}
+
+const DAY = 86_400_000;
+const uid = (key) => {
+  const hex = createHash('sha256').update('vitacare-demo-v2:' + key).digest('hex');
+  return hex.slice(0, 8) + '-' + hex.slice(8, 12) + '-4' + hex.slice(13, 16) + '-a' + hex.slice(17, 20) + '-' + hex.slice(20, 32);
+};
+function demoDate(offset = 0, now = SEED_NOW) {
+  const vnDate = new Date(now.getTime() + 7 * 3_600_000).toISOString().slice(0, 10);
+  return new Date(new Date(vnDate + 'T00:00:00Z').getTime() + offset * DAY);
+}
+const hour = (h, m = 0) => new Date(Date.UTC(1970, 0, 1, h, m));
+
+const demoStaff = [
+  ['admin@vitacare.local', 'Quản trị hệ thống', 'ADMIN', '0988100001', null],
+  ['chain-manager@vitacare.local', 'Nguyễn Hoàng Minh', 'CHAIN_MANAGER', '0988100002', null],
+  ['manager@vitacare.local', 'Trần Quốc Huy', 'BRANCH_MANAGER', '0988100003', 'VC-CENTRAL'],
+  ['manager.east@vitacare.local', 'Lê Ngọc Anh', 'BRANCH_MANAGER', '0988100004', 'VC-EAST'],
+  ['receptionist@vitacare.local', 'Tiếp nhận Đỗ Lan', 'RECEPTIONIST', '0988100005', 'VC-CENTRAL'],
+  ['receptionist.east@vitacare.local', 'Tiếp nhận Phạm Thu Hà', 'RECEPTIONIST', '0988100006', 'VC-EAST'],
+  ['receptionist.central2@vitacare.local', 'Tiếp nhận Nguyễn Bảo Trâm', 'RECEPTIONIST', '0988100007', 'VC-CENTRAL'],
+  ['receptionist.east2@vitacare.local', 'Tiếp nhận Võ Minh Thư', 'RECEPTIONIST', '0988100008', 'VC-EAST'],
+  ['manager.locked@vitacare.local', 'Quản lý dự phòng Nguyễn Đức Long', 'BRANCH_MANAGER', '0988100009', 'VC-EAST', 'LOCKED'],
+  ['receptionist.locked@vitacare.local', 'Tiếp nhận Trần Mỹ Duyên', 'RECEPTIONIST', '0988100010', 'VC-CENTRAL', 'LOCKED'],
+  ['receptionist.inactive@vitacare.local', 'Tiếp nhận nghỉ việc Lý Thanh Tâm', 'RECEPTIONIST', '0988100011', 'VC-EAST', 'INACTIVE'],
+  ['patient.locked@vitacare.local', 'Bệnh nhân Nguyễn Hồng Phúc', 'PATIENT', '0988100012', null, 'LOCKED'],
+  ['doctor.locked@vitacare.local', 'BS. Phạm Đức Khánh', 'DOCTOR', '0988100013', 'VC-CENTRAL', 'LOCKED'],
+];
+
+// Demo records only: all IDs/codes are deterministic; no provider calls or real messages.
+async function seedDashboardData(prisma, { passwordHash }) {
+  const now = SEED_NOW;
+  const branches = await prisma.branch.findMany({
+    where: { code: { in: ['VC-CENTRAL', 'VC-EAST'] } },
+    select: { id: true, code: true, name: true },
+    orderBy: { code: 'asc' },
+  });
+  if (branches.length !== 2) throw new Error('Cần seed đủ hai chi nhánh trước dữ liệu dashboard.');
+  const branchMap = new Map(branches.map(b => [b.code, b]));
+  const accounts = new Map();
+  for (const [index, [email, fullName, role, phoneNumber, branchCode, state]] of demoStaff.entries()) {
+    const isBlocked = state === 'LOCKED';
+    const fields = { fullName, role, phoneNumber, status: state === 'INACTIVE' ? 'INACTIVE' : 'ACTIVE',
+      isBlocked,
+      isDeleted: false, lastLoginAt: new Date(now.getTime() - (isBlocked ? DAY * 2 : (index + 1) * 180_000)) };
+    const user = await prisma.user.upsert({
+      where: { email }, update: fields,
+      create: { email, ...fields, password: passwordHash },
+    });
+    accounts.set(email, user);
+    if (branchCode) {
+      const branchId = branchMap.get(branchCode).id;
+      await prisma.user.update({ where: { id: user.id }, data: { branchId } });
+    }
+    if (role === 'RECEPTIONIST') {
+      const data = { employeeCode: 'LT-DEMO-' + String(index).padStart(3, '0'), deskNumber: index % 2 ? 'Quầy 2' : 'Quầy 1', isActive: !isBlocked && state !== 'INACTIVE' };
+      await prisma.receptionist.upsert({ where: { userId: user.id }, update: data, create: { userId: user.id, ...data } });
+    }
+    if (role === 'DOCTOR') {
+      const data = { academicRank: 'Bác sĩ CKI', licenseNumber: 'DEMO-CCHN-LOCKED', experienceYears: 10,
+        biography: 'Hồ sơ minh họa bác sĩ tạm khóa tài khoản, không phân công lịch trực.',
+        avatarUrl: DEFAULT_DOCTOR_AVATAR,
+        consultationFee: 250000, onlineConsultationFee: 200000,
+        isOnlineConsultationEnabled: false, isFeatured: false, isActive: false };
+      await prisma.doctor.upsert({ where: { userId: user.id }, update: data, create: { userId: user.id, ...data } });
+    }
+  }
+
+  const names = ['Nguyễn Minh Quân', 'Trần Ngọc Linh', 'Lê Văn Thành', 'Phạm Thanh Hương',
+    'Võ Quốc Bảo', 'Đặng Thu Thảo', 'Bùi Anh Tuấn', 'Đỗ Hồng Nhung',
+    'Ngô Đức Hải', 'Dương Thị Yến', 'Lý Minh Khoa', 'Hồ Ngọc Ánh',
+    'Phan Gia Huy', 'Vũ Thanh Vân', 'Mai Trung Kiên', 'Tạ Bảo Ngọc'];
+  for (let i = 0; i < names.length; i++) {
+    const email = 'patient.demo' + String(i + 1).padStart(2, '0') + '@vitacare.local';
+    const phoneNumber = '097400' + String(i + 1).padStart(4, '0');
+    const userData = { fullName: names[i], phoneNumber, role: 'PATIENT', status: 'ACTIVE', isDeleted: false,
+      lastLoginAt: new Date(now.getTime() - (i + 1) * 600_000) };
+    const user = await prisma.user.upsert({ where: { email }, update: userData,
+      create: { email, ...userData, password: passwordHash } });
+    const nationalId = '079190' + String(i + 100001);
+    const fields = {
+      patientCode: 'BN-DEMO-' + String(i + 1).padStart(3, '0'),
+      fullName: names[i], phoneNumber, nationalId, dateOfBirth: new Date(Date.UTC(1980 + i, i % 12, 10)),
+      healthInsuranceNumber: 'GD47979' + String(31000000 + i), gender: i % 2 ? 'FEMALE' : 'MALE',
+      provinceCode: '79', provinceName: 'Thành phố Hồ Chí Minh',
+      wardCode: '26734', wardName: 'Phường Bến Thành', streetAddress: (20 + i) + ' Lê Lợi, Quận 1',
+      ethnicity: 'Kinh', nationality: 'Việt Nam', occupation: i % 2 ? 'Nhân viên văn phòng' : 'Kỹ sư',
+      guardianName: 'Nguyễn Thanh Bình', guardianPhone: '0974999999', guardianRelationship: 'Người thân',
+      bloodGroup: ['O+', 'A+', 'B+', 'AB+'][i % 4], allergies: 'Không ghi nhận',
+      height: 158 + i, weight: 50 + i, medicalHistory: i % 3 ? 'Không ghi nhận bệnh mạn tính' : 'Theo dõi tăng huyết áp',
+      relationshipToAccount: 'SELF', isMainProfile: true,
+    };
+    await prisma.patientProfile.upsert({ where: { accountId_nationalId: { accountId: user.id, nationalId } },
+      update: fields, create: { accountId: user.id, ...fields } });
+  }
+  const lockedPatient = accounts.get('patient.locked@vitacare.local');
+  const lockedProfile = { fullName: lockedPatient.fullName, phoneNumber: lockedPatient.phoneNumber, nationalId: '079190999999',
+    patientCode: 'BN-DEMO-LOCK', dateOfBirth: new Date('1990-04-12'), gender: 'MALE',
+    healthInsuranceNumber: 'GD4797931999999', provinceCode: '79', provinceName: 'Thành phố Hồ Chí Minh',
+    wardCode: '26734', wardName: 'Phường Bến Thành',
+    streetAddress: '88 Lê Lợi, Quận 1',
+    ethnicity: 'Kinh', nationality: 'Việt Nam', occupation: 'Kinh doanh', guardianName: 'Nguyễn Thị Hoa',
+    guardianPhone: '0974999998', guardianRelationship: 'Vợ', bloodGroup: 'O+', height: 170, weight: 65,
+    allergies: 'Không ghi nhận', medicalHistory: 'Không ghi nhận', relationshipToAccount: 'SELF', isMainProfile: true };
+  await prisma.patientProfile.upsert({
+    where: { accountId_nationalId: { accountId: lockedPatient.id, nationalId: lockedProfile.nationalId } },
+    update: lockedProfile, create: { accountId: lockedPatient.id, ...lockedProfile },
+  });
+
+  // Fill contact/session fields for original seed accounts, including every doctor.
+  const allUsers = await prisma.user.findMany({ orderBy: { email: 'asc' },
+    select: { id: true, email: true, fullName: true, phoneNumber: true, lastLoginAt: true } });
+  for (const [i, user] of allUsers.entries()) {
+    if (!user.email || !user.fullName) throw new Error('Tài khoản seed thiếu tên hoặc email: ' + user.id);
+    await prisma.user.update({ where: { id: user.id }, data: {
+      ...(!user.phoneNumber ? { phoneNumber: '098820' + String(i + 1).padStart(4, '0') } : {}),
+      ...(!user.lastLoginAt ? { lastLoginAt: new Date(now.getTime() - (i + 1) * 60_000) } : {}),
+    } });
+  }
+
+  const appointmentCount = await seedAppointmentScenarios(prisma, { accounts, branchMap });
+
+  // Audit examples are visibly labeled synthetic. No login or integration action is actually executed.
+  const admin = accounts.get('admin@vitacare.local');
+  const actions = ['DEMO_USER_LOGIN', 'DEMO_USER_CREATE', 'DEMO_USER_LOCK', 'DEMO_ROLE_UPDATE', 'DEMO_INTEGRATION_VERIFY'];
+  await prisma.auditLog.deleteMany({ where: { action: { in: actions } } });
+  await prisma.auditLog.createMany({ data: Array.from(accounts.values()).map((u, i) => ({
+    actorId: i % 2 ? admin.id : u.id, action: actions[i % actions.length], targetType: 'USER',
+    targetId: u.id, metadata: { demo: true, note: 'Nhật ký minh họa từ seed, không phải thao tác thực tế' },
+    createdAt: new Date(now.getTime() - i * 180_000),
+  })) });
+  // Future availability prevents the real publisher from processing demo pending rows.
+  for (const [i, status] of ['FAILED', 'FAILED', 'PENDING', 'PENDING', 'PUBLISHED'].entries()) {
+    const fields = { aggregateType: 'DEMO', aggregateId: 'seed-dashboard', eventType: 'demo.system.health.' + i,
+      payload: { demo: true, note: 'Sự kiện minh họa, không gửi thông báo' }, status,
+      availableAt: new Date(now.getTime() + 3650 * DAY), attempts: status === 'FAILED' ? 3 : status === 'PUBLISHED' ? 1 : 0,
+      lastError: status === 'FAILED' ? '[DEMO] Mô phỏng lỗi kết nối dịch vụ tích hợp' : null,
+      publishedAt: status === 'PUBLISHED' ? now : null, createdAt: new Date(now.getTime() - i * 60_000) };
+    const existingOutbox = await prisma.outboxEvent.findFirst({
+      where: { eventType: fields.eventType, aggregateId: fields.aggregateId },
+      select: { id: true },
+    });
+    if (existingOutbox) {
+      await prisma.outboxEvent.update({ where: { id: existingOutbox.id }, data: fields });
+    } else {
+      await prisma.outboxEvent.create({ data: fields });
+    }
+  }
+  for (const [i, user] of allUsers.entries()) {
+    const fields = { userId: user.id, title: '[DEMO] Chào mừng đến VitaCare',
+      content: 'Dữ liệu minh họa đã sẵn sàng. Kiểm tra lịch làm việc và lịch hẹn tại chi nhánh của bạn.',
+      type: 'SYSTEM', data: { demo: true }, isRead: i % 3 === 0, createdAt: now };
+    const existingNotification = await prisma.notification.findFirst({
+      where: { userId: user.id, title: fields.title },
+      select: { id: true },
+    });
+    if (existingNotification) {
+      await prisma.notification.update({ where: { id: existingNotification.id }, data: fields });
+    } else {
+      await prisma.notification.create({ data: fields });
+    }
+  }
+  console.log('✓ Dashboard demo: ' + appointmentCount + ' lịch hẹn, đủ 7 trạng thái; ngày khám tính theo thời điểm seed tại Việt Nam.');
+  console.log('✓ 2 quản lý cơ sở hoạt động, 4 lễ tân hoạt động, 4 tài khoản khóa, 1 tài khoản ngừng hoạt động.');
+  console.log('✓ Thanh toán CASH / ONLINE; nhật ký, thông báo và Outbox đều gắn nhãn DEMO.');
+  return { appointmentCount };
+}
+
+// Ten appointment scenarios share the main patient account for easy inspection.
+// All dates are relative to one frozen seed time in Vietnam, never fixed dates.
+async function seedPackageReceptionSlots(prisma) {
+  const packages = await prisma.servicePackage.findMany({
+    where: { branchBookingMethods: { some: { branchBookingMethod: { bookingMethod: { code: 'HEALTH_PACKAGE' } } } } },
+    select: { id: true, receptionSchedules: true },
+  });
+  for (const pkg of packages) {
+    const rows = [];
+    for (let offset = -7; offset <= 30; offset++) {
+      const date = demoDate(offset);
+      for (const reception of pkg.receptionSchedules.filter(day => day.dayOfWeek === date.getUTCDay())) {
+        for (const [index, shift] of SHIFT_DEFINITIONS.entries()) {
+          if (!reception.sessions.includes(index === 0 ? 'MORNING' : 'AFTERNOON')) continue;
+          rows.push(...shift.slots.map(slot => ({
+            branchId: reception.branchId, servicePackageId: pkg.id, date,
+            startTime: slot.startTime, endTime: slot.endTime, capacity: 5,
+          })));
+        }
+      }
+    }
+    for (let index = 0; index < rows.length; index += 500) {
+      await prisma.packageReceptionSlot.createMany({ data: rows.slice(index, index + 500), skipDuplicates: true });
+    }
+  }
+}
+
+async function seedAppointmentScenarios(prisma, { accounts, branchMap }) {
+  const profile = await prisma.patientProfile.findFirstOrThrow({
+    where: { account: { email: 'patient@vitacare.local' }, isMainProfile: true },
+    select: { id: true, accountId: true },
+  });
+  const methods = new Map((await prisma.bookingMethod.findMany({ select: { id: true, code: true } })).map(method => [method.code, method.id]));
+  await seedPackageReceptionSlots(prisma);
+  const local = new Date(SEED_NOW.getTime() + 7 * 3_600_000);
+  const minutes = local.getUTCHours() * 60 + local.getUTCMinutes();
+  const checkedInOffset = minutes < 450 ? -1 : 0;
+  const checkedInMinute = minutes < 450 || minutes >= 1020 ? 990
+    : minutes >= 690 && minutes < 810 ? 660 : Math.floor(minutes / 30) * 30;
+  const scenarios = [
+    { code: 'VC-DEMO-01', status: 'HOLD', offset: 2, kind: 'doctor', minute: 540 },
+    { code: 'VC-DEMO-02', status: 'CONFIRMED', offset: 3, kind: 'eye', minute: 540 },
+    { code: 'VC-DEMO-03', status: 'CONFIRMED', offset: 4, kind: 'health', minute: 480 },
+    { code: 'VC-DEMO-04', status: 'CONFIRMED', offset: 2, kind: 'online', minute: 600 },
+    { code: 'VC-DEMO-05', status: 'CHECKED_IN', offset: checkedInOffset, kind: 'doctor', minute: checkedInMinute },
+    { code: 'VC-DEMO-06', status: 'COMPLETED', offset: -1, kind: 'health', minute: 480 },
+    { code: 'VC-DEMO-07', status: 'CANCELLED', offset: -2, kind: 'eye', minute: 540, cancelHours: 24, refundRate: 95 },
+    { code: 'VC-DEMO-08', status: 'CANCELLED', offset: -3, kind: 'eye', minute: 540, cancelHours: 3, refundRate: 80, branchCode: 'VC-EAST' },
+    { code: 'VC-DEMO-09', status: 'EXPIRED', offset: -4, kind: 'doctor', minute: 540 },
+    { code: 'VC-DEMO-10', status: 'NO_SHOW', offset: -2, kind: 'online', minute: 600 },
+  ];
+  const summary = [];
+  for (const scenario of scenarios) {
+    const branch = branchMap.get(scenario.branchCode || 'VC-CENTRAL');
+    const receptionist = accounts.get(branch.code === 'VC-EAST' ? 'receptionist.east@vitacare.local' : 'receptionist@vitacare.local');
+    const date = demoDate(scenario.offset);
+    const startTime = hour(Math.floor(scenario.minute / 60), scenario.minute % 60);
+    const startsAt = new Date(`${date.toISOString().slice(0, 10)}T${startTime.toISOString().slice(11, 19)}+07:00`);
+    const endsAt = new Date(startsAt.getTime() + 30 * 60_000);
+    if (scenario.status === 'CONFIRMED' && startsAt <= SEED_NOW) throw new Error('Lịch xác nhận phải nằm trong tương lai: ' + scenario.code);
+    if (['COMPLETED', 'NO_SHOW'].includes(scenario.status) && endsAt >= SEED_NOW) throw new Error('Lịch kết thúc phải nằm trong quá khứ: ' + scenario.code);
+    let doctor = null, slot = null, receptionSlot = null, pkg = null;
+    const methodCode = scenario.kind === 'health' ? 'HEALTH_PACKAGE' : scenario.kind === 'eye' ? 'SPECIALTY_EXAM'
+      : scenario.kind === 'online' ? 'ONLINE_CONSULTATION' : 'CONSULTATION';
+    if (scenario.kind === 'health' || scenario.kind === 'eye') {
+      pkg = await prisma.servicePackage.findFirstOrThrow({
+        where: {
+          ...(scenario.kind === 'eye' ? { specialty: { slug: 'mat' } } : { code: 'PKG-GENERAL-BASIC' }),
+          branchBookingMethods: { some: { branchBookingMethod: { branchId: branch.id, bookingMethod: { code: methodCode } } } },
+        }, orderBy: { code: 'asc' }, select: { id: true, name: true, price: true },
+      });
+    }
+    if (scenario.kind === 'health') {
+      receptionSlot = await prisma.packageReceptionSlot.findUniqueOrThrow({
+        where: { branchId_servicePackageId_date_startTime: { branchId: branch.id, servicePackageId: pkg.id, date, startTime } },
+        select: { id: true },
+      });
+    } else {
+      const fixture = scenario.kind === 'eye'
+        ? doctorsData.find(item => item.specialtySlug === 'mat' && item.branchCode === branch.code)
+        : doctorsData.find(item => item.email === 'doctor.cardio@vitacare.local');
+      if (!fixture) throw new Error('Thiếu bác sĩ cho ' + scenario.code);
+      doctor = await prisma.doctor.findFirstOrThrow({ where: { user: { email: fixture.email } },
+        select: { id: true, userId: true, consultationFee: true, onlineConsultationFee: true } });
+      slot = await prisma.doctorScheduleSlot.findFirstOrThrow({
+        where: { startTime, schedule: { doctorId: doctor.id, branchId: branch.id, workDate: date } },
+        select: { id: true },
+      });
+    }
+    const price = Number(pkg?.price ?? (scenario.kind === 'online' ? doctor.onlineConsultationFee : doctor.consultationFee));
+    const paid = !['HOLD', 'EXPIRED'].includes(scenario.status);
+    const counter = scenario.status === 'CHECKED_IN' || scenario.status === 'HOLD';
+    const fee = counter ? 0 : 10_000;
+    const total = price + fee;
+    const createdAt = scenario.status === 'HOLD' ? new Date(SEED_NOW.getTime() - 5 * 60_000)
+      : new Date(Math.min(SEED_NOW.getTime() - 3_600_000, startsAt.getTime() - 2 * DAY));
+    const paidAt = paid ? new Date(createdAt.getTime() + 60_000) : null;
+    const checkedIn = ['CHECKED_IN', 'COMPLETED'].includes(scenario.status);
+    const checkedInAt = checkedIn ? new Date(startsAt.getTime() - 5 * 60_000) : null;
+    const cancelledAt = scenario.cancelHours ? new Date(startsAt.getTime() - scenario.cancelHours * 3_600_000) : null;
+    const holdExpiresAt = ['HOLD', 'EXPIRED'].includes(scenario.status) ? new Date(createdAt.getTime() + 15 * 60_000) : null;
+    const appointmentId = uid(scenario.code), paymentId = uid('payment-' + scenario.code);
+    await prisma.$transaction(async tx => {
+      const order = await tx.bookingOrder.create({ data: {
+        accountId: profile.accountId, orderCode: 'ORD-' + scenario.code, groupType: 'SINGLE',
+        status: ['CANCELLED', 'EXPIRED'].includes(scenario.status) ? 'CANCELLED' : paid ? 'PAID' : 'UNPAID',
+        totalAmount: total, note: '[DEMO] ' + scenario.status, createdAt,
+      } });
+      await tx.appointment.create({ data: {
+        id: appointmentId, bookingCode: scenario.code, bookingOrderId: order.id,
+        patientProfileId: profile.id, branchId: branch.id, bookingMethodId: methods.get(methodCode),
+        scheduleSlotId: slot?.id ?? null, receptionSlotId: receptionSlot?.id ?? null,
+        servicePackageId: pkg?.id ?? null, servicePrice: price, status: scenario.status,
+        queueNumber: slot && paid && scenario.status !== 'CANCELLED' ? 1 : null,
+        checkedInAt, checkedInById: checkedIn ? receptionist.id : null, holdExpiresAt, createdAt,
+        symptomsDescription: '[DEMO] Dữ liệu lịch hẹn minh họa',
+      } });
+      const invoice = await tx.invoice.create({ data: {
+        bookingOrderId: order.id, issuedBranchId: branch.id,
+        subtotal: price, serviceFee: fee, totalAmount: total, createdAt, paidAt,
+        status: scenario.status === 'EXPIRED' ? 'CANCELLED' : paid ? 'PAID' : 'UNPAID',
+      } });
+      const rawPayload = { demo: true, channel: counter ? 'COUNTER' : 'WEB', collectedBy: counter ? receptionist.id : null };
+      if (cancelledAt) {
+        const refundAmount = Math.floor(total * scenario.refundRate / 100);
+        const refundBank = { bankCode: 'VBA', bankBin: '970405', bankName: 'Agribank', accountNumber: '7102205531612', accountName: 'NGUYEN VAN AN DEMO' };
+        const policyVersion = 'cancellation-95-80-0-v2';
+        rawPayload.refundBank = refundBank;
+        rawPayload.refundRequestedAt = cancelledAt.toISOString();
+        rawPayload.appointmentRefunds = { [appointmentId]: {
+          isPaid: true, paidAmount: total, refundRate: scenario.refundRate, refundAmount,
+          retainedAmount: total - refundAmount, requiresManualReview: false, policyVersion,
+          quoteKey: JSON.stringify([appointmentId, paymentId, policyVersion, total, scenario.refundRate, refundAmount]),
+          requestedAt: cancelledAt.toISOString(), approvedAt: cancelledAt.toISOString(), approvedBy: 'SYSTEM',
+          approvalStatus: 'APPROVED', reason: 'Thay đổi kế hoạch cá nhân', refundBank,
+        } };
+      }
+      await tx.paymentTransaction.create({ data: {
+        id: paymentId, invoiceId: invoice.id, provider: counter ? 'DEMO_COUNTER' : 'DEMO_PAYOS',
+        providerTransactionId: 'TXN-' + scenario.code, idempotencyKey: 'IDEM-' + scenario.code,
+        method: counter ? 'CASH' : 'ONLINE', amount: total, createdAt, paidAt, rawPayload,
+        status: scenario.status === 'EXPIRED' ? 'EXPIRED' : !paid ? 'PENDING' : cancelledAt ? 'REFUND_REQUIRED' : 'SUCCESS',
+      } });
+      const histories = [{ appointmentId, fromStatus: null, toStatus: 'HOLD', actorId: profile.accountId, createdAt, reason: '[DEMO] Tạo lịch hẹn' }];
+      if (paid) histories.push({ appointmentId, fromStatus: 'HOLD', toStatus: 'CONFIRMED', actorId: profile.accountId,
+        createdAt: paidAt, reason: '[DEMO] Thanh toán và xác nhận lịch hẹn' });
+      if (checkedIn) histories.push({ appointmentId, fromStatus: 'CONFIRMED', toStatus: 'CHECKED_IN', actorId: receptionist.id,
+        createdAt: checkedInAt, reason: '[DEMO] Tiếp nhận bệnh nhân' });
+      if (scenario.status === 'COMPLETED') histories.push({ appointmentId, fromStatus: 'CHECKED_IN', toStatus: 'COMPLETED',
+        actorId: doctor?.userId ?? receptionist.id, createdAt: endsAt, reason: '[DEMO] Hoàn tất gói khám' });
+      if (cancelledAt) histories.push({ appointmentId, fromStatus: 'CONFIRMED', toStatus: 'CANCELLED', actorId: profile.accountId,
+        createdAt: cancelledAt, reason: 'Bệnh nhân hủy: Thay đổi kế hoạch cá nhân' });
+      if (scenario.status === 'EXPIRED') histories.push({ appointmentId, fromStatus: 'HOLD', toStatus: 'EXPIRED', actorId: null,
+        createdAt: holdExpiresAt, reason: '[DEMO] Hết hạn giữ chỗ, chưa thanh toán' });
+      if (scenario.status === 'NO_SHOW') histories.push({ appointmentId, fromStatus: 'CONFIRMED', toStatus: 'NO_SHOW', actorId: null,
+        createdAt: new Date(`${date.toISOString().slice(0, 10)}T23:59:00+07:00`), reason: 'AUTO_NO_SHOW: Hết ngày khám, bệnh nhân chưa check-in.' });
+      await tx.appointmentStatusHistory.createMany({ data: histories });
+      await tx.appointmentQrToken.create({ data: { appointmentId,
+        tokenHash: createHash('sha256').update('demo-ticket:' + scenario.code).digest('hex'),
+        expiresAt: endsAt, usedAt: checkedInAt,
+      } });
+      if (!['CANCELLED', 'EXPIRED'].includes(scenario.status)) {
+        if (receptionSlot) await tx.packageReceptionSlot.update({ where: { id: receptionSlot.id }, data: { occupiedCount: { increment: 1 } } });
+        if (slot) await tx.doctorScheduleSlot.update({ where: { id: slot.id }, data: { occupiedCount: { increment: 1 } } });
+      }
+    });
+    summary.push({ code: scenario.code, status: scenario.status, date: date.toISOString().slice(0, 10),
+      time: startTime.toISOString().slice(11, 16), type: methodCode, refund: scenario.refundRate ? `${scenario.refundRate}%` : '—' });
+  }
+  console.table(summary);
+  return scenarios.length;
 }
 
 main()

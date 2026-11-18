@@ -3,10 +3,10 @@
 // ============================================================
 
 model DoctorSchedule {
-  id               String         @id @default(uuid()) @db.Uuid
+  id               Int            @id @default(autoincrement())
   doctorId         String         @map("doctor_id") @db.Uuid
-  branchId         String         @map("branch_id") @db.Uuid
-  roomId           String?        @map("room_id") @db.Uuid
+  branchId         Int            @map("branch_id")
+  roomId           Int?           @map("room_id")
   workDate         DateTime       @map("work_date") @db.Date
   startTime        DateTime       @map("start_time") @db.Time(0)
   endTime          DateTime       @map("end_time") @db.Time(0)
@@ -28,8 +28,8 @@ model DoctorSchedule {
 }
 
 model DoctorScheduleSlot {
-  id              String         @id @default(uuid()) @db.Uuid
-  scheduleId      String         @map("schedule_id") @db.Uuid
+  id              Int            @id @default(autoincrement())
+  scheduleId      Int            @map("schedule_id")
   startTime       DateTime       @map("start_time") @db.Time(0)
   endTime         DateTime       @map("end_time") @db.Time(0)
   capacity        Int            @default(1)
@@ -47,10 +47,31 @@ model DoctorScheduleSlot {
   @@map("doctor_schedule_slots")
 }
 
+model PackageReceptionSlot {
+  id               Int            @id @default(autoincrement())
+  branchId         Int            @map("branch_id")
+  servicePackageId Int            @map("service_package_id")
+  date             DateTime       @db.Date
+  startTime        DateTime       @map("start_time") @db.Time(0)
+  endTime          DateTime       @map("end_time") @db.Time(0)
+  capacity         Int            @default(5)
+  occupiedCount    Int            @default(0) @map("occupied_count")
+  isActive         Boolean        @default(true) @map("is_active")
+  createdAt        DateTime       @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt        DateTime       @updatedAt @map("updated_at") @db.Timestamptz(3)
+  branch           Branch         @relation(fields: [branchId], references: [id], onDelete: Restrict)
+  servicePackage   ServicePackage @relation(fields: [servicePackageId], references: [id], onDelete: Restrict)
+  appointments     Appointment[]
+
+  @@unique([branchId, servicePackageId, date, startTime])
+  @@index([branchId, servicePackageId, date, isActive])
+  @@map("package_reception_slots")
+}
+
 model DoctorScheduleException {
-  id        String   @id @default(uuid()) @db.Uuid
+  id        Int      @id @default(autoincrement())
   doctorId  String   @map("doctor_id") @db.Uuid
-  branchId  String   @map("branch_id") @db.Uuid
+  branchId  Int      @map("branch_id")
   date      DateTime @db.Date
   reason    String?
   isClosed  Boolean  @default(true) @map("is_closed")

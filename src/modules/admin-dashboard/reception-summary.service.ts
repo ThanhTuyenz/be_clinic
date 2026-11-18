@@ -6,18 +6,18 @@ import { PrismaService } from '../../infrastructure/database/prisma/prisma.servi
 export class ReceptionSummaryService {
   constructor(private readonly prisma: PrismaService) {}
 
-  async getReceptionSummary(userId: string, query?: { date?: string; branchId?: string }) {
+  async getReceptionSummary(userId: string, query?: { date?: string; branchId?: number }) {
     const user = await getStaffUser(this.prisma, userId)
     if (!['CHAIN_MANAGER', 'BRANCH_MANAGER', 'RECEPTIONIST'].includes(user.role)) throw new ForbiddenException('Không có quyền xem thống kê tiếp nhận')
-    const requestedBranchId = query?.branchId?.trim()
+    const requestedBranchId = query?.branchId
     const assignedBranchIds = user.branchId ? [user.branchId] : []
-    let branchId: string | undefined
+    let branchId: number | undefined
     if (user.role === 'CHAIN_MANAGER') {
-      branchId = requestedBranchId && requestedBranchId !== 'all' ? requestedBranchId : undefined
+      branchId = requestedBranchId !== undefined ? requestedBranchId : undefined
     } else {
       if (!assignedBranchIds.length) throw new ForbiddenException('Tài khoản chưa được phân công chi nhánh')
-      if (requestedBranchId && requestedBranchId !== 'all' && !assignedBranchIds.includes(requestedBranchId)) throw new ForbiddenException('Không có quyền xem thống kê chi nhánh này')
-      branchId = requestedBranchId && requestedBranchId !== 'all' ? requestedBranchId : assignedBranchIds[0]
+      if (requestedBranchId !== undefined && !assignedBranchIds.includes(requestedBranchId)) throw new ForbiddenException('Không có quyền xem thống kê chi nhánh này')
+      branchId = requestedBranchId !== undefined ? requestedBranchId : assignedBranchIds[0]
     }
     const { from, to, dateKey } = parseDateRange(query?.date)
 
@@ -78,7 +78,7 @@ export class ReceptionSummaryService {
           where: {
             ...appointmentWhere,
             status: 'HOLD',
-            invoice: { status: { not: 'PAID' } },
+            bookingOrder: { invoice: { status: { not: 'PAID' } } },
           },
         }),
         this.prisma.appointment.count({
@@ -122,7 +122,7 @@ export class ReceptionSummaryService {
     const sourcesToday = { clinic: 0, online: 0, other: 0 }
     for (const appt of todayAppointments) {
       const actorRole = appt.statusHistories[0]?.actor?.role
-      if (appt.bookingOrderId || actorRole === 'PATIENT' || !actorRole) {
+      if (actorRole === 'PATIENT' || !actorRole) {
         sourcesToday.online += 1
       } else {
         sourcesToday.clinic += 1

@@ -1,15 +1,14 @@
 import { ApiProperty, ApiPropertyOptional, PartialType } from '@nestjs/swagger';
-import { IsBoolean, IsDateString, IsEnum, IsIn, IsNumber, IsOptional, IsString, MaxLength } from 'class-validator';
-
-enum GenderDto { MALE = 'MALE', FEMALE = 'FEMALE', OTHER = 'OTHER' }
+import { Gender as GenderDto } from '@prisma/client';
+import { IsBoolean, IsDateString, IsEnum, IsIn, IsNotEmpty, IsNumber, IsOptional, IsString, MaxLength } from 'class-validator';
 
 export class CreatePatientProfileDto {
   @ApiProperty() @IsString() @MaxLength(100) fullName: string;
   @ApiProperty({ example: '2000-01-15' })
   @IsDateString({ strict: true, strictSeparator: true }, { message: 'Ngày sinh không hợp lệ. Vui lòng chọn lại ngày sinh.' })
   dateOfBirth: string;
-  @ApiPropertyOptional({ enum: GenderDto }) @IsOptional() @IsEnum(GenderDto) gender?: GenderDto;
-  @ApiPropertyOptional() @IsOptional() @IsString() @MaxLength(20) phoneNumber?: string;
+  @ApiProperty({ enum: GenderDto }) @IsEnum(GenderDto) gender: GenderDto;
+  @ApiProperty() @IsString() @IsNotEmpty() @MaxLength(20) phoneNumber: string;
   @ApiPropertyOptional() @IsOptional() @IsString() @MaxLength(20) nationalId?: string;
   @ApiPropertyOptional() @IsOptional() @IsString() @MaxLength(20) healthInsuranceNumber?: string;
   
@@ -50,7 +49,7 @@ export class CreatePatientProfileDto {
   @ApiPropertyOptional({ description: 'Cân nặng (kg)' }) @IsOptional() @IsNumber() weight?: number;
 }
 
-export class UpdatePatientProfileDto extends PartialType(CreatePatientProfileDto) {}
+export class UpdatePatientProfileDto extends PartialType(CreatePatientProfileDto, { skipNullProperties: false }) {}
 
 export class PatientProfileResponseDto {
   @ApiPropertyOptional() familyHistory?: string | null;
@@ -65,8 +64,8 @@ export class PatientProfileResponseDto {
   @ApiPropertyOptional({ description: 'Mã định danh bệnh nhân (BN26xxxxx)' })
   patientCode?: string | null;
 
-  @ApiPropertyOptional({ description: 'ID tài khoản sở hữu' })
-  accountId?: string | null;
+  @ApiProperty({ description: 'ID tài khoản sở hữu' })
+  accountId: string;
 
   @ApiProperty({ description: 'Họ và tên đầy đủ' })
   fullName: string;
@@ -74,11 +73,11 @@ export class PatientProfileResponseDto {
   @ApiProperty({ description: 'Ngày tháng năm sinh' })
   dateOfBirth: Date | string;
 
-  @ApiPropertyOptional({ enum: GenderDto })
-  gender?: string | null;
+  @ApiProperty({ enum: GenderDto })
+  gender: GenderDto;
 
-  @ApiPropertyOptional()
-  phoneNumber?: string | null;
+  @ApiProperty()
+  phoneNumber: string;
 
   @ApiPropertyOptional({ description: 'Số CCCD / CMND' })
   nationalId?: string | null;

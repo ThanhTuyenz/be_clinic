@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../../infrastructure/database/prisma/prisma.service.js';
-import { isUuid } from '../../common/utils/staff.utils.js';
+
 
 @Injectable()
 export class BranchesService {
@@ -8,14 +8,14 @@ export class BranchesService {
 
 
 
-  async resolveBranchId(identifier?: string): Promise<string | undefined> {
+  async resolveBranchId(identifier?: string | number): Promise<number | undefined> {
     if (!identifier) return undefined;
-    if (isUuid(identifier)) return identifier;
+    if (typeof identifier === 'number') return identifier; if (/^\d+$/.test(identifier)) return Number(identifier);
     const branch = await this.prisma.branch.findFirst({
       where: { OR: [{ slug: identifier }, { code: identifier }], isActive: true },
       select: { id: true },
     });
-    return branch?.id ?? identifier;
+    return branch?.id ?? 0;
   }
 
   branches() {
@@ -39,7 +39,7 @@ export class BranchesService {
     });
   }
 
-  departments(branchId: string) {
+  departments(branchId: number) {
     return this.prisma.specialty.findMany({
       where: { branches: { some: { branchId, isActive: true } } },
       orderBy: { name: 'asc' },

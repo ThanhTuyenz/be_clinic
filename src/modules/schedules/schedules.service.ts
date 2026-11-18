@@ -23,7 +23,7 @@ const ASSIGNED_ROOM_SELECT = {
 export class SchedulesService {
   constructor(private readonly prisma: PrismaService) {}
 
-  private async resolveAssignedDoctor(doctorId: string, branchId: string) {
+  private async resolveAssignedDoctor(doctorId: string, branchId: number) {
     const doctor = await this.prisma.doctor.findFirst({
       where: { isActive: true, OR: [{ id: doctorId }, { userId: doctorId }] },
       select: ASSIGNED_DOCTOR_SELECT,
@@ -35,8 +35,8 @@ export class SchedulesService {
 
   private assertDoctorBranch(doctor: {
     isActive: boolean;
-    user: { branchId: string | null; branch: { isActive: boolean } | null };
-  }, branchId: string) {
+    user: { branchId: number | null; branch: { isActive: boolean } | null };
+  }, branchId: number) {
     if (!doctor.isActive) throw new BadRequestException('Bác sĩ đã ngừng hoạt động.');
     if (doctor.user.branchId !== branchId || !doctor.user.branch?.isActive) {
       throw new BadRequestException('Chỉ được phân lịch tại chi nhánh làm việc duy nhất của bác sĩ.');
@@ -44,8 +44,8 @@ export class SchedulesService {
   }
 
   private async validateAssignedRoom(
-    roomId: string | null,
-    branchId: string,
+    roomId: number | null,
+    branchId: number,
     doctor: { specialties: { specialtyId: number }[] },
   ) {
     // Cho phép ca chưa phân phòng; khi chọn phòng phải kiểm tra cấu hình chuyên khoa.
@@ -58,8 +58,8 @@ export class SchedulesService {
   }
 
   private assertRoomSpecialties(
-    room: { branchId: string; isActive: boolean; specialties: { specialtyId: number }[] } | null,
-    branchId: string,
+    room: { branchId: number; isActive: boolean; specialties: { specialtyId: number }[] } | null,
+    branchId: number,
     doctor: { specialties: { specialtyId: number }[] },
   ) {
     if (!room || !room.isActive || room.branchId !== branchId) throw new BadRequestException('Phòng khám không tồn tại, đã ngừng hoạt động hoặc không thuộc chi nhánh của ca làm việc.');
@@ -78,7 +78,7 @@ export class SchedulesService {
    * Sử dụng upsert nên an toàn khi gọi lại (idempotent).
    */
   async generateSlotsForShift(
-    scheduleId: string,
+    scheduleId: number,
     startTime: Date,
     endTime: Date,
     durationMinutes: number,
@@ -91,7 +91,7 @@ export class SchedulesService {
       throw new BadRequestException('Capacity phải từ 1 đến 50 bệnh nhân/slot');
     }
 
-    const slots: { scheduleId: string; startTime: Date; endTime: Date; capacity: number }[] = [];
+    const slots: { scheduleId: number; startTime: Date; endTime: Date; capacity: number }[] = [];
     let current = new Date(startTime);
     while (current < endTime) {
       const next = new Date(current.getTime() + durationMinutes * 60_000);
@@ -131,7 +131,7 @@ export class SchedulesService {
    * GET /doctors/:doctorId/available-slots?date=YYYY-MM-DD
    * Chỉ trả về slot status=AVAILABLE và occupiedCount < capacity.
    */
-  async getAvailableSlots(doctorId: string, date: string, branchId?: string) {
+  async getAvailableSlots(doctorId: string, date: string, branchId?: number) {
     const workDate = parseDateUtil(date);
     const schedule = await this.prisma.doctorSchedule.findFirst({
       where: {
@@ -216,7 +216,7 @@ export class SchedulesService {
   // ─────────────────────────────────────────────────────────────
   async findAll(
     doctorId?: string,
-    branchId?: string,
+    branchId?: number,
     startDate?: string,
     endDate?: string,
     withSlots: boolean = false,
@@ -330,11 +330,11 @@ export class SchedulesService {
 
   async create(body: any) {
     const doctorId = String(body.doctorId || '').trim();
-    const branchId = String(body.branchId || '').trim();
+    const branchId = Number(body.branchId);
     const workDateStr = String(body.workDate || '').trim();
     const startTimeStr = String(body.startTime || CLINIC_SESSION_WINDOWS.MORNING.start).trim();
     const endTimeStr = String(body.endTime || CLINIC_SESSION_WINDOWS.MORNING.end).trim();
-    const roomId = body.roomId ? String(body.roomId).trim() : null;
+    const roomId = body.roomId ? Number(body.roomId) : null;
     const slotDurationMin = Number(body.slotDurationMin) || 30;
     const capacityPerSlot = Number(body.capacityPerSlot) || 1;
 
@@ -400,7 +400,7 @@ export class SchedulesService {
     };
   }
 
-  async update(id: string, body: any) {
+  async update(id: number, body: any) {
     const existing = await this.prisma.doctorSchedule.findUnique({ where: { id } });
     if (!existing) throw new NotFoundException('Không tìm thấy lịch làm việc');
 
@@ -408,12 +408,12 @@ export class SchedulesService {
 
     if (body.roomId !== undefined || !['CLOSED', 'CANCELLED'].includes(body.status ?? existing.status)) {
       const doctor = await this.resolveAssignedDoctor(existing.doctorId, existing.branchId);
-      const roomId = body.roomId !== undefined ? String(body.roomId || '').trim() || null : existing.roomId;
+      const roomId = body.roomId !== undefined ? body.roomId == null || body.roomId === '' ? null : Number(body.roomId) : existing.roomId;
       await this.validateAssignedRoom(roomId, existing.branchId, doctor);
     }
 
     const data: any = {};
-    if (body.roomId !== undefined) data.roomId = String(body.roomId || '').trim() || null;
+    if (body.roomId !== undefined) data.roomId = body.roomId == null || body.roomId === '' ? null : Number(body.roomId);
     if (body.status !== undefined) data.status = body.status;
     if (body.slotDurationMin !== undefined) data.slotDurationMin = Number(body.slotDurationMin) || 30;
     if (body.capacityPerSlot !== undefined) data.capacityPerSlot = Number(body.capacityPerSlot) || 1;
@@ -456,7 +456,7 @@ export class SchedulesService {
     };
   }
 
-  async remove(id: string) {
+  async remove(id: number) {
     const existing = await this.prisma.doctorSchedule.findUnique({
       where: { id },
       include: {
@@ -486,8 +486,8 @@ export class SchedulesService {
   // ─────────────────────────────────────────────────────────────
   async createBatch(body: {
     doctorId: string;
-    branchId: string;
-    roomId?: string | null;
+    branchId: number;
+    roomId?: number | null;
     startDate: string;
     endDate: string;
     daysOfWeek: number[]; // 0 = Sunday, 1 = Monday, ..., 6 = Saturday
@@ -516,7 +516,7 @@ export class SchedulesService {
             },
           ];
 
-    const roomId = body.roomId ? String(body.roomId).trim() : null;
+    const roomId = body.roomId ? Number(body.roomId) : null;
     await this.validateAssignedRoom(roomId, branchId, doc);
     const slotDurationMin = Number(body.slotDurationMin) || 30;
     const capacityPerSlot = Number(body.capacityPerSlot) || 1;
@@ -605,7 +605,7 @@ export class SchedulesService {
   async copyWeek(body: {
     sourceMonday: string; // YYYY-MM-DD
     targetMonday: string; // YYYY-MM-DD
-    branchId?: string;
+    branchId?: number;
   }) {
     const { sourceMonday, targetMonday, branchId } = body;
     if (!sourceMonday || !targetMonday) {
@@ -711,17 +711,17 @@ export class SchedulesService {
   // ─────────────────────────────────────────────────────────────
   // Public Branch Schedules & Booking Methods
   // ─────────────────────────────────────────────────────────────
-  private async resolveBranchId(identifier?: string): Promise<string | undefined> {
+  private async resolveBranchId(identifier?: string | number): Promise<number | undefined> {
     if (!identifier) return undefined;
-    if (/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(identifier)) return identifier;
+    if (typeof identifier === 'number') return identifier; if (/^\d+$/.test(identifier)) return Number(identifier);
     const branch = await this.prisma.branch.findFirst({
       where: { OR: [{ slug: identifier }, { code: identifier }], isActive: true },
       select: { id: true },
     });
-    return branch?.id ?? identifier;
+    return branch?.id ?? 0;
   }
 
-  async bookingMethods(branchIdentifier?: string) {
+  async bookingMethods(branchIdentifier?: string | number) {
     if (!branchIdentifier) {
       const orderMap: Record<string, number> = {
         SPECIALTY_EXAM: 1,
@@ -761,7 +761,6 @@ export class SchedulesService {
           code: bm.code,
           displayName: bm.name,
           description: bm.description,
-          route: bm.route,
         }))
         .sort((a, b) => a.sortOrder - b.sortOrder);
     }
@@ -769,8 +768,8 @@ export class SchedulesService {
     return this.prisma.branchBookingMethod.findMany({
       where: { branchId, isEnabled: true, bookingMethod: { isActive: true } },
       orderBy: { sortOrder: 'asc' },
-      select: { id: true, branchId: true, isEnabled: true, sortOrder: true, bookingMethod: { select: { id: true, code: true, name: true, description: true, route: true } } },
-    }).then((rows) => rows.map(({ bookingMethod, ...item }) => ({ ...item, bookingMethodId: bookingMethod.id, type: bookingMethod.code, code: bookingMethod.code, displayName: bookingMethod.name, description: bookingMethod.description, route: bookingMethod.route })));
+      select: { id: true, branchId: true, isEnabled: true, sortOrder: true, bookingMethod: { select: { id: true, code: true, name: true, description: true } } },
+    }).then((rows) => rows.map(({ bookingMethod, ...item }) => ({ ...item, bookingMethodId: bookingMethod.id, type: bookingMethod.code, code: bookingMethod.code, displayName: bookingMethod.name, description: bookingMethod.description })));
   }
 
 }

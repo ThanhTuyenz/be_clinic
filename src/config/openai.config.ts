@@ -13,7 +13,7 @@ const outputLimit = (name: string, fallback: number) => {
 export default registerAs('openai', () => ({
   apiKey: process.env.OPENAI_API_KEY,
   model: process.env.OPENAI_MODEL || 'gpt-6-luna',
-  intakeModel: process.env.OPENAI_INTAKE_MODEL || 'gpt-4o-mini',
+  intakeModel: process.env.OPENAI_INTAKE_MODEL || 'gpt-6-luna',
   intakeMaxOutputTokens: outputLimit('OPENAI_INTAKE_MAX_OUTPUT_TOKENS', 650),
   chatMaxOutputTokens: outputLimit('OPENAI_CHAT_MAX_OUTPUT_TOKENS', 1800),
   embeddingModel: process.env.OPENAI_EMBEDDING_MODEL || 'text-embedding-3-small',

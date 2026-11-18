@@ -1,3 +1,4 @@
+import { ParseIntPipe } from '@nestjs/common';
 import { Controller, Get, Query, Req } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiQuery, ApiTags } from '@nestjs/swagger';
 import type { Request } from 'express';
@@ -29,7 +30,7 @@ export class ClinicRoomsController {
   getRoomsStatus(
     @Req() request: Request,
     @Query('date') date?: string,
-    @Query('branchId') branchId?: string,
+    @Query('branchId', new ParseIntPipe({ optional: true })) branchId?: number,
   ) {
     return this.rooms.getRoomsStatus(request.user!.id, { date, branchId });
   }

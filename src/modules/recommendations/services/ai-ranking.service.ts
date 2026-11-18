@@ -6,7 +6,7 @@ import { CandidatePoolItem, TELEMETRY_CONFIG } from '../constants/recommendation
 import { ProfileHealthContext, profileEvidenceText } from '../types/profile-health.types.js';
 
 export interface RankingCandidate {
-  id: string; name: string; code: string; slug?: string; description: string; price: number;
+  id: number; name: string; code: string; slug?: string; description: string; price: number;
   specialtyName: string; specialtyId: number | null; durationMin: number;
   origin: CandidatePoolItem['origin']; behaviorSourceType?: CandidatePoolItem['behaviorSourceType'];
   symptoms?: string[]; retrievalScore?: number; evidenceSignals?: string[];
@@ -18,12 +18,12 @@ export type RankingContext = { candidates: RankingCandidate[] } & (
   | {
     source: 'BEHAVIOR'; behavior: {
       recentSearches: Array<{ query: string; searchedAt: number }>;
-      recentDropOffs: Array<{ packageId: string; name: string; abandonedAt: number }>
+      recentDropOffs: Array<{ packageId: number; name: string; abandonedAt: number }>
     }
   }
 );
 interface RankingSelection {
-  packageId: string; priority?: string;
+  packageId: number; priority?: string;
   relevance?: string; profileQuote?: string; packageQuote?: string; basis?: string
 }
 
@@ -77,7 +77,7 @@ export class AiRankingService {
                   items: {
                     type: 'object', additionalProperties: false,
                     properties: {
-                      packageId: { type: 'string', enum: context.candidates.map(candidate => candidate.id) },
+                      packageId: { type: 'integer', enum: context.candidates.map(candidate => candidate.id) },
                       priority: { type: 'string', enum: ['HIGH', 'MEDIUM', 'LOW'] },
                       relevance: { type: 'string', enum: ['DIRECT', 'SUPPORTING'] },
                       ...(context.source === 'PROFILE' ? { basis: { type: 'string', enum: ['CLINICAL', 'ROUTINE'] }, profileQuote: { type: 'string' }, packageQuote: { type: 'string' } } : {}),
@@ -97,14 +97,14 @@ export class AiRankingService {
       const selections = this.safeParseSelections(response.output_text);
 
       const candidateMap = new Map(context.candidates.map((c) => [c.id, c]));
-      const addedIds = new Set<string>();
+      const addedIds = new Set<number>();
       const result: RecommendedPackageItemDto[] = [];
       let routineCount = 0;
       const medicalHistory = context.source === 'PROFILE'
         ? this.normalizeEvidenceText(profileEvidenceText(context.profile)) : '';
 
       for (const sel of selections) {
-        if (typeof sel?.packageId !== 'string') continue;
+        if (!Number.isInteger(sel?.packageId)) continue;
         const match = candidateMap.get(sel.packageId);
         if (!match) throw new BadGatewayException('Gợi ý không thuộc danh sách ứng viên.');
         if (!['DIRECT', 'SUPPORTING'].includes(sel.relevance || '')) throw new BadGatewayException('Thiếu mức độ liên quan của gợi ý.');
@@ -244,9 +244,9 @@ Không khẳng định người dùng mắc bệnh, không viện dẫn hồ sơ
       }
       const parsed = JSON.parse(cleaned);
       if (!Array.isArray(parsed?.selectedPackages)) throw new Error('Invalid ranking schema');
-      if (parsed.selectedPackages.some((item: any) => !item || typeof item.packageId !== 'string')) throw new Error('Invalid package selection');
+      if (parsed.selectedPackages.some((item: any) => !item || !Number.isInteger(item.packageId) || item.packageId < 1)) throw new Error('Invalid package selection');
       return parsed.selectedPackages.map((item: Record<string, unknown>) => ({
-        packageId: String(item.packageId),
+        packageId: Number(item.packageId),
         priority: typeof item.priority === 'string' ? item.priority : undefined,
         relevance: typeof item.relevance === 'string' ? item.relevance : undefined,
         basis: typeof item.basis === 'string' ? item.basis : undefined,
@@ -290,7 +290,7 @@ Không khẳng định người dùng mắc bệnh, không viện dẫn hồ sơ
   rankWithRules(candidates: CandidatePoolItem[], medicalHistory = ''): RecommendedPackageItemDto[] {
     const sorted = [...candidates].sort((a, b) => a.origin === 'BEHAVIOR' && b.origin === 'BEHAVIOR'
       ? this.behaviorWeight(b) - this.behaviorWeight(a) : 0);
-    const seen = new Set<string>();
+    const seen = new Set<number>();
     return sorted.filter(item => {
       if (seen.has(item.pkg.id)) return false;
       seen.add(item.pkg.id);

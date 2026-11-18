@@ -8,7 +8,7 @@ import { SearchRankingService } from '../search/services/search-ranking.service.
 export interface GetPackagesQueryDto {
   page?: number | string;
   limit?: number | string;
-  branchId?: string;
+  branchId?: number | string;
   specialtyId?: number | string;
   search?: string;
   /** Internal caller option; public search keeps hybrid ranking by default. */
@@ -107,7 +107,7 @@ export class PackagesService {
 
     // Use the same retrieval rules as the search suggestions. Only lightweight
     // metadata is ranked; deployment details are fetched for the requested page.
-    let rankedIds: string[] | undefined;
+    let rankedIds: number[] | undefined;
     if (search) {
       const candidates = await this.prisma.servicePackage.findMany({
         where,
@@ -230,13 +230,13 @@ export class PackagesService {
   }
 
   /**
-   * GET /services/:id (Hỗ trợ ID UUID, mã code hoặc slug)
+   * GET /services/:id (Hỗ trợ ID số, mã code hoặc slug)
    * Chi tiết đầy đủ 1 gói dịch vụ / gói khám phục vụ trang chi tiết riêng
    */
   async getServiceDetail(serviceIdentifier: string) {
     if (!serviceIdentifier) throw new NotFoundException('Thiếu định danh gói dịch vụ');
     const cleanId = serviceIdentifier.trim();
-    const isId = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(cleanId);
+    const isId = /^\d+$/.test(cleanId) && Number.isSafeInteger(Number(cleanId)) && Number(cleanId) > 0;
     const upperId = cleanId.toUpperCase();
     const withPkgPrefix = upperId.startsWith('PKG-') ? upperId : `PKG-${upperId}`;
     const withoutPkgPrefix = upperId.startsWith('PKG-') ? upperId.slice(4) : upperId;
@@ -245,7 +245,7 @@ export class PackagesService {
 
     const pkg = await this.prisma.servicePackage.findFirst({
       where: isId
-        ? { id: cleanId, isActive: true }
+        ? { id: Number(cleanId), isActive: true }
         : {
             isActive: true,
             OR: [
@@ -299,7 +299,7 @@ export class PackagesService {
                 isActive: true,
               },
             },
-            bookingMethod: { select: { id: true, code: true, name: true, route: true, isActive: true } },
+            bookingMethod: { select: { id: true, code: true, name: true, isActive: true } },
           },
         },
         receptionSchedules: { select: { branchId: true, dayOfWeek: true, sessions: true } },
@@ -319,7 +319,7 @@ export class PackagesService {
                     isActive: true,
                   },
                 },
-                bookingMethod: { select: { id: true, code: true, name: true, route: true, isActive: true } },
+                bookingMethod: { select: { id: true, code: true, name: true, isActive: true } },
               },
             },
           },
@@ -381,7 +381,7 @@ export class PackagesService {
   /**
    * GET /services/packages/specialty
    */
-  async specialtyPackages(branchIdentifier?: string, limit?: number) {
+  async specialtyPackages(branchIdentifier?: string | number, limit?: number) {
     const res = await this.getPackages({
       branchId: branchIdentifier,
       type: 'specialty',
@@ -394,7 +394,7 @@ export class PackagesService {
   /**
    * GET /services/packages/health
    */
-  async healthPackages(branchIdentifier?: string, limit?: number) {
+  async healthPackages(branchIdentifier?: string | number, limit?: number) {
     const res = await this.getPackages({
       branchId: branchIdentifier,
       type: 'health-package',
@@ -408,7 +408,7 @@ export class PackagesService {
    * GET /services?q=&specialtyId=&branchId=
    * Tìm kiếm gói dịch vụ tổng quát (specialtyId NULL)
    */
-  async getGeneralServices(branchId?: string, q?: string) {
+  async getGeneralServices(branchId?: number, q?: string) {
     const result = await this.getPackages({ branchId, search: q, type: 'health-package', needPagination: false });
     return result.data.filter((pkg) => pkg.specialtyId === null).slice(0, 60);
 

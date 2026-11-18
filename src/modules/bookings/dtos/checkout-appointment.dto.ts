@@ -6,17 +6,19 @@ import {
   IsArray,
   IsBoolean,
   IsIn,
+  IsInt,
   IsOptional,
   IsString,
   IsUUID,
   MaxLength,
+  Min,
   ValidateNested,
 } from 'class-validator';
 
 // ─── DTO cho 1 thành viên (đơn lẻ hoặc 1 phần tử của nhóm) ──
 export class AppointmentItemDto {
-  @IsOptional() @IsUUID() searchId?: string;
-  @IsOptional() @IsUUID() sourceViewId?: string;
+  @IsOptional() @Type(() => Number) @IsInt() @Min(1) searchId?: number;
+  @IsOptional() @Type(() => Number) @IsInt() @Min(1) sourceViewId?: number;
   @IsOptional() @IsString() @MaxLength(100) analyticsSessionId?: string;
   @ApiProperty({ format: 'uuid', description: 'Hồ sơ bệnh nhân của thành viên' })
   @IsUUID()
@@ -26,15 +28,21 @@ export class AppointmentItemDto {
   @IsString()
   bookingMethodCode: string;
 
-  @ApiPropertyOptional({ description: 'ID slot bác sĩ đã được tạo sẵn', format: 'uuid' })
+  @ApiPropertyOptional({ description: 'ID slot bác sĩ đã được tạo sẵn', type: Number, minimum: 1 })
   @IsOptional()
-  @IsUUID()
-  scheduleSlotId?: string;
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  scheduleSlotId?: number;
+  @ApiPropertyOptional({ description: 'Khung tiếp nhận gói tổng quát, không gán bác sĩ', type: Number, minimum: 1 })
+  @IsOptional() @Type(() => Number) @IsInt() @Min(1) receptionSlotId?: number;
 
-  @ApiPropertyOptional({ format: 'uuid' })
+  @ApiPropertyOptional({ type: Number, minimum: 1 })
   @IsOptional()
-  @IsUUID()
-  servicePackageId?: string;
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  servicePackageId?: number;
 
   @ApiPropertyOptional({ maxLength: 2000 })
   @IsOptional()

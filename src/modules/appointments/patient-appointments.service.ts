@@ -1,15 +1,18 @@
 import { appointmentTransaction, releaseCancelledHoldVoucher } from './helpers/appointment-mutation.helper.js';
 import { BadRequestException, ConflictException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
-import { isUuid } from '../../common/utils/staff.utils.js';
 import { PrismaService } from '../../infrastructure/database/prisma/prisma.service.js';
 import { MailsService } from '../../infrastructure/mail/mails.service.js';
-import { PACKAGE_RECEPTION_SELECT } from '../bookings/helpers/package-reception.helper.js';
-import { requestAppointmentRefund } from '../payments/appointment-refund.js';
+import { assertPackageReception, PACKAGE_RECEPTION_SELECT } from '../bookings/helpers/package-reception.helper.js';
+import { onlineBookingDateRange } from '../bookings/helpers/booking-date.helper.js';
+import { getAppointmentRefundQuote, requestAppointmentRefund, type AppointmentRefundQuote } from '../payments/appointment-refund.js';
+import { CancelAppointmentDto } from './dtos/cancel-appointment.dto.js';
+import { PATIENT_CANCELLATION_REASONS } from './cancellation-reasons.js';
 import { RescheduleAppointmentDto } from './dtos/reschedule-appointment.dto.js';
-import { assertRescheduleDestination, releaseAppointmentSlot, transferAppointmentSlot, appointmentDateTime } from './helpers/appointment.helper.js';
+import { assertPatientSlotAvailable, assertRescheduleDestination, releaseAppointmentSlot, transferAppointmentSlot, appointmentDateTime } from './helpers/appointment.helper.js';
 
 const PATIENT_MUTATION_INCLUDE = {
+  receptionSlot: { select: { date: true, startTime: true, endTime: true } },
   bookingMethod: { select: { code: true } },
   bookingOrder: { select: { accountId: true } },
   patientProfile: { select: { id: true, accountId: true, fullName: true, account: { select: { email: true } } } },
@@ -21,6 +24,18 @@ const PATIENT_MUTATION_INCLUDE = {
   servicePackage: { select: { name: true } },
   branch: { select: { name: true, address: true } },
 } satisfies Prisma.AppointmentInclude;
+
+function assertUpcomingPatientAppointment(appointment: {
+  receptionSlot?: { date: Date; startTime: Date } | null;
+  scheduleSlot?: { startTime: Date; schedule: { workDate: Date } } | null;
+}) {
+  const date = appointment.receptionSlot?.date ?? appointment.scheduleSlot?.schedule.workDate;
+  const time = appointment.receptionSlot?.startTime ?? appointment.scheduleSlot?.startTime;
+  if (!date || !time) throw new BadRequestException('Không xác định được giờ khám. Vui lòng liên hệ phòng khám để được hỗ trợ.');
+  if (appointmentDateTime(date, time).getTime() <= Date.now()) {
+    throw new BadRequestException('Lịch hẹn đã đến hoặc qua giờ khám, không thể đổi hoặc hủy trực tuyến.');
+  }
+}
 
 const RESCHEDULE_SLOT_INCLUDE = {
   schedule: {
@@ -65,6 +80,8 @@ export class PatientAppointmentsService {
         servicePrice: true,
         servicePackageId: true,
         scheduleSlotId: true,
+        receptionSlotId: true,
+        receptionSlot: { select: { date: true, startTime: true, endTime: true } },
         branchId: true,
         symptomsDescription: true,
         bookingMethod: {
@@ -92,18 +109,7 @@ export class PatientAppointmentsService {
           select: { id: true, name: true, address: true },
         },
         bookingOrder: {
-          select: { orderCode: true, groupType: true, invoice: { select: { status: true, payments: { select: { status: true }, orderBy: { createdAt: 'desc' }, take: 1 } } } },
-        },
-        invoice: {
-          select: {
-            totalAmount: true,
-            status: true,
-            payments: {
-              select: { status: true },
-              orderBy: { createdAt: 'desc' },
-              take: 1,
-            },
-          },
+          select: { orderCode: true, groupType: true, invoice: { select: { totalAmount: true, status: true, payments: { select: { status: true }, orderBy: { createdAt: 'desc' }, take: 1 } } } },
         },
         scheduleSlot: {
           select: {
@@ -158,9 +164,10 @@ export class PatientAppointmentsService {
         holdExpiresAt: row.holdExpiresAt,
         rescheduleCount: row.rescheduleCount ?? 0,
         createdAt: row.createdAt,
-        appointmentDate: doctorSlot?.schedule.workDate?.toISOString().slice(0, 10) ?? null,
-        startTime: doctorSlot?.startTime?.toISOString().slice(11, 16) ?? null,
-        endTime: doctorSlot?.endTime?.toISOString().slice(11, 16) ?? null,
+        appointmentDate: (row.receptionSlot?.date ?? doctorSlot?.schedule.workDate)?.toISOString().slice(0, 10) ?? null,
+        startTime: (row.receptionSlot?.startTime ?? doctorSlot?.startTime)?.toISOString().slice(11, 16) ?? null,
+        endTime: (row.receptionSlot?.endTime ?? doctorSlot?.endTime)?.toISOString().slice(11, 16) ?? null,
+        receptionSlotId: row.receptionSlotId,
         scheduleSlotId: row.scheduleSlotId,
         servicePackageId: row.servicePackageId,
         isTelehealth,
@@ -176,20 +183,40 @@ export class PatientAppointmentsService {
         branch: branch ? { id: branch.id, name: branch.name, address: branch.address } : null,
         branchId: branch?.id ?? row.branchId,
         room: !isTelehealth && room ? { id: room.id, code: room.code, name: room.name } : null,
-        totalAmount: Number(row.invoice?.totalAmount ?? row.servicePrice ?? 0),
-        invoiceStatus: row.invoice?.status ?? row.bookingOrder?.invoice?.status ?? null,
-        paymentStatus: row.invoice?.payments[0]?.status ?? row.bookingOrder?.invoice?.payments[0]?.status ?? null,
+        totalAmount: Number(row.bookingOrder.invoice?.totalAmount ?? row.servicePrice),
+        invoiceStatus: row.bookingOrder.invoice?.status ?? null,
+        paymentStatus: row.bookingOrder.invoice?.payments[0]?.status ?? null,
       };
     });
+  }
+
+  async cancellationQuote(accountId: string, appointmentId: string) {
+    const appointment = await this.prisma.appointment.findUnique({
+      where: { id: appointmentId }, include: PATIENT_MUTATION_INCLUDE,
+    });
+    if (!appointment) throw new NotFoundException('Không tìm thấy lịch hẹn');
+    if (appointment.bookingOrder?.accountId !== accountId && appointment.patientProfile.accountId !== accountId) {
+      throw new ForbiddenException('Bạn không có quyền hủy lịch hẹn này');
+    }
+    if (!['CONFIRMED', 'HOLD'].includes(appointment.status)) throw new BadRequestException('Lịch hẹn không còn ở trạng thái có thể hủy');
+    assertUpcomingPatientAppointment(appointment);
+    const quote = await this.prisma.$transaction(tx => getAppointmentRefundQuote(tx, {
+      appointmentId, bookingOrderId: appointment.bookingOrderId, reason: 'Xem trước khoản hoàn',
+    }));
+    return { ...quote, cancellationReasons: PATIENT_CANCELLATION_REASONS };
   }
 
   async cancelMyAppointment(
     accountId: string,
     appointmentId: string,
-    inputOrReason?: string | { reason?: string; refundBank?: { bankCode?: string; bankName?: string; bankBin?: string; accountNumber?: string; accountName?: string } },
+    inputOrReason?: string | CancelAppointmentDto,
   ) {
     const reason = typeof inputOrReason === 'string' ? inputOrReason : inputOrReason?.reason;
+    if (!PATIENT_CANCELLATION_REASONS.some(option => option === reason)) {
+      throw new BadRequestException('Vui lòng chọn lý do hủy trong danh sách có sẵn');
+    }
     const refundBank = typeof inputOrReason === 'object' ? inputOrReason?.refundBank : undefined;
+    const expectedRefundQuote = typeof inputOrReason === 'object' ? inputOrReason.expectedRefundQuote : undefined;
 
     const appointment = await this.prisma.appointment.findUnique({
       where: { id: appointmentId },
@@ -206,11 +233,12 @@ export class PatientAppointmentsService {
     if (!['CONFIRMED', 'HOLD'].includes(appointment.status)) {
       throw new BadRequestException(`Không thể hủy lịch hẹn đang ở trạng thái «${appointment.status}»`);
     }
+    assertUpcomingPatientAppointment(appointment);
 
-    // Tính toán thời gian khám để kiểm tra tính cấp bách (sát giờ < 24h hoặc sau 16h30 ngày trước)
+    // Mark cancellations within 24 hours; refund approval uses the separate 24h/2h policy.
     const doctorSlot = appointment.scheduleSlot;
-    const examDate = doctorSlot?.schedule?.workDate;
-    const startTimeDate = doctorSlot?.startTime;
+    const examDate = appointment.receptionSlot?.date ?? doctorSlot?.schedule?.workDate;
+    const startTimeDate = appointment.receptionSlot?.startTime ?? doctorSlot?.startTime;
 
     const now = new Date();
     let isUrgent = false;
@@ -228,23 +256,26 @@ export class PatientAppointmentsService {
 
     const previousStatus = appointment.status;
     let isPaid = false;
+    let refund: AppointmentRefundQuote | null = null;
 
     await appointmentTransaction(this.prisma, async (tx) => {
+      assertUpcomingPatientAppointment(appointment);
       // 1. Cập nhật trạng thái Appointment -> CANCELLED
       const changed = await tx.appointment.updateMany({
-        where: { id: appointmentId, status: previousStatus, scheduleSlotId: appointment.scheduleSlotId, rescheduleCount: appointment.rescheduleCount },
+        where: { id: appointmentId, status: previousStatus, scheduleSlotId: appointment.scheduleSlotId, receptionSlotId: appointment.receptionSlotId, rescheduleCount: appointment.rescheduleCount },
         data: { status: 'CANCELLED' },
       });
       if (changed.count !== 1) throw new ConflictException('Lịch hẹn vừa được cập nhật, vui lòng tải lại');
 
       // 2. Trả lại slot occupiedCount (giải phóng slot ngay lập tức)
-      await releaseAppointmentSlot(tx, appointment.scheduleSlotId);
+      await releaseAppointmentSlot(tx, appointment.scheduleSlotId, appointment.receptionSlotId);
 
-      isPaid = await requestAppointmentRefund(tx, {
+      refund = await requestAppointmentRefund(tx, {
         appointmentId: appointment.id, bookingOrderId: appointment.bookingOrderId,
         bookingCode: appointment.bookingCode, reason: reason?.trim() || 'Bệnh nhân tự hủy lịch khám',
-        isUrgent, refundBank,
+        isUrgent, refundBank, expectedRefundQuote,
       });
+      isPaid = !!refund;
 
       await releaseCancelledHoldVoucher(tx, appointment, isPaid);
 
@@ -260,11 +291,19 @@ export class PatientAppointmentsService {
       });
     });
 
+    // The transaction callback assigns the quote only after a successful cancellation.
+    const refundResult = refund as AppointmentRefundQuote | null;
+    const refundStatusNote = !refundResult ? undefined : refundResult.refundAmount === 0
+      ? 'Lịch đã hủy nhưng không đủ điều kiện hoàn tiền theo chính sách (dưới 2 giờ hoặc thiếu dữ liệu tính tiền).'
+      : refundResult.requiresManualReview
+      ? 'Yêu cầu hoàn tiền đang chờ quản lý chi nhánh xét duyệt. Chưa thực hiện hoàn tiền.'
+      : `Khoản hoàn ${refundResult.refundRate}% (${refundResult.refundAmount!.toLocaleString('vi-VN')} đ) đã được tự động duyệt, đang chờ nhân viên chuyển tiền.`;
+
     // 5. Gửi email xác nhận hủy lịch cho bệnh nhân
     const patientEmail = appointment.patientProfile?.account?.email;
     if (patientEmail) {
-      const examDateStr = doctorSlot?.schedule?.workDate?.toISOString().slice(0, 10) ?? '';
-      const startTimeStr = doctorSlot?.startTime?.toISOString().slice(11, 16) ?? '';
+      const examDateStr = examDate?.toISOString().slice(0, 10) ?? '';
+      const startTimeStr = startTimeDate?.toISOString().slice(11, 16) ?? '';
       const doctorName = doctorSlot?.schedule?.doctor
         ? `${doctorSlot.schedule.doctor.academicRank ? doctorSlot.schedule.doctor.academicRank + ' ' : ''}${doctorSlot.schedule.doctor.user?.fullName ?? ''}`.trim()
         : null;
@@ -283,10 +322,7 @@ export class PatientAppointmentsService {
             doctorOrServiceName: doctorName ? `Bác sĩ ${doctorName}` : (serviceName || 'Khám chuyên khoa'),
             cancelReason: reason || 'Bệnh nhân có việc bận cá nhân',
             cancelledBy: 'PATIENT',
-            refundStatusNote: isPaid
-              ? (isUrgent ? 'Yêu cầu hoàn tiền đã được chuyển tới quản lý để xét duyệt do lịch bị hủy sát giờ khám.'
-                : 'Yêu cầu hoàn tiền đã được ghi nhận. Bộ phận kế toán sẽ kiểm tra và xử lý theo khoản đã thanh toán.')
-              : undefined,
+            refundStatusNote,
           },
         });
       } catch {
@@ -297,13 +333,14 @@ export class PatientAppointmentsService {
     return {
       success: true,
       isUrgent,
+      refund: refundResult,
       message: !isPaid ? 'Hủy lịch khám thành công. Slot khám đã được giải phóng.'
-        : isUrgent ? 'Hủy lịch khám thành công. Yêu cầu hoàn tiền đã được chuyển tới quản lý để xét duyệt.'
-          : 'Hủy lịch khám thành công. Yêu cầu hoàn tiền đã được ghi nhận để bộ phận kế toán xử lý.',
+        : `Hủy lịch khám thành công. ${refundStatusNote}`,
     };
   }
 
   async rescheduleMyAppointment(accountId: string, appointmentId: string, dto: RescheduleAppointmentDto) {
+    if (dto.newReceptionSlotId) return this.rescheduleReception(accountId, appointmentId, dto);
     const { result, appointment, newSlot } = await appointmentTransaction(this.prisma, async (tx) => {
       const appointment = await tx.appointment.findUnique({
         where: { id: appointmentId },
@@ -311,6 +348,7 @@ export class PatientAppointmentsService {
       });
 
       if (!appointment) throw new NotFoundException('Không tìm thấy lịch hẹn');
+      if (appointment.receptionSlotId) throw new BadRequestException('Vui lòng chọn khung tiếp nhận mới cho gói khám');
 
       // 1. Kiểm tra quyền sở hữu lịch hẹn
       const isOwner = appointment.bookingOrder?.accountId === accountId || appointment.patientProfile?.accountId === accountId;
@@ -320,6 +358,7 @@ export class PatientAppointmentsService {
       if (appointment.status !== 'CONFIRMED') {
         throw new BadRequestException(`Không thể đổi lịch hẹn đang ở trạng thái «${appointment.status}». Chỉ áp dụng cho lịch đã xác nhận.`);
       }
+      assertUpcomingPatientAppointment(appointment);
 
       // 3. Kiểm tra số lần đổi lịch (tối đa 2 lần)
       if (appointment.rescheduleCount >= 2) {
@@ -344,7 +383,7 @@ export class PatientAppointmentsService {
       }
 
       // 5. Xác thực slot mới
-      if (!isUuid(dto.newScheduleSlotId)) throw new BadRequestException('Vui lòng chọn khung giờ khám đã được tạo sẵn');
+      if (!Number.isInteger(dto.newScheduleSlotId) || dto.newScheduleSlotId < 1) throw new BadRequestException('Vui lòng chọn khung giờ khám đã được tạo sẵn');
       const newSlot = await tx.doctorScheduleSlot.findUnique({
         where: { id: dto.newScheduleSlotId },
         include: RESCHEDULE_SLOT_INCLUDE,
@@ -427,5 +466,33 @@ export class PatientAppointmentsService {
     }
 
     return result;
+  }
+
+  private async rescheduleReception(accountId: string, appointmentId: string, dto: RescheduleAppointmentDto) {
+    if (dto.newScheduleSlotId) throw new BadRequestException('Gói tổng quát chỉ sử dụng khung tiếp nhận');
+    return appointmentTransaction(this.prisma, async tx => {
+      const appointment = await tx.appointment.findUnique({ where: { id: appointmentId }, include: { ...PATIENT_MUTATION_INCLUDE, servicePackage: { select: PACKAGE_RECEPTION_SELECT } } });
+      if (!appointment || (appointment.patientProfile.accountId !== accountId && appointment.bookingOrder?.accountId !== accountId)) throw new ForbiddenException('Không có quyền đổi lịch hẹn');
+      if (appointment.bookingMethod?.code !== 'HEALTH_PACKAGE' || appointment.status !== 'CONFIRMED' || appointment.rescheduleCount >= 2) throw new BadRequestException('Lịch hẹn không đủ điều kiện đổi khung tiếp nhận');
+      assertUpcomingPatientAppointment(appointment);
+      const oldDate = appointment.receptionSlot?.date ?? appointment.scheduleSlot?.schedule.workDate;
+      const oldTime = appointment.receptionSlot?.startTime ?? appointment.scheduleSlot?.startTime;
+      if (!oldDate || !oldTime || (Date.now() - appointment.createdAt.getTime() > 1800000 && appointmentDateTime(oldDate, oldTime).getTime() - Date.now() < 6 * 3600000)) throw new BadRequestException('Chỉ được đổi trước giờ tiếp nhận ít nhất 6 giờ');
+      const slot = await tx.packageReceptionSlot.findUnique({ where: { id: dto.newReceptionSlotId! } });
+      if (!slot?.isActive || slot.id === appointment.receptionSlotId || slot.branchId !== appointment.branchId || slot.servicePackageId !== appointment.servicePackageId) throw new BadRequestException('Khung tiếp nhận mới không hợp lệ');
+      onlineBookingDateRange(60).resolveDate(slot.date.toISOString().slice(0, 10));
+      assertPackageReception(appointment.servicePackage!.receptionSchedules, { startTime: slot.startTime, schedule: { branchId: slot.branchId, workDate: slot.date } });
+      await assertPatientSlotAvailable(tx, appointment.patientProfileId, { startTime: slot.startTime, endTime: slot.endTime, schedule: { workDate: slot.date } }, appointment.id);
+      const reserved = await tx.$executeRaw`UPDATE package_reception_slots SET occupied_count = occupied_count + 1, updated_at = NOW() WHERE id = ${slot.id} AND is_active = true AND occupied_count < capacity`;
+      if (reserved !== 1) throw new ConflictException('Khung tiếp nhận mới vừa hết chỗ');
+      await releaseAppointmentSlot(tx, appointment.scheduleSlotId, appointment.receptionSlotId);
+      const updated = await tx.appointment.update({ where: { id: appointment.id }, data: {
+        receptionSlotId: slot.id, scheduleSlotId: null, queueNumber: null, rescheduleCount: { increment: 1 }, reminderSent24h: false, reminderSent2h: false,
+        statusHistories: { create: { fromStatus: appointment.status, toStatus: appointment.status, actorId: accountId, reason: `Đổi giờ tiếp nhận: ${dto.reason?.trim() || 'Người bệnh yêu cầu'}` } },
+      } });
+      const newDate = slot.date.toISOString().slice(0, 10), newTime = `${slot.startTime.toISOString().slice(11, 16)} - ${slot.endTime.toISOString().slice(11, 16)}`;
+      await tx.outboxEvent.create({ data: { aggregateType: 'Appointment', aggregateId: appointment.id, eventType: 'appointment.rescheduled', payload: { appointmentId, newAppointmentDate: newDate, newStartTime: slot.startTime.toISOString().slice(11, 16), newEndTime: slot.endTime.toISOString().slice(11, 16), newReceptionSlotId: slot.id } } });
+      return { success: true, message: 'Đã đổi giờ tiếp nhận gói khám', appointmentId, bookingCode: updated.bookingCode, newDate, newTime, newQueueNumber: null, rescheduleCount: updated.rescheduleCount };
+    });
   }
 }

@@ -1,9 +1,10 @@
-import { IsIn, IsNotEmpty, IsOptional, IsString, Matches, MaxLength } from 'class-validator';
+import { Type } from 'class-transformer';
+import { IsIn, IsInt, IsNotEmpty, IsOptional, IsString, Matches, MaxLength, Min } from 'class-validator';
 
 export type RecommendationPriority = 'HIGH' | 'MEDIUM' | 'LOW';
 
 export interface RecommendedPackageItemDto {
-  packageId: string;
+  packageId: number;
   code: string;
   slug?: string;
   name: string;
@@ -44,9 +45,11 @@ export class TrackBehaviorDto {
   @IsIn([TrackingActionType.VIEW_PACKAGE], { message: 'Client chỉ được ghi nhận lượt xem gói khám' })
   actionType: TrackingActionType;
 
-  @IsString()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
   @IsOptional()
-  targetPackageId?: string;
+  targetPackageId?: number;
 
 }
 

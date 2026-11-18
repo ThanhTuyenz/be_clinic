@@ -91,9 +91,9 @@ type BookingTimeSlot = {
   occupiedCount: number;
   remainingSlots: number;
   isFull: boolean;
-  representativeSlotId: string;
+  representativeSlotId: number;
   doctors: Array<{
-    slotId: string;
+    slotId: number;
     doctorId: string;
     doctorName: string;
     academicRank?: string | null;
@@ -101,7 +101,7 @@ type BookingTimeSlot = {
     experienceYears?: number | null;
     consultationFee: number;
     onlineConsultationFee: number;
-    roomId?: string | null;
+    roomId?: number | null;
     roomName?: string | null;
     remainingSlots: number;
   }>;
@@ -171,7 +171,6 @@ export class BookingFlowService {
           code: true,
           name: true,
           description: true,
-          route: true,
         },
       }),
       doctorFlow ? Promise.resolve<BookingInitPackage[]>([]) : this.prisma.servicePackage.findMany({
@@ -279,7 +278,7 @@ export class BookingFlowService {
         const primaryBranch = d.user.branch;
         return {
           ...this.formatBookingDoctor(d),
-          branchId: primaryBranch?.id || '',
+          branchId: primaryBranch?.id ?? null,
           branches: primaryBranch ? [primaryBranch] : [],
         };
       });
@@ -469,6 +468,30 @@ export class BookingFlowService {
     const parsedSpecialtyId = await this.resolveSpecialtyId(dto.specialtyId);
     const doctorId = dto.doctorId || undefined;
     const servicePackage = await this.resolveBookingSlotPackage(dto.servicePackageId, effectiveBranchId, dto.bookingMethodCode);
+    if (dto.bookingMethodCode === 'HEALTH_PACKAGE') {
+      if (!servicePackage || !effectiveBranchId) throw new BadRequestException('Vui lòng chọn gói khám và cơ sở tiếp nhận');
+      const range = this.getBookingDateRange(Number(dto.days));
+      const rows = await this.prisma.packageReceptionSlot.findMany({
+        where: { branchId: effectiveBranchId, servicePackageId: servicePackage.id, isActive: true, date: { gte: range.minDate, lte: range.maxDate } },
+        select: { id: true, date: true, startTime: true, endTime: true, capacity: true, occupiedCount: true },
+        orderBy: [{ date: 'asc' }, { startTime: 'asc' }],
+      });
+      const available = rows.filter(slot => packageAcceptsSlot(servicePackage.receptionSchedules, effectiveBranchId, slot.date, slot.startTime));
+      const availableDates = [...new Set(available.filter(slot => slot.occupiedCount < slot.capacity).map(slot => slot.date.toISOString().slice(0, 10)))];
+      const date = dto.date || availableDates[0] || null;
+      if (date) range.resolveDate(date);
+      const summary = { morning: 0, afternoon: 0, evening: 0 };
+      const keys = { MORNING: 'morning', AFTERNOON: 'afternoon', EVENING: 'evening' } as const;
+      const slots = available.filter(slot => slot.date.toISOString().slice(0, 10) === date).map(slot => {
+        const startTime = slot.startTime.toISOString().slice(11, 16), endTime = slot.endTime.toISOString().slice(11, 16);
+        const period = clinicPeriod(startTime), remainingSlots = Math.max(0, slot.capacity - slot.occupiedCount);
+        if (remainingSlots > 0) summary[keys[period]]++;
+        return { startTime, endTime, label: `${startTime} - ${endTime}`, period, totalCapacity: slot.capacity,
+          occupiedCount: slot.occupiedCount, remainingSlots, isFull: remainingSlots === 0,
+          representativeSlotId: slot.id, receptionSlotId: slot.id, doctors: [] };
+      });
+      return { date, availableDates, summary, totalAvailableSlots: slots.filter(slot => !slot.isFull).length, slots };
+    }
     const packageSpecialtyId = servicePackage?.specialtyId ?? undefined;
     if (parsedSpecialtyId !== undefined && packageSpecialtyId !== undefined && parsedSpecialtyId !== packageSpecialtyId) {
       throw new BadRequestException('Dịch vụ khám không thuộc chuyên khoa đã chọn');
@@ -666,13 +689,13 @@ export class BookingFlowService {
     return { totalAvailableSlots, summary, slots: calculatedSlots };
   }
 
-  private async resolveBookingSlotPackage(identifier?: string, branchId?: string, bookingMethodCode?: string): Promise<BookingSlotPackage | null> {
+  private async resolveBookingSlotPackage(identifier?: string | number, branchId?: number, bookingMethodCode?: string): Promise<BookingSlotPackage | null> {
     if (!identifier) return null;
-    const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(identifier);
+    const isId = /^\d+$/.test(String(identifier)) && Number.isSafeInteger(Number(identifier)) && Number(identifier) > 0;
     const servicePackage = await this.prisma.servicePackage.findFirst({
-      where: uuid
-        ? { id: identifier, isActive: true }
-        : { OR: [{ slug: identifier }, { code: identifier }], isActive: true },
+      where: isId
+        ? { id: Number(identifier), isActive: true }
+        : { OR: [{ slug: String(identifier) }, { code: String(identifier) }], isActive: true },
       select: BOOKING_SLOT_PACKAGE_SELECT,
     });
     if (!servicePackage) throw new NotFoundException('Gói khám không khả dụng');

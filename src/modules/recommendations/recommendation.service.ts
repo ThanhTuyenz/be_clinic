@@ -185,7 +185,7 @@ export class RecommendationService {
 
   private refreshRankingItems(rows: RecommendedPackageItemDto[], catalog: RecommendationPackage[], source: 'PROFILE' | 'BEHAVIOR'): RecommendedPackageItemDto[] {
     const catalogById = new Map(catalog.map(pkg => [pkg.id, pkg]));
-    const seen = new Set<string>();
+    const seen = new Set<number>();
     return rows.flatMap(item => {
       const pkg = catalogById.get(item.packageId);
       if (!pkg || seen.has(pkg.id)) return [];

@@ -82,10 +82,15 @@ export class ReceptionBookingService {
 
       const appointmentId = randomUUID();
       const bookingCode = `VC-${appointmentId.replace(/-/g, '').slice(0, 20).toUpperCase()}`;
+      const profile = await tx.patientProfile.findUniqueOrThrow({ where: { id: patientProfileId }, select: { accountId: true } });
+      const bookingOrder = await tx.bookingOrder.create({ data: {
+        accountId: profile.accountId, orderCode: `ORD-${randomUUID().replace(/-/g, '').slice(0, 24).toUpperCase()}`,
+        groupType: 'SINGLE', totalAmount: service.price,
+      } });
       const queueNumber = await computeQueueNumber(tx, appointmentId, slot.id);
       await tx.appointment.create({
         data: {
-          id: appointmentId, bookingCode, patientProfileId,
+          id: appointmentId, bookingCode, patientProfileId, bookingOrderId: bookingOrder.id,
           branchId: slot.schedule.branchId, bookingMethodId: method.id,
           servicePackageId: service.id, servicePrice: service.price,
           scheduleSlotId: slot.id, queueNumber,
@@ -95,7 +100,7 @@ export class ReceptionBookingService {
       });
       await tx.invoice.create({
         data: {
-          appointmentId, issuedBranchId: slot.schedule.branchId,
+          bookingOrderId: bookingOrder.id, issuedBranchId: slot.schedule.branchId,
           subtotal: service.price, totalAmount: service.price,
         },
       });

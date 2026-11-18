@@ -3,6 +3,7 @@ import { randomUUID } from 'node:crypto';
 import { Prisma } from '@prisma/client';
 import { TelehealthChatCache } from './telehealth-chat-cache.service.js';
 import { PrismaService } from '../../infrastructure/database/prisma/prisma.service.js';
+import { appointmentDateTime } from '../appointments/helpers/appointment.helper.js';
 import { ChatMessagePayload, TelehealthPeer, TelehealthRoomState } from './types/telehealth.types.js';
 
 @Injectable()
@@ -25,7 +26,7 @@ export class TelehealthService {
         status: true,
         bookingMethod: { select: { code: true } },
         patientProfile: { select: { accountId: true } },
-        scheduleSlot: { select: { schedule: { select: { doctor: { select: { userId: true } } } } } },
+        scheduleSlot: { select: { startTime: true, endTime: true, schedule: { select: { workDate: true, doctor: { select: { userId: true } } } } } },
       },
     });
     if (!appointment) throw new NotFoundException('Không tìm thấy lịch hẹn.');
@@ -42,6 +43,22 @@ export class TelehealthService {
     return appointment;
   }
 
+  private assertRoomEntryAllowed(appointment: {
+    status: string;
+    scheduleSlot: { startTime: Date; endTime: Date; schedule: { workDate: Date } } | null;
+  }) {
+    if (!['CONFIRMED', 'CHECKED_IN'].includes(appointment.status)) {
+      throw new ForbiddenException('Lịch hẹn chưa được xác nhận hoặc đã kết thúc.');
+    }
+    const slot = appointment.scheduleSlot;
+    if (!slot) throw new ForbiddenException('Không xác định được khung giờ tư vấn. Vui lòng liên hệ phòng khám.');
+    const opensAt = appointmentDateTime(slot.schedule.workDate, slot.startTime).getTime() - 15 * 60_000;
+    const closesAt = appointmentDateTime(slot.schedule.workDate, slot.endTime).getTime();
+    const now = Date.now();
+    if (now < opensAt) throw new ForbiddenException('Phòng tư vấn chỉ mở trước giờ hẹn 15 phút. Vui lòng quay lại đúng giờ.');
+    if (now >= closesAt) throw new ForbiddenException('Đã hết khung giờ tư vấn, không thể vào phòng. Vui lòng liên hệ phòng khám để được hỗ trợ.');
+  }
+
   async getSocketPeer(appointmentId: string, userId: string, socketId: string) {
     const user = await this.prisma.user.findUnique({
       where: { id: userId },
@@ -51,9 +68,7 @@ export class TelehealthService {
     const role: 'DOCTOR' | 'PATIENT' =
       user.role === 'DOCTOR' || Boolean(user.doctor) ? 'DOCTOR' : 'PATIENT';
     const appointment = await this.authorizeAppointment(appointmentId, userId, role);
-    if (!['CONFIRMED', 'CHECKED_IN'].includes(appointment.status)) {
-      throw new ForbiddenException('Lịch hẹn chưa được xác nhận hoặc đã kết thúc.');
-    }
+    this.assertRoomEntryAllowed(appointment);
     if (
       (role === 'DOCTOR' && appointment.scheduleSlot?.schedule.doctor.userId !== userId) ||
       (role === 'PATIENT' && appointment.patientProfile.accountId !== userId)
@@ -83,7 +98,8 @@ export class TelehealthService {
    * Lấy thông tin chi tiết cuộc hẹn để chuẩn bị vào phòng tư vấn
    */
   async getRoomDetails(appointmentId: string, userId: string, role?: string) {
-    await this.authorizeAppointment(appointmentId, userId, role);
+    const authorized = await this.authorizeAppointment(appointmentId, userId, role);
+    this.assertRoomEntryAllowed(authorized);
     const appointment = await this.prisma.appointment.findUnique({
       where: { id: appointmentId },
       select: {

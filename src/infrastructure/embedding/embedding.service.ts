@@ -6,7 +6,7 @@ import { RedisService } from '../redis/redis.service.js';
 import { matchesSearchConstraints, matchesSearchExclusions, normalizeSearch, parseSearchIntent, searchTextScore, searchTypoScore } from '../../common/utils/search-query.js';
 
 export interface PackageForRetrieval {
-  id: string;
+  id: number;
   code: string;
   name: string;
   description: string;
@@ -18,7 +18,7 @@ export interface PackageForRetrieval {
   targetGender?: string; // ALL, MALE, FEMALE
   minAge?: number | null;
   maxAge?: number | null;
-  branchId?: string;
+  branchId?: number;
   bookingMethodCode?: string;
   isFollowUp?: boolean;
 }
@@ -219,7 +219,7 @@ export class EmbeddingService {
   /**
    * Xóa vector của gói khám trên Redis khi gói khám được cập nhật nội dung
    */
-  async invalidatePackageVector(packageId: string): Promise<void> {
+  async invalidatePackageVector(packageId: number): Promise<void> {
     if (this.redis.isEnabled()) {
       try {
         await this.redis.delete(`${this.vectorKeyPrefix}${packageId}`, `vector:pkg:${packageId}`);
@@ -273,7 +273,7 @@ export class EmbeddingService {
 
       if (candidates.length === 0) return [];
       const fetchK = Math.min(topK, candidates.length);
-      const ids = candidates.map(({ id }) => id.replace(/[^a-zA-Z0-9]/g, '\\$&')).join('|');
+      const ids = candidates.map(({ id }) => String(id).replace(/[^a-zA-Z0-9]/g, '\\$&')).join('|');
       const query = `(@packageId:{${ids}})=>[KNN ${fetchK} @vector $BLOB AS score]`;
 
       const tStart = performance.now();
@@ -317,7 +317,9 @@ export class EmbeddingService {
       const scoredList: ScoredPackage[] = attributes.flatMap(attrs => {
         if (!Array.isArray(attrs)) return [];
         const { packageId, score } = toFields(attrs);
-        const pkg = candidateMap.get(String(packageId ?? ''));
+        const parsedPackageId = Number(packageId);
+        if (!Number.isSafeInteger(parsedPackageId) || parsedPackageId < 1) return [];
+        const pkg = candidateMap.get(parsedPackageId);
         if (!pkg) return [];
         const parsed = Number(score);
         const distance = Number.isFinite(parsed) ? parsed : 1;
@@ -372,7 +374,7 @@ export class EmbeddingService {
     const candidates = packages.filter(pkg => matchesSearchConstraints(intent, pkg)
       && matchesSearchExclusions(intent, [pkg.name, pkg.specialtyName, pkg.description, ...(pkg.symptoms || [])]));
     if (candidates.length === 0) return [];
-    const textScores = new Map<string, number>();
+    const textScores = new Map<number, number>();
     for (const pkg of candidates) {
       const score = intent.text
         ? searchTextScore(intent.text, pkg.name) * 1.3
@@ -391,7 +393,7 @@ export class EmbeddingService {
         if (score > 0) textScores.set(pkg.id, score);
       }
     }
-    const vectorScores = new Map<string, number>();
+    const vectorScores = new Map<number, number>();
     const minSemanticScore = 0.82;
     // Preserve accents for embeddings. Exclusions are already enforced on candidates.
     if (intent.text) {
@@ -409,7 +411,7 @@ export class EmbeddingService {
       return [{ package: pkg, score: Number((textScore * 1.5 + vectorScore * 1.2).toFixed(3)) }];
     }).sort((a, b) => (intent.followUp === undefined ? Number(Boolean(a.package.isFollowUp)) - Number(Boolean(b.package.isFollowUp)) : 0)
       || b.score - a.score
-      || a.package.price - b.package.price || a.package.id.localeCompare(b.package.id)).slice(0, topK);
+      || a.package.price - b.package.price || a.package.id - b.package.id).slice(0, topK);
   }
 
   private fallbackKeywordMatcher(

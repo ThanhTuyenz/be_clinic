@@ -1,4 +1,5 @@
-import { IsIn, IsOptional, IsString, IsUUID, MaxLength } from 'class-validator';
+import { IsIn, IsInt, IsOptional, IsString, IsUUID, MaxLength } from 'class-validator';
+import { Type } from 'class-transformer';
 
 export class AiBookingSessionDto {
   @IsUUID() sessionId: string;
@@ -11,7 +12,8 @@ export class PrepareAiBookingDto extends AiBookingSessionDto {
 }
 
 export class ConfirmAiBookingDto extends AiBookingSessionDto {
-  @IsUUID() quoteId: string;
+  @Type(() => Number)
+  @IsInt() quoteId: number;
   @IsIn(['CONSULTATION', 'ONLINE_CONSULTATION', 'SPECIALTY_EXAM', 'AFTER_HOURS'])
   bookingMethodCode: string;
 }

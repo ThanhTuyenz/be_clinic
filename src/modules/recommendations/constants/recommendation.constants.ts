@@ -34,8 +34,8 @@ export const TELEMETRY_CONFIG = {
   SEMANTIC_SEARCH_LIMIT: 20,
 
   // Mỗi nguồn xếp hạng tối đa 20 ứng viên và trả riêng tối đa 10 gói.
-  CACHE_PREFIX: 'rec:v7:account',
-  POLICY_VERSION: 'grounded-independent-account-v5-routine-checkups',
+  CACHE_PREFIX: 'rec:v8:account',
+  POLICY_VERSION: 'grounded-independent-account-v6-integer-ids',
   MAX_RECENT_PACKAGE_VIEWS: 50,
   MAX_RECENT_SEARCHES: 5,
   MAX_RECENT_DROP_OFFS: 3,

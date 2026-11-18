@@ -5,13 +5,13 @@ export const SUCCESSFUL_BOOKING_STATUSES: AppointmentStatus[] = ['CONFIRMED', 'C
 export const conversionPercent = (converted: number, total: number): number | null => total > 0 ? +(converted * 100 / total).toFixed(1) : null;
 
 /** All conversions belong to the same view/search cohort; unrelated bookings never inflate CVR. */
-export async function demandTelemetry(prisma: PrismaService, start: Date, end: Date, branchId?: string | { in: string[] }) {
+export async function demandTelemetry(prisma: PrismaService, start: Date, end: Date, branchId?: number | { in: number[] }) {
   const period = { gte: start, lt: end };
   const scope = branchId ? { branchId } : {};
   const searchWhere: Prisma.SearchRequestWhereInput = { createdAt: period, ...scope };
   const viewWhere: Prisma.AnalyticsInteractionWhereInput = { eventType: 'PACKAGE_VIEW', occurredAt: period, ...scope };
   const booked: Prisma.AppointmentWhereInput = { status: { in: SUCCESSFUL_BOOKING_STATUSES }, ...scope };
-  const paid: Prisma.AppointmentWhereInput = { ...booked, OR: [{ invoice: { status: 'PAID' } }, { bookingOrder: { invoice: { status: 'PAID' } } }] };
+  const paid: Prisma.AppointmentWhereInput = { ...booked, bookingOrder: { invoice: { status: 'PAID' } } };
   const [queries, emptyQueries, statuses, viewGroups, convertedViews, clicked, convertedSearches, paidSearches, firstSearch, firstView] = await Promise.all([
     prisma.searchRequest.groupBy({ by: ['normalizedQuery'], where: { ...searchWhere, status: { in: ['SUCCESS', 'EMPTY'] } }, _count: { _all: true }, _min: { query: true }, orderBy: [{ _count: { normalizedQuery: 'desc' } }, { normalizedQuery: 'asc' }], take: 8 }),
     prisma.searchRequest.groupBy({ by: ['normalizedQuery'], where: { ...searchWhere, status: 'EMPTY' }, _count: { _all: true }, _min: { query: true }, orderBy: [{ _count: { normalizedQuery: 'desc' } }, { normalizedQuery: 'asc' }], take: 6 }),
@@ -27,8 +27,8 @@ export async function demandTelemetry(prisma: PrismaService, start: Date, end: D
   const counts = new Map(statuses.map(item => [item.status, item._count._all]));
   const executed = statuses.reduce((sum, item) => sum + item._count._all, 0);
   const eligibleSearches = (counts.get('SUCCESS') || 0) + (counts.get('EMPTY') || 0);
-  const views = new Map(viewGroups.map(item => [item.targetId, item._count._all]));
-  const converted = new Map<string, number>();
+  const views = new Map(viewGroups.filter(item => item.targetId !== null).map(item => [item.targetId, item._count._all]));
+  const converted = new Map<number, number>();
   for (const item of convertedViews) if (item.sourceView) converted.set(item.sourceView.targetId, (converted.get(item.sourceView.targetId) || 0) + 1);
   const totalViews = [...views.values()].reduce((sum, count) => sum + count, 0);
   return {

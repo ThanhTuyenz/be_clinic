@@ -1,5 +1,5 @@
-import { IsNotEmpty, IsOptional, IsString, IsUUID, MaxLength, MinLength } from 'class-validator';
-import { Transform } from 'class-transformer';
+import { IsInt, IsNotEmpty, IsOptional, IsString, IsUUID, MaxLength, Min, MinLength } from 'class-validator';
+import { Transform, Type } from 'class-transformer';
 
 export class SearchQueryDto {
   @IsOptional()
@@ -19,7 +19,9 @@ export class SearchQueryDto {
   @MaxLength(200, { message: 'Từ khóa tìm kiếm không được vượt quá 200 ký tự' })
   q: string;
 
-  @IsUUID()
   @IsOptional()
-  branchId?: string;
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  branchId?: number;
 }

@@ -21,37 +21,39 @@ export class AiChatMessageDto {
 interface DoctorCardRecommendation {
   id: string;
   fullName: string;
+  avatarUrl?: string | null;
   title?: string;
   specialtyName: string;
-  branchId: string;
+  branchId: number;
   branchName: string;
   consultationFee: number;
+  bookingMethodCode?: 'CONSULTATION' | 'ONLINE_CONSULTATION';
 }
 
 interface PackageCardRecommendation {
-  id: string;
+  id: number;
   code: string;
   name: string;
   price: number;
   description?: string;
-  branchId?: string;
+  branchId?: number;
   specialtyId?: number;
   bookingMethodCode?: string;
-  branches?: Array<{ id: string; name: string; receptionHours: Array<{ days: number[]; startTime: string; endTime: string }> }>;
+  branches?: Array<{ id: number; name: string; receptionHours: Array<{ days: number[]; startTime: string; endTime: string }> }>;
 }
 
 export interface AiAgentBookingProposal {
   id: string;
   expiresAt: string;
   bookingMethodCode: string;
-  slotId: string;
-  servicePackageId?: string;
+  slotId: number;
+  servicePackageId?: number;
   doctorId: string;
   doctorName: string;
   specialtyName: string;
-  specialtyId?: string;
+  specialtyId?: number;
   packageName?: string;
-  branchId: string;
+  branchId: number;
   branchName: string;
   date: string;
   startTime: string;
@@ -65,7 +67,7 @@ export interface AiAgentChatResponse {
   step: 'GREETING' | 'COLLECTING_INFO' | 'PROPOSED' | 'ERROR';
   proposal?: AiAgentBookingProposal | null;
   proposedPackages?: PackageCardRecommendation[];
-  selectPackageForSchedule?: boolean;
+  bookingPreferences?: { date: string | null; period: 'MORNING' | 'AFTERNOON' | 'EVENING' | null; startTime: string | null; branchId: number | null };
   doctors?: DoctorCardRecommendation[];
   quickSuggestions?: string[];
   showAppointments?: boolean;

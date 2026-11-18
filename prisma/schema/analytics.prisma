@@ -1,10 +1,10 @@
 // ============================================================
 
 model SearchRequest {
-  id            String   @id @default(uuid()) @db.Uuid
+  id            Int      @id @default(autoincrement())
   sessionId     String   @map("session_id") @db.VarChar(100)
   accountId     String?  @map("account_id") @db.Uuid
-  branchId      String?  @map("branch_id") @db.Uuid
+  branchId      Int?     @map("branch_id")
   query         String   @db.VarChar(200)
   normalizedQuery String @map("normalized_query") @db.VarChar(200)
   intent        Json
@@ -25,18 +25,19 @@ model SearchRequest {
 }
 
 model AnalyticsInteraction {
-  id          String   @id @db.Uuid
+  id          Int      @id @default(autoincrement())
   sessionId   String   @map("session_id") @db.VarChar(100)
   accountId   String?  @map("account_id") @db.Uuid
-  searchId    String?  @map("search_id") @db.Uuid
+  searchId    Int?     @map("search_id")
   recommendationId String? @map("recommendation_id") @db.Uuid
   recommendationSource String? @map("recommendation_source") @db.VarChar(20)
   eventType   String   @map("event_type") @db.VarChar(20)
   targetType  String   @map("target_type") @db.VarChar(20)
-  targetId    String   @map("target_id") @db.Uuid
+  targetId    Int?     @map("target_id")
+  targetDoctorId String? @map("target_doctor_id") @db.Uuid
   occurredAt  DateTime @default(now()) @map("occurred_at") @db.Timestamptz(3)
   position    Int?
-  branchId    String?  @map("branch_id") @db.Uuid
+  branchId    Int?     @map("branch_id")
   createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
   search      SearchRequest? @relation(fields: [searchId], references: [id], onDelete: SetNull)
   appointments Appointment[]
@@ -44,15 +45,16 @@ model AnalyticsInteraction {
   @@index([eventType, occurredAt])
   @@index([branchId, eventType, occurredAt])
   @@index([searchId, eventType])
-  @@index([recommendationId, eventType, targetId], map: "analytics_recommendation_event_target_idx")
+  @@unique([recommendationId, eventType, targetId], map: "analytics_recommendation_event_target_key")
   @@index([sessionId, targetId, createdAt])
+  @@index([sessionId, targetDoctorId, createdAt])
   @@map("analytics_interactions")
 }
 // Analytics & Business Intelligence: Search Logs, Snapshots, AI Reports
 // ============================================================
 
 model SearchLog {
-  id         String   @id @default(uuid()) @db.Uuid
+  id         Int      @id @default(autoincrement())
   keyword    String   @db.VarChar(255)
   dateKey    String   @map("date_key") @db.VarChar(10) // YYYY-MM-DD
   count      Int      @default(1)
@@ -67,9 +69,9 @@ model SearchLog {
 }
 
 model DailyDemandSnapshot {
-  id                    String   @id @default(uuid()) @db.Uuid
+  id                    Int      @id @default(autoincrement())
   dateKey               String   @unique @map("date_key") @db.VarChar(10) // YYYY-MM-DD
-  branchId              String?  @map("branch_id") @db.Uuid
+  branchId              Int?     @map("branch_id")
   totalSearches         Int      @default(0) @map("total_searches")
   unmatchedSearches     Int      @default(0) @map("unmatched_searches")
   totalPackageViews     Int      @default(0) @map("total_package_views")
@@ -80,21 +82,4 @@ model DailyDemandSnapshot {
 
   @@index([dateKey])
   @@map("daily_demand_snapshots")
-}
-
-model AiExecutiveReport {
-  metricsVersion           String   @default("legacy") @map("metrics_version") @db.VarChar(30)
-  id                       String   @id @default(uuid()) @db.Uuid
-  timeRange                String   @map("time_range") @db.VarChar(50)
-  branchId                 String?  @map("branch_id") @db.Uuid
-  overview                 String   @db.Text
-  epidemiologicalTrends    Json     @map("epidemiological_trends")
-  conversionBottlenecks    Json     @map("conversion_bottlenecks")
-  demographicInsights      Json     @map("demographic_insights")
-  unmetDemandInsights      Json?    @map("unmet_demand_insights")
-  strategicRecommendations Json     @map("strategic_recommendations")
-  createdAt                DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
-
-  @@index([timeRange, createdAt])
-  @@map("ai_executive_reports")
 }

@@ -3,7 +3,7 @@
 // ============================================================
 
 model Notification {
-  id        String           @id @default(uuid()) @db.Uuid
+  id        Int              @id @default(autoincrement())
   userId    String           @map("user_id") @db.Uuid
   title     String           @db.VarChar(255)
   content   String           @db.Text
@@ -20,7 +20,7 @@ model Notification {
 }
 
 model DeviceToken {
-  id         String   @id @default(uuid()) @db.Uuid
+  id         Int      @id @default(autoincrement())
   userId     String   @map("user_id") @db.Uuid
   token      String   @unique @db.VarChar(500)
   deviceType String   @default("mobile") @map("device_type") @db.VarChar(50)

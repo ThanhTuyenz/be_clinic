@@ -13,7 +13,7 @@ export class BookingSlotsDto {
   })
   @IsOptional()
   @IsString()
-  branchId?: string;
+  branchId?: string | number;
 
   @ApiPropertyOptional({
     description: 'Ngày khám theo định dạng YYYY-MM-DD',
@@ -47,7 +47,7 @@ export class BookingSlotsDto {
   })
   @IsOptional()
   @IsString()
-  servicePackageId?: string;
+  servicePackageId?: string | number;
 
   @ApiPropertyOptional({
     description: 'Số ngày tương lai tìm lịch khám khả dụng (mặc định 30, giới hạn từ 7 đến 60 ngày)',

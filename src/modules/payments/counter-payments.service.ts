@@ -4,10 +4,12 @@ import { Prisma } from '@prisma/client';
 import { getStaffUser } from '../../common/utils/staff.utils.js';
 import { PrismaService } from '../../infrastructure/database/prisma/prisma.service.js';
 import { MyCollectionsQueryDto } from './dtos/my-collections-query.dto.js';
+import { AppointmentConfirmationService, ConfirmedAppointment } from '../appointments/appointment-confirmation.service.js';
+import { computeQueueNumber } from '../appointments/helpers/appointment.helper.js';
 
 @Injectable()
 export class CounterPaymentsService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(private readonly prisma: PrismaService, private readonly confirmations: AppointmentConfirmationService) {}
 
   async myCollections(userId: string, query: MyCollectionsQueryDto) {
     const user = await getStaffUser(this.prisma, userId);
@@ -39,9 +41,9 @@ export class CounterPaymentsService {
           id: true, amount: true, method: true, paidAt: true,
           invoice: { select: {
             id: true, issuedBranch: { select: { id: true, name: true } },
-            appointment: { select: {
+            bookingOrder: { select: { id: true, orderCode: true, appointments: { orderBy: { createdAt: 'asc' }, select: {
               bookingCode: true, patientProfile: { select: { fullName: true, phoneNumber: true } },
-            } },
+            } } } },
           } },
         },
       });
@@ -57,9 +59,10 @@ export class CounterPaymentsService {
       date, page, pageSize, total, totalAmount, cashAmount, transferAmount: totalAmount - cashAmount,
       items: items.map(item => ({
         id: item.id, amount: Number(item.amount), method: item.method, paidAt: item.paidAt,
-        invoiceId: item.invoice.id, ticket: item.invoice.appointment?.bookingCode ?? null,
-        patientName: item.invoice.appointment?.patientProfile.fullName ?? null,
-        patientPhone: item.invoice.appointment?.patientProfile.phoneNumber ?? null,
+        invoiceId: item.invoice.id, bookingOrderId: item.invoice.bookingOrder.id,
+        ticket: item.invoice.bookingOrder.appointments.length === 1 ? item.invoice.bookingOrder.appointments[0].bookingCode : item.invoice.bookingOrder.orderCode,
+        patientName: item.invoice.bookingOrder.appointments.map(appointment => appointment.patientProfile.fullName).join(', '),
+        patientPhone: item.invoice.bookingOrder.appointments[0]?.patientProfile.phoneNumber ?? null,
         branch: item.invoice.issuedBranch,
       })),
     };
@@ -71,33 +74,33 @@ export class CounterPaymentsService {
     if (!['CHAIN_MANAGER', 'BRANCH_MANAGER', 'RECEPTIONIST'].includes(role)) {
       throw new ForbiddenException('Không có quyền ghi nhận thanh toán')
     }
-    const invoice = await this.prisma.invoice.findUnique({
-      where: { appointmentId },
-      include: { appointment: true, payments: { where: { status: 'SUCCESS' }, take: 1 } },
-    })
-    if (!invoice) throw new NotFoundException('Không tìm thấy hóa đơn của lịch khám')
-    if (user.role !== 'CHAIN_MANAGER' && user.branchId !== invoice.issuedBranchId) throw new ForbiddenException('Chỉ được thu tiền tại chi nhánh phụ trách')
-    if (!invoice.appointment || !['HOLD', 'CONFIRMED'].includes(invoice.appointment.status)) throw new BadRequestException('Lịch khám không ở trạng thái có thể thanh toán')
-    if (invoice.status === 'PAID' || invoice.payments.length) throw new BadRequestException('Lịch khám đã được thanh toán')
-    const amount = Number(input.amount ?? invoice.totalAmount)
-    if (!Number.isFinite(amount) || amount <= 0) throw new BadRequestException('Số tiền không hợp lệ')
     const m = String(input.method || 'cash').toLowerCase()
     const method = m === 'cash' ? 'CASH' : m === 'card' ? 'POS_CARD' : (m === 'payos' || m === 'online') ? 'ONLINE' : 'VIETQR'
     const now = new Date()
-    return this.prisma.$transaction(async (tx) => {
+    const snapshots: ConfirmedAppointment[] = []
+    const result = await this.prisma.$transaction(async (tx) => {
+      const invoice = await tx.invoice.findFirst({
+        where: { bookingOrder: { appointments: { some: { id: appointmentId } } } },
+        include: { bookingOrder: { include: { appointments: { orderBy: { id: 'asc' } } } }, payments: { where: { status: 'SUCCESS' }, take: 1 } },
+      })
+      if (!invoice) throw new NotFoundException('Không tìm thấy hóa đơn của lịch khám')
+      if (role !== 'CHAIN_MANAGER' && user.branchId !== invoice.issuedBranchId) throw new ForbiddenException('Chỉ được thu tiền tại chi nhánh phụ trách')
+      if (!invoice.bookingOrder.appointments.length || invoice.bookingOrder.appointments.some(appointment => !['HOLD', 'CONFIRMED'].includes(appointment.status))) throw new BadRequestException('Đơn có lịch khám không ở trạng thái có thể thanh toán')
+      if (invoice.status === 'PAID' || invoice.payments.length) throw new BadRequestException('Đơn đặt lịch đã được thanh toán')
+      if (!['UNPAID', 'PENDING_PAYMENT'].includes(invoice.bookingOrder.status)) throw new BadRequestException('Đơn đặt lịch không ở trạng thái chờ thanh toán')
+      const amount = Number(input.amount ?? invoice.totalAmount)
+      if (!Number.isFinite(amount) || amount <= 0 || amount !== Number(invoice.totalAmount)) throw new BadRequestException('Số tiền thu phải bằng tổng tiền hóa đơn của đơn đặt lịch')
       const claimed = await tx.invoice.updateMany({
         where: { id: invoice.id, status: 'UNPAID', paidAt: null },
         data: { status: 'PAID', paidAt: now },
       })
       if (claimed.count !== 1) throw new ConflictException('Hóa đơn vừa được thanh toán hoặc hủy, vui lòng tải lại')
-      if (invoice.appointment.status === 'HOLD') {
-        const confirmed = await tx.appointment.updateMany({
-          where: { id: appointmentId, status: 'HOLD' }, data: { status: 'CONFIRMED', holdExpiresAt: null },
-        })
-        if (confirmed.count !== 1) throw new ConflictException('Lịch khám vừa được cập nhật, vui lòng tải lại')
-        await tx.appointmentStatusHistory.create({ data: {
-          appointmentId, fromStatus: 'HOLD', toStatus: 'CONFIRMED', actorId: userId, reason: 'COUNTER_PAYMENT_SUCCESS',
-        } })
+      await tx.bookingOrder.update({ where: { id: invoice.bookingOrderId }, data: { status: 'PAID' } })
+      for (const appointment of invoice.bookingOrder.appointments) {
+        if (appointment.status !== 'HOLD') continue
+        const queueNumber = appointment.receptionSlotId ? null : appointment.queueNumber ?? await computeQueueNumber(tx, appointment.id, appointment.scheduleSlotId)
+        const { updated } = await this.confirmations.confirmSingleAppointment(tx, appointment.id, queueNumber, 'HOLD', 'COUNTER_PAYMENT_SUCCESS', invoice.bookingOrderId)
+        snapshots.push(updated)
       }
       const payment = await tx.paymentTransaction.create({
         data: {
@@ -113,6 +116,8 @@ export class CounterPaymentsService {
       })
       const appointment = await tx.appointment.findUniqueOrThrow({ where: { id: appointmentId } })
       return { appointment, payment }
-    })
+    }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable })
+    for (const snapshot of snapshots) await this.confirmations.notifyConfirmedAppointment(snapshot)
+    return result
   }
 }

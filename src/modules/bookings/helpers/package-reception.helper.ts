@@ -22,10 +22,10 @@ export const PACKAGE_RECEPTION_SELECT = {
 } satisfies Prisma.ServicePackageSelect;
 
 export type ReceptionSession = keyof typeof CLINIC_SESSION_WINDOWS;
-export type ReceptionDay = { branchId: string; dayOfWeek: number; sessions: readonly string[] };
+export type ReceptionDay = { branchId: number; dayOfWeek: number; sessions: readonly string[] };
 
 export function assertReceptionMethods(
-  methods: readonly { branchId: string; bookingMethod: { code: string } }[],
+  methods: readonly { branchId: number; bookingMethod: { code: string } }[],
   days: readonly ReceptionDay[],
 ): void {
   for (const day of days) {
@@ -38,7 +38,7 @@ export function assertReceptionMethods(
 
 // The last slot must start before closing; 17:00 belongs to the evening session.
 export function packageAcceptsSlot(
-  schedules: readonly ReceptionDay[], branchId: string, workDate: Date, startTime: Date,
+  schedules: readonly ReceptionDay[], branchId: number, workDate: Date, startTime: Date,
 ): boolean {
   const time = startTime.toISOString().slice(11, 16);
   return schedules.some((day) => day.branchId === branchId && day.dayOfWeek === workDate.getUTCDay()
@@ -62,7 +62,7 @@ export function assertBookingMethodSlot(code: string, slot: { schedule: { workDa
 
 export function assertPackageReception(
   schedules: readonly ReceptionDay[],
-  slot: { startTime: Date; schedule: { branchId: string; workDate: Date } },
+  slot: { startTime: Date; schedule: { branchId: number; workDate: Date } },
 ): void {
   if (!packageAcceptsSlot(schedules, slot.schedule.branchId, slot.schedule.workDate, slot.startTime)) {
     throw new BadRequestException('Khung giờ đã chọn nằm ngoài lịch tiếp nhận của gói khám tại chi nhánh. Vui lòng chọn lại.');
@@ -87,12 +87,12 @@ export function parseReceptionDays(value: unknown): { dayOfWeek: number; session
   });
 }
 
-export function parseBranchReceptionSchedules(value: unknown, branchIds: readonly string[]): { branchId: string; dayOfWeek: number; sessions: ReceptionSession[] }[] | undefined {
+export function parseBranchReceptionSchedules(value: unknown, branchIds: readonly number[]): { branchId: number; dayOfWeek: number; sessions: ReceptionSession[] }[] | undefined {
   if (value === undefined) return undefined;
   if (!Array.isArray(value)) throw new BadRequestException('Lịch tiếp nhận theo cơ sở không hợp lệ.');
-  const seen = new Set<string>();
+  const seen = new Set<number>();
   return value.flatMap((entry) => {
-    if (!entry || typeof entry.branchId !== 'string' || !branchIds.includes(entry.branchId) || seen.has(entry.branchId)) {
+    if (!entry || !Number.isInteger(entry.branchId) || !branchIds.includes(entry.branchId) || seen.has(entry.branchId)) {
       throw new BadRequestException('Lịch tiếp nhận phải thuộc cơ sở áp dụng và không được trùng cơ sở.');
     }
     seen.add(entry.branchId);

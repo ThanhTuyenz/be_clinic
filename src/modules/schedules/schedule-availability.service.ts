@@ -29,7 +29,7 @@ export class ScheduleAvailabilityService {
       throw new ForbiddenException('Chỉ được xem lịch tại chi nhánh phụ trách');
     }
     let specialtyId = options.specialtyId;
-    let allowedBranches: string[] | undefined;
+    let allowedBranches: number[] | undefined;
     const method = specialtyId || options.servicePackageId ? await this.prisma.bookingMethod.findFirst({
       where: { code: 'SPECIALTY_EXAM', isActive: true }, select: { id: true },
     }) : null;

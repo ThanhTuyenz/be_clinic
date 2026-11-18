@@ -1,9 +1,10 @@
-import { BadRequestException, ConflictException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ConflictException, Injectable, NotFoundException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { isISO8601 } from 'class-validator';
 import { PrismaService } from '../../infrastructure/database/prisma/prisma.service.js';
 import { RecommendationService } from '../recommendations/recommendation.service.js';
 import { resolvePatientCode } from './patient-code.js';
+import { patientRecordScope } from './patient-record-scope.js';
 import { formatPatientAddress, normalizePatientAddressInput } from './patient-address.js';
 import {
 CreatePatientProfileDto,
@@ -193,23 +194,10 @@ export class PatientProfilesService {
     });
     if (!profile) throw new NotFoundException('Không tìm thấy hồ sơ bệnh nhân');
 
-    const user = await this.prisma.user.findUnique({
-      where: { id: userId },
-      select: { role: true },
-    });
-    const isStaff = user && ['CHAIN_MANAGER', 'SUPER_ADMIN', 'BRANCH_MANAGER', 'RECEPTIONIST', 'DOCTOR'].includes(user.role);
-    if (!isStaff && profile.accountId !== userId) {
-      throw new ForbiddenException('Không có quyền truy cập hồ sơ bệnh án này');
-    }
+    const recordScope = await patientRecordScope(this.prisma, userId, profile);
 
     const appointments = await this.prisma.appointment.findMany({
-      where: {
-        OR: [
-          { patientProfileId: profile.id },
-          ...(profile.nationalId ? [{ patientProfile: { nationalId: profile.nationalId } }] : []),
-          ...(profile.patientCode ? [{ patientProfile: { patientCode: profile.patientCode } }] : []),
-        ],
-      },
+      where: recordScope,
       orderBy: { createdAt: 'desc' },
       select: {
         id: true,
@@ -240,7 +228,7 @@ export class PatientProfilesService {
             },
           },
         },
-        invoice: {
+        bookingOrder: { select: { invoice: {
           select: {
             status: true,
             totalAmount: true,
@@ -250,7 +238,7 @@ export class PatientProfilesService {
               take: 1,
             },
           },
-        },
+        } } },
       },
     });
 
@@ -312,10 +300,10 @@ export class PatientProfilesService {
               room: room ? { code: room.code, name: room.name } : null,
             },
           } : null,
-          payment: appt.invoice ? {
-            status: appt.invoice.status,
-            amount: Number(appt.invoice.totalAmount),
-            method: appt.invoice.payments?.[0]?.method || 'ONLINE',
+          payment: appt.bookingOrder.invoice ? {
+            status: appt.bookingOrder.invoice.status,
+            amount: Number(appt.bookingOrder.invoice.totalAmount),
+            method: appt.bookingOrder.invoice.payments?.[0]?.method || 'ONLINE',
           } : null,
         },
       };

@@ -10,7 +10,7 @@ export type UserUpdate = Omit<Partial<User>, 'customPermissions'> & DoctorProfil
   customPermissions?: unknown[] | null;
   phoneNumber?: string | null;
   avatarUrl?: string | null;
-  branchId?: string | null;
+  branchId?: number | null;
   specialtyId?: number | null;
   academicRank?: string | null;
   licenseNumber?: string | null;

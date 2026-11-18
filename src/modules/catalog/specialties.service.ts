@@ -18,14 +18,14 @@ export class SpecialtiesService {
    * GET /specialties
    * Danh sách tất cả chuyên khoa đang hoạt động
    */
-  async getSpecialties(branchId?: string) {
+  async getSpecialties(branchId?: number | string) {
     const effectiveBranchId = await resolveBranchId(this.prisma, branchId);
     const specialties = await this.prisma.specialty.findMany({
       where: {
         ...(effectiveBranchId
           ? { branches: { some: { branchId: effectiveBranchId, isActive: true } } }
           : {}),
-      } as any,
+      },
       orderBy: [{ id: 'asc' }],
       select: {
         id: true,
@@ -38,9 +38,9 @@ export class SpecialtiesService {
             servicePackages: { where: { isActive: true } },
           },
         },
-      } as any,
+      },
     });
-    return (specialties as any[]).map(({ _count, ...s }) => ({
+    return specialties.map(({ _count, ...s }) => ({
       ...s,
       doctorCount: _count?.doctors ?? 0,
       serviceCount: _count?.servicePackages ?? 0,
@@ -53,7 +53,7 @@ export class SpecialtiesService {
    */
   async getSpecialtyById(id: number) {
     const specialty = await this.prisma.specialty.findFirst({
-      where: { id } as any,
+      where: { id },
       include: {
         branches: {
           where: { isActive: true },
@@ -69,7 +69,7 @@ export class SpecialtiesService {
    * GET /specialties/:id/services
    * Gói khám / dịch vụ thuộc chuyên khoa
    */
-  async getSpecialtyServices(specialtyId: number, branchId?: string) {
+  async getSpecialtyServices(specialtyId: number, branchId?: number | string) {
     const effectiveBranchId = await resolveBranchId(this.prisma, branchId);
     const packages = await this.prisma.servicePackage.findMany({
       where: {
@@ -112,7 +112,7 @@ export class SpecialtiesService {
             id: true,
             branchId: true,
             branch: { select: { id: true, code: true, slug: true } },
-            bookingMethod: { select: { id: true, code: true, name: true, route: true } },
+            bookingMethod: { select: { id: true, code: true, name: true } },
           },
         },
         branchBookingMethods: {
@@ -122,7 +122,7 @@ export class SpecialtiesService {
                 id: true,
                 branchId: true,
                 branch: { select: { id: true, code: true, slug: true } },
-                bookingMethod: { select: { id: true, code: true, name: true, route: true } },
+                bookingMethod: { select: { id: true, code: true, name: true } },
               },
             },
           },
@@ -151,7 +151,7 @@ export class SpecialtiesService {
    * GET /specialties/:id/doctors
    * Bác sĩ thuộc chuyên khoa
    */
-  async getSpecialtyDoctors(specialtyId: number, branchId?: string, q?: string) {
+  async getSpecialtyDoctors(specialtyId: number, branchId?: number | string, q?: string) {
     const effectiveBranchId = await resolveBranchId(this.prisma, branchId);
     const term = q?.trim();
     const doctors = await this.prisma.doctor.findMany({
@@ -227,7 +227,7 @@ export class SpecialtiesService {
    * GET /public/homepage
    * Tổng hợp trang chủ BFF kèm multi-tier Redis Caching
    */
-  async getHomepage(branchIdentifier?: string) {
+  async getHomepage(branchIdentifier?: string | number) {
     const effectiveBranchId = await resolveBranchId(this.prisma, branchIdentifier);
     const cacheKey = `cache:public:homepage:v3:${effectiveBranchId || 'all'}`;
 
@@ -361,7 +361,7 @@ export class SpecialtiesService {
   /**
    * Alias for specialty services query
    */
-  async specialtyServices(branchIdentifier: string | undefined, specialtyId: number) {
+  async specialtyServices(branchIdentifier: string | number | undefined, specialtyId: number) {
     if (!Number.isInteger(specialtyId)) throw new NotFoundException('Thiếu chuyên khoa');
     return this.getSpecialtyServices(specialtyId, branchIdentifier);
   }

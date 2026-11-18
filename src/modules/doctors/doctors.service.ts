@@ -1,24 +1,24 @@
 import { BadRequestException, ForbiddenException, Injectable } from '@nestjs/common';
 import { PrismaService } from '../../infrastructure/database/prisma/prisma.service.js';
-import { isUuid, parseDate as parseDateUtil, parseDateRange } from '../../common/utils/staff.utils.js';
+import { parseDate as parseDateUtil, parseDateRange } from '../../common/utils/staff.utils.js';
 
 @Injectable()
 export class DoctorsService {
   constructor(private readonly prisma: PrismaService) { }
 
 
-  private async resolveBranchId(identifier?: string): Promise<string | undefined> {
+  private async resolveBranchId(identifier?: string | number): Promise<number | undefined> {
     if (!identifier) return undefined;
-    if (isUuid(identifier)) return identifier;
+    if (typeof identifier === 'number') return identifier; if (/^\d+$/.test(identifier)) return Number(identifier);
     const branch = await this.prisma.branch.findFirst({
       where: { OR: [{ slug: identifier }, { code: identifier }], isActive: true },
       select: { id: true },
     });
-    return branch?.id ?? identifier;
+    return branch?.id ?? 0;
   }
 
   async doctors(
-    branchIdentifier?: string,
+    branchIdentifier?: string | number,
     _departmentId?: number, // Legacy positional argument; keep specialtyId and later arguments aligned.
     specialtyId?: number,
     q?: string,
@@ -81,7 +81,7 @@ export class DoctorsService {
     }));
   }
 
-  async availableDates(doctorId: string, branchId: string) {
+  async availableDates(doctorId: string, branchId: number) {
     const { minDate, maxDate } = this.getBookingAllowedDateRange();
     const schedules = await this.prisma.doctorSchedule.findMany({
       where: { doctorId, branchId, status: 'OPEN', workDate: { gte: minDate, lte: maxDate } },
@@ -92,7 +92,7 @@ export class DoctorsService {
     return Array.from(new Set(schedules.map(({ workDate }) => workDate.toISOString().slice(0, 10))));
   }
 
-  async timeslots(doctorId: string, branchId: string, date: string) {
+  async timeslots(doctorId: string, branchId: number, date: string) {
     const workDate = parseDateUtil(date) ?? new Date(`${date}T00:00:00.000Z`);
     this.validateDateWithinBookingRange(workDate);
     const schedule = await this.prisma.doctorSchedule.findFirst({

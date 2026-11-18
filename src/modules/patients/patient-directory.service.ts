@@ -99,27 +99,40 @@ export class PatientDirectoryService {
 
   async resolveReceptionProfile(tx: Prisma.TransactionClient, input: Record<string, any>): Promise<string> {
     let patientProfileId = String(input.patient?.id || input.patient?.patientId || '')
+    let accountId: string | undefined
     if (!patientProfileId && input.patientEmailOrPhone) {
       const account = await tx.user.findFirst({
         where: { OR: [{ email: input.patientEmailOrPhone }, { phoneNumber: input.patientEmailOrPhone }] },
         include: { patientProfiles: { orderBy: { isMainProfile: 'desc' }, take: 1 } },
       })
       patientProfileId = account?.patientProfiles[0]?.id || ''
+      accountId = account?.id
     }
     if (!patientProfileId && input.patient?.fullName) {
       const patient = input.patient
+      if (!accountId && patient.accountId) {
+        const account = await tx.user.findUnique({ where: { id: patient.accountId }, select: { id: true } })
+        accountId = account?.id
+      }
+      if (!accountId) throw new BadRequestException('Hồ sơ bệnh nhân phải thuộc một tài khoản. Vui lòng chọn tài khoản bệnh nhân trước.')
+      const phoneNumber = patient.phoneNumber || patient.phone
+      const gender = typeof patient.gender === 'string' ? patient.gender.toUpperCase() : undefined
+      if (typeof phoneNumber !== 'string' || !phoneNumber.trim() || !Object.values(Gender).includes(gender)) {
+        throw new BadRequestException('Vui lòng nhập số điện thoại và giới tính hợp lệ cho bệnh nhân.')
+      }
+      const dateOfBirth = new Date(patient.dateOfBirth || patient.dob)
+      if (!Number.isFinite(dateOfBirth.getTime())) throw new BadRequestException('Ngày sinh bệnh nhân không hợp lệ.')
       const patientCode = await resolvePatientCode(tx, patient.nationalId, patient.healthInsuranceNumber)
 
       const created = await tx.patientProfile.create({
         data: {
+          account: { connect: { id: accountId } },
           patientCode,
           fullName: String(patient.fullName),
-          phoneNumber: patient.phoneNumber || patient.phone || null,
+          phoneNumber: phoneNumber.trim(),
           nationalId: patient.nationalId || null,
-          dateOfBirth: new Date(patient.dateOfBirth || patient.dob || '1990-01-01'),
-          gender: patient.gender && Object.values(Gender).includes(String(patient.gender).toUpperCase() as Gender)
-            ? String(patient.gender).toUpperCase() as Gender
-            : null,
+          dateOfBirth,
+          gender,
           ...normalizePatientAddressInput({
             streetAddress: patient.streetAddress,
             wardCode: patient.wardCode,

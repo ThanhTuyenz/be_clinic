@@ -1,3 +1,4 @@
+import { ParseIntPipe } from '@nestjs/common';
 import { Body, Controller, Delete, Get, Param, Patch, Post, Query, Req } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import type { Request } from 'express';
@@ -55,7 +56,7 @@ export class NotificationController {
 
   @Patch(':id/read')
   @ApiOperation({ summary: 'Đánh dấu 1 thông báo là đã đọc' })
-  async markAsRead(@Req() req: RequestWithUser, @Param('id') id: string) {
+  async markAsRead(@Req() req: RequestWithUser, @Param('id', ParseIntPipe) id: number) {
     const userId = req.user?.id;
     if (!userId) return { success: false };
     return this.notificationService.markAsRead(userId, id);

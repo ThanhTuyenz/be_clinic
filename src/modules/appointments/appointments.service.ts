@@ -8,6 +8,7 @@ import { MailsService } from '../../infrastructure/mail/mails.service.js';
 import { RealtimeGateway } from '../../infrastructure/realtime/realtime.gateway.js';
 import { PACKAGE_RECEPTION_SELECT } from '../bookings/helpers/package-reception.helper.js';
 import { requestAppointmentRefund } from '../payments/appointment-refund.js';
+import { patientRecordScope } from '../patients/patient-record-scope.js';
 import { RecommendationService } from '../recommendations/recommendation.service.js';
 import {
   APPOINTMENT_STAFF_ROLES,
@@ -30,6 +31,7 @@ import {
 
 interface StatusInput { status?: string; cancelReason?: string; note?: string; visitQueueNumber?: number }
 const MUTATION_INCLUDE = {
+  receptionSlot: { select: { date: true, startTime: true, endTime: true } },
   patientProfile: { select: { id: true, fullName: true, account: { select: { email: true } } } },
   scheduleSlot: { include: { schedule: { include: { doctor: { select: { academicRank: true, user: { select: { fullName: true } } } }, branch: { select: { name: true } } } } } },
   servicePackage: { select: { name: true } }, branch: { select: { name: true } },
@@ -66,12 +68,12 @@ export class AppointmentsService {
     const filters: Prisma.AppointmentWhereInput[] = [appointmentScope(actor), appointmentStatusFilter(query.status, true)];
     if (query.paymentChannel === 'counter') {
       filters.push({ OR: [
-        { invoice: { payments: { some: {
-          provider: 'CLINIC_COUNTER', status: 'SUCCESS', method: { in: ['CASH', 'VIETQR'] },
-        } } } },
-        { status: { in: ['HOLD', 'CONFIRMED'] }, invoice: {
-          status: 'UNPAID', payments: { none: { status: 'SUCCESS' } },
-        } },
+        { bookingOrder: { invoice: { payments: { some: {
+          provider: 'CLINIC_COUNTER', status: { in: ['SUCCESS', 'REFUND_REQUIRED', 'REFUNDED'] }, method: { in: ['CASH', 'VIETQR'] },
+        } } } } },
+        { status: { in: ['HOLD', 'CONFIRMED'] }, bookingOrder: { invoice: {
+          status: 'UNPAID', payments: { none: { status: { in: ['SUCCESS', 'REFUND_REQUIRED', 'REFUNDED'] } } },
+        } } },
       ] });
     }
     const start = query.from ? parseAppointmentDate(query.from) : undefined;
@@ -82,7 +84,7 @@ export class AppointmentsService {
       const range = { ...(start ? { gte: start } : {}), ...(end ? { lt: end } : {}) };
       filters.push({
         OR: [
-          { scheduleSlot: { schedule: { workDate: range } } }, { checkedInAt: range }, { createdAt: range },
+          { scheduleSlot: { schedule: { workDate: range } } }, { receptionSlot: { date: range } }, { checkedInAt: range }, { createdAt: range },
         ]
       });
     }
@@ -133,26 +135,13 @@ export class AppointmentsService {
   // list danh sách khám bệnh của bệnh nhân
   async patientHistory(userId: string, patientId: string) {
     if (!isUuid(patientId)) throw new BadRequestException('Mã hồ sơ bệnh nhân không hợp lệ');
-    const actor = await loadAppointmentActor(this.prisma, userId, [...APPOINTMENT_STAFF_ROLES, 'PATIENT']);
     const profile = await this.prisma.patientProfile.findUnique({
-      where: { id: patientId }, select: { accountId: true, nationalId: true, patientCode: true },
+      where: { id: patientId }, select: { id: true, accountId: true, nationalId: true, patientCode: true },
     });
     if (!profile) throw new NotFoundException('Không tìm thấy hồ sơ bệnh nhân');
-    if (actor.role === 'PATIENT' && profile.accountId !== userId) throw new ForbiddenException('Không có quyền xem lịch sử khám');
-    const identity: Prisma.AppointmentWhereInput = actor.role === 'PATIENT' ? { patientProfileId: patientId } : {
-      OR: [
-        { patientProfileId: patientId },
-        ...(profile.nationalId ? [{ patientProfile: { nationalId: profile.nationalId } }] : []),
-        ...(profile.patientCode ? [{ patientProfile: { patientCode: profile.patientCode } }] : []),
-      ]
-    };
-    if (actor.role === 'DOCTOR') {
-      const assigned = await this.prisma.appointment.findFirst({ where: { AND: [identity, appointmentScope(actor)] }, select: { id: true } });
-      if (!assigned) throw new ForbiddenException('Bệnh nhân chưa từng được phân công cho bác sĩ này');
-    }
-    const branchScope = ['BRANCH_MANAGER', 'RECEPTIONIST'].includes(actor.role) ? appointmentScope(actor) : {};
+    const recordScope = await patientRecordScope(this.prisma, userId, profile);
     const rows = await this.prisma.appointment.findMany({
-      where: { AND: [identity, branchScope] }, include: appointmentInclude(), orderBy: { createdAt: 'desc' }, take: 50,
+      where: recordScope, include: appointmentInclude(), orderBy: { createdAt: 'desc' }, take: 50,
     });
     return { appointments: rows.map(serialize) };
   }
@@ -185,11 +174,11 @@ export class AppointmentsService {
     const row = await appointmentTransaction(this.prisma, async tx => {
       if (current.status === 'HOLD' && status === 'CONFIRMED') {
         const paid = await tx.invoice.findFirst({
-          where: { status: 'PAID', OR: [{ appointmentId }, ...(current.bookingOrderId ? [{ bookingOrderId: current.bookingOrderId }] : [])] }, select: { id: true },
+          where: { status: 'PAID', bookingOrderId: current.bookingOrderId }, select: { id: true },
         });
         if (!paid) throw new BadRequestException('Cần thanh toán trước khi xác nhận lịch khám');
       }
-      const queueNumber = status === 'CHECKED_IN' && requestedQueue == null
+      const queueNumber = current.receptionSlotId ? null : status === 'CHECKED_IN' && requestedQueue == null
         ? await computeQueueNumber(tx, appointmentId, current.scheduleSlotId) : requestedQueue;
       const changed = await tx.appointment.updateMany({
         where: { id: appointmentId, status: current.status, scheduleSlotId: current.scheduleSlotId, rescheduleCount: current.rescheduleCount },
@@ -201,11 +190,11 @@ export class AppointmentsService {
       });
       if (changed.count !== 1) throw new ConflictException('Lịch hẹn vừa được cập nhật, vui lòng tải lại');
       if (status === 'CANCELLED') {
-        await releaseAppointmentSlot(tx, current.scheduleSlotId);
-        refundRequested = await requestAppointmentRefund(tx, {
+        await releaseAppointmentSlot(tx, current.scheduleSlotId, current.receptionSlotId);
+        refundRequested = !!(await requestAppointmentRefund(tx, {
           appointmentId, bookingOrderId: current.bookingOrderId, bookingCode: current.bookingCode,
           reason: input.cancelReason?.trim() || 'Phòng khám hủy lịch khám', isClinicCancelled: true,
-        });
+        }));
         await releaseCancelledHoldVoucher(tx, current, refundRequested);
       }
       await tx.appointmentStatusHistory.create({
@@ -226,7 +215,7 @@ export class AppointmentsService {
           await this.mailsService.sendAppointmentCancellation({
             to: email, data: {
               patientName: current.patientProfile.fullName, bookingCode: current.bookingCode || current.id,
-              appointmentDate: slot?.schedule.workDate.toISOString().slice(0, 10) || '', startTime: slot?.startTime.toISOString().slice(11, 16) || '',
+              appointmentDate: (current.receptionSlot?.date ?? slot?.schedule.workDate)?.toISOString().slice(0, 10) || '', startTime: (current.receptionSlot?.startTime ?? slot?.startTime)?.toISOString().slice(11, 16) || '',
               branchName: slot?.schedule.branch.name || current.branch.name,
               doctorOrServiceName: doctorName ? 'Bác sĩ ' + doctorName : current.servicePackage?.name || 'Khám chuyên khoa',
               cancelReason: input.cancelReason?.trim() || 'Phòng khám thay đổi lịch khám', cancelledBy: 'CLINIC',
@@ -246,7 +235,7 @@ export class AppointmentsService {
     return { appointment: serialize(row) };
   }
 
-  async executeSmartReschedule(userId: string, body: { items: Array<{ appointmentId: string; newSlotId: string }> }) {
+  async executeSmartReschedule(userId: string, body: { items: Array<{ appointmentId: string; newSlotId: number }> }) {
     const actor = await loadAppointmentActor(this.prisma, userId, RECEPTION_ROLES);
     appointmentScope(actor);
     if (!body.items?.length || body.items.length > 100) throw new BadRequestException('Mỗi lần được đổi từ 1 đến 100 lịch khám');
@@ -261,13 +250,13 @@ export class AppointmentsService {
     return { total: body.items.length, successCount: results.filter(result => result.success).length, results };
   }
 
-  async adminReschedule(userId: string, appointmentId: string, body: { newSlotId: string; note?: string }) {
+  async adminReschedule(userId: string, appointmentId: string, body: { newSlotId: number; note?: string }) {
     const actor = await loadAppointmentActor(this.prisma, userId, RECEPTION_ROLES);
     return this.rescheduleForActor(actor, appointmentId, body);
   }
 
-  private async rescheduleForActor(actor: AppointmentActor, appointmentId: string, body: { newSlotId: string; note?: string }) {
-    if (!isUuid(body.newSlotId)) throw new BadRequestException('Vui lòng chọn khung giờ khám mới hợp lệ');
+  private async rescheduleForActor(actor: AppointmentActor, appointmentId: string, body: { newSlotId: number; note?: string }) {
+    if (!Number.isInteger(body.newSlotId) || body.newSlotId < 1) throw new BadRequestException('Vui lòng chọn khung giờ khám mới hợp lệ');
     return appointmentTransaction(this.prisma, async tx => {
       const appointment = await tx.appointment.findUnique({
         where: { id: appointmentId }, include: {

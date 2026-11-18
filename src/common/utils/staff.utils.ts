@@ -50,13 +50,13 @@ export async function getStaffUser(prisma: PrismaService, userId: string) {
 }
 
 export function resolveBranchId(
-  user: { role: string; branchId: string | null },
-  requestedBranchId?: string,
-): string | undefined {
+  user: { role: string; branchId: number | null },
+  requestedBranchId?: number,
+): number | undefined {
   if (user.role === 'CHAIN_MANAGER') {
-    return requestedBranchId && requestedBranchId !== 'all' ? requestedBranchId : undefined
+    return requestedBranchId !== undefined ? requestedBranchId : undefined
   }
-  if (requestedBranchId && requestedBranchId !== 'all' && user.branchId === requestedBranchId) {
+  if (requestedBranchId !== undefined && user.branchId === requestedBranchId) {
     return requestedBranchId
   }
   return user.branchId || undefined

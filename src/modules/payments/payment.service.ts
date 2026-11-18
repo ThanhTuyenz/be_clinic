@@ -110,8 +110,8 @@ export class PaymentService {
     if (!isUuid(appointmentId)) throw new BadRequestException('Mã lịch hẹn không hợp lệ.');
     const invoice = await this.prisma.invoice.findFirst({
       where: {
-        OR: [{ appointmentId }, { payments: { some: { id: appointmentId } } }, { bookingOrderId: appointmentId }],
-        ...(accountId ? { AND: [{ OR: [{ appointment: { patientProfile: { accountId } } }, { bookingOrder: { accountId } }] }] } : {}),
+        OR: [{ bookingOrder: { appointments: { some: { id: appointmentId } } } }, { payments: { some: { id: appointmentId } } }, { bookingOrderId: appointmentId }],
+        ...(accountId ? { bookingOrder: { accountId } } : {}),
       }, select: { id: true },
     });
     if (!invoice) throw new NotFoundException('Không tìm thấy hóa đơn của bạn.');
@@ -125,49 +125,32 @@ export class PaymentService {
   private async createPaymentUrlLocked(appointmentId: string, amount: number, customDescription?: string, accountId?: string): Promise<PaymentLinkResponse> {
     const payos = this.getPayOSInstance();
 
-    // 1. Kiểm tra lịch hẹn hoặc payment transaction trong DB
-    const appointment = await this.prisma.appointment.findFirst({
+    const invoice = await this.prisma.invoice.findFirst({
       where: {
         OR: [
-          { id: appointmentId },
-          { invoice: { payments: { some: { id: appointmentId } } } },
-          { bookingOrder: { id: appointmentId } },
+          { bookingOrder: { appointments: { some: { id: appointmentId } } } },
+          { payments: { some: { id: appointmentId } } },
+          { bookingOrderId: appointmentId },
         ],
-        ...(accountId
-          ? { AND: [{ OR: [{ patientProfile: { accountId } }, { bookingOrder: { accountId } }] }] }
-          : {}),
+        ...(accountId ? { bookingOrder: { accountId } } : {}),
       },
       include: {
-        invoice: {
-          include: {
-            payments: true,
-          },
-        },
+        payments: true,
+        bookingOrder: { include: { appointments: { orderBy: { createdAt: 'asc' }, select: { id: true, status: true, holdExpiresAt: true } } } },
       },
     });
-    const bookingOrder = appointment
-      ? null
-      : await this.prisma.bookingOrder.findFirst({
-          where: {
-            id: appointmentId,
-            ...(accountId ? { accountId } : {}),
-          },
-          include: {
-            invoice: { include: { payments: true } },
-            appointments: { select: { id: true, holdExpiresAt: true }, take: 1 },
-          },
-        });
-    const invoice = appointment?.invoice ?? bookingOrder?.invoice;
-    const targetAppointmentId = appointment?.id ?? bookingOrder?.appointments[0]?.id;
+    const appointment = invoice?.bookingOrder.appointments.find(item => item.id === appointmentId) ?? invoice?.bookingOrder.appointments[0];
+    const targetAppointmentId = appointment?.id;
 
     if (!invoice || !targetAppointmentId) {
       throw new NotFoundException(`Không tìm thấy lịch hẹn hoặc giao dịch với ID: ${appointmentId}`);
     }
-    if (invoice.status === 'PAID' || invoice.payments.every((payment) => payment.status !== 'PENDING')) {
+    if (invoice.status !== 'UNPAID' || invoice.bookingOrder.appointments.some(item => item.status !== 'HOLD') || invoice.payments.every((payment) => payment.status !== 'PENDING')) {
       throw new BadRequestException('Lịch hẹn không còn ở trạng thái chờ thanh toán');
     }
 
-    const holdExpiresAt = appointment?.holdExpiresAt ?? bookingOrder?.appointments[0]?.holdExpiresAt;
+    const holdExpiresAt = invoice.bookingOrder.appointments.reduce<Date | null>((earliest, item) =>
+      item.holdExpiresAt && (!earliest || item.holdExpiresAt < earliest) ? item.holdExpiresAt : earliest, null);
     if (!holdExpiresAt) {
       throw new BadRequestException('Lịch hẹn không còn thời gian giữ chỗ. Vui lòng đặt lịch lại.');
     }
@@ -342,7 +325,6 @@ export class PaymentService {
       include: {
         invoice: {
           include: {
-            appointment: true,
             bookingOrder: {
               include: { appointments: true },
             },
@@ -380,21 +362,17 @@ export class PaymentService {
       where: {
         OR: [
           { id: paymentIdOrAppointmentId },
-          { invoice: { appointmentId: paymentIdOrAppointmentId } },
+          { invoice: { bookingOrder: { appointments: { some: { id: paymentIdOrAppointmentId } } } } },
           { invoice: { bookingOrderId: paymentIdOrAppointmentId } },
         ],
         invoice: {
-          OR: [
-            { appointment: { patientProfile: { accountId } } },
-            { bookingOrder: { accountId } },
-          ],
+          bookingOrder: { accountId },
         },
       },
       include: {
         invoice: {
           include: {
-            appointment: true,
-            bookingOrder: true,
+            bookingOrder: { include: { appointments: { select: { id: true }, orderBy: { createdAt: 'asc' }, take: 1 } } },
           },
         },
       },
@@ -402,7 +380,7 @@ export class PaymentService {
 
     if (!payment) throw new NotFoundException('Không tìm thấy giao dịch thanh toán');
 
-    const appointmentId = payment.invoice.appointment?.id || payment.invoice.bookingOrder?.id;
+    const appointmentId = payment.invoice.bookingOrder.appointments[0]?.id;
 
     await this.settlement.handlePaymentWebhook('PAYOS_SIMULATE', {
         paymentId: payment.id,
@@ -433,7 +411,7 @@ export class PaymentService {
       const payment = await this.prisma.paymentTransaction.findFirst({
         where: {
           OR: [
-            { invoice: { appointment: { id: String(orderCodeOrAppointmentId) } } },
+            { invoice: { bookingOrder: { appointments: { some: { id: String(orderCodeOrAppointmentId) } } } } },
             { invoice: { bookingOrder: { id: String(orderCodeOrAppointmentId) } } },
             { id: String(orderCodeOrAppointmentId) },
             { providerTransactionId: String(orderCodeOrAppointmentId) },
@@ -441,10 +419,7 @@ export class PaymentService {
           ...(accountId
             ? {
                 invoice: {
-                  OR: [
-                    { appointment: { patientProfile: { accountId } } },
-                    { bookingOrder: { accountId } },
-                  ],
+                  bookingOrder: { accountId },
                 },
               }
             : {}),
@@ -463,10 +438,7 @@ export class PaymentService {
 
     if (accountId) {
       const ownedPayment = await this.prisma.paymentTransaction.findFirst({
-        where: { providerTransactionId: String(orderCode), invoice: { OR: [
-          { appointment: { patientProfile: { accountId } } },
-          { bookingOrder: { accountId } },
-        ] } },
+        where: { providerTransactionId: String(orderCode), invoice: { bookingOrder: { accountId } } },
         select: { id: true },
       });
       if (!ownedPayment) throw new NotFoundException('Không tìm thấy giao dịch thanh toán');
@@ -526,7 +498,6 @@ export class PaymentService {
         telehealthSession: { select: { id: true } },
         queueNumber: true,
         bookingOrder: { select: { invoice: { select: { status: true, payments: { select: { status: true }, orderBy: { createdAt: 'desc' }, take: 1 } } } } },
-        invoice: { select: { status: true, payments: { select: { status: true }, orderBy: { createdAt: 'desc' }, take: 1 } } },
         qrToken: { select: { id: true } },
         branch: { select: { id: true, name: true, address: true } },
         scheduleSlot: {
@@ -544,7 +515,7 @@ export class PaymentService {
 
     if (!row) {
       // Thử tìm theo bookingOrderId
-      const order = await (this.prisma as any).bookingOrder.findFirst({
+      const order = await this.prisma.bookingOrder.findFirst({
         where: { id: appointmentIdOrOrderId, accountId },
         select: {
           id: true,
@@ -594,7 +565,7 @@ export class PaymentService {
 
     let siblingAppts: any[] = [];
     if (row.bookingOrderId) {
-      const siblings = await (this.prisma as any).appointment.findMany({
+      const siblings = await this.prisma.appointment.findMany({
         where: { bookingOrderId: row.bookingOrderId },
         select: {
           id: true,
@@ -621,7 +592,7 @@ export class PaymentService {
       bookingOrderId: row.bookingOrderId,
       status: row.status,
       holdExpiresAt: row.holdExpiresAt,
-      paymentStatus: row.invoice?.status === 'PAID' || row.bookingOrder?.invoice?.status === 'PAID' ? 'SUCCESS' : row.invoice?.payments[0]?.status ?? row.bookingOrder?.invoice?.payments[0]?.status ?? null,
+      paymentStatus: row.bookingOrder.invoice?.status === 'PAID' ? 'SUCCESS' : row.bookingOrder.invoice?.payments[0]?.status ?? null,
       hasQr: Boolean(row.qrToken),
       bookingCode: row.bookingCode,
       isTelehealth,

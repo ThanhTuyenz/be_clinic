@@ -1,8 +1,11 @@
-import { ArrayMaxSize, IsArray, IsUUID } from 'class-validator';
+import { Type } from 'class-transformer';
+import { ArrayMaxSize, IsArray, IsInt, Min } from 'class-validator';
 
 export class UpdatePackageReceptionDto {
-  @IsUUID()
-  branchId!: string;
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  branchId!: number;
 
   @IsArray()
   @ArrayMaxSize(7)

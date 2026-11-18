@@ -8,8 +8,8 @@ export const REALTIME_EVENTS = {
 
 export const REALTIME_ROOMS = {
   RECEPTION: 'room:reception',
-  BRANCH: (branchId: string) => `branch:${branchId}`,
+  BRANCH: (branchId: number) => `branch:${branchId}`,
   DOCTOR: (doctorId: string) => `doctor:${doctorId}`,
-  ROOM: (roomId: string) => `clinic_room:${roomId}`,
+  ROOM: (roomId: number) => `clinic_room:${roomId}`,
   USER: (userId: string) => `user:${userId}`,
 } as const;

@@ -256,7 +256,7 @@ export class UsersService implements IUsersService {
       if (String(row.role).toUpperCase() === 'DOCTOR') {
         const storedDoctor = await tx.doctor.findUnique({
           where: { userId: row.id },
-          select: { academicRank: true, licenseNumber: true, consultationFee: true, onlineConsultationFee: true, isOnlineConsultationEnabled: true },
+          select: { academicRank: true, licenseNumber: true, consultationFee: true, onlineConsultationFee: true, isOnlineConsultationEnabled: true, biography: true, avatarUrl: true },
         });
         const doctorData = buildDoctorProfileData(p, storedDoctor);
         const docRec = await tx.doctor.upsert({
@@ -349,7 +349,7 @@ export class UsersService implements IUsersService {
     return entity;
   }
 
-  private async validateDoctorBranch(tx: Prisma.TransactionClient, branchId: string | null) {
+  private async validateDoctorBranch(tx: Prisma.TransactionClient, branchId: number | null) {
     if (!branchId) throw new BadRequestException('Bác sĩ phải được phân công đúng một chi nhánh.');
     const branch = await tx.branch.findFirst({ where: { id: branchId, isActive: true }, select: { id: true } });
     if (!branch) throw new BadRequestException('Chi nhánh làm việc không tồn tại hoặc đã ngừng hoạt động.');

@@ -23,6 +23,12 @@ export class PatientAppointmentsController {
     return this.appointments.myAppointments(request.user!.id);
   }
 
+  @Get(':id/cancellation-quote')
+  @ApiOperation({ summary: 'Xem trước tỷ lệ và số tiền hoàn khi hủy lịch' })
+  cancellationQuote(@Req() request: Request, @Param('id') id: string) {
+    return this.appointments.cancellationQuote(request.user!.id, id);
+  }
+
   @Post(':id/cancel')
   @ApiOperation({ summary: 'Bệnh nhân tự hủy lịch hẹn' })
   @ApiParam({ name: 'id', format: 'uuid' })

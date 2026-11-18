@@ -3,8 +3,8 @@ import { CLINIC_SESSION_WINDOWS } from '../../common/constants/clinic-sessions.j
 export const SCHEDULE_METHODS = ['CONSULTATION', 'ONLINE_CONSULTATION', 'SPECIALTY_EXAM', 'AFTER_HOURS'] as const;
 
 export interface ScheduleState {
-  branchId: string | null;
-  servicePackageId: string | null;
+  branchId: number | null;
+  servicePackageId: number | null;
   doctorId: string | null;
   bookingMethodCode: typeof SCHEDULE_METHODS[number] | null;
   date: string | null;
@@ -18,7 +18,7 @@ export interface ScheduleState {
 
 const nullableText = { type: ['string', 'null'] };
 export const SCHEDULE_PROPERTIES = {
-  branchId: nullableText, servicePackageId: nullableText, doctorId: nullableText,
+  branchId: { type: ['integer', 'null'], minimum: 1 }, servicePackageId: { type: ['integer', 'null'], minimum: 1 }, doctorId: nullableText,
   bookingMethodCode: { type: ['string', 'null'], enum: [...SCHEDULE_METHODS, null] },
   date: nullableText,
   earliestDate: { type: 'boolean' },
@@ -42,7 +42,8 @@ export function isScheduleState(value: unknown): value is ScheduleState {
   const state = value as ScheduleState;
   const fields = value as Record<string, unknown>;
   if (typeof state.earliestDate !== 'boolean') return false;
-  if (!Object.keys(SCHEDULE_PROPERTIES).filter(key => key !== 'earliestDate').every(key => key in fields
+  if (!['branchId', 'servicePackageId'].every(key => key in fields && (fields[key] === null || (typeof fields[key] === 'number' && Number.isInteger(fields[key]) && fields[key] > 0)))) return false;
+  if (!Object.keys(SCHEDULE_PROPERTIES).filter(key => !['earliestDate', 'branchId', 'servicePackageId'].includes(key)).every(key => key in fields
     && (fields[key] === null || (typeof fields[key] === 'string'
       && fields[key].length > 0 && fields[key].length <= 200)))) return false;
   return (state.bookingMethodCode === null || SCHEDULE_METHODS.includes(state.bookingMethodCode))

@@ -6,6 +6,7 @@ import { GoogleGenAI } from '@google/genai'
 import { createHash } from 'node:crypto'
 import { PrismaService } from '../../infrastructure/database/prisma/prisma.service.js'
 import { RedisService } from '../../infrastructure/redis/redis.service.js'
+import { allocateAppointmentPayment } from '../payments/order-payment-allocation.js'
 
 export type StatusCounts = {
   total: number
@@ -68,20 +69,20 @@ export class AdminDashboardService {
     return user
   }
 
-  private resolveBranchScope(user: any, requestedBranchId?: string) {
+  private resolveBranchScope(user: any, requestedBranchId?: number) {
     const branchIds = user.branchId ? [user.branchId] : []
     const scope: Record<string, any> = {}
 
     if (user.role === 'DOCTOR') {
       scope.doctorId = user.doctor?.id || '__none__'
     } else if (user.role === 'BRANCH_MANAGER') {
-      if (requestedBranchId && requestedBranchId !== 'all' && branchIds.includes(requestedBranchId)) {
+      if (requestedBranchId !== undefined && branchIds.includes(requestedBranchId)) {
         scope.branchId = requestedBranchId
       } else {
         scope.branchId = { in: branchIds }
       }
     } else if (user.role === 'CHAIN_MANAGER') {
-      if (requestedBranchId && requestedBranchId !== 'all') {
+      if (requestedBranchId !== undefined) {
         scope.branchId = requestedBranchId
       }
     }
@@ -200,7 +201,7 @@ export class AdminDashboardService {
 
 
   // overview
-  async overview(userId: string, query?: { branchId?: string; timeFilter?: string }) {
+  async overview(userId: string, query?: { branchId?: number; timeFilter?: string }) {
     const user = await this.getStaffUser(userId)
     const scope = this.resolveBranchScope(user, query?.branchId)
 
@@ -274,7 +275,7 @@ export class AdminDashboardService {
             },
           },
           statusHistories: { orderBy: { createdAt: 'asc' }, take: 1, select: { actor: { select: { role: true } } } },
-          invoice: { select: { id: true, status: true, totalAmount: true } },
+          bookingOrder: { select: { appointments: { select: { id: true, servicePrice: true } }, invoice: { select: { id: true, status: true, totalAmount: true } } } },
         },
       }),
       this.prisma.appointment.findMany({
@@ -303,7 +304,7 @@ export class AdminDashboardService {
           createdAt: true,
           servicePrice: true,
           scheduleSlot: { select: { startTime: true } },
-          invoice: { select: { totalAmount: true, status: true } },
+          bookingOrder: { select: { appointments: { select: { id: true, servicePrice: true } }, invoice: { select: { totalAmount: true, status: true } } } },
         },
       }),
       // Lấy toàn bộ hóa đơn đã thanh toán thực tế trong tuần
@@ -395,7 +396,7 @@ export class AdminDashboardService {
       const bucket = todayChartHours.find((b) => h >= b.startH && h < b.endH)
       if (bucket) {
         bucket.count += 1
-        bucket.rev += Number(appt.invoice?.totalAmount || appt.servicePrice || 0)
+        bucket.rev += allocateAppointmentPayment(Number(appt.bookingOrder.invoice?.totalAmount ?? 0), appt.id, appt.bookingOrder.appointments) ?? Number(appt.servicePrice || 0)
       }
     }
 
@@ -493,7 +494,7 @@ export class AdminDashboardService {
     const occupied = slotStats._sum.occupiedCount || todayCounts.total
     const occupancyRate = Math.min(100, Math.round((occupied / Math.max(totalCapacity, 1)) * 100))
 
-    const unpaidPending = todayAppointments.filter((a) => a.status === 'HOLD' && a.invoice?.status !== 'PAID').length
+    const unpaidPending = todayAppointments.filter((a) => a.status === 'HOLD' && a.bookingOrder.invoice?.status !== 'PAID').length
     const bookedWaitingCheckIn = todayAppointments.filter((a) => a.status === 'CONFIRMED').length
 
     // Thống kê so sánh các cơ sở chi nhánh
@@ -580,8 +581,8 @@ export class AdminDashboardService {
           branchName: a.scheduleSlot?.schedule?.branch?.name || 'VitaCare Clinic',
           startTime: a.scheduleSlot?.startTime ? a.scheduleSlot.startTime.toISOString().slice(11, 16) : null,
           endTime: a.scheduleSlot?.endTime ? a.scheduleSlot.endTime.toISOString().slice(11, 16) : null,
-          amount: Number(a.invoice?.totalAmount || a.servicePrice || 0),
-          isPaid: a.invoice?.status === 'PAID',
+          amount: allocateAppointmentPayment(Number(a.bookingOrder.invoice?.totalAmount ?? 0), a.id, a.bookingOrder.appointments) ?? Number(a.servicePrice || 0),
+          isPaid: a.bookingOrder.invoice?.status === 'PAID',
         };
       }),
       branchComparison,
@@ -632,7 +633,7 @@ export class AdminDashboardService {
         select: { capacity: true, occupiedCount: true, schedule: { select: { branchId: true } } },
       }),
     ])
-    const capacityByBranch = new Map<string, { capacity: number; occupied: number }>()
+    const capacityByBranch = new Map<number, { capacity: number; occupied: number }>()
     for (const slot of slots) {
       const value = capacityByBranch.get(slot.schedule.branchId) || { capacity: 0, occupied: 0 }
       value.capacity += slot.capacity
@@ -668,7 +669,7 @@ export class AdminDashboardService {
 
   async analytics(
     userId: string,
-    query: { timeFilter?: string; branchId?: string; startDate?: string; endDate?: string },
+    query: { timeFilter?: string; branchId?: number; startDate?: string; endDate?: string },
   ) {
     const user = await this.getStaffUser(userId)
     const scope = this.resolveBranchScope(user, query.branchId)
@@ -725,7 +726,7 @@ export class AdminDashboardService {
               },
             },
           },
-          invoice: { select: { totalAmount: true, status: true, paidAt: true } },
+          bookingOrder: { select: { appointments: { select: { id: true, servicePrice: true } }, invoice: { select: { totalAmount: true, status: true, paidAt: true } } } },
         },
       }),
       this.prisma.paymentTransaction.findMany({
@@ -1115,7 +1116,7 @@ export class AdminDashboardService {
         category = `Chuyên khoa ${docSpec}`
       }
 
-      const invPaid = appt.invoice?.status === 'PAID' ? Number(appt.invoice.totalAmount || 0) : 0
+      const invPaid = appt.bookingOrder.invoice?.status === 'PAID' ? allocateAppointmentPayment(Number(appt.bookingOrder.invoice.totalAmount), appt.id, appt.bookingOrder.appointments) ?? 0 : 0
       const price = invPaid > 0 ? invPaid : Number(appt.servicePrice || 0)
 
       const existing = sourcesMap.get(key)
@@ -1200,7 +1201,7 @@ export class AdminDashboardService {
 
       entry.appts += 1
       const examAmount = Number(appt.servicePrice || doc.consultationFee || 0)
-      const invTotal = appt.invoice?.status === 'PAID' ? Number(appt.invoice.totalAmount || 0) : 0
+      const invTotal = appt.bookingOrder.invoice?.status === 'PAID' ? allocateAppointmentPayment(Number(appt.bookingOrder.invoice.totalAmount), appt.id, appt.bookingOrder.appointments) ?? 0 : 0
       const subclinical = Math.max(0, invTotal - examAmount)
       const totalAmount = invTotal > 0 ? invTotal : examAmount
 
@@ -1261,11 +1262,11 @@ export class AdminDashboardService {
    */
   async getDemandMetrics(
     userId: string,
-    filter: { branchId?: string; timeFilter?: string; startDate?: string; endDate?: string },
+    filter: { branchId?: number; timeFilter?: string; startDate?: string; endDate?: string },
   ) {
     const user = await this.getStaffUser(userId)
     if (!['CHAIN_MANAGER', 'BRANCH_MANAGER'].includes(user.role)) throw new ForbiddenException('Chỉ quản trị viên và quản lý cơ sở được xem phân tích tìm kiếm')
-    if (user.role === 'BRANCH_MANAGER' && filter.branchId && filter.branchId !== 'all' && user.branchId !== filter.branchId) {
+    if (user.role === 'BRANCH_MANAGER' && filter.branchId !== undefined && user.branchId !== filter.branchId) {
       throw new ForbiddenException('Bạn chỉ được xem phân tích của cơ sở được phân công')
     }
     const branchScope = this.resolveBranchScope(user, filter.branchId)
@@ -1324,7 +1325,7 @@ export class AdminDashboardService {
       },
     })
 
-    const packageBookingCountMap = new Map<string, number>()
+    const packageBookingCountMap = new Map<number, number>()
     for (const appt of appointments) {
       if (appt.servicePackageId) {
         packageBookingCountMap.set(
@@ -1481,7 +1482,7 @@ export class AdminDashboardService {
    */
   async generateExecutiveAiReport(
     userId: string,
-    filter: { branchId?: string; timeFilter?: string; startDate?: string; endDate?: string; forceRefresh?: boolean },
+    filter: { branchId?: number; timeFilter?: string; startDate?: string; endDate?: string; forceRefresh?: boolean },
   ) {
     const metrics = await this.getDemandMetrics(userId, filter)
     const fingerprint = createHash('sha256').update(JSON.stringify(metrics)).digest('hex').slice(0, 16)
@@ -1589,25 +1590,6 @@ Hãy phân tích sắc bén, sâu sắc theo góc nhìn y khoa và quản trị 
         generatedAt: new Date().toISOString(),
         metrics,
         fromCache: false,
-      }
-
-      // Lưu vào cơ sở dữ liệu PostgreSQL để lưu trữ vĩnh viễn
-      try {
-        await this.prisma.aiExecutiveReport.create({
-          data: {
-            metricsVersion: 'events-v1',
-            timeRange: metrics.timeRange,
-            branchId: filter.branchId && filter.branchId !== 'all' ? filter.branchId : null,
-            overview: finalReport.overview,
-            epidemiologicalTrends: finalReport.epidemiologicalTrends,
-            conversionBottlenecks: finalReport.conversionBottlenecks,
-            demographicInsights: finalReport.demographicInsights,
-            unmetDemandInsights: finalReport.unmetDemandInsights,
-            strategicRecommendations: finalReport.strategicRecommendations,
-          },
-        })
-      } catch (dbErr: any) {
-        this.logger.warn(`Lỗi lưu AiExecutiveReport vào DB: ${dbErr?.message}`)
       }
 
       if (this.redis.isEnabled()) {

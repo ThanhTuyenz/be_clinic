@@ -1,3 +1,4 @@
+import { ParseIntPipe } from '@nestjs/common';
 import { Controller, Get, Param } from '@nestjs/common';
 import { ApiOperation, ApiTags } from '@nestjs/swagger';
 import { Public } from '../../common/decorators/public.decorator.js';
@@ -17,7 +18,7 @@ export class BranchesController {
 
   @Get(':branchId/departments')
   @ApiOperation({ summary: 'Chuyên khoa có bác sĩ tại cơ sở' })
-  departments(@Param('branchId') branchId: string) {
+  departments(@Param('branchId', ParseIntPipe) branchId: number) {
     return this.branchesService.departments(branchId);
   }
 }

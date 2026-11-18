@@ -157,6 +157,10 @@ hoặc lịch sử migration cũ. Các migration trước vẫn có thể xem l�
 
 Seed đã đồng bộ metadata gói dịch vụ, liên kết phương thức đặt khám, lịch tiếp nhận,
 phí và cờ tư vấn online. Chạy seed bình thường sẽ dừng nếu database đã có dữ liệu.
+Chỉ có một script seed `prisma/seed.mjs`; các JSON trong `prisma/data/` giữ danh mục
+cơ sở, bác sĩ, bệnh nhân và dịch vụ. Seed tạo đúng 10 lịch cho tài khoản
+`patient@vitacare.local`, tính ngày tương đối theo thời điểm chạy tại Việt Nam.
+Lịch xác nhận nằm ở tương lai; lịch đã hoàn tất hoặc vắng mặt nằm ở quá khứ.
 Nếu chủ động muốn XÓA toàn bộ dữ liệu hiện tại và nạp lại bộ demo:
 
 ```powershell
@@ -166,6 +170,17 @@ npm run prisma:seed -- --reset
 Seed dùng `.env.development` mặc định. Với file môi trường khác trên PowerShell,
 đặt `$env:ENV_FILE='.env.production'` trước lệnh. Không tự seed lại dữ liệu demo
 trong mỗi lần CI/CD deploy.
+
+Nếu database development vẫn lưu lịch sử migration cũ, `seed --reset` chỉ nạp lại
+dữ liệu, không đồng bộ lịch sử migration. Để chuyển database demo đó sang baseline
+mới, dừng backend và chỉ chạy hai lệnh sau khi chấp nhận xóa toàn bộ dữ liệu:
+
+```powershell
+npx prisma migrate reset --force
+npm run prisma:seed
+```
+
+Không chạy `migrate deploy` với baseline đã gộp lên database đang giữ migration cũ.
 
 Trên EC2 không cần cài Node riêng; sau khi workflow đã migrate và các dịch vụ phụ
 thuộc chạy, có thể nạp dữ liệu một lần trong container:
@@ -212,8 +227,6 @@ Mật khẩu chung: `VitaCare@123`.
 | Quản lý chi nhánh | `manager@vitacare.local` |
 | Bác sĩ Tim mạch | `doctor.cardio@vitacare.local` |
 | Bác sĩ Nhi khoa | `doctor.pediatrics@vitacare.local` |
-| Dược sĩ | `pharmacist@vitacare.local` |
-| Thu ngân | `cashier@vitacare.local` |
 | Lễ tân | `receptionist@vitacare.local` |
 | Bệnh nhân | `patient@vitacare.local` |
 
@@ -221,18 +234,23 @@ Mật khẩu chung: `VitaCare@123`.
 
 | Mã lịch | Trạng thái sau seed | Mục đích |
 | --- | --- | --- |
-| `VC-PED-BOOKED-QR` | `BOOKED` | Test cấp QR và check-in kiosk/lễ tân |
-| `VC-PED-WAIT-01` | `CHECKED_IN` | Hàng đợi bác sĩ Nhi khoa |
-| `VC-PED-WAIT-02` | `CHECKED_IN` | Hàng đợi bác sĩ Nhi khoa |
-| `VC-SEED-WAIT-01` | `CHECKED_IN` | Hàng đợi bác sĩ Tim mạch |
-| `VC-SEED-WAIT-02` | `CHECKED_IN` | Hàng đợi bác sĩ Tim mạch |
+| `VC-DEMO-01` | `HOLD` | Chờ thanh toán, giữ chỗ 15 phút, lịch tương lai |
+| `VC-DEMO-02` | `CONFIRMED` | Khám Mắt, đã thanh toán, lịch tương lai |
+| `VC-DEMO-03` | `CONFIRMED` | Gói tổng quát, khung tiếp nhận giới hạn 5 người, không bác sĩ/phòng/STT |
+| `VC-DEMO-04` | `CONFIRMED` | Tư vấn online, lịch tương lai |
+| `VC-DEMO-05` | `CHECKED_IN` | Đã tiếp nhận, đang chờ nhân viên/bác sĩ xử lý |
+| `VC-DEMO-06` | `COMPLETED` | Gói tổng quát đã khám xong hôm trước |
+| `VC-DEMO-07` | `CANCELLED` | Hủy trước 24 giờ, hoàn 95%, chờ chuyển tiền |
+| `VC-DEMO-08` | `CANCELLED` | Hủy trước 3 giờ, hoàn 80%, chờ chuyển tiền, cơ sở Đông |
+| `VC-DEMO-09` | `EXPIRED` | Hết hạn giữ chỗ, chưa thanh toán |
+| `VC-DEMO-10` | `NO_SHOW` | Không đến khám, đã thanh toán, không tạo khoản hoàn |
 
 Phòng seed:
 
 - `P101` — Phòng khám Nội 101
 - `P102` — Phòng khám Nhi 102
 
-Sau khi check-in `VC-PED-BOOKED-QR`, reset về `BOOKED` bằng:
+Để khôi phục toàn bộ dữ liệu demo và cập nhật ngày theo thời điểm chạy:
 
 ```powershell
 npm run prisma:seed -- --reset
@@ -240,7 +258,7 @@ npm run prisma:seed -- --reset
 
 ## Flow QR check-in
 
-1. Thanh toán thành công, lịch chuyển sang `BOOKED`.
+1. Thanh toán thành công, lịch chuyển sang `CONFIRMED`.
 2. Client lấy QR, số thứ tự dự kiến và phòng:
 
 ```http
@@ -259,7 +277,7 @@ POST /api/v1/check-in/kiosk/scan
 POST /api/v1/check-in/scan
 ```
 
-Hai endpoint dùng chung transaction cấp số thứ tự và chuyển `BOOKED → CHECKED_IN`; chỉ khác `channel` là `KIOSK` hoặc `RECEPTIONIST`.
+Hai endpoint dùng chung transaction cấp số thứ tự và chuyển `CONFIRMED → CHECKED_IN`; chỉ khác `channel` là `KIOSK` hoặc `RECEPTIONIST`.
 
 ## Các lệnh thường dùng
 

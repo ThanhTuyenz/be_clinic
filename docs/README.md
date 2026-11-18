@@ -4,6 +4,15 @@ Hướng dẫn cài đặt, biến môi trường và vận hành nằm tại [R
 
 ## Nghiệp vụ và kiến trúc
 
+Hồ sơ bệnh nhân được quản lý riêng theo tài khoản. CCCD/BHYT có thể trùng giữa
+các tài khoản và dùng chung `patientCode`, nhưng không cấp quyền xem lịch sử của
+nhau. Hai API bệnh án và lịch sử khám cùng dùng `patients/patient-record-scope.ts`:
+bệnh nhân chỉ đọc lịch của đúng `patientProfileId` thuộc tài khoản mình; nhân viên
+đối chiếu cùng người theo CCCD/mã bệnh nhân nhưng chỉ đọc lịch trong chi nhánh hoặc
+phân công bác sĩ của mình. Quản lý chuỗi dùng phạm vi toàn chuỗi khi endpoint cho
+phép. Quyền đổi/hủy lịch, xem phiếu, lịch cá nhân và thanh toán vẫn kiểm tra tài
+khoản sở hữu hồ sơ hoặc đơn đặt; không dùng CCCD/mã bệnh nhân để cấp quyền.
+
 `modules/analytics` sở hữu thu thập sự kiện search/gợi ý, xác minh nguồn và ghi nhận nguồn đặt lịch. Search, recommendations và bookings import `AnalyticsModule` tường minh. Báo cáo quản trị vẫn thuộc `modules/admin-dashboard/analytics`; các thành phần này không nằm trong `common`.
 
 Booking online dùng chung kiểm tra slot/bác sĩ/gói cho đơn lẻ và gia đình. Tìm lịch mặc định 30 ngày, tối đa 60 ngày; checkout cũng kiểm tra trần 60 ngày. Không nhận đặt online trong ngày; từ 16h30 Việt Nam chỉ nhận từ ngày mốt. Tiếp nhận tại quầy giữ quy tắc riêng cho phép lịch trong ngày. Cả hai luồng dùng chung SQL giữ chỗ nguyên tử; đơn gia đình vẫn tạo một hóa đơn và tính phí dịch vụ một lần. Xung đột Prisma `P2002`/`P2034` trả HTTP 409 cho cả đơn lẻ và gia đình.

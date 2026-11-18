@@ -8,6 +8,8 @@ import { PackagesService } from './packages.service.js';
 @ApiTags('Specialties & Services')
 @Public()
 @SkipPermissions()
+// Keep branchId metadata as Object: global Number conversion turns an absent query into NaN.
+// ParseIntPipe converts integers and preserves omitted optional queries.
 @Controller()
 export class SpecialtiesController {
   constructor(
@@ -30,7 +32,7 @@ export class SpecialtiesController {
   @Get('public/homepage')
   @ApiOperation({ summary: 'Tổng hợp trang chủ công khai (BFF)' })
   @ApiQuery({ name: 'branchId', required: false })
-  getHomepage(@Query('branchId') branchId?: string) {
+  getHomepage(@Query('branchId', new ParseIntPipe({ optional: true })) branchId?: number | string) {
     return this.specialtiesService.getHomepage(branchId);
   }
 
@@ -40,7 +42,7 @@ export class SpecialtiesController {
   @Get(['specialties', 'public/specialties'])
   @ApiOperation({ summary: 'Danh sách chuyên khoa' })
   @ApiQuery({ name: 'branchId', required: false, description: 'Lọc theo chi nhánh' })
-  getSpecialties(@Query('branchId') branchId?: string) {
+  getSpecialties(@Query('branchId', new ParseIntPipe({ optional: true })) branchId?: number | string) {
     return this.specialtiesService.getSpecialties(branchId);
   }
 
@@ -52,7 +54,7 @@ export class SpecialtiesController {
   @ApiQuery({ name: 'specialtyId', required: true, type: 'integer' })
   @ApiQuery({ name: 'branchId', required: false, description: 'Lọc theo chi nhánh' })
   getSpecialtyServicesQuery(
-    @Query('branchId') branchId: string | undefined,
+    @Query('branchId', new ParseIntPipe({ optional: true })) branchId: number | string | undefined,
     @Query('specialtyId') specialtyId: string,
   ) {
     return this.specialtiesService.specialtyServices(branchId, Number(specialtyId));
@@ -77,7 +79,7 @@ export class SpecialtiesController {
   @ApiQuery({ name: 'branchId', required: false })
   getSpecialtyServices(
     @Param('id', ParseIntPipe) id: number,
-    @Query('branchId') branchId?: string,
+    @Query('branchId', new ParseIntPipe({ optional: true })) branchId?: number | string,
   ) {
     return this.specialtiesService.getSpecialtyServices(id, branchId);
   }
@@ -92,7 +94,7 @@ export class SpecialtiesController {
   @ApiQuery({ name: 'q', required: false, description: 'Tìm kiếm theo tên bác sĩ' })
   getSpecialtyDoctors(
     @Param('id', ParseIntPipe) id: number,
-    @Query('branchId') branchId?: string,
+    @Query('branchId', new ParseIntPipe({ optional: true })) branchId?: number | string,
     @Query('q') q?: string,
   ) {
     return this.specialtiesService.getSpecialtyDoctors(id, branchId, q);
@@ -116,7 +118,7 @@ export class SpecialtiesController {
   getPublicPackages(
     @Query('page') page?: number,
     @Query('limit') limit?: number,
-    @Query('branchId') branchId?: string,
+    @Query('branchId', new ParseIntPipe({ optional: true })) branchId?: number | string,
     @Query('specialtyId') specialtyId?: number,
     @Query('search') search?: string,
     @Query('minPrice') minPrice?: number,
@@ -146,7 +148,7 @@ export class SpecialtiesController {
   @Get(['services/packages/specialty', 'public/specialty-packages'])
   @ApiOperation({ summary: 'Danh sách gói khám chuyên khoa' })
   @ApiQuery({ name: 'branchId', required: false })
-  getSpecialtyPackages(@Query('branchId') branchId?: string) {
+  getSpecialtyPackages(@Query('branchId', new ParseIntPipe({ optional: true })) branchId?: number | string) {
     return this.packagesService.specialtyPackages(branchId);
   }
 
@@ -156,16 +158,16 @@ export class SpecialtiesController {
   @Get(['services/packages/health', 'public/health-packages'])
   @ApiOperation({ summary: 'Danh sách gói khám sức khỏe' })
   @ApiQuery({ name: 'branchId', required: false })
-  getHealthPackages(@Query('branchId') branchId?: string) {
+  getHealthPackages(@Query('branchId', new ParseIntPipe({ optional: true })) branchId?: number | string) {
     return this.packagesService.healthPackages(branchId);
   }
 
   /**
-   * Chi tiết gói dịch vụ / gói khám (hỗ trợ ID UUID, mã code hoặc slug)
+   * Chi tiết gói dịch vụ / gói khám (hỗ trợ ID số, mã code hoặc slug)
    */
   @Get(['services/:id', 'public/services/:id', 'public/packages/:id'])
   @ApiOperation({ summary: 'Chi tiết gói dịch vụ / gói khám theo ID/Slug/Code' })
-  @ApiParam({ name: 'id', description: 'UUID, mã Code hoặc Slug của gói khám' })
+  @ApiParam({ name: 'id', description: 'ID số, mã Code hoặc Slug của gói khám' })
   getServiceDetail(@Param('id') id: string) {
     return this.packagesService.getServiceDetail(id);
   }
@@ -178,9 +180,9 @@ export class SpecialtiesController {
   @ApiQuery({ name: 'branchId', required: false })
   @ApiQuery({ name: 'q', required: false })
   getGeneralServices(
-    @Query('branchId') branchId?: string,
+    @Query('branchId', new ParseIntPipe({ optional: true })) branchId?: number | string,
     @Query('q') q?: string,
   ) {
-    return this.packagesService.getGeneralServices(branchId, q);
+    return this.packagesService.getGeneralServices(branchId === undefined ? undefined : Number(branchId), q);
   }
 }

@@ -3,8 +3,8 @@ import { EmbeddingService, type PackageForRetrieval, type ScoredPackage } from '
 import { matchesSearchConstraints, matchesSearchExclusions, normalizeSearch, parseSearchIntent, searchTextScore, searchTypoScore } from '../../../common/utils/search-query.js';
 
 /** Each document contributes at most once per retriever. Rank starts at one. */
-function reciprocalRankFusion(lists: string[][], constant = 60): Map<string, number> {
-  const scores = new Map<string, number>();
+function reciprocalRankFusion(lists: number[][], constant = 60): Map<number, number> {
+  const scores = new Map<number, number>();
   for (const list of lists) [...new Set(list)].forEach((id, index) =>
     scores.set(id, (scores.get(id) || 0) + 1 / (constant + index + 1)));
   return scores;
@@ -35,7 +35,7 @@ export class SearchRankingService {
     }
     const tieBreak = (a: PackageForRetrieval, b: PackageForRetrieval) =>
       (intent.followUp === undefined ? Number(Boolean(a.isFollowUp)) - Number(Boolean(b.isFollowUp)) : 0)
-      || a.price - b.price || a.id.localeCompare(b.id);
+      || a.price - b.price || a.id - b.id;
     const lexical = keyword.filter(item => item.score > 0)
       .sort((a, b) => b.score - a.score || tieBreak(a.package, b.package));
     let semantic: ScoredPackage[] = [];

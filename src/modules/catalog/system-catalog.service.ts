@@ -23,10 +23,10 @@ export class SystemCatalogService {
     private readonly embeddingService: EmbeddingService,
   ) {}
 
-  private async syncPackageVector(pkg: { id: string }): Promise<void> {
+  private async syncPackageVector(pkg: { id: number }): Promise<void> {
     try {
       await this.prisma.outboxEvent.create({ data: {
-        aggregateType: 'ServicePackage', aggregateId: pkg.id,
+        aggregateType: 'ServicePackage', aggregateId: String(pkg.id),
         eventType: 'package.vector.sync', payload: { packageId: pkg.id },
       } });
     } catch {
@@ -132,14 +132,14 @@ export class SystemCatalogService {
     }
   }
 
-  private async assertAssignmentScope(user: { role: string; branchId: string | null }, resource: string, body: any) {
+  private async assertAssignmentScope(user: { role: string; branchId: number | null }, resource: string, body: any) {
     if (user.role !== 'BRANCH_MANAGER') return
     const branchId = user.branchId
     if (['branch-specialties', 'rooms'].includes(resource) && branchId !== body.branchId) {
       throw new ForbiddenException('Bạn chỉ có quyền thao tác trên chi nhánh mình phụ trách')
     }
     if (resource === 'room-specialties') {
-      const room = await this.prisma.clinicRoom.findFirst({ where: { id: body.roomId, branchId: branchId || '__none__' }, select: { id: true } })
+      const room = await this.prisma.clinicRoom.findFirst({ where: { id: body.roomId, branchId: branchId || 0 }, select: { id: true } })
       if (!room) throw new ForbiddenException('Phòng khám không thuộc chi nhánh bạn phụ trách')
     }
   }
@@ -171,7 +171,7 @@ export class SystemCatalogService {
         include: { branch: { select: { id: true, name: true } }, bookingMethod: true },
         orderBy: [{ branch: { name: 'asc' } }, { sortOrder: 'asc' }],
       })
-      return { items: rows.map(({ bookingMethod, ...row }: any) => ({ ...row, bookingMethodId: bookingMethod.id, type: bookingMethod.code, code: bookingMethod.code, displayName: bookingMethod.name, bookingMethodIsActive: bookingMethod.isActive, description: bookingMethod.description, route: bookingMethod.route })) }
+      return { items: rows.map(({ bookingMethod, ...row }: any) => ({ ...row, bookingMethodId: bookingMethod.id, type: bookingMethod.code, code: bookingMethod.code, displayName: bookingMethod.name, bookingMethodIsActive: bookingMethod.isActive, description: bookingMethod.description })) }
     }
     if (resource === 'branch-specialties') {
       const baseWhere: any = isBranchManager ? { branchId: { in: branchIds } } : {}
@@ -247,14 +247,16 @@ export class SystemCatalogService {
       throw new ForbiddenException('Quản lý chi nhánh không có quyền tạo chi nhánh mới')
     }
     if (resource === 'booking-methods') {
-      const branchId = String(body.branchId || ''), code = String(body.code || body.type || '').trim().toUpperCase(), name = String(body.displayName || body.name || '').trim()
+      const branchId = Number(body.branchId), code = String(body.code || body.type || '').trim().toUpperCase(), name = String(body.displayName || body.name || '').trim()
       if (!branchId || !code || !name) throw new BadRequestException('Thiếu chi nhánh, mã hoặc tên hình thức đặt khám')
       return this.prisma.$transaction(async (tx) => {
-        const bookingMethod = await tx.bookingMethod.upsert({ where: { code }, update: { name, description: body.description || null, route: body.route || null, isActive: true }, create: { code, name, description: body.description || null, route: body.route || null } })
+        const description = String(body.description || '').trim()
+        if (!description) throw new BadRequestException('Thiếu mô tả hình thức đặt khám')
+        const bookingMethod = await tx.bookingMethod.upsert({ where: { code }, update: { name, description, isActive: true }, create: { code, name, description } })
         const exists = await tx.branchBookingMethod.findUnique({ where: { branchId_bookingMethodId: { branchId, bookingMethodId: bookingMethod.id } } })
         if (exists) throw new BadRequestException('Chi nhánh đã có hình thức đặt khám này')
         const row = await tx.branchBookingMethod.create({ data: { branchId, bookingMethodId: bookingMethod.id, isEnabled: body.isEnabled ?? true, sortOrder: Number(body.sortOrder) || 0 }, include: { bookingMethod: true } })
-        return { ...row, type: bookingMethod.code, code: bookingMethod.code, displayName: bookingMethod.name, description: bookingMethod.description, route: bookingMethod.route }
+        return { ...row, type: bookingMethod.code, code: bookingMethod.code, displayName: bookingMethod.name, description: bookingMethod.description }
       })
     }
     if (resource === 'service-packages') {
@@ -264,7 +266,7 @@ export class SystemCatalogService {
       const data: any = await this.payload(resource, body)
       const specialty = await this.prisma.specialty.create({ data })
 
-      const branchIds: string[] = body.applyAllBranches
+      const branchIds: number[] = body.applyAllBranches
         ? (await this.prisma.branch.findMany({ where: { isActive: true }, select: { id: true } })).map((b) => b.id)
         : Array.isArray(body.branchIds) && body.branchIds.length > 0
         ? body.branchIds
@@ -284,7 +286,7 @@ export class SystemCatalogService {
     void this.invalidatePublicCache()
     return row
   }
-  async update(userId: string, resource: string, id: string, body: any) {
+  async update(userId: string, resource: string, id: number, body: any) {
     const user = await this.manager(userId)
     this.assertCrudPermission(user, resource, 'update')
     this.assertCatalogOwner(user, resource)
@@ -294,7 +296,7 @@ export class SystemCatalogService {
       }
     }
     const model = this.model(resource)
-    const key = resource === 'specialties' ? Number(id) : id
+    const key = id
     const existing = await model.findUnique({ where: { id: key } })
     if (!existing) throw new NotFoundException('Không tìm thấy dữ liệu')
     await this.assertAssignmentScope(user, resource, existing)
@@ -309,7 +311,6 @@ export class SystemCatalogService {
           data: {
             ...(name ? { name } : {}),
             description: body.description || null,
-            route: body.route || null,
             isActive,
           },
         })
@@ -327,7 +328,7 @@ export class SystemCatalogService {
       const updated = await this.prisma.specialty.update({ where: { id: specialtyId }, data })
 
       if (body.branchIds !== undefined || body.applyAllBranches !== undefined) {
-        const branchIds: string[] = body.applyAllBranches
+        const branchIds: number[] = body.applyAllBranches
           ? (await this.prisma.branch.findMany({ where: { isActive: true }, select: { id: true } })).map((b) => b.id)
           : Array.isArray(body.branchIds) ? body.branchIds : []
         await this.prisma.branchSpecialty.deleteMany({ where: { specialtyId, branchId: { notIn: branchIds } } })
@@ -410,7 +411,7 @@ export class SystemCatalogService {
     void this.invalidatePublicCache()
     return row
   }
-  async remove(userId: string, resource: string, id: string) {
+  async remove(userId: string, resource: string, id: number) {
     const user = await this.manager(userId)
     this.assertCrudPermission(user, resource, 'delete')
     this.assertCatalogOwner(user, resource)
@@ -418,7 +419,7 @@ export class SystemCatalogService {
       throw new ForbiddenException('Quản lý chi nhánh không có quyền ngừng hoạt động chi nhánh')
     }
     const model = this.model(resource)
-    const key = resource === 'specialties' ? Number(id) : id
+    const key = id
     const existing = await model.findUnique({ where: { id: key } })
     if (!existing) throw new NotFoundException('Không tìm thấy dữ liệu')
     await this.assertAssignmentScope(user, resource, existing)
@@ -432,7 +433,7 @@ export class SystemCatalogService {
     return updated
   }
 
-  async batchBranchSpecialties(userId: string, body: { branchId: string; specialtyIds: number[] }) {
+  async batchBranchSpecialties(userId: string, body: { branchId: number; specialtyIds: number[] }) {
     const user = await this.manager(userId)
     this.assertCatalogOwner(user, 'branch-specialties')
     this.assertCrudPermission(user, 'branch-specialties', 'update')
@@ -465,13 +466,13 @@ export class SystemCatalogService {
     return { success: true, branchId, count: ids.length }
   }
 
-  async batchRoomSpecialties(userId: string, body: { specialtyId: number; roomIds: string[] }) {
+  async batchRoomSpecialties(userId: string, body: { specialtyId: number; roomIds: number[] }) {
     const user = await this.manager(userId)
     this.assertCatalogOwner(user, 'room-specialties')
     this.assertCrudPermission(user, 'room-specialties', 'update')
     const specialtyId = Number(body.specialtyId)
     if (!Number.isInteger(specialtyId)) throw new BadRequestException('Vui lòng chọn chuyên khoa')
-    const roomIds = Array.isArray(body.roomIds) ? body.roomIds.map(String).filter(Boolean) : []
+    const roomIds = Array.isArray(body.roomIds) ? body.roomIds.map(Number).filter((id) => Number.isInteger(id) && id > 0) : []
     const branchIds = user.branchId ? [user.branchId] : []
     if (user.role === 'BRANCH_MANAGER' && roomIds.length > 0) {
       const invalidRooms = await this.prisma.clinicRoom.findFirst({
@@ -501,15 +502,15 @@ export class SystemCatalogService {
     return { success: true, specialtyId, count: roomIds.length }
   }
 
-  async setBranchPackage(userId: string, id: string, body: { branchId: string; branchBookingMethodIds: string[]; schedules?: UpdatePackageReceptionDto['schedules'] }) {
+  async setBranchPackage(userId: string, id: number, body: { branchId: number; branchBookingMethodIds: number[]; schedules?: UpdatePackageReceptionDto['schedules'] }) {
     const user = await this.manager(userId)
     if (user.role === 'ADMIN') throw new ForbiddenException('Quản trị kỹ thuật không điều phối gói khám tại chi nhánh')
     this.assertCrudPermission(user, 'service-packages', 'update')
-    const branchId = String(body.branchId || '')
+    const branchId = Number(body.branchId)
     if (!branchId) throw new BadRequestException('Vui lòng chọn chi nhánh')
     await this.assertAssignmentScope(user, 'branch-specialties', { branchId })
     if (!Array.isArray(body.branchBookingMethodIds)) throw new BadRequestException('Danh sách hình thức đặt khám không hợp lệ')
-    const ids = [...new Set(body.branchBookingMethodIds.map(String))]
+    const ids = [...new Set(body.branchBookingMethodIds.map(Number))]
     const days = body.schedules === undefined ? undefined : parseReceptionDays(body.schedules)
     if (!ids.length && days?.length) throw new BadRequestException('Vui lòng chọn hình thức khám trước khi thiết lập lịch tiếp nhận')
     await this.prisma.$transaction(async (tx) => {
@@ -545,7 +546,7 @@ export class SystemCatalogService {
     return { success: true }
   }
 
-  async setReceptionSchedules(userId: string, id: string, body: UpdatePackageReceptionDto) {
+  async setReceptionSchedules(userId: string, id: number, body: UpdatePackageReceptionDto) {
     const user = await this.manager(userId)
     if (!['CHAIN_MANAGER', 'BRANCH_MANAGER'].includes(user.role)) throw new ForbiddenException('Chỉ quản lý được cấu hình lịch tiếp nhận gói khám')
     this.assertCrudPermission(user, 'service-packages', 'update')
@@ -578,7 +579,7 @@ export class SystemCatalogService {
     if (!['branch-specialties', 'room-specialties'].includes(resource) && !String(b.name || '').trim()) throw new BadRequestException('Tên không được để trống')
     if (resource === 'branches') {
       return {
-        name: String(b.name).trim(),
+        name: String(b.name).trim(), slug: String(b.slug || '').trim() || String(b.code || '').trim().toLowerCase() || String(b.name).trim().toLowerCase().replace(/\s+/g, '-'),
         code: String(b.code || '').trim() || `BRC-${new Date().getFullYear()}-${Math.floor(1000 + Math.random() * 9000)}`,
         address: b.address || null,
         province: b.province || null,
@@ -588,8 +589,8 @@ export class SystemCatalogService {
         longitude: b.longitude != null && b.longitude !== '' ? Number(b.longitude) : null,
         phoneNumber: b.phoneNumber || null,
         email: b.email || null,
-        imageUrl: b.imageUrl || null,
-        description: b.description || null,
+        imageUrl: b.imageUrl || '',
+        description: b.description || '',
         operatingHours: b.operatingHours || null,
         openTime: b.openTime || null,
         closeTime: b.closeTime || null,
@@ -599,21 +600,21 @@ export class SystemCatalogService {
     }
     if (resource === 'specialties') {
       return {
-        name: String(b.name).trim(),
-        slug: b.slug ? String(b.slug).trim().toLowerCase() : null,
-        description: b.description || null,
-        iconUrl: b.iconUrl || b.imageUrl || null,
+        name: String(b.name).trim(), slug: String(b.slug || '').trim() || String(b.code || '').trim().toLowerCase() || String(b.name).trim().toLowerCase().replace(/\s+/g, '-'),
+
+        description: b.description || '',
+        iconUrl: b.iconUrl || b.imageUrl || '',
         isActive: b.isActive ?? true,
         symptoms: Array.isArray(b.symptoms) ? b.symptoms.map(String).map((s: string) => s.trim().toLowerCase()).filter(Boolean) : [],
       }
     }
     if (resource === 'branch-specialties') {
-      const branchId = String(b.branchId || ''), specialtyId = Number(b.specialtyId)
+      const branchId = Number(b.branchId), specialtyId = Number(b.specialtyId)
       if (!branchId || !Number.isInteger(specialtyId)) throw new BadRequestException('Vui lòng chọn cơ sở và chuyên khoa')
       return { branchId, specialtyId, isActive: b.isActive ?? true }
     }
     if (resource === 'room-specialties') {
-      const roomId = String(b.roomId || ''), specialtyId = Number(b.specialtyId)
+      const roomId = Number(b.roomId), specialtyId = Number(b.specialtyId)
       if (!roomId || !Number.isInteger(specialtyId)) throw new BadRequestException('Vui lòng chọn phòng khám và chuyên khoa')
       const room = await this.prisma.clinicRoom.findFirst({ where: { id: roomId, isActive: true }, select: { branchId: true } })
       if (!room) throw new BadRequestException('Phòng khám không tồn tại hoặc đã ngừng hoạt động')
@@ -622,17 +623,17 @@ export class SystemCatalogService {
       return { roomId, specialtyId, priority: Math.max(0, Number(b.priority) || 0), isActive: b.isActive ?? true }
     }
     if (resource === 'rooms') {
-      const branchId = String(b.branchId || '')
+      const branchId = Number(b.branchId)
       if (!branchId) throw new BadRequestException('Vui lòng chọn cơ sở y tế')
       return { branchId, name: String(b.name).trim(), code: String(b.code || '').trim(), isActive: b.isActive ?? true }
     }
     if (resource === 'service-packages') {
       return {
         ...(b.isFeatured !== undefined ? { isFeatured: b.isFeatured === true } : {}),
-        name: String(b.name).trim(),
+        name: String(b.name).trim(), slug: String(b.slug || '').trim() || String(b.code || '').trim().toLowerCase() || String(b.name).trim().toLowerCase().replace(/\s+/g, '-'),
         code: String(b.code || '').trim() || generatePackageCode(),
-        imageUrl: b.imageUrl || null,
-        description: b.description || null,
+        imageUrl: b.imageUrl || '',
+        description: b.description || '',
         symptoms: Array.isArray(b.symptoms) ? b.symptoms.map(String).map((s: string) => s.trim().toLowerCase()).filter(Boolean) : [],
         specialtyId: b.specialtyId ? Number(b.specialtyId) : null,
         price: Number(b.price) || 0,
@@ -645,8 +646,8 @@ export class SystemCatalogService {
   }
 
   private async packageDeployments(tx: Prisma.TransactionClient, value: unknown, specialtyId?: number | null) {
-    if (!Array.isArray(value) || value.some((id) => typeof id !== 'string' || !id)) throw new BadRequestException('Vui lòng chọn hình thức khám tại từng chi nhánh')
-    const ids = [...new Set<string>(value)]
+    if (!Array.isArray(value) || value.some((id) => !Number.isInteger(id) || id < 1)) throw new BadRequestException('Vui lòng chọn hình thức khám tại từng chi nhánh')
+    const ids = [...new Set<number>(value)]
     const methods = await tx.branchBookingMethod.findMany({ where: { id: { in: ids } }, select: {
       id: true, branchId: true, isEnabled: true, branch: { select: { isActive: true } }, bookingMethod: { select: { code: true, isActive: true } },
     } })
@@ -681,10 +682,10 @@ export class SystemCatalogService {
       // TẠO ĐÚNG 1 BẢN GHI ServicePackage DUY NHẤT và liên kết các cơ sở/hình thức
       return tx.servicePackage.create({
         data: {
-          name: String(b.name).trim(),
+          name: String(b.name).trim(), slug: String(b.slug || '').trim() || String(b.code || '').trim().toLowerCase() || String(b.name).trim().toLowerCase().replace(/\s+/g, '-'),
           code: pkgCode,
-          imageUrl: b.imageUrl || null,
-          description: b.description || null,
+          imageUrl: b.imageUrl || '',
+          description: b.description || '',
           symptoms: Array.isArray(b.symptoms) ? b.symptoms.map(String).map((s: string) => s.trim().toLowerCase()).filter(Boolean) : [],
           branchBookingMethodId: bbmList[0]?.id || null,
           ...(receptionSchedules?.length ? { receptionSchedules: { create: receptionSchedules } } : {}),
