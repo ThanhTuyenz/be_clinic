@@ -138,3 +138,5 @@ jobs:
             docker compose --env-file .env.production up -d --remove-orphans --wait --wait-timeout 180
             docker compose --env-file .env.production exec -T nginx nginx -s reload
             docker compose --env-file .env.production ps
+
+            
