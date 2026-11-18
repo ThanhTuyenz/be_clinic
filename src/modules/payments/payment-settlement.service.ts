@@ -35,7 +35,6 @@ export class PaymentSettlementService {
       include: {
         invoice: {
           include: {
-            appointment: true,
             bookingOrder: {
               include: {
                 appointments: {
@@ -54,7 +53,7 @@ export class PaymentSettlementService {
       || (payment.status === 'FAILED' && dto.status === 'FAILED')) {
       return {
         status: payment.status,
-        appointmentStatus: payment.invoice.appointment?.status ?? (payment.invoice.bookingOrder?.status as any),
+        appointmentStatus: payment.invoice.bookingOrder.appointments[0]?.status ?? null,
       };
     }
     if (dto.status === 'FAILED') {
@@ -62,57 +61,43 @@ export class PaymentSettlementService {
         where: { id: payment.id },
         data: { provider, providerTransactionId: dto.providerTransactionId, status: 'FAILED', rawPayload: dto.payload as Prisma.InputJsonValue },
       });
-      if (payment.invoice.bookingOrder) {
-        await (tx as any).bookingOrder.update({
-          where: { id: payment.invoice.bookingOrder.id },
-          data: { status: 'CANCELLED' },
-        });
-      }
       return {
         status: PaymentStatus.FAILED,
-        appointmentStatus: payment.invoice.appointment?.status ?? 'CANCELLED',
+        appointmentStatus: payment.invoice.bookingOrder.appointments[0]?.status ?? null,
       };
+    }
+
+    if (payment.invoice.status === 'PAID') {
+      const appointments = payment.invoice.bookingOrder.appointments;
+      return this.markRefundRequired(tx, payment.id, payment.invoiceId, appointments, provider, dto, payment.invoice.bookingOrderId, true);
     }
 
     // Xử lý đơn tổng BookingOrder (Batch Payment)
     const bookingOrder = payment.invoice.bookingOrder;
-    if (bookingOrder) {
-      if (!bookingOrder.appointments.length || bookingOrder.appointments.some(appt => appt.status !== 'HOLD')) {
-        return this.markRefundRequired(tx, payment.id, payment.invoiceId, bookingOrder.appointments, provider, dto, bookingOrder.id, payment.invoice.status === 'PAID');
-      }
-      return this.confirmPaidBatch(tx, payment.id, payment.invoiceId, bookingOrder.id, bookingOrder.appointments, provider, dto, snapshots);
+    if (!['UNPAID', 'PENDING_PAYMENT'].includes(bookingOrder.status) || !bookingOrder.appointments.length || bookingOrder.appointments.some(appt => appt.status !== 'HOLD')) {
+      return this.markRefundRequired(tx, payment.id, payment.invoiceId, bookingOrder.appointments, provider, dto, bookingOrder.id);
     }
-
-    const appointment = payment.invoice.appointment;
-    if (appointment) {
-      // A HOLD still owns its capacity, including while expiry reconciliation is running.
-      if (appointment.status === 'HOLD') {
-        return this.confirmPaid(tx, payment.id, payment.invoiceId, appointment.id, provider, dto, snapshots);
-      }
-      if (appointment.status === 'CANCELLED') return this.markRefundRequired(tx, payment.id, payment.invoiceId, [appointment], provider, dto);
-      return { status: payment.status, appointmentStatus: appointment.status };
-    }
-    return { status: payment.status, appointmentStatus: 'UNKNOWN' };
+    return this.confirmPaidBatch(tx, payment.id, payment.invoiceId, bookingOrder.id, bookingOrder.appointments, provider, dto, snapshots);
   }
 
   private async markRefundRequired(
     tx: Prisma.TransactionClient, paymentId: string, invoiceId: string,
-    appointments: { id: string; status: AppointmentStatus; scheduleSlotId: string | null }[],
-    provider: string, dto: PaymentWebhookDto, bookingOrderId?: string, alreadyPaid = false,
+    appointments: { id: string; status: AppointmentStatus; scheduleSlotId: number | null; receptionSlotId?: number | null }[],
+    provider: string, dto: PaymentWebhookDto, bookingOrderId: string, alreadyPaid = false,
   ) {
     for (const appointment of appointments) {
       if (appointment.status !== 'HOLD') continue;
       const changed = await tx.appointment.updateMany({ where: { id: appointment.id, status: 'HOLD' }, data: { status: 'CANCELLED' } });
       if (!changed.count) continue;
-      await releaseAppointmentSlot(tx, appointment.scheduleSlotId);
+      await releaseAppointmentSlot(tx, appointment.scheduleSlotId, appointment.receptionSlotId);
       await tx.appointmentStatusHistory.create({ data: {
         appointmentId: appointment.id, fromStatus: 'HOLD', toStatus: 'CANCELLED', reason: 'LATE_PAYMENT_REFUND_REQUIRED',
       } });
     }
     if (!alreadyPaid) {
       await tx.invoice.update({ where: { id: invoiceId }, data: { status: 'CANCELLED' } });
-      if (bookingOrderId) await tx.bookingOrder.update({ where: { id: bookingOrderId }, data: { status: 'CANCELLED' } });
-      if (bookingOrderId || appointments[0]) await releaseVoucherUsage(tx, bookingOrderId ? { bookingOrderId } : { appointmentId: appointments[0].id });
+      await tx.bookingOrder.update({ where: { id: bookingOrderId }, data: { status: 'CANCELLED' } });
+      await releaseVoucherUsage(tx, { bookingOrderId });
     }
     await tx.paymentTransaction.update({ where: { id: paymentId }, data: {
       provider, providerTransactionId: dto.providerTransactionId, status: 'REFUND_REQUIRED', paidAt: new Date(), rawPayload: dto.payload as Prisma.InputJsonValue,
@@ -124,41 +109,12 @@ export class PaymentSettlementService {
     return { status: PaymentStatus.REFUND_REQUIRED, appointmentStatus: alreadyPaid ? AppointmentStatus.CONFIRMED : AppointmentStatus.CANCELLED };
   }
 
-  private async confirmPaid(
-    tx: Prisma.TransactionClient,
-    paymentId: string,
-    invoiceId: string,
-    appointmentId: string,
-    provider: string,
-    dto: PaymentWebhookDto,
-    snapshots: ConfirmedAppointment[],
-  ) {
-    // Cấp số thứ tự cố định chuẩn theo thứ tự khung giờ trong ngày làm việc của Bác sĩ
-    const existingAppt = await tx.appointment.findUnique({
-      where: { id: appointmentId },
-      include: { scheduleSlot: true },
-    });
-
-    let assignedQueueNumber = existingAppt?.queueNumber ?? null;
-    if (assignedQueueNumber == null && existingAppt) {
-      assignedQueueNumber = await computeQueueNumber(tx, appointmentId, existingAppt.scheduleSlotId);
-    }
-
-    await tx.paymentTransaction.update({ where: { id: paymentId }, data: { provider, providerTransactionId: dto.providerTransactionId, status: 'SUCCESS', paidAt: new Date(), rawPayload: dto.payload as Prisma.InputJsonValue } });
-    await tx.invoice.update({ where: { id: invoiceId }, data: { status: 'PAID', paidAt: new Date() } });
-
-    const { rawToken, updated: appointment } = await this.confirmations.confirmSingleAppointment(tx, appointmentId, assignedQueueNumber, AppointmentStatus.HOLD, 'PAYMENT_SUCCESS');
-
-    snapshots.push(appointment);
-    return { status: PaymentStatus.SUCCESS, appointmentStatus: appointment.status, bookingCode: appointment.bookingCode!, queueNumber: assignedQueueNumber, qrToken: rawToken };
-  }
-
   private async confirmPaidBatch(
     tx: Prisma.TransactionClient,
     paymentId: string,
     invoiceId: string,
     bookingOrderId: string,
-    appointments: any[],
+    appointments: Prisma.AppointmentGetPayload<{}>[],
     provider: string,
     dto: PaymentWebhookDto,
     snapshots: ConfirmedAppointment[],
@@ -168,20 +124,22 @@ export class PaymentSettlementService {
       data: { provider, providerTransactionId: dto.providerTransactionId, status: 'SUCCESS', paidAt: new Date(), rawPayload: dto.payload as Prisma.InputJsonValue },
     });
     await tx.invoice.update({ where: { id: invoiceId }, data: { status: 'PAID', paidAt: new Date() } });
-    await (tx as any).bookingOrder.update({ where: { id: bookingOrderId }, data: { status: 'PAID' } });
+    await tx.bookingOrder.update({ where: { id: bookingOrderId }, data: { status: 'PAID' } });
 
-    const confirmedAppointments: any[] = [];
+    const confirmedAppointments: { appointmentId: string; bookingCode: string | null; queueNumber: number | null }[] = [];
+    let singleConfirmation: { bookingCode: string | null; queueNumber: number | null; qrToken: string } | undefined;
     for (const appt of appointments) {
       let assignedQueueNumber = appt.queueNumber ?? null;
-      if (assignedQueueNumber == null) {
+      if (assignedQueueNumber == null && !appt.receptionSlotId) {
         assignedQueueNumber = await computeQueueNumber(tx, appt.id, appt.scheduleSlotId);
       }
 
-      const { updated } = await this.confirmations.confirmSingleAppointment(tx, appt.id, assignedQueueNumber, 'HOLD' as AppointmentStatus, 'PAYMENT_SUCCESS_BATCH', bookingOrderId);
+      const { updated, rawToken } = await this.confirmations.confirmSingleAppointment(tx, appt.id, assignedQueueNumber, 'HOLD', 'PAYMENT_SUCCESS', bookingOrderId);
       snapshots.push(updated);
       confirmedAppointments.push({ appointmentId: updated.id, bookingCode: updated.bookingCode, queueNumber: assignedQueueNumber });
+      if (appointments.length === 1) singleConfirmation = { bookingCode: updated.bookingCode, queueNumber: assignedQueueNumber, qrToken: rawToken };
     }
 
-    return { status: PaymentStatus.SUCCESS, appointmentStatus: 'CONFIRMED', bookingOrderId, appointments: confirmedAppointments };
+    return { status: PaymentStatus.SUCCESS, appointmentStatus: 'CONFIRMED', bookingOrderId, appointments: confirmedAppointments, ...singleConfirmation };
   }
 }

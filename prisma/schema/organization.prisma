@@ -1,62 +1,47 @@
 // ============================================================
-// Tổ chức: Clinic, Branch, Phòng khám – Smart Booking scope
+// Tổ chức: Chi nhánh và phòng khám trong một hệ thống VitaCare
 // ============================================================
 
-model Clinic {
-  id        String   @id @default(uuid()) @db.Uuid
-  name      String   @db.VarChar(150)
-  slug      String   @unique @db.VarChar(150)
-  isActive  Boolean  @default(true) @map("is_active")
-  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
-  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
-  branches  Branch[]
-
-  @@map("clinics")
-}
-
 model Branch {
-  id              String                    @id @default(uuid()) @db.Uuid
-  clinicId        String                    @map("clinic_id") @db.Uuid
+  id              Int                       @id @default(autoincrement())
   code            String                    @unique @db.VarChar(30)
-  slug            String?                   @unique @db.VarChar(120)
+  slug            String                    @unique @db.VarChar(120)
   name            String                    @db.VarChar(150)
-  address         String?
-  province        String?                   @map("province") @db.VarChar(100)
-  district        String?                   @map("district") @db.VarChar(100)
-  ward            String?                   @map("ward") @db.VarChar(100)
+  address         String
+  province        String                    @map("province") @db.VarChar(100)
+  district        String                    @map("district") @db.VarChar(100)
+  ward            String                    @map("ward") @db.VarChar(100)
   latitude        Float?                    @map("latitude")
   longitude       Float?                    @map("longitude")
-  phoneNumber     String?                   @map("phone_number") @db.VarChar(20)
+  phoneNumber     String                    @map("phone_number") @db.VarChar(20)
   email           String?                   @map("email") @db.VarChar(100)
-  imageUrl        String?                   @map("image_url") @db.VarChar(500)
+  imageUrl        String                    @map("image_url") @db.VarChar(500)
   description     String?                   @map("description")
   operatingHours  String?                   @map("operating_hours") @db.VarChar(100)
-  openTime        String?                   @map("open_time") @db.VarChar(10)
-  closeTime       String?                   @map("close_time") @db.VarChar(10)
+  openTime        String                    @map("open_time") @db.VarChar(10)
+  closeTime       String                    @map("close_time") @db.VarChar(10)
   timezone        String                    @default("Asia/Ho_Chi_Minh") @db.VarChar(500)
   isActive        Boolean                   @default(true) @map("is_active")
   createdAt       DateTime                  @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt       DateTime                  @updatedAt @map("updated_at") @db.Timestamptz(3)
-  clinic          Clinic                    @relation(fields: [clinicId], references: [id], onDelete: Cascade)
   rooms           ClinicRoom[]
-  userAssignments UserBranchAssignment[]
+  users           User[]
   scheduleExceptions DoctorScheduleException[]
   schedules       DoctorSchedule[]
   appointments    Appointment[]
   issuedInvoices  Invoice[]
   bookingMethods  BranchBookingMethod[]
-  packageReceptionSchedules PackageReceptionSchedule[]
+  packageReceptionTimes PackageReceptionTime[]
+  packageReceptionSlots PackageReceptionSlot[]
   specialties     BranchSpecialty[]
-  aiTriageInsights AITriageInsight[]
 
-  @@index([clinicId, isActive])
   @@map("branches")
 
 }
 
 model BranchSpecialty {
-  id          String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  branchId    String    @map("branch_id") @db.Uuid
+  id          Int       @id @default(autoincrement())
+  branchId    Int       @map("branch_id")
   specialtyId Int       @map("specialty_id")
   isActive    Boolean   @default(true) @map("is_active")
   createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
@@ -71,11 +56,10 @@ model BranchSpecialty {
 }
 
 model BookingMethod {
-  id          String   @id @default(uuid()) @db.Uuid
+  id          Int      @id @default(autoincrement())
   code        String   @unique @db.VarChar(50)
   name        String   @db.VarChar(150)
-  description String?  @db.Text
-  route       String?  @db.VarChar(255)
+  description String   @db.Text
   isActive    Boolean  @default(true) @map("is_active")
   createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt   DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
@@ -87,9 +71,9 @@ model BookingMethod {
 }
 
 model BranchBookingMethod {
-  id              String   @id @default(uuid()) @db.Uuid
-  branchId        String   @map("branch_id") @db.Uuid
-  bookingMethodId String   @map("booking_method_id") @db.Uuid
+  id              Int      @id @default(autoincrement())
+  branchId        Int      @map("branch_id")
+  bookingMethodId Int      @map("booking_method_id")
   isEnabled       Boolean  @default(true) @map("is_enabled")
   sortOrder       Int      @default(0) @map("sort_order")
   createdAt       DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
@@ -97,7 +81,7 @@ model BranchBookingMethod {
   branch          Branch        @relation(fields: [branchId], references: [id], onDelete: Cascade)
   bookingMethod   BookingMethod @relation(fields: [bookingMethodId], references: [id], onDelete: Restrict)
   servicePackages ServicePackage[]
-  servicePackageLinks ServicePackageBranchBookingMethod[]
+  servicePackageLinks PackageBranchMethod[]
 
   @@unique([branchId, bookingMethodId])
   @@index([branchId, isEnabled, sortOrder])
@@ -106,8 +90,8 @@ model BranchBookingMethod {
 }
 
 model ClinicRoom {
-  id        String   @id @default(uuid()) @db.Uuid
-  branchId  String   @map("branch_id") @db.Uuid
+  id        Int      @id @default(autoincrement())
+  branchId  Int      @map("branch_id")
   code      String   @db.VarChar(30)
   name      String   @db.VarChar(100)
   isActive  Boolean  @default(true) @map("is_active")
@@ -122,8 +106,8 @@ model ClinicRoom {
 }
 
 model ClinicRoomSpecialty {
-  id          String     @id @default(uuid()) @db.Uuid
-  roomId      String     @map("room_id") @db.Uuid
+  id          Int        @id @default(autoincrement())
+  roomId      Int        @map("room_id")
   specialtyId Int        @map("specialty_id")
   priority    Int        @default(0)
   isActive    Boolean    @default(true) @map("is_active")
@@ -135,18 +119,4 @@ model ClinicRoomSpecialty {
   @@unique([roomId, specialtyId])
   @@index([specialtyId, isActive, priority])
   @@map("clinic_room_specialties")
-}
-
-model UserBranchAssignment {
-  id        String   @id @default(uuid()) @db.Uuid
-  userId    String   @map("user_id") @db.Uuid
-  branchId  String   @map("branch_id") @db.Uuid
-  isPrimary Boolean  @default(false) @map("is_primary")
-  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  branch    Branch   @relation(fields: [branchId], references: [id], onDelete: Cascade)
-
-  @@unique([userId, branchId])
-  @@index([branchId])
-  @@map("user_branch_assignments")
 }

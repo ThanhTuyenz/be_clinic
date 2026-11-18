@@ -2,27 +2,22 @@ import { ForbiddenException, Injectable, Logger, NotFoundException } from '@nest
 import { createHash } from 'node:crypto';
 import { PrismaService } from '../../infrastructure/database/prisma/prisma.service.js';
 import { RedisService } from '../../infrastructure/redis/redis.service.js';
-import { HomeRecommendationQueryDto, HomeRecommendationResponseDto, ProfileRecommendationResponseDto, RecommendedPackageItemDto, TrackBehaviorDto } from './recommendation.dto.js';
+import { ProfileRecommendationResponseDto, RecommendedPackageItemDto, RecommendationSectionDto, ProfileRecommendationSectionDto } from './recommendation.dto.js';
 import { CandidatePoolItem, RecommendationPackage, TELEMETRY_CONFIG } from './constants/recommendation.constants.js';
 import { BehaviorTelemetryService } from './services/behavior-telemetry.service.js';
+import type { BehaviorEvent } from './services/behavior-telemetry.service.js';
 import { CandidateRetrievalService, ProfileRecommendationContext } from './services/candidate-retrieval.service.js';
 import { AiRankingService, RankingContext } from './services/ai-ranking.service.js';
-import { SemanticSearchService } from './services/semantic-search.service.js';
-import { SearchAnalyticsService } from '../search-analytics/search-analytics.service.js';
+import { AnalyticsService } from '../analytics/analytics.service.js';
 
-interface CachedRanking {
-  fingerprint: string;
-  updatedAt: string;
-  source: 'AI_OPENAI' | 'RULE_FALLBACK';
-  packages: RecommendedPackageItemDto[];
-}
-type SourceRanking = CachedRanking & { fromCache: boolean };
-type BehaviorContext = Awaited<ReturnType<BehaviorTelemetryService['getBehaviorTelemetryContext']>>;
-
+import type { CachedRanking, SourceRanking } from './types/ranking.types.js';
+import { rankBehaviorCandidates } from './services/behavior-ranking.js';
+import { isRoutineCheckupPackage } from './types/routine-checkup.js';
 @Injectable()
 export class RecommendationService {
   private readonly logger = new Logger(RecommendationService.name);
   private readonly inFlight = new Map<string, Promise<SourceRanking>>();
+  private readonly profileAnalysisRequests = new Map<string, number>();
 
   constructor(
     private readonly prisma: PrismaService,
@@ -30,93 +25,132 @@ export class RecommendationService {
     private readonly behaviorTelemetryService: BehaviorTelemetryService,
     private readonly candidateRetrievalService: CandidateRetrievalService,
     private readonly aiRankingService: AiRankingService,
-    private readonly semanticSearchService: SemanticSearchService,
-    private readonly analytics: SearchAnalyticsService,
+    private readonly analytics: AnalyticsService,
   ) {}
 
-  async getHomeRecommendations(query: HomeRecommendationQueryDto, userId?: string, userRole?: string): Promise<HomeRecommendationResponseDto> {
-    if (query.profileId) await this.assertProfileAccess(query.profileId, userId, userRole);
-    const [catalog, profile, behavior] = await Promise.all([
+  async getProfileRecommendations(profileId: string, sessionId?: string, userId?: string, userRole?: string): Promise<ProfileRecommendationSectionDto> {
+    await this.assertProfileAccess(profileId, userId, userRole);
+    const [catalog, context] = await Promise.all([
       this.candidateRetrievalService.loadActivePackages(),
-      this.candidateRetrievalService.getProfileContext(query.profileId),
-      userId ? this.behaviorTelemetryService.getBehaviorTelemetryContext(userId, query.sessionId) : undefined,
+      this.candidateRetrievalService.getProfileContext(profileId),
     ]);
-    const catalogVersion = this.catalogFingerprint(catalog);
-    const [profileRanking, behaviorRanking] = await Promise.all([
-      profile.profile ? this.getProfileRanking(profile, catalog, catalogVersion) : undefined,
-      behavior ? this.getBehaviorRanking(behavior, catalog, catalogVersion, userId, query.sessionId) : undefined,
-    ]);
-    // Recheck current catalog/profile constraints even when both rankings came from cache.
-    const merged = await this.mergeRankings(profileRanking?.packages || [], behaviorRanking?.packages || [], catalog, profile);
-    const source = merged.hasProfile && merged.hasBehavior ? 'HYBRID'
-      : merged.hasProfile ? 'AI_PROFILE' : merged.hasBehavior ? 'BEHAVIOR' : 'FALLBACK';
-    const activeRankings = [
-      ...(merged.hasProfile && profileRanking ? [profileRanking] : []),
-      ...(merged.hasBehavior && behaviorRanking ? [behaviorRanking] : []),
-    ];
-    const fromCache = activeRankings.length > 0 && activeRankings.every(item => item.fromCache);
-    const event = source === 'HYBRID' ? 'MERGE_PROFILE_BEHAVIOR'
-      : source === 'AI_PROFILE' ? 'PROFILE' : source === 'BEHAVIOR' ? 'BEHAVIOR' : 'DEFAULT_PACKAGES';
+    if (!context.profile) throw new NotFoundException('Không tìm thấy hồ sơ bệnh nhân.');
+    const ranking = await this.getCachedProfileRanking(context, this.catalogFingerprint(catalog));
+    const packages = this.getEligibleProfilePackages(ranking?.packages || [], catalog, context);
     return {
-      profileId: query.profileId, profileName: profile.profile?.fullName,
-      updatedAt: activeRankings.map(item => item.updatedAt).sort().at(-1) || new Date().toISOString(),
-      source, event, triggerEvent: event,
-      triggerReason: source === 'HYBRID' ? 'Kết hợp hai danh sách được phân tích độc lập theo hồ sơ và hành vi'
-        : source === 'AI_PROFILE' ? 'Gợi ý theo hồ sơ sức khỏe'
-        : source === 'BEHAVIOR' ? 'Gợi ý theo quan tâm gần đây' : 'Gói khám nổi bật và được khám nhiều trong 90 ngày gần nhất',
-      dataOrigin: fromCache ? 'CACHE' : 'NEW', isCached: fromCache, fromCache,
-      packages: merged.packages,
-      trackingToken: this.analytics.createRecommendationToken(merged.packages, query.sessionId, userId),
+      ...this.toSection(packages, ranking, sessionId, userId),
+      status: !ranking ? 'PENDING' : packages.length ? 'READY' : 'EMPTY',
+      profileId, profileName: context.profile.fullName,
     };
+  }
+
+  async getBehaviorRecommendations(sessionId?: string, userId?: string): Promise<RecommendationSectionDto> {
+    if (!userId && !sessionId) return this.toSection([]);
+    const catalog = await this.candidateRetrievalService.loadActivePackages();
+    const ranking = await this.getBehaviorRanking(catalog, userId, sessionId);
+    const rows = ranking.packages.filter(item => ['DROP_OFF', 'SEARCH_INTENT', 'RECENT_VIEW'].includes(item.sourceType || ''));
+    return this.toSection(this.refreshRankingItems(rows, catalog, 'BEHAVIOR'), ranking, sessionId, userId);
+  }
+
+  private toSection(packages: RecommendedPackageItemDto[], ranking?: SourceRanking, sessionId?: string, userId?: string): RecommendationSectionDto {
+    return {
+      status: packages.length ? 'READY' : 'EMPTY',
+      updatedAt: ranking?.updatedAt || new Date().toISOString(),
+      fromCache: ranking?.fromCache ?? false,
+      packages,
+      trackingToken: this.analytics.createRecommendationToken(packages, sessionId, userId),
+    };
+  }
+
+
+  private async getCachedRanking(key: string, fingerprint?: string): Promise<SourceRanking | undefined> {
+    if (!this.redis.isEnabled()) return undefined;
+    try {
+      const cached = await this.redis.get<CachedRanking>(key);
+      if (cached && Array.isArray(cached.packages) && (!fingerprint || cached.fingerprint === fingerprint)) {
+        return { ...cached, fromCache: true };
+      }
+    } catch { this.logger.debug('Prepared recommendation cache is unavailable'); }
+    return undefined;
+  }
+
+  private async getCachedProfileRanking(profile: ProfileRecommendationContext, catalogVersion: string) {
+    const cached = await this.getCachedRanking(this.profileCacheKey(profile.profile!.id), this.fingerprint({ catalogVersion, profile }));
+    if (!cached) {
+      const now = Date.now();
+      // Polling a pending section must not enqueue the same analysis on every read.
+      for (const [id, requestedAt] of this.profileAnalysisRequests) {
+        if (now - requestedAt >= 60_000) this.profileAnalysisRequests.delete(id);
+      }
+      if (!this.profileAnalysisRequests.has(profile.profile!.id)) {
+        this.profileAnalysisRequests.set(profile.profile!.id, now);
+        this.triggerAsyncRecommendation(profile.profile!.id);
+      }
+    }
+    return cached;
   }
 
   private getProfileRanking(profile: ProfileRecommendationContext, catalog: RecommendationPackage[], catalogVersion: string, force = false) {
     return this.getSourceRanking(
       this.profileCacheKey(profile.profile!.id),
       this.fingerprint({ catalogVersion, profile }), TELEMETRY_CONFIG.PROFILE_CACHE_TTL_SECONDS,
+
       async () => {
         const candidates = await this.candidateRetrievalService.getProfileCandidates(profile, catalog);
-        return this.rankSource(candidates, { source: 'PROFILE', profile: {
-          age: profile.age, gender: profile.gender, bmi: profile.bmi,
-          medicalHistory: profile.medicalHistory, allergies: profile.allergies,
-        } });
+        return this.rankSource(candidates, {
+          source: 'PROFILE', profile: {
+            age: profile.age, gender: profile.gender, bmi: profile.bmi,
+            medicalHistory: profile.medicalHistory, allergies: profile.allergies,
+            familyHistory: profile.familyHistory,
+            smokingStatus: profile.smokingStatus, alcoholUse: profile.alcoholUse, activityLevel: profile.activityLevel,
+            pregnancyStatus: profile.pregnancyStatus, isBreastfeeding: profile.isBreastfeeding,
+          }
+        });
       }, force,
     );
   }
 
-  private getBehaviorRanking(behavior: BehaviorContext, catalog: RecommendationPackage[], catalogVersion: string, userId?: string, sessionId?: string) {
-    if ((!userId && !sessionId) || (!behavior.lastSearchQuery && !behavior.dropOffPkgId
-      && !behavior.topSpecialties.some(item => item.score >= TELEMETRY_CONFIG.MIN_QUALIFIED_SCORE))) return undefined;
-    const owner = userId ? 'u:' + userId + ':sess:' + (sessionId || 'none') : 'sess:' + sessionId;
-    const context = { ...behavior, topSpecialties: [...behavior.topSpecialties].sort((a, b) => b.score - a.score || a.specialtyId - b.specialtyId) };
-    return this.getSourceRanking(
-      TELEMETRY_CONFIG.CACHE_PREFIX + ':behavior:' + owner,
-      this.fingerprint({ catalogVersion, context }), TELEMETRY_CONFIG.BEHAVIOR_CACHE_TTL_SECONDS,
-      async () => {
-        const retrieved = await this.candidateRetrievalService.getBehaviorCandidates(userId, sessionId, catalog, context);
-        const candidates: CandidatePoolItem[] = retrieved.candidates.map(item => ({
-          pkg: item.pkg, origin: 'BEHAVIOR', behaviorSourceType: item.sourceType,
-        }));
-        return this.rankSource(candidates, { source: 'BEHAVIOR', behavior: {
-          topSpecialties: context.topSpecialties.map(item => item.specialtyName + ' (' + item.score + ' điểm)').join(', '),
-          lastSearchQuery: context.lastSearchQuery || '',
-          dropOffPkgName: candidates.find(item => item.behaviorSourceType === 'DROP_OFF')?.pkg.name,
-        } });
-      },
-    );
+  private async getBehaviorRanking(
+    catalog: RecommendationPackage[], userId?: string, sessionId?: string,
+  ): Promise<SourceRanking> {
+    const behavior = await this.behaviorTelemetryService.getBehaviorTelemetryContext(userId, sessionId);
+    const fingerprint = createHash('sha256').update(JSON.stringify({
+      policy: 'behavior-rules-v2-linear-views', behavior, catalog: this.catalogFingerprint(catalog),
+      minute: Math.floor(Date.now() / 60000),
+    })).digest('hex');
+    
+    return this.getSourceRanking(this.behaviorCacheKey(userId, sessionId), fingerprint,
+      TELEMETRY_CONFIG.BEHAVIOR_CACHE_TTL_SECONDS, async () => {
+        const { candidates } = await this.candidateRetrievalService.getBehaviorCandidates(userId, sessionId, catalog, behavior);
+        return { source: 'BEHAVIOR_RULES', updatedAt: new Date().toISOString(),
+          packages: rankBehaviorCandidates(candidates) };
+      });
   }
 
-  private async rankSource(candidates: CandidatePoolItem[], context: Omit<Extract<RankingContext, { source: 'PROFILE' }>, 'candidates'> | Omit<Extract<RankingContext, { source: 'BEHAVIOR' }>, 'candidates'>) {
-    const rankingContext: RankingContext = { ...context, candidates: candidates.map(item => ({
-      id: item.pkg.id, code: item.pkg.code, slug: item.pkg.slug || undefined,
-      name: item.pkg.name, description: item.pkg.description || '', price: Number(item.pkg.price),
-      specialtyName: item.pkg.specialty?.name || 'Đa khoa', specialtyId: item.pkg.specialtyId,
-      durationMin: item.pkg.durationMin, origin: item.origin, behaviorSourceType: item.behaviorSourceType,
-    })) };
-    let packages = this.aiRankingService.isAiAvailable() && candidates.length
-      ? await this.aiRankingService.rankWithOpenAI(rankingContext) : [];
-    const source = packages.length ? 'AI_OPENAI' as const : 'RULE_FALLBACK' as const;
-    if (!packages.length) packages = this.aiRankingService.rankWithRules(candidates, context.source === 'PROFILE' ? context.profile.medicalHistory : '');
+  private async rankSource(candidates: CandidatePoolItem[], context: Omit<Extract<RankingContext, { source: 'PROFILE' }>, 'candidates'>) {
+    const rankingContext: RankingContext = {
+      ...context, candidates: candidates.map(item => ({
+        id: item.pkg.id, code: item.pkg.code, slug: item.pkg.slug || undefined,
+        name: item.pkg.name, description: item.pkg.description || '', price: Number(item.pkg.price),
+        specialtyName: item.pkg.specialty?.name || 'Đa khoa', specialtyId: item.pkg.specialtyId,
+        durationMin: item.pkg.durationMin, origin: item.origin, behaviorSourceType: item.behaviorSourceType,
+        symptoms: item.pkg.symptoms || [], retrievalScore: item.retrievalScore, evidenceSignals: item.evidenceSignals,
+        routineEligible: isRoutineCheckupPackage(item.pkg),
+        viewCount: item.viewCount, lastViewedAt: item.lastViewedAt, searchQuery: item.searchQuery, searchedAt: item.searchedAt, abandonedAt: item.abandonedAt,
+      }))
+    };
+    let packages: RecommendedPackageItemDto[] = [];
+    let source: CachedRanking['source'] = 'RULE_FALLBACK';
+    if (!candidates.length) return { source, updatedAt: new Date().toISOString(), packages };
+    try {
+      if (!this.aiRankingService.isAiAvailable()) throw new Error('AI unavailable');
+      packages = await this.aiRankingService.rankWithOpenAI(rankingContext);
+      source = 'AI_OPENAI'; // A successful empty selection is a valid answer.
+    } catch {
+      const grounded = candidates.filter(item => item.origin !== 'PROFILE'
+        || (item.pkg.specialty?.name && item.evidenceSignals?.includes(item.pkg.specialty.name)));
+      packages = this.aiRankingService.rankWithRules(grounded, context.source === 'PROFILE' ? context.profile.medicalHistory : '');
+    }
     return { source, updatedAt: new Date().toISOString(), packages: packages.slice(0, TELEMETRY_CONFIG.SOURCE_PACKAGES_LIMIT) };
   }
 
@@ -133,7 +167,7 @@ export class RecommendationService {
     const request = (async () => {
       const ranking: CachedRanking = { ...await generate(), fingerprint };
       if (this.redis.isEnabled()) {
-        const cacheTtl = ranking.source === 'AI_OPENAI' ? ttl : Math.min(ttl, TELEMETRY_CONFIG.RULE_CACHE_TTL_SECONDS);
+        const cacheTtl = ranking.source !== 'RULE_FALLBACK' ? ttl : Math.min(ttl, TELEMETRY_CONFIG.RULE_CACHE_TTL_SECONDS);
         await this.redis.set(key, ranking, cacheTtl).catch(() => this.logger.debug('Unable to cache recommendation source'));
       }
       return { ...ranking, fromCache: false };
@@ -142,80 +176,51 @@ export class RecommendationService {
     return request;
   }
 
-  private async mergeRankings(profileRows: RecommendedPackageItemDto[], behaviorRows: RecommendedPackageItemDto[], catalog: RecommendationPackage[], profile: ProfileRecommendationContext) {
-    const eligible = catalog.filter(pkg => this.candidateRetrievalService.isPackageEligibleForProfile(pkg, profile)
+  private getEligibleProfilePackages(rows: RecommendedPackageItemDto[], catalog: RecommendationPackage[], profile: ProfileRecommendationContext) {
+    const profileCatalog = catalog.filter(pkg =>
+      this.candidateRetrievalService.isPackageEligibleForProfile(pkg, profile)
       && !profile.recentlyCompletedPackageIds.includes(pkg.id));
-    const catalogById = new Map(eligible.map(pkg => [pkg.id, pkg]));
-    const hydrate = (rows: RecommendedPackageItemDto[], source: 'PROFILE' | 'BEHAVIOR') => rows.flatMap(item => {
-      const pkg = catalogById.get(item.packageId);
-      if (!pkg) return [];
-      return [{ ...item, code: pkg.code, slug: pkg.slug || undefined, name: pkg.name, price: Number(pkg.price),
-        durationMin: pkg.durationMin, specialtyId: pkg.specialtyId, specialtyName: pkg.specialty?.name || 'Đa khoa',
-        sourceType: source === 'PROFILE' ? 'PROFILE_AI' as const : item.sourceType || 'RECENT_VIEW' as const }];
-    });
-    const profiles = hydrate(profileRows, 'PROFILE'), behaviors = hydrate(behaviorRows, 'BEHAVIOR');
-    const behaviorById = new Map(behaviors.map(item => [item.packageId, item]));
-    const packages: RecommendedPackageItemDto[] = [], used = new Set<string>();
-    const add = (item?: RecommendedPackageItemDto) => {
-      if (!item || used.has(item.packageId) || packages.length >= TELEMETRY_CONFIG.HOME_FINAL_PACKAGES_LIMIT) return;
-      used.add(item.packageId); packages.push(item);
-    };
-    for (const item of profiles) {
-      const match = behaviorById.get(item.packageId);
-      if (match) add({ ...item, sourceType: 'BOTH', priority: 'HIGH', badge: 'Phù hợp cả hai',
-        clinicalReason: [...new Set([item.clinicalReason, match.clinicalReason].filter(Boolean))].join(' ') });
-    }
-    for (let index = 0; index < Math.max(profiles.length, behaviors.length); index++) {
-      add(profiles[index]); add(behaviors[index]);
-    }
-    if (packages.length < TELEMETRY_CONFIG.HOME_FINAL_PACKAGES_LIMIT) {
-      for (const item of await this.getFeaturedFallback(eligible)) add(item);
-    }
-    return { packages, hasProfile: profiles.length > 0, hasBehavior: behaviors.length > 0 };
+    return this.refreshRankingItems(rows, profileCatalog, 'PROFILE');
   }
 
-  private async getFeaturedFallback(eligible: RecommendationPackage[]): Promise<RecommendedPackageItemDto[]> {
-    if (!eligible.length) return [];
-    const now = new Date();
-    const since = new Date(now.getTime() - TELEMETRY_CONFIG.POPULARITY_WINDOW_DAYS * 86400000);
-    // Count appointments once, using completion history rather than booking/update dates.
-    const completed = await this.prisma.appointment.groupBy({
-      by: ['servicePackageId'],
-      where: {
-        servicePackageId: { in: eligible.map(pkg => pkg.id) },
-        status: 'COMPLETED',
-        statusHistories: { some: { toStatus: 'COMPLETED', createdAt: { gte: since, lte: now } } },
-      },
-      _count: { _all: true },
-    });
-    const counts = new Map(completed.map(row => [row.servicePackageId, row._count._all]));
-    const sorted = [...eligible].sort((a, b) => Number(Boolean(b.isFeatured)) - Number(Boolean(a.isFeatured))
-      || (counts.get(b.id) || 0) - (counts.get(a.id) || 0)
-      || Number(a.price) - Number(b.price) || a.id.localeCompare(b.id));
-    const featuredIds = new Set(eligible.filter(pkg => pkg.isFeatured).map(pkg => pkg.id));
-    return this.aiRankingService.rankWithRules(sorted.map(pkg => ({ pkg, origin: 'POPULAR' })))
-      .map(item => {
-        const featured = featuredIds.has(item.packageId);
-        const popular = (counts.get(item.packageId) || 0) > 0;
-        return { ...item,
-          badge: featured ? 'Gói khám nổi bật' : popular ? 'Được khám nhiều' : 'Gói khám tham khảo',
-          clinicalReason: featured ? 'Gói khám nổi bật được VitaCare Clinic lựa chọn.'
-            : popular ? 'Gói khám được nhiều bệnh nhân hoàn tất trong 90 ngày gần nhất.' : 'Gói khám hiện đang được cung cấp.',
-        };
-      });
+  private refreshRankingItems(rows: RecommendedPackageItemDto[], catalog: RecommendationPackage[], source: 'PROFILE' | 'BEHAVIOR'): RecommendedPackageItemDto[] {
+    const catalogById = new Map(catalog.map(pkg => [pkg.id, pkg]));
+    const seen = new Set<number>();
+    return rows.flatMap(item => {
+      const pkg = catalogById.get(item.packageId);
+      if (!pkg || seen.has(pkg.id)) return [];
+      seen.add(pkg.id);
+      return [{
+        ...item, code: pkg.code, slug: pkg.slug || undefined, name: pkg.name, price: Number(pkg.price),
+        durationMin: pkg.durationMin, specialtyId: pkg.specialtyId, specialtyName: pkg.specialty?.name || 'Đa khoa',
+        sourceType: source === 'PROFILE' ? 'PROFILE_AI' as const : item.sourceType || 'RECENT_VIEW' as const
+      }];
+    }).slice(0, TELEMETRY_CONFIG.SOURCE_PACKAGES_LIMIT);
+  }
+
+
+  private behaviorScopeId(userId?: string, sessionId?: string): string | undefined {
+    return userId ? `u:${userId}` : sessionId ? `g:${sessionId}` : undefined;
+  }
+
+  private behaviorCacheKey(userId?: string, sessionId?: string) {
+    return TELEMETRY_CONFIG.CACHE_PREFIX + ':behavior-rules:' + this.behaviorScopeId(userId, sessionId);
   }
 
   triggerAsyncRecommendation(profileId: string): void {
-    void this.prisma.outboxEvent.create({ data: {
-      aggregateType: 'PatientProfile', aggregateId: profileId,
-      eventType: 'recommendation.profile.analyze', payload: { profileId },
-    } }).catch(() => {
-      setImmediate(() => { void this.analyzeAndCacheRecommendations(profileId, undefined, undefined, true).catch(() => {}); });
+    void this.prisma.outboxEvent.create({
+      data: {
+        aggregateType: 'PatientProfile', aggregateId: profileId,
+        eventType: 'recommendation.profile.analyze', payload: { profileId },
+      }
+    }).catch(() => {
+      setImmediate(() => { void this.analyzeAndCacheRecommendations(profileId, undefined, undefined, true).catch(() => { }); });
     });
   }
 
   async invalidateCache(profileId: string): Promise<void> {
-    if (this.redis.isEnabled()) await this.redis.delete(this.profileCacheKey(profileId)).catch(() => {});
+    this.profileAnalysisRequests.delete(profileId);
+    if (this.redis.isEnabled()) await this.redis.delete(this.profileCacheKey(profileId)).catch(() => { });
   }
 
   async analyzeAndCacheRecommendations(profileId: string, actorId?: string, actorRole?: string, isInternal = false): Promise<ProfileRecommendationResponseDto> {
@@ -225,17 +230,20 @@ export class RecommendationService {
     ]);
     if (!context.profile) throw new NotFoundException('Không tìm thấy hồ sơ bệnh nhân.');
     const ranking = await this.getProfileRanking(context, catalog, this.catalogFingerprint(catalog), !isInternal);
-    return { profileId, profileName: context.profile.fullName, updatedAt: ranking.updatedAt,
-      source: ranking.source, event: 'PROFILE', triggerEvent: 'PROFILE', triggerReason: 'Phân tích riêng hồ sơ sức khỏe',
-      packages: ranking.packages };
+    return {
+      profileId, profileName: context.profile.fullName, updatedAt: ranking.updatedAt,
+      source: ranking.source === 'AI_OPENAI' ? 'AI_OPENAI' : 'RULE_FALLBACK', event: 'PROFILE', triggerEvent: 'PROFILE', triggerReason: 'Phân tích riêng hồ sơ sức khỏe',
+      packages: ranking.packages
+    };
   }
 
-  trackUserBehavior(dto: TrackBehaviorDto, userId?: string) {
-    return this.behaviorTelemetryService.trackUserBehavior(dto, userId);
+  async trackUserBehavior(dto: BehaviorEvent, userId?: string) {
+    const recorded = await this.behaviorTelemetryService.trackUserBehavior(dto, userId);
+    return { success: recorded.success, recorded: recorded.recorded === true };
   }
 
-  semanticSearchPackages(query: string, branchId?: string, context: { sessionId?: string; accountId?: string } = {}) {
-    return this.semanticSearchService.semanticSearchPackages(query, branchId, context);
+  async recordAbandonedBooking(appointmentId: string): Promise<void> {
+    await this.behaviorTelemetryService.recordAbandonedBooking(appointmentId);
   }
 
   suggestSymptomsForPackage(name: string, specialtyName?: string) {
@@ -249,6 +257,7 @@ export class RecommendationService {
   private fingerprint(value: unknown) {
     return createHash('sha256').update(JSON.stringify({
       model: process.env.OPENAI_MODEL || 'gpt-6-luna',
+      policy: TELEMETRY_CONFIG.POLICY_VERSION,
       embeddingModel: process.env.OPENAI_EMBEDDING_MODEL || 'text-embedding-3-small',
       candidateLimit: TELEMETRY_CONFIG.CANDIDATE_POOL_TARGET,
       resultLimit: TELEMETRY_CONFIG.SOURCE_PACKAGES_LIMIT, value,
@@ -261,7 +270,6 @@ export class RecommendationService {
       id: pkg.id, code: pkg.code, slug: pkg.slug, name: pkg.name, description: pkg.description,
       price: Number(pkg.price), durationMin: pkg.durationMin, specialty: pkg.specialty, symptoms: pkg.symptoms,
       targetGender: pkg.targetGender, minAge: pkg.minAge, maxAge: pkg.maxAge, isPediatric: pkg.isPediatric,
-      isFollowUp: pkg.isFollowUp, followUpAfterDays: pkg.followUpAfterDays,
     })));
   }
 

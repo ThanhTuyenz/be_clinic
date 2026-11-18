@@ -1,7 +1,8 @@
+import { ExcludeRoles } from '../../common/decorators/exclude-roles.decorator.js';
 import { Body, Controller, Get, Param, Patch, Post, Req } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
 import type { Request } from 'express';
-import { AppPermission } from '../../common/constants/permissions.constant.js';
+import { AppPermission } from '../auth/permissions/constants/permissions.constant.js';
 import { RequirePermissions } from '../../common/decorators/require-permissions.decorator.js';
 import {
 CreatePatientProfileDto,
@@ -12,6 +13,7 @@ import { PatientProfilesService } from './patient-profiles.service.js';
 
 @ApiTags('Patient profiles')
 @ApiBearerAuth('access-token')
+@ExcludeRoles('CHAIN_MANAGER')
 @Controller('patient-profiles')
 export class PatientProfilesController {
   constructor(private readonly service: PatientProfilesService) { }

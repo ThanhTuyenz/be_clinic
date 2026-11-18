@@ -1,6 +1,10 @@
-import { ForbiddenException, Injectable, Logger, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ConflictException, ForbiddenException, Injectable, Logger, NotFoundException } from '@nestjs/common';
+import { randomUUID } from 'node:crypto';
+import { Prisma } from '@prisma/client';
+import { TelehealthChatCache } from './telehealth-chat-cache.service.js';
 import { PrismaService } from '../../infrastructure/database/prisma/prisma.service.js';
-import { TelehealthPeer, TelehealthRoomState } from './types/telehealth.types.js';
+import { appointmentDateTime } from '../appointments/helpers/appointment.helper.js';
+import { ChatMessagePayload, TelehealthPeer, TelehealthRoomState } from './types/telehealth.types.js';
 
 @Injectable()
 export class TelehealthService {
@@ -12,7 +16,7 @@ export class TelehealthService {
   // Map từ socketId -> { appointmentId, role } để xử lý disconnect nhanh
   private readonly socketMap = new Map<string, { appointmentId: string; role: 'DOCTOR' | 'PATIENT'; userId: string; name: string }>();
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(private readonly prisma: PrismaService, private readonly chatCache: TelehealthChatCache) {}
 
   private async authorizeAppointment(appointmentId: string, userId: string, role?: string) {
     const appointment = await this.prisma.appointment.findUnique({
@@ -22,7 +26,7 @@ export class TelehealthService {
         status: true,
         bookingMethod: { select: { code: true } },
         patientProfile: { select: { accountId: true } },
-        scheduleSlot: { select: { schedule: { select: { doctor: { select: { userId: true } } } } } },
+        scheduleSlot: { select: { startTime: true, endTime: true, schedule: { select: { workDate: true, doctor: { select: { userId: true } } } } } },
       },
     });
     if (!appointment) throw new NotFoundException('Không tìm thấy lịch hẹn.');
@@ -39,6 +43,22 @@ export class TelehealthService {
     return appointment;
   }
 
+  private assertRoomEntryAllowed(appointment: {
+    status: string;
+    scheduleSlot: { startTime: Date; endTime: Date; schedule: { workDate: Date } } | null;
+  }) {
+    if (!['CONFIRMED', 'CHECKED_IN'].includes(appointment.status)) {
+      throw new ForbiddenException('Lịch hẹn chưa được xác nhận hoặc đã kết thúc.');
+    }
+    const slot = appointment.scheduleSlot;
+    if (!slot) throw new ForbiddenException('Không xác định được khung giờ tư vấn. Vui lòng liên hệ phòng khám.');
+    const opensAt = appointmentDateTime(slot.schedule.workDate, slot.startTime).getTime() - 15 * 60_000;
+    const closesAt = appointmentDateTime(slot.schedule.workDate, slot.endTime).getTime();
+    const now = Date.now();
+    if (now < opensAt) throw new ForbiddenException('Phòng tư vấn chỉ mở trước giờ hẹn 15 phút. Vui lòng quay lại đúng giờ.');
+    if (now >= closesAt) throw new ForbiddenException('Đã hết khung giờ tư vấn, không thể vào phòng. Vui lòng liên hệ phòng khám để được hỗ trợ.');
+  }
+
   async getSocketPeer(appointmentId: string, userId: string, socketId: string) {
     const user = await this.prisma.user.findUnique({
       where: { id: userId },
@@ -48,9 +68,7 @@ export class TelehealthService {
     const role: 'DOCTOR' | 'PATIENT' =
       user.role === 'DOCTOR' || Boolean(user.doctor) ? 'DOCTOR' : 'PATIENT';
     const appointment = await this.authorizeAppointment(appointmentId, userId, role);
-    if (!['CONFIRMED', 'CHECKED_IN', 'IN_EXAMINATION'].includes(appointment.status)) {
-      throw new ForbiddenException('Lịch hẹn chưa được xác nhận hoặc đã kết thúc.');
-    }
+    this.assertRoomEntryAllowed(appointment);
     if (
       (role === 'DOCTOR' && appointment.scheduleSlot?.schedule.doctor.userId !== userId) ||
       (role === 'PATIENT' && appointment.patientProfile.accountId !== userId)
@@ -80,7 +98,8 @@ export class TelehealthService {
    * Lấy thông tin chi tiết cuộc hẹn để chuẩn bị vào phòng tư vấn
    */
   async getRoomDetails(appointmentId: string, userId: string, role?: string) {
-    await this.authorizeAppointment(appointmentId, userId, role);
+    const authorized = await this.authorizeAppointment(appointmentId, userId, role);
+    this.assertRoomEntryAllowed(authorized);
     const appointment = await this.prisma.appointment.findUnique({
       where: { id: appointmentId },
       select: {
@@ -271,15 +290,35 @@ export class TelehealthService {
     return { appointmentId: info.appointmentId, leftPeer, otherPeer };
   }
 
-  /**
-   * Lưu tin nhắn chat vào phòng đang hoạt động
-   */
-  recordChatMessage(appointmentId: string, message: any) {
-    const room = this.activeRooms.get(appointmentId);
-    if (room) {
-      if (!room.messages) room.messages = [];
-      room.messages.push(message);
+  async getChatMessages(appointmentId: string, userId: string, role: string): Promise<ChatMessagePayload[]> {
+    await this.authorizeAppointment(appointmentId, userId, role);
+    const cached = await this.chatCache.read(appointmentId);
+    const session = await this.prisma.telehealthSession.findUnique({
+      where: { appointmentId },
+      select: { chatMessages: true },
+    });
+    const stored = Array.isArray(session?.chatMessages) ? session.chatMessages as unknown as ChatMessagePayload[] : [];
+    return this.mergeChatMessages(stored, cached.messages);
+  }
+
+  private mergeChatMessages(...groups: ChatMessagePayload[][]): ChatMessagePayload[] {
+    const unique = new Map<string, ChatMessagePayload>();
+    for (const message of groups.flat()) {
+      unique.set(message.id || JSON.stringify([message.senderId, message.timestamp, message.text]), message);
     }
+    return [...unique.values()];
+  }
+
+  async recordChatMessage(appointmentId: string, message: Omit<ChatMessagePayload, 'id' | 'timestamp'>): Promise<ChatMessagePayload> {
+    const text = typeof message.text === 'string' ? message.text.trim() : '';
+    if (!text || text.length > 2000) throw new BadRequestException('Tin nhắn phải có từ 1 đến 2000 ký tự.');
+    const appointment = await this.authorizeAppointment(appointmentId, message.senderId, message.senderRole);
+    if (!['CONFIRMED', 'CHECKED_IN'].includes(appointment.status)) {
+      throw new ConflictException('Phiên tư vấn chưa bắt đầu hoặc đã kết thúc.');
+    }
+    const savedMessage = { ...message, id: randomUUID(), text, timestamp: new Date().toISOString() };
+    await this.chatCache.append(appointmentId, savedMessage, this.activeRooms.get(appointmentId)?.startedAt || new Date());
+    return savedMessage;
   }
 
   /**
@@ -287,50 +326,53 @@ export class TelehealthService {
    */
   async endRoomSession(
     appointmentId: string,
-    data?: { diagnosis?: string; prescriptionNotes?: string; endedByUserId?: string; endReason?: string },
+    data?: { endedByUserId?: string },
     role?: string,
   ) {
     if (!data?.endedByUserId) throw new ForbiddenException('Thiếu người kết thúc phiên tư vấn.');
     const normalizedRole = String(role || '').toUpperCase();
-    if (!['DOCTOR', 'ADMIN', 'SUPER_ADMIN'].includes(normalizedRole)) {
-      throw new ForbiddenException('Chỉ bác sĩ hoặc quản trị viên mới được hoàn tất buổi tư vấn.');
+    if (normalizedRole !== 'DOCTOR') {
+      throw new ForbiddenException('Chỉ bác sĩ phụ trách mới được hoàn tất buổi tư vấn.');
     }
     await this.authorizeAppointment(appointmentId, data.endedByUserId, role);
     const room = this.activeRooms.get(appointmentId);
+    const cached = await this.chatCache.freeze(appointmentId);
     const now = new Date();
-    const startedAt = room?.startedAt || now;
-    const durationSeconds = Math.max(0, Math.round((now.getTime() - startedAt.getTime()) / 1000));
-    const chatMessages = room?.messages || [];
+    const startedAt = cached.startedAt ? new Date(cached.startedAt) : room?.startedAt || now;
 
     try {
       // 1. Lưu bản ghi phiên tư vấn vào bảng telehealth_sessions
       const session = await this.prisma.$transaction(async (tx) => {
+        await tx.$queryRaw`SELECT id FROM appointments WHERE id = ${appointmentId}::uuid FOR UPDATE`;
         const current = await tx.appointment.findUnique({
           where: { id: appointmentId },
           select: { status: true },
         });
         if (!current) throw new NotFoundException('Không tìm thấy lịch hẹn.');
+        const storedSession = await tx.telehealthSession.findUnique({
+          where: { appointmentId },
+          select: { startedAt: true, chatMessages: true, endedAt: true },
+        });
+        if (storedSession?.endedAt && current.status === 'COMPLETED') {
+          return tx.telehealthSession.findUniqueOrThrow({ where: { appointmentId } });
+        }
+        const storedMessages = Array.isArray(storedSession?.chatMessages) ? storedSession.chatMessages as unknown as ChatMessagePayload[] : [];
+        const chatMessages = this.mergeChatMessages(storedMessages, cached.messages) as unknown as Prisma.InputJsonValue;
+        const sessionStartedAt = storedSession?.startedAt || startedAt;
+        const sessionDurationSeconds = Math.max(0, Math.round((now.getTime() - sessionStartedAt.getTime()) / 1000));
         const session = await tx.telehealthSession.upsert({
           where: { appointmentId },
           create: {
             appointmentId,
-            startedAt,
+            startedAt: sessionStartedAt,
             endedAt: now,
-            durationSeconds,
-            diagnosis: data.diagnosis?.trim() || null,
-            prescriptionNotes: data.prescriptionNotes?.trim() || null,
-            chatMessages: chatMessages as any,
+            chatMessages,
             endedByUserId: data.endedByUserId,
-            endReason: data.endReason || 'CALL_ENDED',
           },
           update: {
+            chatMessages,
             endedAt: now,
-            durationSeconds,
-            diagnosis: data.diagnosis?.trim() || undefined,
-            prescriptionNotes: data.prescriptionNotes?.trim() || undefined,
-            chatMessages: chatMessages as any,
             endedByUserId: data.endedByUserId,
-            endReason: data.endReason || 'CALL_ENDED',
           },
         });
         if (current.status !== 'COMPLETED') {
@@ -344,12 +386,19 @@ export class TelehealthService {
               fromStatus: current.status,
               toStatus: 'COMPLETED',
               actorId: data.endedByUserId,
-              reason: `Hoàn tất ca khám từ xa (${Math.round(durationSeconds / 60)} phút)`,
+              reason: `Hoàn tất ca khám từ xa (${Math.round(sessionDurationSeconds / 60)} phút)`,
             },
           });
         }
         return session;
       });
+
+      try {
+        await this.chatCache.complete(appointmentId);
+      } catch (error) {
+        // DB is already committed; retain the frozen cache for a safe retry rather than reporting a failed consultation.
+        this.logger.warn(`Chưa dọn được cache chat cho ${appointmentId}: ${error instanceof Error ? error.message : error}`);
+      }
 
       if (room) {
         room.status = 'COMPLETED';
@@ -360,7 +409,7 @@ export class TelehealthService {
       }
 
       this.logger.log(
-        `[Telehealth] Session saved to DB for appointment ${appointmentId}. Duration: ${durationSeconds}s, Messages: ${chatMessages.length}`,
+        `[Telehealth] Session saved to DB for appointment ${appointmentId}. Messages: ${Array.isArray(session.chatMessages) ? session.chatMessages.length : 0}`,
       );
 
       return session;
@@ -371,7 +420,7 @@ export class TelehealthService {
   }
 
   /**
-   * Lấy lịch sử ca tư vấn đã hoàn thành (kết quả khám + đơn thuốc + tin nhắn chat)
+   * Lấy thời gian và tin nhắn của ca tư vấn đã hoàn thành.
    */
   async getSessionHistory(appointmentId: string, userId: string, role?: string) {
     await this.authorizeAppointment(appointmentId, userId, role);
@@ -416,9 +465,9 @@ export class TelehealthService {
       appointmentId: session.appointmentId,
       startedAt: session.startedAt,
       endedAt: session.endedAt,
-      durationSeconds: session.durationSeconds,
-      diagnosis: session.diagnosis,
-      prescriptionNotes: session.prescriptionNotes,
+      durationSeconds: session.startedAt && session.endedAt
+        ? Math.max(0, Math.round((session.endedAt.getTime() - session.startedAt.getTime()) / 1000))
+        : null,
       chatMessages: session.chatMessages,
       doctor: doctor?.user
         ? {

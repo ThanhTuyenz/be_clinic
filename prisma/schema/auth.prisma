@@ -7,23 +7,19 @@ model User {
   phoneNumber              String?                    @unique @map("phone_number") @db.VarChar(20)
   fullName                 String?                    @map("full_name") @db.VarChar(100)
   avatarUrl                String?                    @map("avatar_url") @db.VarChar(500)
-  provider                 AuthProvider               @default(EMAIL)
   status                   UserStatus                 @default(ACTIVE)
   role                     UserRole                   @default(PATIENT)
-  roleId                   String?                    @map("role_id") @db.VarChar(100)
-  socialId                 String?                    @map("social_id") @db.VarChar(255)
-  zaloId                   String?                    @unique @map("zalo_id") @db.VarChar(255)
   customPermissions        Json?                      @map("custom_permissions")
   hash                     String?                    @db.VarChar(255)
   isBlocked                Boolean                    @default(false) @map("is_blocked")
-  blockedAt                DateTime?                  @map("blocked_at") @db.Timestamptz(3)
   isDeleted                Boolean                    @default(false) @map("is_deleted")
   lastLoginAt              DateTime?                  @map("last_login_at") @db.Timestamptz(3)
   createdAt                DateTime                   @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt                DateTime                   @updatedAt @map("updated_at") @db.Timestamptz(3)
 
   oauthAccounts            OAuthAccount[]
-  branchAssignments        UserBranchAssignment[]
+  branchId                 Int?                       @map("branch_id")
+  branch                   Branch?                    @relation(fields: [branchId], references: [id], onDelete: SetNull)
   patientProfiles          PatientProfile[]
   doctor                   Doctor?
   receptionist             Receptionist?

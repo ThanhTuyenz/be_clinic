@@ -1,9 +1,11 @@
-import { BadRequestException, ConflictException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ConflictException, Injectable, NotFoundException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { isISO8601 } from 'class-validator';
 import { PrismaService } from '../../infrastructure/database/prisma/prisma.service.js';
 import { RecommendationService } from '../recommendations/recommendation.service.js';
 import { resolvePatientCode } from './patient-code.js';
+import { patientRecordScope } from './patient-record-scope.js';
+import { formatPatientAddress, normalizePatientAddressInput } from './patient-address.js';
 import {
 CreatePatientProfileDto,
 PatientProfileResponseDto,
@@ -33,13 +35,18 @@ export class PatientProfilesService {
   }
 
   async list(accountId: string): Promise<PatientProfileResponseDto[]> {
-    return this.prisma.patientProfile.findMany({
+    const profiles = await this.prisma.patientProfile.findMany({
       where: { accountId },
       orderBy: [{ isMainProfile: 'desc' }, { createdAt: 'asc' }],
     });
+    return profiles.map((profile) => ({ ...profile, address: formatPatientAddress(profile) }));
   }
 
   async create(accountId: string, dto: CreatePatientProfileDto): Promise<PatientProfileResponseDto> {
+    if (dto.gender !== 'FEMALE') {
+      dto.pregnancyStatus = null;
+      dto.isBreastfeeding = null;
+    }
     const dob = this.parseDateOfBirth(dto.dateOfBirth);
     const ageDiffMs = Date.now() - dob.getTime();
     const age = Math.abs(new Date(ageDiffMs).getUTCFullYear() - 1970);
@@ -72,32 +79,24 @@ export class PatientProfilesService {
         const makeMain = dto.isMainProfile === true || count === 0;
         if (makeMain) await tx.patientProfile.updateMany({ where: { accountId, isMainProfile: true }, data: { isMainProfile: false } });
 
-        const computedAddress = dto.address?.trim() || [
-          dto.streetAddress?.trim(),
-          dto.wardName?.trim(),
-          dto.districtName?.trim(),
-          dto.provinceName?.trim()
-        ].filter(Boolean).join(', ');
-
         const patientCode = await resolvePatientCode(tx, cleanedNationalId, cleanedHealthInsuranceNumber);
 
         return tx.patientProfile.create({
           data: {
-            ...dto,
+            ...normalizePatientAddressInput(dto),
             accountId,
             patientCode,
             fullName: dto.fullName.trim(),
             dateOfBirth: dob,
             nationalId: cleanedNationalId,
             healthInsuranceNumber: cleanedHealthInsuranceNumber,
-            address: computedAddress || null,
             relationshipToAccount: dto.relationshipToAccount ?? (makeMain ? 'SELF' : 'OTHER'),
             isMainProfile: makeMain,
           },
         });
       });
       this.recommendationService.triggerAsyncRecommendation(created.id);
-      return created;
+      return { ...created, address: formatPatientAddress(created) };
     } catch (error) {
       if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
         throw new ConflictException('Hồ sơ với số CCCD hoặc mã BHYT này đã tồn tại trong tài khoản của bạn.');
@@ -112,6 +111,10 @@ export class PatientProfilesService {
       ? await this.prisma.patientProfile.findUnique({ where: { id } })
       : await this.prisma.patientProfile.findFirst({ where: { id, accountId: actorId } });
     if (!profile) throw new NotFoundException('Không tìm thấy hồ sơ bệnh nhân');
+    if ((dto.gender ?? profile.gender) !== 'FEMALE') {
+      dto.pregnancyStatus = null;
+      dto.isBreastfeeding = null;
+    }
 
     const accountId = profile.accountId;
     const effectiveDob = dob ?? profile.dateOfBirth;
@@ -160,29 +163,21 @@ export class PatientProfilesService {
       }
     }
 
-    const computedAddress = dto.address?.trim() || [
-      dto.streetAddress !== undefined ? dto.streetAddress?.trim() || null : profile.streetAddress,
-      dto.wardName !== undefined ? dto.wardName?.trim() || null : profile.wardName,
-      dto.districtName !== undefined ? dto.districtName?.trim() || null : profile.districtName,
-      dto.provinceName !== undefined ? dto.provinceName?.trim() || null : profile.provinceName,
-    ].filter(Boolean).join(', ');
-
     try {
       const updated = await this.prisma.patientProfile.update({
         where: { id },
         data: {
-          ...dto,
+          ...normalizePatientAddressInput(dto, profile),
           patientCode: syncedPatientCode,
           ...(dto.fullName && { fullName: dto.fullName.trim() }),
           ...(dob !== undefined && { dateOfBirth: dob }),
           ...(dto.nationalId !== undefined && { nationalId: effectiveNationalId }),
           ...(dto.healthInsuranceNumber !== undefined && { healthInsuranceNumber: effectiveHealthInsurance }),
-          ...(computedAddress ? { address: computedAddress } : {}),
         },
       });
       await this.recommendationService.invalidateCache(id);
       this.recommendationService.triggerAsyncRecommendation(id);
-      return updated;
+      return { ...updated, address: formatPatientAddress(updated) };
     } catch (error) {
       if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
         throw new ConflictException('Hồ sơ với số CCCD hoặc mã BHYT này đã tồn tại trong tài khoản của bạn.');
@@ -199,23 +194,10 @@ export class PatientProfilesService {
     });
     if (!profile) throw new NotFoundException('Không tìm thấy hồ sơ bệnh nhân');
 
-    const user = await this.prisma.user.findUnique({
-      where: { id: userId },
-      select: { role: true },
-    });
-    const isStaff = user && ['CHAIN_MANAGER', 'SUPER_ADMIN', 'BRANCH_MANAGER', 'RECEPTIONIST', 'DOCTOR'].includes(user.role);
-    if (!isStaff && profile.accountId !== userId) {
-      throw new ForbiddenException('Không có quyền truy cập hồ sơ bệnh án này');
-    }
+    const recordScope = await patientRecordScope(this.prisma, userId, profile);
 
     const appointments = await this.prisma.appointment.findMany({
-      where: {
-        OR: [
-          { patientProfileId: profile.id },
-          ...(profile.nationalId ? [{ patientProfile: { nationalId: profile.nationalId } }] : []),
-          ...(profile.patientCode ? [{ patientProfile: { patientCode: profile.patientCode } }] : []),
-        ],
-      },
+      where: recordScope,
       orderBy: { createdAt: 'desc' },
       select: {
         id: true,
@@ -246,7 +228,7 @@ export class PatientProfilesService {
             },
           },
         },
-        invoice: {
+        bookingOrder: { select: { invoice: {
           select: {
             status: true,
             totalAmount: true,
@@ -256,7 +238,7 @@ export class PatientProfilesService {
               take: 1,
             },
           },
-        },
+        } } },
       },
     });
 
@@ -318,10 +300,10 @@ export class PatientProfilesService {
               room: room ? { code: room.code, name: room.name } : null,
             },
           } : null,
-          payment: appt.invoice ? {
-            status: appt.invoice.status,
-            amount: Number(appt.invoice.totalAmount),
-            method: appt.invoice.payments?.[0]?.method || 'ONLINE',
+          payment: appt.bookingOrder.invoice ? {
+            status: appt.bookingOrder.invoice.status,
+            amount: Number(appt.bookingOrder.invoice.totalAmount),
+            method: appt.bookingOrder.invoice.payments?.[0]?.method || 'ONLINE',
           } : null,
         },
       };
@@ -337,9 +319,9 @@ export class PatientProfilesService {
         height: profile.height || null,
         weight: profile.weight || null,
         surgicalHistory: null,
-        familyHistory: null,
+        familyHistory: profile.familyHistory || null,
         notes: null,
-        profile: { ...profile },
+        profile: { ...profile, address: formatPatientAddress(profile) },
         visits,
       },
     };

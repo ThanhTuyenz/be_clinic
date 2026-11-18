@@ -4,13 +4,11 @@ import {
   Inject,
   Injectable,
   Logger,
-  NotFoundException,
   UnauthorizedException,
 } from '@nestjs/common';
 import { IUsersService } from '../users/users.js';
 import { Services } from '../../../common/utils/constants.js';
 import { AuthEmailLoginDto, AuthRegisterDto } from './dtos/index.js';
-import { AuthProvidersEnum } from './enums/auth-providers.enum.js';
 import { createHash } from 'crypto';
 import { User, UserRole, UserStatus } from '../users/entities/user.entity.js';
 import { ISessionService } from '../session/session.js';
@@ -24,7 +22,7 @@ import {
   JwtRefreshPayloadType,
 } from './types/index.js';
 import { NullableType } from '../../../common/utils/types/nullable.type.js';
-import { SocialType } from '../../../common/utils/social.type.js';
+import { OAuthProvider, SocialType } from '../../../common/utils/social.type.js';
 import { HistoryService } from '../history/history.service.js';
 import { HISTORY_ACTIONS } from '../history/history.js';
 import { TokenBlacklistService } from '../jwt-auth-core/token-blacklist.service.js';
@@ -76,14 +74,6 @@ export class AuthService implements IAuthService {
       );
     }
 
-    const authProvider = user.provider ?? AuthProvidersEnum.email;
-    if (authProvider !== AuthProvidersEnum.email) {
-      throw new HttpException(
-        { status: HttpStatus.UNPROCESSABLE_ENTITY, errors: { email: `needLoginViaProvider:${authProvider}` } },
-        HttpStatus.UNPROCESSABLE_ENTITY,
-      );
-    }
-
     if (user.status !== UserStatus.Active) {
       throw new HttpException(
         { status: HttpStatus.UNPROCESSABLE_ENTITY, errors: { email: 'inactive' } },
@@ -93,6 +83,17 @@ export class AuthService implements IAuthService {
 
     if (user.isDeleted) throw new UnauthorizedException('Tài khoản không tồn tại hoặc đã bị xóa');
     if (user.isBlocked) throw new UnauthorizedException('Tài khoản đã bị khóa');
+
+    if (!user.password) {
+      throw new HttpException(
+        {
+          status: HttpStatus.UNPROCESSABLE_ENTITY,
+          message: 'Tài khoản chưa có mật khẩu. Vui lòng đăng nhập bằng tài khoản Google hoặc Zalo đã liên kết.',
+          errors: { password: 'passwordNotSet' },
+        },
+        HttpStatus.UNPROCESSABLE_ENTITY,
+      );
+    }
 
     const isValidPassword = await compareHash(loginDto.password, user.password);
     if (!isValidPassword) {
@@ -126,86 +127,11 @@ export class AuthService implements IAuthService {
   // ─── Social Login ─────────────────────────────────────────────────────────
 
   async validateSocialLogin(
-    authProvider: AuthProvidersEnum,
+    authProvider: OAuthProvider,
     socialData: SocialType,
   ): Promise<LoginResponseType> {
-    let user: NullableType<User> = null;
-    const socialEmail = socialData.email?.toLowerCase().trim();
-
-    // 1. Tìm theo zaloId hoặc provider + socialId
-    if (authProvider === AuthProvidersEnum.zalo) {
-      user = await this.usersService.findOneUser({ zaloId: socialData.id } as any);
-    }
-    if (!user) {
-      user = await this.usersService.findOneUser({ socialId: socialData.id, provider: authProvider });
-    }
-
-    // 2. Auto-link theo SĐT
-    if (!user && socialData.phoneNumber) {
-      const rawPhone = socialData.phoneNumber.trim();
-      user = await this.usersService.findByPhoneVariants(normalizePhoneVariants(rawPhone));
-      if (user) {
-        if (authProvider === AuthProvidersEnum.zalo) {
-          user.zaloId = socialData.id;
-        } else {
-          user.socialId = socialData.id;
-        }
-        if (!user.avatarUrl && socialData.avatarUrl) user.avatarUrl = socialData.avatarUrl;
-        await this.usersService.saveUser(user);
-        this.logger.log(`Linked ${authProvider} ID ${socialData.id} to user ${user.id} via phone`);
-      }
-    }
-
-    // 3. Auto-link theo Email
-    if (!user && socialEmail) {
-      const userByEmail = await this.usersService.findOneUser({ email: socialEmail });
-      if (userByEmail) {
-        user = userByEmail;
-        if (authProvider === AuthProvidersEnum.zalo) {
-          user.zaloId = socialData.id;
-        } else {
-          user.socialId = socialData.id;
-        }
-        if (!user.avatarUrl && socialData.avatarUrl) user.avatarUrl = socialData.avatarUrl;
-        await this.usersService.saveUser(user);
-        this.logger.log(`Linked ${authProvider} ID ${socialData.id} to user ${user.id} via email`);
-      }
-    }
-
-    // 4. Nếu có user: cập nhật email/avatar/socialId nếu thiếu
-    if (user) {
-      let changed = false;
-      if (socialEmail && !user.email) { user.email = socialEmail; changed = true; }
-      if (authProvider === AuthProvidersEnum.zalo && !user.zaloId) { user.zaloId = socialData.id; changed = true; }
-      if (authProvider !== AuthProvidersEnum.zalo && !user.socialId) { user.socialId = socialData.id; changed = true; }
-      if (!user.avatarUrl && socialData.avatarUrl) { user.avatarUrl = socialData.avatarUrl; changed = true; }
-      if (changed) await this.usersService.saveUser(user);
-    } else {
-      // 5. Tạo user mới
-      user = await this.usersService.createUser({
-        email: socialEmail ?? null,
-        fullName: socialData.fullName ?? null,
-        phoneNumber: socialData.phoneNumber ?? null,
-        avatarUrl: socialData.avatarUrl ?? null,
-        socialId: socialData.id,
-        zaloId: authProvider === AuthProvidersEnum.zalo ? socialData.id : null,
-        provider: authProvider,
-        status: UserStatus.Active,
-      });
-    }
-
-    if (!user) {
-      throw new HttpException(
-        { status: HttpStatus.UNPROCESSABLE_ENTITY, errors: { user: 'userNotFound' } },
-        HttpStatus.UNPROCESSABLE_ENTITY,
-      );
-    }
-    if (user.isDeleted) throw new UnauthorizedException('Tài khoản không tồn tại hoặc đã bị xóa');
-    if (user.isBlocked) throw new UnauthorizedException('Tài khoản đã bị khóa');
-
+    const user = await this.usersService.resolveOAuthUser(authProvider, socialData);
     const session = await this.sessionService.create({ user });
-    user.lastLoginAt = new Date();
-    await this.usersService.saveUser(user);
 
     const { token, refreshToken, tokenExpires } = await this.authTokenService.getTokensData({
       id: user.id,

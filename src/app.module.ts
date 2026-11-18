@@ -18,7 +18,7 @@ import { AuthGoogleModule } from './modules/auth/auth-google/auth-google.module.
 import { AuthZaloModule } from './modules/auth/auth-zalo/auth-zalo.module.js'
 import { JwtAuthCoreModule } from './modules/auth/jwt-auth-core/jwt-auth-core.module.js'
 import { BookingModule } from './modules/bookings/booking.module.js'
-import { BranchesModule } from './modules/branches/branches.module.js'
+import { CatalogModule } from './modules/catalog/catalog.module.js'
 import { ClinicRoomsModule } from './modules/clinic-rooms/clinic-rooms.module.js'
 import { DoctorsModule } from './modules/doctors/doctors.module.js'
 import { PermissionsGuard } from './modules/auth/permissions/guards/permissions.guard.js'
@@ -30,8 +30,6 @@ import { RealtimeModule } from './infrastructure/realtime/realtime.module.js'
 import { PatientsModule } from './modules/patients/patients.module.js'
 import { PaymentsModule } from './modules/payments/payments.module.js'
 import { AdminDashboardModule } from './modules/admin-dashboard/admin-dashboard.module.js'
-import { SpecialtiesModule } from './modules/specialties/specialties.module.js'
-import { SystemCatalogModule } from './modules/system-catalog/system-catalog.module.js'
 import { SchedulesModule } from './modules/schedules/schedules.module.js'
 import { AiAssistantModule } from './modules/ai-assistant/ai-assistant.module.js'
 import { VouchersModule } from './modules/vouchers/vouchers.module.js'
@@ -40,8 +38,7 @@ import { HttpSmsModule } from './infrastructure/httpsms/httpsms.module.js'
 import { MediaModule } from './infrastructure/media/media.module.js'
 import { NotificationModule } from './modules/notifications/notification.module.js'
 import { TelehealthModule } from './modules/telehealth/telehealth.module.js'
-import { SearchAnalyticsModule } from './modules/search-analytics/search-analytics.module.js'
-import { IntegrationsModule } from './modules/integrations/integrations.module.js'
+import { SearchModule } from './modules/search/search.module.js'
 
 @Module({
   imports: [
@@ -66,15 +63,14 @@ import { IntegrationsModule } from './modules/integrations/integrations.module.j
     ]),
     ScheduleModule.forRoot(),
     PrismaModule,
-    IntegrationsModule,
-    SearchAnalyticsModule,
+    SearchModule,
     // RedisModule,
     JwtAuthCoreModule,
     AuthModule,
     AuthGoogleModule,
     AuthZaloModule,
     BookingModule,
-    BranchesModule,
+    CatalogModule,
     DoctorsModule,
     ClinicRoomsModule,
     AppointmentsModule,
@@ -84,8 +80,6 @@ import { IntegrationsModule } from './modules/integrations/integrations.module.j
     PatientsModule,
     PaymentsModule,
     AdminDashboardModule,
-    SpecialtiesModule,
-    SystemCatalogModule,
     SchedulesModule,
     AiAssistantModule,
     VouchersModule,

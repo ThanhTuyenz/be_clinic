@@ -1,3 +1,4 @@
+import { ExcludeRoles } from '../../common/decorators/exclude-roles.decorator.js';
 import {
 Body,
 Controller,
@@ -18,6 +19,7 @@ import { CreatePaymentDto, PayosWebhookDto } from './dtos/payment.dto.js';
 import { PaymentService } from './payment.service.js';
 
 @ApiTags('Payments')
+@ExcludeRoles('CHAIN_MANAGER')
 @Controller('payments')
 @SkipPermissions()
 export class PaymentController {

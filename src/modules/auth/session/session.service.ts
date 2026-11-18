@@ -129,7 +129,6 @@ export class SessionService implements ISessionService {
     return Object.assign(new User(), row, {
       role: row.role?.toLowerCase(),
       status: row.status?.toLowerCase(),
-      provider: row.provider?.toLowerCase(),
     });
   }
 }

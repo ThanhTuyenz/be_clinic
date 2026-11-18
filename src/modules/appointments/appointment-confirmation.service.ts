@@ -7,7 +7,8 @@ import { NotificationService } from '../notifications/notification.service.js';
 import { PrismaService } from '../../infrastructure/database/prisma/prisma.service.js';
 import { checkInToken } from './helpers/check-in-token.js';
 
-export const CONFIRMATION_INCLUDE = {
+const CONFIRMATION_INCLUDE = {
+  receptionSlot: true,
   patientProfile: true,
   servicePackage: { include: { specialty: true } },
   branch: true,
@@ -95,9 +96,9 @@ export class AppointmentConfirmationService {
         bookingType: isHealthPkg ? 'HEALTH_PACKAGE' : (updated.servicePackageId ? 'SERVICE_PACKAGE' : 'DOCTOR'),
         branchId: updated.branchId,
         branchName: updated.branch?.name,
-        appointmentDate: updated.scheduleSlot?.schedule?.workDate?.toISOString().slice(0, 10),
-        startTime: updated.scheduleSlot?.startTime?.toISOString().slice(11, 16),
-        endTime: updated.scheduleSlot?.endTime?.toISOString().slice(11, 16),
+        appointmentDate: (updated.receptionSlot?.date ?? updated.scheduleSlot?.schedule?.workDate)?.toISOString().slice(0, 10),
+        startTime: (updated.receptionSlot?.startTime ?? updated.scheduleSlot?.startTime)?.toISOString().slice(11, 16),
+        endTime: (updated.receptionSlot?.endTime ?? updated.scheduleSlot?.endTime)?.toISOString().slice(11, 16),
         status: 'CONFIRMED',
       });
 
@@ -106,7 +107,7 @@ export class AppointmentConfirmationService {
         await this.notifications.createNotification({
           userId: updated.patientProfile.accountId,
           title: 'Đặt lịch khám thành công!',
-          content: `Lịch khám #${bookingCode} đã được xác nhận. Ngày khám: ${updated.scheduleSlot?.schedule?.workDate?.toISOString().slice(0, 10) || ''} (${updated.scheduleSlot?.startTime?.toISOString().slice(11, 16) || ''}) tại ${updated.branch?.name || 'VitaCare Clinic'}.`,
+          content: `Lịch khám #${bookingCode} đã được xác nhận. Ngày tiếp nhận: ${(updated.receptionSlot?.date ?? updated.scheduleSlot?.schedule?.workDate)?.toISOString().slice(0, 10) || ''} (${(updated.receptionSlot?.startTime ?? updated.scheduleSlot?.startTime)?.toISOString().slice(11, 16) || ''}) tại ${updated.branch?.name || 'VitaCare Clinic'}.`,
           type: NotificationType.BOOKING_CONFIRMED,
           data: { appointmentId, bookingCode, branchName: updated.branch?.name },
         }).catch(() => { });
@@ -129,6 +130,7 @@ export class AppointmentConfirmationService {
         status: true,
         queueNumber: true,
         servicePrice: true,
+        receptionSlot: { select: { date: true, startTime: true, endTime: true } },
         bookingMethod: { select: { code: true, name: true } },
         telehealthSession: { select: { id: true } },
         patientProfile: {
@@ -147,7 +149,7 @@ export class AppointmentConfirmationService {
         branch: {
           select: { id: true, name: true, address: true },
         },
-        invoice: {
+        bookingOrder: { select: { invoice: {
           select: {
             totalAmount: true,
             status: true,
@@ -157,7 +159,7 @@ export class AppointmentConfirmationService {
               take: 1,
             },
           },
-        },
+        } } },
         scheduleSlot: {
           select: {
             startTime: true,
@@ -188,7 +190,8 @@ export class AppointmentConfirmationService {
     });
     if (!row) throw new NotFoundException('Không tìm thấy lịch hẹn');
     const isTelehealth = Boolean(row.telehealthSession || row.bookingMethod?.code === 'ONLINE_CONSULTATION');
-    if (!(isTelehealth ? ['CONFIRMED', 'CHECKED_IN', 'IN_EXAMINATION', 'COMPLETED'] : ['CONFIRMED', 'CHECKED_IN']).includes(row.status)) throw new ConflictException('Lịch hẹn chưa được xác nhận');
+    if (!['CONFIRMED', 'CHECKED_IN', 'COMPLETED', 'NO_SHOW'].includes(row.status)) throw new ConflictException('Lịch hẹn chưa được xác nhận');
+    const historical = ['COMPLETED', 'NO_SHOW'].includes(row.status);
     const doctorSlot = row.scheduleSlot;
     const room = doctorSlot?.schedule.room;
     const branch = doctorSlot?.schedule.branch ?? row.branch;
@@ -196,9 +199,11 @@ export class AppointmentConfirmationService {
 
     const rawToken = checkInToken(row.id, this.config.get<string>('auth.secret'));
     const tokenHash = createHash('sha256').update(rawToken).digest('hex');
-    const appointmentDate = (doctorSlot?.schedule.workDate ? doctorSlot.schedule.workDate.toISOString().slice(0, 10) : new Date().toISOString().slice(0, 10));
-    const expiresAt = new Date(`${appointmentDate}T23:59:59.999+07:00`);
-    if (!isTelehealth) await this.prisma.appointmentQrToken.upsert({
+    const appointmentDate = (row.receptionSlot?.date ?? doctorSlot?.schedule.workDate)?.toISOString().slice(0, 10);
+    if (!appointmentDate) throw new ConflictException('Lịch hẹn chưa có ngày tiếp nhận');
+    const dayEnd = new Date(`${appointmentDate}T23:59:59.999+07:00`).getTime();
+    const expiresAt = new Date(historical ? Math.min(dayEnd, Date.now() - 1) : dayEnd);
+    await this.prisma.appointmentQrToken.upsert({
       where: { appointmentId: row.id },
       update: { tokenHash, expiresAt },
       create: { appointmentId: row.id, tokenHash, expiresAt },
@@ -210,19 +215,19 @@ export class AppointmentConfirmationService {
     return {
       appointmentId: row.id,
       bookingCode: row.bookingCode,
-      qrPayload: isTelehealth ? null : `VITACARE_CHECKIN:${rawToken}`,
+      qrPayload: `VITACARE_CHECKIN:${rawToken}`,
       expiresAt,
       status: row.status,
       isTelehealth,
       bookingMethod: row.bookingMethod,
-      queueNumber: isTelehealth ? null : row.queueNumber,
-      estimatedQueueNumber: isTelehealth ? null : estimatedQueueNumber,
+      queueNumber: row.bookingMethod?.code === 'HEALTH_PACKAGE' ? null : row.queueNumber,
+      estimatedQueueNumber: row.bookingMethod?.code === 'HEALTH_PACKAGE' ? null : estimatedQueueNumber,
       appointmentDate,
-      startTime: doctorSlot?.startTime ? doctorSlot.startTime.toISOString().slice(11, 16) : null,
-      endTime: doctorSlot?.endTime ? doctorSlot.endTime.toISOString().slice(11, 16) : null,
-      room: !isTelehealth && room ? { id: room.id, code: room.code, name: room.name } : null,
+      startTime: (row.receptionSlot?.startTime ?? doctorSlot?.startTime)?.toISOString().slice(11, 16) ?? null,
+      endTime: (row.receptionSlot?.endTime ?? doctorSlot?.endTime)?.toISOString().slice(11, 16) ?? null,
+      room: row.bookingMethod?.code !== 'HEALTH_PACKAGE' && !isTelehealth && room ? { id: room.id, code: room.code, name: room.name } : null,
       branch: { id: branch.id, name: branch.name, address: branch.address },
-      doctor: doc ? { id: doc.id, fullName: doc.user?.fullName ?? '', academicRank: doc.academicRank ?? null } : null,
+      doctor: row.bookingMethod?.code !== 'HEALTH_PACKAGE' && doc ? { id: doc.id, fullName: doc.user?.fullName ?? '', academicRank: doc.academicRank ?? null } : null,
       specialty: specialtyName,
       healthPackage: row.servicePackage ? { id: row.servicePackage.id, name: row.servicePackage.name } : null,
       patient: {
@@ -233,8 +238,8 @@ export class AppointmentConfirmationService {
         nationalId: row.patientProfile.nationalId || null,
         phoneNumber: row.patientProfile.phoneNumber || null,
       },
-      totalAmount: Number(row.invoice?.totalAmount ?? row.servicePrice ?? 0),
-      paymentStatus: row.invoice?.payments[0]?.status ?? (['CONFIRMED', 'CHECKED_IN'].includes(row.status) ? 'PAID' : null),
+      totalAmount: Number(row.bookingOrder.invoice?.totalAmount ?? row.servicePrice ?? 0),
+      paymentStatus: row.bookingOrder.invoice?.payments[0]?.status ?? (['CONFIRMED', 'CHECKED_IN'].includes(row.status) ? 'PAID' : null),
     };
   }
 }

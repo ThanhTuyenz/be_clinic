@@ -1,128 +1,75 @@
-import { IsNotEmpty, IsOptional, IsString, MaxLength } from 'class-validator'
+import { IsNotEmpty, IsOptional, IsString, IsUUID, MaxLength } from 'class-validator';
+import { Transform } from 'class-transformer';
+import type { AiPaymentStatusResult } from '../ai-payment-status.service.js';
 
 export class AiChatMessageDto {
+  @Transform(({ value }) => typeof value === 'string' ? value.trim() : value)
   @IsString()
-  @IsNotEmpty({ message: 'Tin nhắn không được để trống' })
-  @MaxLength(1000, { message: 'Tin nhắn không được vượt quá 1000 ký tự' })
-  message: string
-
-  @IsString()
-  @IsOptional()
-  sessionId?: string
+  @IsNotEmpty()
+  @MaxLength(1000)
+  message: string;
 
   @IsOptional()
-  userLocationLat?: number
+  @IsUUID()
+  sessionId?: string;
 
   @IsOptional()
-  userLocationLng?: number
+  @IsUUID()
+  paymentAppointmentId?: string;
 }
 
-export interface StructuredAiTriageResponse {
-  summary: string
-  possibleCauses: string[]
-  careAdvice: string[]
-  isEmergency: boolean
-  emergencyReason?: string
-  recommendedSpecialtyCodes: string[]
-  confidenceScore: number
-  disclaimer: string
+interface DoctorCardRecommendation {
+  id: string;
+  fullName: string;
+  avatarUrl?: string | null;
+  title?: string;
+  specialtyName: string;
+  branchId: number;
+  branchName: string;
+  consultationFee: number;
+  bookingMethodCode?: 'CONSULTATION' | 'ONLINE_CONSULTATION';
 }
 
-export interface DoctorCardRecommendation {
-  id: string
-  fullName: string
-  title?: string
-  avatarUrl?: string
-  specialtyName: string
-  branchName: string
-  consultationFee: number
-}
-
-export interface PackageCardRecommendation {
-  id: string
-  code: string
-  name: string
-  description?: string
-  price: number
-  branchName?: string
-}
-
-export interface SpecialtyRecommendation {
-  id: string
-  code: string
-  name: string
-  description?: string
-  iconUrl?: string
-}
-
-export interface AiChatResponsePayload {
-  sessionId: string
-  sanitizedQuery: string
-  triage: StructuredAiTriageResponse
-  recommendations: {
-    specialties: SpecialtyRecommendation[]
-    doctors: DoctorCardRecommendation[]
-    packages: PackageCardRecommendation[]
-  }
-}
-
-export class AiAgentChatDto {
-  @IsString()
-  @IsNotEmpty({ message: 'Tin nhắn không được để trống' })
-  message: string
-
-  @IsString()
-  @IsOptional()
-  sessionId?: string
-
-  @IsOptional()
-  confirmBooking?: boolean
-
-  @IsString()
-  @IsOptional()
-  selectedSlotId?: string
-
-  @IsString()
-  @IsOptional()
-  servicePackageId?: string
-
-  @IsString()
-  @IsOptional()
-  selectedProfileId?: string
+interface PackageCardRecommendation {
+  id: number;
+  code: string;
+  name: string;
+  price: number;
+  description?: string;
+  branchId?: number;
+  specialtyId?: number;
+  bookingMethodCode?: string;
+  branches?: Array<{ id: number; name: string; receptionHours: Array<{ days: number[]; startTime: string; endTime: string }> }>;
 }
 
 export interface AiAgentBookingProposal {
-  slotId: string
-  servicePackageId?: string
-  doctorId: string
-  doctorName: string
-  specialtyName: string
-  packageName?: string
-  description?: string
-  branchId: string
-  branchName: string
-  date: string
-  startTime: string
-  endTime: string
-  fee: number
-  patientProfileId?: string
-  patientProfileName?: string
+  id: string;
+  expiresAt: string;
+  bookingMethodCode: string;
+  slotId: number;
+  servicePackageId?: number;
+  doctorId: string;
+  doctorName: string;
+  specialtyName: string;
+  specialtyId?: number;
+  packageName?: string;
+  branchId: number;
+  branchName: string;
+  date: string;
+  startTime: string;
+  endTime: string;
+  fee: number;
 }
 
 export interface AiAgentChatResponse {
-  sessionId: string
-  message: string
-  step: 'GREETING' | 'COLLECTING_INFO' | 'PROPOSED' | 'CONFIRMED' | 'SUCCESS' | 'ERROR'
-  proposal?: AiAgentBookingProposal | null
-  proposedPackages?: PackageCardRecommendation[]
-  missingSlots?: string[]
-  quickSuggestions?: string[]
-  bookingResult?: {
-    appointmentId: string
-    bookingCode: string
-    totalAmount: number
-    holdExpiresAt: string
-    paymentId?: string
-  } | null
-  availableProfiles?: Array<{ id: string; fullName: string; isMain: boolean; relationship: string }>
+  sessionId: string;
+  message: string;
+  step: 'GREETING' | 'COLLECTING_INFO' | 'PROPOSED' | 'ERROR';
+  proposal?: AiAgentBookingProposal | null;
+  proposedPackages?: PackageCardRecommendation[];
+  bookingPreferences?: { date: string | null; period: 'MORNING' | 'AFTERNOON' | 'EVENING' | null; startTime: string | null; branchId: number | null };
+  doctors?: DoctorCardRecommendation[];
+  quickSuggestions?: string[];
+  showAppointments?: boolean;
+  paymentStatus?: AiPaymentStatusResult;
 }

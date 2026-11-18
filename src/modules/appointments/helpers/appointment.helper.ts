@@ -2,12 +2,13 @@ import { BadRequestException, ConflictException, ForbiddenException } from '@nes
 import { AppointmentStatus, Prisma, UserRole } from '@prisma/client';
 import { formatTime } from '../../../common/utils/staff.utils.js';
 import { PrismaService } from '../../../infrastructure/database/prisma/prisma.service.js';
-import { assertPackageReception, PACKAGE_RECEPTION_SELECT } from '../../bookings/helpers/package-reception.helper.js';
+import { formatPatientAddress } from '../../patients/patient-address.js';
+import { assertBookingMethodSlot, assertPackageReception, PACKAGE_RECEPTION_SELECT } from '../../bookings/helpers/package-reception.helper.js';
+import { reserveBookingSlot } from '../../bookings/helpers/slot-reservation.helper.js';
 
 // Access control
-export const APPOINTMENT_ACTOR_SELECT = {
-  id: true, role: true, doctor: { select: { id: true } },
-  branchAssignments: { select: { branchId: true } },
+const APPOINTMENT_ACTOR_SELECT = {
+  id: true, role: true, branchId: true, doctor: { select: { id: true } },
 } satisfies Prisma.UserSelect;
 
 export type AppointmentActor = Prisma.UserGetPayload<{ select: typeof APPOINTMENT_ACTOR_SELECT }>;
@@ -26,20 +27,19 @@ export function appointmentScope(actor: AppointmentActor): Prisma.AppointmentWhe
     if (!actor.doctor) throw new ForbiddenException('Tài khoản chưa được gán hồ sơ bác sĩ');
     return { scheduleSlot: { schedule: { doctorId: actor.doctor.id } } };
   }
-  const branchIds = actor.branchAssignments.map(link => link.branchId);
-  if (!branchIds.length) throw new ForbiddenException('Tài khoản chưa được phân công chi nhánh');
-  return { branchId: { in: branchIds } };
+  if (!actor.branchId) throw new ForbiddenException('Tài khoản chưa được phân công chi nhánh');
+  return { branchId: actor.branchId };
 }
 
 export function assertAppointmentAccess(actor: AppointmentActor, appointment: {
-  branchId: string; scheduleSlot?: { schedule: { doctorId: string } } | null;
+  branchId: number; scheduleSlot?: { schedule: { doctorId: string } } | null;
 }) {
   if (actor.role === 'CHAIN_MANAGER') return;
   if (actor.role === 'DOCTOR') {
     if (!actor.doctor || appointment.scheduleSlot?.schedule.doctorId !== actor.doctor.id) {
       throw new ForbiddenException('Lịch khám không thuộc bác sĩ hiện tại');
     }
-  } else if (!actor.branchAssignments.some(link => link.branchId === appointment.branchId)) {
+  } else if (actor.branchId !== appointment.branchId) {
     throw new ForbiddenException('Lịch khám không thuộc chi nhánh phụ trách');
   }
 }
@@ -48,12 +48,11 @@ export function assertAppointmentAccess(actor: AppointmentActor, appointment: {
 export async function computeQueueNumber(
   tx: Prisma.TransactionClient,
   appointmentId: string,
-  scheduleSlotId?: string | null,
+  scheduleSlot?: number | { id: number; scheduleId: number; startTime: Date } | null,
 ): Promise<number> {
-  if (scheduleSlotId) {
-    const currSlot = await tx.doctorScheduleSlot.findUnique({
-      where: { id: scheduleSlotId },
-    });
+  if (scheduleSlot) {
+    const currSlot = typeof scheduleSlot === 'number'
+      ? await tx.doctorScheduleSlot.findUnique({ where: { id: scheduleSlot } }) : scheduleSlot;
     if (currSlot) {
       const earlierSlots = await tx.doctorScheduleSlot.findMany({
         where: {
@@ -83,17 +82,19 @@ type ReceptionPackage = Prisma.ServicePackageGetPayload<{ select: typeof PACKAGE
 
 export function assertRescheduleDestination(
   appointment: {
-    branchId: string; scheduleSlotId: string | null;
+    branchId: number; scheduleSlotId: number | null;
     scheduleSlot?: { schedule: { doctorId: string } } | null;
     servicePackage?: ReceptionPackage | null;
+    bookingMethod?: { code: string } | null;
   },
   slot: {
-    id: string; isActive: boolean; startTime: Date;
-    schedule: { doctorId: string; branchId: string; status: string; workDate: Date; doctor: { isActive: boolean } };
+    id: number; isActive: boolean; startTime: Date; slotStatus?: string;
+    schedule: { doctorId: string; branchId: number; status: string; workDate: Date; doctor: { isActive: boolean } };
   },
   now = new Date(),
 ) {
-  if (!slot.isActive || slot.schedule.status !== 'OPEN' || !slot.schedule.doctor.isActive) throw new BadRequestException('Khung giờ khám mới không khả dụng');
+  if (!slot.isActive || (slot.slotStatus && slot.slotStatus !== 'AVAILABLE') || slot.schedule.status !== 'OPEN' || !slot.schedule.doctor.isActive) throw new BadRequestException('Khung giờ khám mới không khả dụng');
+  if (appointment.bookingMethod) assertBookingMethodSlot(appointment.bookingMethod.code, slot);
   if (slot.id === appointment.scheduleSlotId) throw new BadRequestException('Khung giờ mới trùng với khung giờ hiện tại');
   if (!appointment.scheduleSlot || slot.schedule.doctorId !== appointment.scheduleSlot.schedule.doctorId) throw new BadRequestException('Đổi lịch phải giữ nguyên bác sĩ phụ trách');
   if (slot.schedule.branchId !== appointment.branchId) throw new BadRequestException('Đổi lịch phải giữ nguyên cơ sở khám');
@@ -107,25 +108,29 @@ export function assertRescheduleDestination(
 }
 
 // Slot mutations
-export async function releaseAppointmentSlot(tx: Prisma.TransactionClient, slotId?: string | null) {
+export async function releaseAppointmentSlot(tx: Prisma.TransactionClient, slotId?: number | null, receptionSlotId?: number | null) {
+  if (receptionSlotId) {
+    await tx.$executeRaw`UPDATE package_reception_slots SET occupied_count = GREATEST(occupied_count - 1, 0), updated_at = NOW() WHERE id = ${receptionSlotId}`;
+  }
   if (!slotId) return;
   await tx.$executeRaw`
     UPDATE "doctor_schedule_slots"
     SET "occupied_count" = GREATEST("occupied_count" - 1, 0), "updated_at" = NOW()
-    WHERE "id" = ${slotId}::uuid
+    WHERE "id" = ${slotId}
   `;
 }
 
 /** The caller supplies its policy checks; all slot transfers share one atomic mutation. */
 export async function transferAppointmentSlot(
   tx: Prisma.TransactionClient,
-  appointment: { id: string; status: AppointmentStatus; scheduleSlotId: string | null; rescheduleCount: number },
-  newSlot: { id: string; schedule: { branchId: string } },
+  appointment: { id: string; patientProfileId: string; status: AppointmentStatus; scheduleSlotId: number | null; rescheduleCount: number },
+  newSlot: { id: number; scheduleId: number; startTime: Date; endTime: Date; schedule: { branchId: number; workDate: Date } },
   actorId: string,
   reason: string,
 ) {
   if (appointment.scheduleSlotId === newSlot.id) throw new BadRequestException('Khung giờ mới trùng với khung giờ hiện tại');
   if (!['HOLD', 'CONFIRMED'].includes(appointment.status)) throw new BadRequestException('Lịch hẹn không còn ở trạng thái có thể đổi lịch');
+  await assertPatientSlotAvailable(tx, appointment.patientProfileId, newSlot, appointment.id);
   const claimed = await tx.appointment.updateMany({
     where: {
       id: appointment.id, status: appointment.status,
@@ -134,14 +139,10 @@ export async function transferAppointmentSlot(
     data: { scheduleSlotId: newSlot.id, branchId: newSlot.schedule.branchId, rescheduleCount: { increment: 1 }, reminderSent24h: false, reminderSent2h: false },
   });
   if (claimed.count !== 1) throw new ConflictException('Lịch hẹn vừa được cập nhật, vui lòng tải lại');
-  const reserved = await tx.$executeRaw`
-    UPDATE "doctor_schedule_slots"
-    SET "occupied_count" = "occupied_count" + 1, "updated_at" = NOW()
-    WHERE "id" = ${newSlot.id}::uuid AND "is_active" = TRUE AND "occupied_count" < "capacity"
-  `;
+  const reserved = await reserveBookingSlot(tx, newSlot.id);
   if (reserved !== 1) throw new ConflictException('Khung giờ mới vừa hết chỗ, vui lòng chọn khung giờ khác');
   await releaseAppointmentSlot(tx, appointment.scheduleSlotId);
-  const queueNumber = await computeQueueNumber(tx, appointment.id, newSlot.id);
+  const queueNumber = await computeQueueNumber(tx, appointment.id, newSlot);
   return tx.appointment.update({
     where: { id: appointment.id },
     data: {
@@ -153,13 +154,12 @@ export async function transferAppointmentSlot(
 
 // Appointment statuses
 const ALIASES: Record<string, AppointmentStatus> = {
-  PENDING: 'HOLD', BOOKED: 'CONFIRMED', EXAMINED: 'COMPLETED',
+  PENDING: 'HOLD', EXAMINED: 'COMPLETED',
 };
 const TRANSITIONS: Partial<Record<AppointmentStatus, AppointmentStatus[]>> = {
   HOLD: ['HOLD', 'CONFIRMED', 'CANCELLED'],
   CONFIRMED: ['CONFIRMED', 'CHECKED_IN', 'COMPLETED', 'CANCELLED'],
   CHECKED_IN: ['CHECKED_IN', 'COMPLETED', 'CANCELLED'],
-  IN_EXAMINATION: ['IN_EXAMINATION', 'COMPLETED'],
   COMPLETED: ['COMPLETED'], CANCELLED: ['CANCELLED'],
 };
 
@@ -214,7 +214,7 @@ export function reminderSlotWindows(now: Date, hoursAhead: 2 | 24) {
 }
 
 // Response serialization
-export function statusForClient(status: string) {
+function statusForClient(status: string) {
   if (status === 'HOLD') return 'pending'
   if (['CONFIRMED', 'CHECKED_IN'].includes(status)) return 'confirmed'
   if (status === 'COMPLETED') return 'examined'
@@ -223,13 +223,21 @@ export function statusForClient(status: string) {
 }
 
 export function serialize(row: any) {
-  const invoice = row.invoice ?? row.bookingOrder?.invoice
+  const invoice = row.bookingOrder?.invoice
   const payment = invoice?.payments?.[0]
+  const refund = payment?.rawPayload?.appointmentRefunds?.[row.id] ?? null
+  const refundRequests = payment?.rawPayload?.appointmentRefunds
+  const refundBank = refund?.refundBank ?? (
+    !refundRequests || (refund && Object.keys(refundRequests).length === 1)
+      ? payment?.rawPayload?.refundBank : null
+  )
   const doctorSlot = row.scheduleSlot
   const bookedDoctor = row.doctor ?? doctorSlot?.schedule?.doctor
   const appointmentDate = doctorSlot?.schedule?.workDate
+  const receptionSlot = row.receptionSlot
   const room = doctorSlot?.schedule?.room
   const creator = row.statusHistories?.[0]?.actor
+  const cancellation = row.statusHistories?.find((entry: any) => entry.toStatus === 'CANCELLED')
   const createdAtClinic = creator && creator.role !== 'PATIENT'
   const specialty = row.servicePackage?.specialty ?? bookedDoctor?.specialties?.find((item: any) => item.isPrimary)?.specialty ?? bookedDoctor?.specialties?.[0]?.specialty
   const bookingMethod = row.bookingMethod
@@ -250,6 +258,7 @@ export function serialize(row: any) {
     ticket: row.bookingCode,
     bookingCode: row.bookingCode,
     bookingOrderId: row.bookingOrderId ?? null,
+    receptionSlotId: row.receptionSlotId ?? null,
     orderCode: bookingOrder?.orderCode ?? null,
     groupType: bookingOrder?.groupType ?? 'SINGLE',
     createdAt: row.createdAt,
@@ -257,11 +266,17 @@ export function serialize(row: any) {
     source: createdAtClinic ? 'clinic' : 'online',
     bookingSource: createdAtClinic ? 'clinic' : 'online',
     createdByStaff: createdAtClinic ? { id: creator.id, fullName: creator.fullName, email: creator.email, role: creator.role } : null,
-    appointmentDate: appointmentDate?.toISOString().slice(0, 10) ?? null,
-    startTime: doctorSlot?.startTime ? formatTime(doctorSlot.startTime) : null,
-    endTime: doctorSlot?.endTime ? formatTime(doctorSlot.endTime) : null,
+    appointmentDate: (receptionSlot?.date ?? appointmentDate)?.toISOString().slice(0, 10) ?? null,
+    startTime: receptionSlot?.startTime ? formatTime(receptionSlot.startTime) : doctorSlot?.startTime ? formatTime(doctorSlot.startTime) : null,
+    endTime: receptionSlot?.endTime ? formatTime(receptionSlot.endTime) : doctorSlot?.endTime ? formatTime(doctorSlot.endTime) : null,
+    isHealthPackage: bookingMethod.code === 'HEALTH_PACKAGE',
     status: statusForClient(row.status),
     workflowStatus: row.status,
+    cancellation: cancellation ? {
+      reason: cancellation.reason || refund?.reason || null,
+      cancelledAt: cancellation.createdAt,
+      cancelledBy: cancellation.actor ? { fullName: cancellation.actor.fullName, role: cancellation.actor.role } : null,
+    } : null,
     symptoms: row.symptomsDescription || '',
     visitQueueNumber: row.queueNumber,
     // Telehealth uses the doctor's time slot, not its physical room.
@@ -275,7 +290,7 @@ export function serialize(row: any) {
       gender: row.patientProfile.gender?.toLowerCase(),
       email: row.patientProfile.account?.email,
       phone: row.patientProfile.phoneNumber || row.patientProfile.account?.phoneNumber || '',
-      address: row.patientProfile.address || '',
+      address: formatPatientAddress(row.patientProfile) || '',
       nationalId: row.patientProfile.nationalId,
       healthInsuranceNumber: row.patientProfile.healthInsuranceNumber,
     },
@@ -300,13 +315,6 @@ export function serialize(row: any) {
       totalAmount: Number(invoice.totalAmount),
       status: invoice.status,
       paidAt: invoice.paidAt,
-      items: (invoice.items || []).map((item: any) => ({
-        id: String(item.id),
-        description: item.description,
-        quantity: item.quantity,
-        unitPrice: Number(item.unitPrice),
-        amount: Number(item.amount),
-      })),
     } : null,
     payment: invoice ? {
       status: invoice.status === 'PAID' ? 'paid' : (invoice.status === 'REFUNDED' ? 'refunded' : 'unpaid'),
@@ -316,7 +324,8 @@ export function serialize(row: any) {
       provider: payment?.provider,
       transactionId: payment?.providerTransactionId,
       paidAt: invoice.paidAt,
-      refundBank: payment?.rawPayload?.refundBank || null,
+      refund,
+      refundBank: refundBank || null,
     } : null,
     medicalVisit: null,
   }
@@ -324,6 +333,7 @@ export function serialize(row: any) {
 
 export function appointmentInclude() {
   return {
+    receptionSlot: { select: { date: true, startTime: true, endTime: true } },
     patientProfile: {
       select: {
         id: true,
@@ -334,7 +344,9 @@ export function appointmentInclude() {
         healthInsuranceNumber: true,
         dateOfBirth: true,
         gender: true,
-        address: true,
+        streetAddress: true,
+        wardName: true,
+        provinceName: true,
         account: { select: { id: true, email: true, phoneNumber: true } },
       },
     },
@@ -396,35 +408,27 @@ export function appointmentInclude() {
     bookingMethod: {
       select: { id: true, code: true, name: true },
     },
-    invoice: {
-      select: {
-        id: true,
-        totalAmount: true,
-        status: true,
-        paidAt: true,
-        payments: { orderBy: { createdAt: 'desc' as const }, take: 1, select: { method: true, provider: true, providerTransactionId: true, paidAt: true, rawPayload: true } },
-      },
-    },
     statusHistories: {
       orderBy: { createdAt: 'asc' as const },
-      take: 1,
-      select: { actor: { select: { id: true, fullName: true, email: true, role: true } } },
+      select: { toStatus: true, reason: true, createdAt: true, actor: { select: { id: true, fullName: true, email: true, role: true } } },
     },
-  }
+  } satisfies Prisma.AppointmentInclude
 }
 export async function assertPatientSlotAvailable(
   tx: Prisma.TransactionClient,
   patientProfileId: string,
   slot: { startTime: Date; endTime: Date; schedule: { workDate: Date } },
+  excludingAppointmentId?: string,
 ) {
   const conflict = await tx.appointment.findFirst({
     where: {
       patientProfileId,
-      status: { in: ['HOLD', 'CONFIRMED', 'CHECKED_IN', 'IN_EXAMINATION'] },
-      scheduleSlot: {
-        startTime: { lt: slot.endTime }, endTime: { gt: slot.startTime },
-        schedule: { workDate: slot.schedule.workDate },
-      },
+      ...(excludingAppointmentId ? { id: { not: excludingAppointmentId } } : {}),
+      status: { in: ['HOLD', 'CONFIRMED', 'CHECKED_IN'] },
+      OR: [
+        { scheduleSlot: { startTime: { lt: slot.endTime }, endTime: { gt: slot.startTime }, schedule: { workDate: slot.schedule.workDate } } },
+        { receptionSlot: { date: slot.schedule.workDate, startTime: { lt: slot.endTime }, endTime: { gt: slot.startTime } } },
+      ],
     },
     select: { id: true },
   });

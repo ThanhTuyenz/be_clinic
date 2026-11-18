@@ -1,4 +1,5 @@
 import { Module } from '@nestjs/common';
+import { AnalyticsModule } from '../analytics/analytics.module.js';
 import { RecommendationModule } from '../recommendations/recommendation.module.js';
 import { VouchersModule } from '../vouchers/vouchers.module.js';
 import { BookingFlowController } from './booking-flow.controller.js';
@@ -10,9 +11,12 @@ import { ReceptionBookingController } from './reception-booking.controller.js';
 import { ReceptionBookingService } from './reception-booking.service.js';
 
 import { PatientsModule } from '../patients/patients.module.js';
+import { PackageReceptionSlotsController } from './package-reception-slots.controller.js';
+import { PackageReceptionSlotsService } from './package-reception-slots.service.js';
 
 @Module({
   imports: [
+    AnalyticsModule,
     PatientsModule,
     RecommendationModule,
     VouchersModule,
@@ -21,11 +25,13 @@ import { PatientsModule } from '../patients/patients.module.js';
     BookingController,
     ReceptionBookingController,
     BookingFlowController,
+    PackageReceptionSlotsController,
   ],
   providers: [
     BookingService,
     ReceptionBookingService,
     BookingFlowService,
+    PackageReceptionSlotsService,
   ],
   exports: [BookingService, BookingFlowService],
 })

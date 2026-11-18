@@ -17,7 +17,6 @@ import { Type } from 'class-transformer';
 
 import { lowerCaseTransformer } from '../../../../common/utils/transformers/lower-case.transformer';
 import { UserRole, UserStatus } from '../entities/user.entity';
-import { AuthProvidersEnum } from '../../auth-local/enums/auth-providers.enum';
 import { ApiProperty } from '@nestjs/swagger';
 import { RolePermissionDto } from './role-permission.dto';
 import { DoctorProfileDto } from './doctor-profile.dto';
@@ -42,10 +41,6 @@ export class CreateUserDto extends DoctorProfileDto {
   @IsEnum(UserRole, { message: 'Role không hợp lệ' })
   role?: UserRole;
 
-  @ApiProperty({ description: 'Role ID to assign to user', required: false })
-  @IsOptional()
-  roleId?: string;
-
   @ApiProperty({
     description: 'Custom permissions for user',
     required: false,
@@ -58,9 +53,6 @@ export class CreateUserDto extends DoctorProfileDto {
   customPermissions?: RolePermissionDto[];
 
   status?: UserStatus;
-  provider?: AuthProvidersEnum;
-  socialId?: string | null;
-  zaloId?: string | null;
 
   hash?: string | null;
 
@@ -74,19 +66,16 @@ export class CreateUserDto extends DoctorProfileDto {
 
   @ApiProperty({ description: 'ID cơ sở làm việc', required: false })
   @IsOptional()
-  branchId?: string | null;
-
-  @ApiProperty({ description: 'Danh sách ID cơ sở làm việc / quản lý', required: false, type: [String] })
-  @IsOptional()
-  @IsArray()
-  branchIds?: string[];
-
-  @ApiProperty({ description: 'ID cơ sở chính', required: false })
-  @IsOptional()
-  primaryBranchId?: string | null;
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  branchId?: number | null;
 
   @ApiProperty({ description: 'ID chuyên khoa chính (Bác sĩ)', required: false })
   @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
   specialtyId?: number | null;
 
   @ApiProperty({ example: 'BS. CKI', required: false })

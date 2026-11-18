@@ -3,10 +3,10 @@ import { ConfigService } from '@nestjs/config';
 import OpenAI from 'openai';
 import { createHash } from 'node:crypto';
 import { RedisService } from '../redis/redis.service.js';
-import { matchesSearchConstraints, parseSearchIntent, searchTextScore } from '../../common/utils/search-query.js';
+import { matchesSearchConstraints, matchesSearchExclusions, normalizeSearch, parseSearchIntent, searchTextScore, searchTypoScore } from '../../common/utils/search-query.js';
 
 export interface PackageForRetrieval {
-  id: string;
+  id: number;
   code: string;
   name: string;
   description: string;
@@ -18,8 +18,9 @@ export interface PackageForRetrieval {
   targetGender?: string; // ALL, MALE, FEMALE
   minAge?: number | null;
   maxAge?: number | null;
-  branchId?: string;
+  branchId?: number;
   bookingMethodCode?: string;
+  isFollowUp?: boolean;
 }
 
 export interface ScoredPackage {
@@ -42,6 +43,7 @@ export function mapPackageForRetrieval(pkg: PackageEmbeddingSource): PackageForR
     description: [pkg.description, pkg.specialty?.description].filter(Boolean).join(' - '),
     symptoms: [...new Set([...(pkg.symptoms || []), ...(pkg.specialty?.symptoms || [])])],
     targetGender: pkg.targetGender, minAge: pkg.minAge, maxAge: pkg.maxAge,
+    isFollowUp: pkg.isFollowUp === true || /(?:^|-)FOLLOWUP$/i.test(pkg.code) || /\btai kham\b/.test(normalizeSearch(pkg.name)),
   };
 }
 
@@ -85,10 +87,17 @@ export class EmbeddingService {
       if (!/unknown index|no such index/i.test(error?.message || '')) throw error;
     }
     const prefix = `${client.options.keyPrefix || ''}${this.vectorKeyPrefix}`;
+    
     try {
-      await client.call('FT.CREATE', this.vectorIndexName, 'ON', 'HASH', 'PREFIX', 1, prefix,
-        'SCHEMA', 'packageId', 'TAG', 'vector', 'VECTOR', 'HNSW', 6, 'TYPE', 'FLOAT32',
-        'DIM', this.vectorDimensions, 'DISTANCE_METRIC', 'COSINE');
+      await client.call(
+        'FT.CREATE', this.vectorIndexName, 
+        'ON', 'HASH', 'PREFIX', 1, prefix,
+        'SCHEMA', 
+        'packageId', 'TAG', 
+        'vector', 'VECTOR', 'HNSW', 6, 
+        'TYPE', 'FLOAT32',
+        'DIM', this.vectorDimensions, 
+        'DISTANCE_METRIC', 'COSINE');
     } catch (error: any) {
       if (!/index already exists/i.test(error?.message || '')) throw error;
     }
@@ -114,25 +123,6 @@ export class EmbeddingService {
   }
 
   /**
-   * Tính Cosine Similarity giữa 2 vector nhiều chiều
-   */
-  cosineSimilarity(vecA: number[], vecB: number[]): number {
-    if (vecA.length !== vecB.length || vecA.length === 0) return 0;
-    let dotProduct = 0;
-    let normA = 0;
-    let normB = 0;
-
-    for (let i = 0; i < vecA.length; i++) {
-      dotProduct += vecA[i] * vecB[i];
-      normA += vecA[i] * vecA[i];
-      normB += vecB[i] * vecB[i];
-    }
-
-    if (normA === 0 || normB === 0) return 0;
-    return dotProduct / (Math.sqrt(normA) * Math.sqrt(normB));
-  }
-
-  /**
    * emveeding cho goi kham benh
    */
   buildPackageEmbeddingText(pkg: { name: string; specialtyName?: string; description?: string; symptoms?: string[] }): string {
@@ -154,6 +144,7 @@ export class EmbeddingService {
     bmi: number | null;
     medicalHistory?: string;
     allergies?: string;
+    familyHistory?: string | null;
   }): string {
     const genderVi = profile.gender === 'MALE' ? 'Nam' : profile.gender === 'FEMALE' ? 'Nữ' : 'Khác';
     const bmiText = profile.bmi ? `Chỉ số thể trạng BMI: ${profile.bmi}.` : '';
@@ -163,7 +154,8 @@ export class EmbeddingService {
     const allergy = profile.allergies?.trim() ? `Tiền sử dị ứng: ${profile.allergies}.` : '';
 
     const ageText = profile.age === null ? 'chưa ghi nhận độ tuổi' : `${profile.age} tuổi`;
-    return `Bệnh nhân ${genderVi}, ${ageText}. ${bmiText} ${med} ${allergy}`.trim();
+    const family = profile.familyHistory ? `Tiền sử gia đình: ${profile.familyHistory}.` : '';
+    return `Bệnh nhân ${genderVi}, ${ageText}. ${bmiText} ${med} ${allergy} ${family}`.trim();
   }
 
   /**
@@ -227,7 +219,7 @@ export class EmbeddingService {
   /**
    * Xóa vector của gói khám trên Redis khi gói khám được cập nhật nội dung
    */
-  async invalidatePackageVector(packageId: string): Promise<void> {
+  async invalidatePackageVector(packageId: number): Promise<void> {
     if (this.redis.isEnabled()) {
       try {
         await this.redis.delete(`${this.vectorKeyPrefix}${packageId}`, `vector:pkg:${packageId}`);
@@ -256,7 +248,7 @@ export class EmbeddingService {
 
     // 2. Truy vấn trực tiếp qua RediSearch HNSW (< 1ms)
     if (patientVector) {
-      const redisSearchResults = await this.searchWithRedisSearch(patientVector, candidates, topK);
+      const redisSearchResults = await this.retrieveVectorCandidates(patientVector, candidates, topK);
       if (redisSearchResults && redisSearchResults.length > 0) {
         return redisSearchResults;
       }
@@ -267,10 +259,8 @@ export class EmbeddingService {
     return this.fallbackKeywordMatcher(patientEmbeddingText, candidates, topK);
   }
 
-  /**
-   *  redis serch hnsw
-   */
-  private async searchWithRedisSearch(
+  // danh sách sau khi so sánh vector
+  async retrieveVectorCandidates(
     queryVector: number[],
     candidates: PackageForRetrieval[],
     topK: number,
@@ -283,7 +273,7 @@ export class EmbeddingService {
 
       if (candidates.length === 0) return [];
       const fetchK = Math.min(topK, candidates.length);
-      const ids = candidates.map(({ id }) => id.replace(/[^a-zA-Z0-9]/g, '\\$&')).join('|');
+      const ids = candidates.map(({ id }) => String(id).replace(/[^a-zA-Z0-9]/g, '\\$&')).join('|');
       const query = `(@packageId:{${ids}})=>[KNN ${fetchK} @vector $BLOB AS score]`;
 
       const tStart = performance.now();
@@ -312,58 +302,29 @@ export class EmbeddingService {
 
       if (!Array.isArray(rawResult)) return null;
 
-      let resultsList: any[] = [];
-      for (let i = 0; i < rawResult.length; i += 2) {
-        if (rawResult[i] === 'results' && Array.isArray(rawResult[i + 1])) {
-          resultsList = rawResult[i + 1];
-          break;
-        }
-      }
+      // Redis fields arrive as [name, value, name, value, ...].
+      const toFields = (values: unknown[]): Record<string, unknown> => Object.fromEntries(
+        Array.from({ length: Math.floor(values.length / 2) }, (_, i) => [String(values[i * 2]), values[i * 2 + 1]]),
+      );
+      const responseFields = toFields(rawResult);
+      const attributes = Array.isArray(responseFields.results)
+        ? responseFields.results.map(item => Array.isArray(item) ? toFields(item).extra_attributes : null)
+        : rawResult.filter((_, index) => index >= 2 && index % 2 === 0);
 
-      if (resultsList.length === 0) {
-        for (let i = 1; i < rawResult.length; i += 2) {
-          if (Array.isArray(rawResult[i + 1])) {
-            resultsList.push(['id', rawResult[i], 'extra_attributes', rawResult[i + 1]]);
-          }
-        }
-      }
+      if (!attributes.length) return rawResult[0] === 0 || responseFields.total_results === 0 ? [] : null;
 
-      if (resultsList.length === 0) return rawResult[0] === 0 ? [] : null;
-
-      const candidateMap = new Map<string, PackageForRetrieval>();
-      for (const c of candidates) {
-        candidateMap.set(c.id, c);
-      }
-
-      const scoredList: ScoredPackage[] = [];
-
-      for (const item of resultsList) {
-        if (!Array.isArray(item)) continue;
-        let packageId = '';
-        let dist = 1.0;
-
-        for (let j = 0; j < item.length; j += 2) {
-          if (item[j] === 'extra_attributes' && Array.isArray(item[j + 1])) {
-            const attrs = item[j + 1];
-            for (let k = 0; k < attrs.length; k += 2) {
-              if (attrs[k] === 'packageId') packageId = String(attrs[k + 1]);
-              if (attrs[k] === 'score') {
-                const parsed = Number(attrs[k + 1]);
-                dist = Number.isFinite(parsed) ? parsed : 1;
-              }
-            }
-          }
-        }
-
-        if (packageId && candidateMap.has(packageId)) {
-          const pkg = candidateMap.get(packageId)!;
-          const similarityScore = Math.max(0, 1 - dist);
-          scoredList.push({
-            package: pkg,
-            score: similarityScore,
-          });
-        }
-      }
+      const candidateMap = new Map(candidates.map(pkg => [pkg.id, pkg]));
+      const scoredList: ScoredPackage[] = attributes.flatMap(attrs => {
+        if (!Array.isArray(attrs)) return [];
+        const { packageId, score } = toFields(attrs);
+        const parsedPackageId = Number(packageId);
+        if (!Number.isSafeInteger(parsedPackageId) || parsedPackageId < 1) return [];
+        const pkg = candidateMap.get(parsedPackageId);
+        if (!pkg) return [];
+        const parsed = Number(score);
+        const distance = Number.isFinite(parsed) ? parsed : 1;
+        return [{ package: pkg, score: Math.max(0, 1 - distance) }];
+      });
 
       if (scoredList.length > 0) {
         this.logger.log(
@@ -379,62 +340,78 @@ export class EmbeddingService {
     }
   }
 
-  /** Query embeddings are bounded, deduplicated and have a short request budget. */
-  private async embedSearchQuery(text: string): Promise<number[] | null> {
-    const cached = this.queryVectors.get(text);
+  /** Shared query cache and in-flight deduplication for search and recommendations. */
+  async embedSearchQuery(text: string): Promise<number[] | null> {
+    const key = text.normalize('NFC').trim().toLowerCase().replace(/\s+/g, ' ');
+    if (!key) return null;
+    const cached = this.queryVectors.get(key);
     if (cached && cached.expiresAt > Date.now()) return cached.vector;
-    const pending = this.pendingQueryVectors.get(text);
+    if (cached) this.queryVectors.delete(key);
+    const pending = this.pendingQueryVectors.get(key);
     if (pending) return pending;
     if (!this.aiClient) return null;
     const request = (async () => {
       try {
-        const vector = await this.embedText(text);
+        const vector = await this.embedText(key);
         if (!vector?.length) return null;
         if (this.queryVectors.size >= 200) this.queryVectors.delete(this.queryVectors.keys().next().value!);
-        this.queryVectors.set(text, { vector, expiresAt: Date.now() + 300_000 });
+        this.queryVectors.set(key, { vector, expiresAt: Date.now() + 300_000 });
         return vector;
       } catch {
         this.logger.debug('Search embedding unavailable; using text matches.');
         return null;
       }
     })();
-    this.pendingQueryVectors.set(text, request);
+    this.pendingQueryVectors.set(key, request);
     try { return await request; }
-    finally { this.pendingQueryVectors.delete(text); }
+    finally { this.pendingQueryVectors.delete(key); }
   }
 
-  /** Phrase matching first; semantic-only matches require similarity >= 0.82. */
+  /** Combine field matches and semantic hits after applying explicit constraints. */
   async searchByNaturalLanguage(queryText: string, packages: PackageForRetrieval[], topK = 10, options: { strictSemantic?: boolean } = {}): Promise<ScoredPackage[]> {
     const intent = parseSearchIntent(queryText);
     if ((!intent.text && !intent.hasConstraints) || packages.length === 0) return [];
-    const candidates = packages.filter(pkg => matchesSearchConstraints(intent, pkg));
+    const candidates = packages.filter(pkg => matchesSearchConstraints(intent, pkg)
+      && matchesSearchExclusions(intent, [pkg.name, pkg.specialtyName, pkg.description, ...(pkg.symptoms || [])]));
     if (candidates.length === 0) return [];
-    const textScores = new Map<string, number>();
+    const textScores = new Map<number, number>();
     for (const pkg of candidates) {
-      const score = intent.text ? Math.max(
-        searchTextScore(intent.text, pkg.name) * 1.3,
-        searchTextScore(intent.text, pkg.specialtyName) * 1.1,
-        ...(pkg.symptoms || []).map(symptom => searchTextScore(intent.text, symptom) * 1.2),
-        searchTextScore(intent.text, pkg.description) * 0.7,
-      ) : 1;
+      const score = intent.text
+        ? searchTextScore(intent.text, pkg.name) * 1.3
+          + searchTextScore(intent.text, pkg.code) * 1.4
+          + searchTextScore(intent.text, pkg.specialtyName) * 1.1
+          + Math.max(0, ...(pkg.symptoms || []).map(symptom => searchTextScore(intent.text, symptom))) * 1.2
+          + searchTextScore(intent.text, pkg.description) * 0.3
+        : 1;
       if (score > 0) textScores.set(pkg.id, score);
     }
-    const vectorScores = new Map<string, number>();
-    // Short queries and explicit negation require a real phrase match.
-    if (intent.text.split(' ').length > 4 && intent.excluded.length === 0 && textScores.size === 0) {
-      const vector = await this.embedSearchQuery(intent.text);
+    // Do not dilute exact matches or loosen clinical exclusions/price constraints.
+    // Only rescue an otherwise empty text result with a bounded title/specialty typo.
+    if (intent.text && textScores.size === 0) {
+      for (const pkg of candidates) {
+        const score = Math.max(searchTypoScore(intent.text, pkg.name), searchTypoScore(intent.text, pkg.specialtyName));
+        if (score > 0) textScores.set(pkg.id, score);
+      }
+    }
+    const vectorScores = new Map<number, number>();
+    const minSemanticScore = 0.82;
+    // Preserve accents for embeddings. Exclusions are already enforced on candidates.
+    if (intent.text) {
+      const vector = await this.embedSearchQuery(queryText);
       if (vector) {
-        const hits = await this.searchWithRedisSearch(vector, candidates, Math.min(20, candidates.length));
-        if (hits === null && options.strictSemantic) throw new Error('Semantic index unavailable');
-        for (const hit of hits || []) if (hit.score >= 0.82) vectorScores.set(hit.package.id, hit.score);
-      } else if (options.strictSemantic) throw new Error('Search embedding unavailable');
+        const hits = await this.retrieveVectorCandidates(vector, candidates, Math.min(20, candidates.length));
+        if (hits === null && options.strictSemantic && textScores.size === 0) throw new Error('Semantic index unavailable');
+        for (const hit of hits || []) if (hit.score >= minSemanticScore) vectorScores.set(hit.package.id, hit.score);
+      } else if (options.strictSemantic && textScores.size === 0) throw new Error('Search embedding unavailable');
     }
     return candidates.flatMap(pkg => {
       const textScore = textScores.get(pkg.id) || 0;
       const vectorScore = vectorScores.get(pkg.id) || 0;
-      if (textScore === 0 && vectorScore < 0.82) return [];
+      if (textScore === 0 && vectorScore < minSemanticScore) return [];
       return [{ package: pkg, score: Number((textScore * 1.5 + vectorScore * 1.2).toFixed(3)) }];
-    }).sort((a, b) => b.score - a.score || a.package.price - b.package.price).slice(0, topK);
+    }).sort((a, b) => (intent.followUp === undefined ? Number(Boolean(a.package.isFollowUp)) - Number(Boolean(b.package.isFollowUp)) : 0)
+      || b.score - a.score
+      || a.package.price - b.package.price || a.package.id - b.package.id).slice(0, topK);
   }
 
   private fallbackKeywordMatcher(
@@ -442,34 +419,15 @@ export class EmbeddingService {
     candidates: PackageForRetrieval[],
     topK: number,
   ): ScoredPackage[] {
-    const qNorm = this.normalizeVietnamese(query);
-    const scored = candidates.map((pkg) => {
-      const nameNorm = this.normalizeVietnamese(pkg.name || '');
-      const descNorm = this.normalizeVietnamese(pkg.description || '');
-      const specNorm = this.normalizeVietnamese(pkg.specialtyName || '');
-      const symNorm = (pkg.symptoms || []).map((s) => this.normalizeVietnamese(s)).join(' ');
-      const targetText = `${nameNorm} ${specNorm} ${descNorm} ${symNorm}`;
-
-      // Profile retrieval ranks broad histories; unlike search, it need not match the entire history.
-      const tokens = [...new Set(parseSearchIntent(qNorm).text.split(' ').filter(Boolean))];
-      const targetTokens = new Set(targetText.split(/\W+/));
-      const score = searchTextScore(parseSearchIntent(query).text, targetText) ||
-        tokens.filter(token => targetTokens.has(token)).length / Math.max(tokens.length, 1);
+    const text = normalizeSearch(parseSearchIntent(query).text);
+    const tokens = [...new Set(text.split(' ').filter(Boolean))];
+    return candidates.map(pkg => {
+      const target = normalizeSearch([pkg.name, pkg.specialtyName, pkg.description, ...(pkg.symptoms || [])].join(' '));
+      const words = new Set(target.split(' '));
+      // Profile histories may match part of the text; search uses stricter matching.
+      const score = searchTextScore(text, target) ||
+        tokens.filter(token => words.has(token)).length / Math.max(tokens.length, 1);
       return { package: pkg, score };
-    });
-
-    scored.sort((a, b) => b.score - a.score);
-    return scored.slice(0, topK);
-  }
-
-  private normalizeVietnamese(str: string): string {
-    if (!str) return '';
-    return str
-      .normalize('NFD')
-      .replace(/[\u0300-\u036f]/g, '')
-      .replace(/đ/g, 'd')
-      .replace(/Đ/g, 'D')
-      .toLowerCase()
-      .trim();
+    }).sort((a, b) => b.score - a.score).slice(0, topK);
   }
 }

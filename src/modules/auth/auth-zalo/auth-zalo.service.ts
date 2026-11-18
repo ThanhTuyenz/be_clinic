@@ -1,6 +1,4 @@
 import { HttpException, HttpStatus, Injectable, Logger } from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
-import { AllConfigType } from '../../../config/config.type';
 import { AuthZaloLoginDto } from './dtos/auth-zalo-login.dto';
 import { SocialType } from '../../../common/utils/social.type';
 import { IAuthZaloService } from './auth-zalo';
@@ -21,13 +19,8 @@ interface ZaloGraphResponse {
 export class AuthZaloService implements IAuthZaloService {
   private readonly logger = new Logger(AuthZaloService.name);
 
-  constructor(private readonly configService: ConfigService<AllConfigType>) {}
-
   async getProfileByToken(loginDto: AuthZaloLoginDto): Promise<SocialType> {
-    const isMock =
-      loginDto.accessToken.startsWith('mock_') ||
-      loginDto.accessToken.startsWith('test_') ||
-      process.env.NODE_ENV !== 'production';
+    const isMock = process.env.NODE_ENV !== 'production';
 
     // 1. Thử gọi Zalo Graph API thật nếu token không phải mock rõ ràng
     if (!loginDto.accessToken.startsWith('mock_')) {

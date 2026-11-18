@@ -11,11 +11,13 @@ import { CounterPaymentsService } from './counter-payments.service.js';
 
 import { AppointmentsModule } from '../appointments/appointments.module.js';
 import { PaymentSettlementService } from './payment-settlement.service.js';
+import { RefundApprovalController } from './refund-approval.controller.js';
+import { RefundApprovalService } from './refund-approval.service.js';
 
 @Module({
   imports: [BookingModule, AppointmentsModule],
-  controllers: [CounterPaymentsController, PaymentController, PaymentWebhookController],
-  providers: [PaymentSettlementService, CounterPaymentsService, PaymentService, PaymentWebhookSignatureService, PaymentReconciliationService],
+  controllers: [CounterPaymentsController, PaymentController, PaymentWebhookController, RefundApprovalController],
+  providers: [PaymentSettlementService, CounterPaymentsService, PaymentService, PaymentWebhookSignatureService, PaymentReconciliationService, RefundApprovalService],
   exports: [PaymentService, PaymentWebhookSignatureService, PaymentReconciliationService],
 })
 export class PaymentsModule {}

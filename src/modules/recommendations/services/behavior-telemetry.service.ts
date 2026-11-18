@@ -4,7 +4,15 @@ import { RedisService } from '../../../infrastructure/redis/redis.service.js';
 import { TrackBehaviorDto, TrackingActionType } from '../recommendation.dto.js';
 import { TELEMETRY_CONFIG } from '../constants/recommendation.constants.js';
 
-type BehaviorEvent = Omit<TrackBehaviorDto, 'sessionId'> & { sessionId?: string; searchQuery?: string };
+export type BehaviorEvent = Omit<TrackBehaviorDto, 'sessionId'> & { sessionId?: string; searchQuery?: string; searchPackageIds?: number[]; abandonedAt?: number };
+type RecentSearch = { query: string; searchedAt: number; packageIds?: number[] };
+type RecentView = { packageId: number; viewCount: number; lastViewedAt: number };
+type RecentDropOff = { packageId: number; abandonedAt: number };
+interface BehaviorTelemetryContext {
+  recentSearches: RecentSearch[];
+  recentViews: RecentView[];
+  recentDropOffs: RecentDropOff[];
+}
 
 @Injectable()
 export class BehaviorTelemetryService {
@@ -16,19 +24,17 @@ export class BehaviorTelemetryService {
   ) { }
 
   // hành vi người dùng
-  async trackUserBehavior(dto: BehaviorEvent, userId?: string): Promise<{ success: boolean }> {
+  async trackUserBehavior(dto: BehaviorEvent, userId?: string): Promise<{ success: boolean; recorded?: boolean }> {
     if (!this.redis.isEnabled()) return { success: true };
 
     try {
-      const resolvedSpecialtyId = await this.resolveSpecialtyId(dto);
-      const userKeys = this.getUserTelemetryKeys(dto.sessionId, userId);
+      const key = this.getUserTelemetryKey(dto.sessionId, userId);
 
-      await Promise.allSettled([
-        this.recordPersonalInterests(userKeys, dto, resolvedSpecialtyId),
-        this.recordGlobalAnalytics(dto, resolvedSpecialtyId),
-        this.persistDatabaseAnalytics(dto),
+      const [recorded] = await Promise.allSettled([
+        this.recordBehaviorHistory(key, dto),
+        this.incrementPackageViewCount(dto),
       ]);
-      await this.invalidateBehaviorRecommendationCache(dto.sessionId, userId);
+      return { success: true, recorded: recorded.status === 'fulfilled' };
     } catch (err: any) {
       this.logger.debug(`[Telemetry] Failed to process telemetry: ${err?.message}`);
     }
@@ -37,7 +43,7 @@ export class BehaviorTelemetryService {
   }
 
   /** Only a committed, unpaid HOLD cancellation is an abandoned booking. */
-  async recordAbandonedBooking(appointmentId: string): Promise<void> {
+  async recordAbandonedBooking(appointmentId: string): Promise<{ userId?: string; packageId: number } | undefined> {
     if (!this.redis.isEnabled()) return;
     const appointment = await this.prisma.appointment.findFirst({
       where: {
@@ -48,227 +54,244 @@ export class BehaviorTelemetryService {
         id: true, bookingOrderId: true, servicePackageId: true,
         patientProfile: { select: { accountId: true } },
         bookingOrder: { select: { accountId: true, invoice: { select: { payments: { where: { paidAt: { not: null } }, select: { id: true }, take: 1 } } } } },
-        invoice: { select: { payments: { where: { paidAt: { not: null } }, select: { id: true }, take: 1 } } },
         sourceView: { select: { sessionId: true } },
+        statusHistories: {
+          where: { fromStatus: 'HOLD', toStatus: 'CANCELLED', reason: { in: ['PAYMENT_HOLD_TIMEOUT', 'PAYMENT_CANCELLED'] } },
+          orderBy: { createdAt: 'desc' }, take: 1, select: { createdAt: true },
+        },
       },
     });
-    if (!appointment?.servicePackageId || appointment.invoice?.payments.length || appointment.bookingOrder?.invoice?.payments.length) return;
+    if (!appointment?.servicePackageId || appointment.bookingOrder.invoice?.payments.length) return;
     const userId = appointment.bookingOrder?.accountId || appointment.patientProfile.accountId || undefined;
     const sessionId = appointment.sourceView?.sessionId;
     if (!userId && !sessionId) return;
     const key = `rec:dropoff:${appointment.bookingOrderId || appointment.id}:${appointment.servicePackageId}`;
     const recorded = await this.redis.getClient()?.set(key, '1', 'EX', TELEMETRY_CONFIG.BEHAVIOR_TTL_SECONDS, 'NX');
     if (!recorded) return;
-    await this.trackUserBehavior({ sessionId, actionType: TrackingActionType.DROP_OFF, targetPackageId: appointment.servicePackageId }, userId);
+    const recordedBehavior = await this.trackUserBehavior({
+      sessionId,
+      actionType: TrackingActionType.DROP_OFF, targetPackageId: appointment.servicePackageId,
+      abandonedAt: appointment.statusHistories[0]?.createdAt.getTime(),
+    }, userId);
+    if (!recordedBehavior.recorded) return;
+    return { userId, packageId: appointment.servicePackageId };
   }
 
   /**
-   * Phân giải chuyên khoa từ targetPackageId nếu client chưa truyền targetSpecialtyId
+   * Chọn Redis key của tài khoản hoặc khách.
    */
-  private async resolveSpecialtyId(dto: BehaviorEvent): Promise<number | undefined> {
-    if (!dto.targetPackageId) return dto.targetSpecialtyId;
-
-    try {
-      const pkg = await this.prisma.servicePackage.findUnique({
-        where: { id: dto.targetPackageId },
-        select: { specialtyId: true },
-      });
-      return pkg?.specialtyId ?? undefined;
-    } catch (err: any) {
-      this.logger.debug(`[Telemetry] Failed to resolve specialty for package ${dto.targetPackageId}: ${err?.message}`);
-      return undefined;
-    }
+  private getUserTelemetryKey(sessionId?: string, userId?: string): string | undefined {
+    // Logged-in accounts never read/write a shared browser's anonymous interests.
+    if (userId) return `rec:user_interest:${userId}`;
+    return sessionId ? `rec:guest_interest:${sessionId}` : undefined;
   }
 
   /**
-   * Lấy danh sách Redis keys đại diện cho hồ sơ hành vi của người dùng (User / Guest)
+   * Lưu lịch sử xem gói, tìm kiếm và bỏ dở.
    */
-  private getUserTelemetryKeys(sessionId?: string, userId?: string): string[] {
-    const keys = sessionId ? [`rec:guest_interest:${sessionId}`] : [];
-    if (userId) {
-      keys.push(`rec:user_interest:${userId}`);
-    }
-    return keys;
-  }
-
-  /**
-   * Cập nhật điểm quan tâm chuyên khoa, từ khóa tìm kiếm và gói bỏ dở
-   */
-  private async recordPersonalInterests(
-    userKeys: string[],
+  private async recordBehaviorHistory(
+    key: string | undefined,
     dto: BehaviorEvent,
-    specialtyId?: number,
   ): Promise<void> {
-    const scoreToAdd = TELEMETRY_CONFIG.ACTION_SCORES[dto.actionType] ?? 0;
     const client = this.redis.getClient();
-    if (!client) return;
+    if (!client || !key) return;
 
-    for (const key of userKeys) {
-      // 1. Tăng điểm chuyên khoa quan tâm (capped at MAX_SPECIALTY_SCORE_CAP)
-      if (specialtyId && scoreToAdd > 0) {
-        const field = `specialty:${specialtyId}`;
-        await client.eval(
-          'local current = tonumber(redis.call("HGET", KEYS[1], ARGV[1]) or "0"); local next = math.min(current + tonumber(ARGV[2]), tonumber(ARGV[3])); redis.call("HSET", KEYS[1], ARGV[1], next); return next;',
-          1,
-          key,
-          field,
-          scoreToAdd,
-          TELEMETRY_CONFIG.MAX_SPECIALTY_SCORE_CAP,
-        );
-      }
-
-      const pipeline = client.pipeline();
-      const eventAt = Date.now().toString();
-      // 2. Lưu từ khóa tìm kiếm gần nhất
-      if (dto.actionType === TrackingActionType.SEARCH && dto.searchQuery?.trim()) {
-        pipeline.hset(key, 'last_search_query', dto.searchQuery.trim().toLowerCase());
-        pipeline.hset(key, 'last_search_at', eventAt);
-      }
-
-      // 3. Lưu gói khám bỏ dở ở bước thanh toán
-      if (dto.actionType === TrackingActionType.DROP_OFF && dto.targetPackageId) {
-        pipeline.hset(key, 'drop_off_pkg', dto.targetPackageId);
-        pipeline.hset(key, 'drop_off_at', eventAt);
-        pipeline.hset(key, 'drop_off_verified', '1');
-      }
-
-      // Gia hạn TTL cho dữ liệu hành vi (14 ngày)
-      pipeline.expire(key, TELEMETRY_CONFIG.BEHAVIOR_TTL_SECONDS);
-      await pipeline.exec();
-    }
-  }
-
-  /**
-   * Cập nhật các bảng thống kê tần suất toàn hệ thống (Global Analytics Sorted Sets)
-   */
-  private async recordGlobalAnalytics(dto: BehaviorEvent, specialtyId?: number): Promise<void> {
-    const client = this.redis.getClient();
-    if (!client) return;
-
-    const pipeline = client.pipeline();
-
-    if (specialtyId) {
-      pipeline.zincrby('rec:global:popular_specialties', 1, specialtyId.toString());
-    }
+    const eventAt = (dto.actionType === TrackingActionType.DROP_OFF ? dto.abandonedAt ?? Date.now() : Date.now()).toString();
     if (dto.actionType === TrackingActionType.VIEW_PACKAGE && dto.targetPackageId) {
-      pipeline.zincrby('rec:global:package_views', 1, dto.targetPackageId);
-      pipeline.zincrby('rec:global:popular_packages', 1, dto.targetPackageId);
+      // One atomic update keeps recency and frequency consistent under concurrent views.
+      await client.eval(`local countKey = KEYS[2]
+          redis.call('ZADD', KEYS[1], ARGV[1], ARGV[2])
+          redis.call('HINCRBY', countKey, ARGV[2], 1)
+          local extra = redis.call('ZCARD', KEYS[1]) - tonumber(ARGV[3])
+          if extra > 0 then
+            local removed = redis.call('ZRANGE', KEYS[1], 0, extra - 1)
+            for _, id in ipairs(removed) do redis.call('ZREM', KEYS[1], id); redis.call('HDEL', countKey, id) end
+          end
+          redis.call('EXPIRE', KEYS[1], ARGV[4]); redis.call('EXPIRE', countKey, ARGV[4]); return 1`,
+        2, key + ':package_views', key + ':package_view_counts', eventAt, dto.targetPackageId,
+        TELEMETRY_CONFIG.MAX_RECENT_PACKAGE_VIEWS, TELEMETRY_CONFIG.BEHAVIOR_TTL_SECONDS);
     }
-    // Executed searches are counted by SemanticSearchService, not again by behavior tracking.
+    // 2. Keep distinct searches atomically; repeating a query refreshes its timestamp.
+    if (dto.actionType === TrackingActionType.SEARCH && dto.searchQuery?.trim()) {
+      const query = dto.searchQuery.normalize('NFC').trim().toLowerCase().replace(/\s+/g, ' ');
+      await client.eval(`
+          local legacy = redis.call('HGET', KEYS[1], 'last_search_query')
+          local legacyAt = tonumber(redis.call('HGET', KEYS[1], 'last_search_at') or '0')
+          if legacy and legacyAt >= tonumber(ARGV[1]) - tonumber(ARGV[4]) * 1000 then
+            redis.call('ZADD', KEYS[2], 'NX', legacyAt, legacy)
+          end
+          redis.call('ZADD', KEYS[2], ARGV[1], ARGV[2])
+          redis.call('HSET', KEYS[3], ARGV[2], ARGV[5])
+          redis.call('ZREMRANGEBYSCORE', KEYS[2], '-inf', '(' .. (tonumber(ARGV[1]) - tonumber(ARGV[4]) * 1000))
+          local extra = redis.call('ZCARD', KEYS[2]) - tonumber(ARGV[3])
+          if extra > 0 then redis.call('ZREMRANGEBYRANK', KEYS[2], 0, extra - 1) end
+          for _, query in ipairs(redis.call('HKEYS', KEYS[3])) do
+            if not redis.call('ZSCORE', KEYS[2], query) then redis.call('HDEL', KEYS[3], query) end
+          end
+          redis.call('EXPIRE', KEYS[2], ARGV[4])
+          redis.call('EXPIRE', KEYS[3], ARGV[4])
+          return 1`,
+        3, key, key + ':searches', key + ':search_results', eventAt, query,
+        TELEMETRY_CONFIG.MAX_RECENT_SEARCHES, TELEMETRY_CONFIG.BEHAVIOR_TTL_SECONDS,
+        JSON.stringify([...new Set(dto.searchPackageIds || [])].slice(0, TELEMETRY_CONFIG.SEMANTIC_SEARCH_LIMIT)));
+    }
 
-    await pipeline.exec();
+    // 3. Lưu gói khám bỏ dở ở bước thanh toán
+    if (dto.actionType === TrackingActionType.DROP_OFF && dto.targetPackageId) {
+      await client.eval(`
+        local legacy = redis.call('HGET', KEYS[1], 'drop_off_pkg')
+        local legacyAt = tonumber(redis.call('HGET', KEYS[1], 'drop_off_at') or '0')
+        if legacy and redis.call('HGET', KEYS[1], 'drop_off_verified') == '1'
+          and legacyAt >= tonumber(ARGV[1]) - tonumber(ARGV[4]) * 1000 then
+          redis.call('ZADD', KEYS[2], 'NX', legacyAt, legacy)
+        end
+        local current = tonumber(redis.call('ZSCORE', KEYS[2], ARGV[2]) or '0')
+        if tonumber(ARGV[1]) > current then redis.call('ZADD', KEYS[2], ARGV[1], ARGV[2]) end
+        redis.call('ZREMRANGEBYSCORE', KEYS[2], '-inf', '(' .. (tonumber(ARGV[1]) - tonumber(ARGV[4]) * 1000))
+        local extra = redis.call('ZCARD', KEYS[2]) - tonumber(ARGV[3])
+        if extra > 0 then redis.call('ZREMRANGEBYRANK', KEYS[2], 0, extra - 1) end
+        redis.call('EXPIRE', KEYS[2], ARGV[4])
+        return 1`,
+        2, key, key + ':drop_offs', eventAt, dto.targetPackageId,
+        TELEMETRY_CONFIG.MAX_RECENT_DROP_OFFS, TELEMETRY_CONFIG.BEHAVIOR_TTL_SECONDS);
+    }
+
+    // Gia hạn TTL cho dữ liệu hành vi (14 ngày)
+    await client.expire(key, TELEMETRY_CONFIG.BEHAVIOR_TTL_SECONDS);
   }
 
-  /**
-   * Ghi log thống kê tìm kiếm và cập nhật lượt xem gói vào cơ sở dữ liệu PostgreSQL
-   */
-  private async persistDatabaseAnalytics(dto: BehaviorEvent): Promise<void> {
-    // 1. Cập nhật lượt xem gói khám
-    if (dto.actionType === TrackingActionType.VIEW_PACKAGE && dto.targetPackageId) {
-      try {
-        await this.prisma.servicePackage.update({
-          where: { id: dto.targetPackageId },
-          data: { viewCount: { increment: 1 } },
-        });
-      } catch (err: any) {
-        this.logger.debug(`[Telemetry] Failed to increment package viewCount: ${err?.message}`);
-      }
-    }
-
-  }
-
-  /**
-   * Xóa cache hành vi, giữ nguyên cache hồ sơ khi người dùng vừa có hành vi mới để phản ánh tức thời
-   */
-  async invalidateBehaviorRecommendationCache(sessionId?: string, userId?: string): Promise<void> {
+  private async incrementPackageViewCount(dto: BehaviorEvent): Promise<void> {
+    if (dto.actionType !== TrackingActionType.VIEW_PACKAGE || !dto.targetPackageId) return;
     try {
-      const deletePromises: Promise<any>[] = [];
-      if (userId) {
-        deletePromises.push(this.redis.deletePattern(`${TELEMETRY_CONFIG.CACHE_PREFIX}:behavior:u:${userId}:*`));
-      }
-      if (sessionId) {
-        deletePromises.push(this.redis.deletePattern(`${TELEMETRY_CONFIG.CACHE_PREFIX}:behavior:sess:${sessionId}`));
-      }
-      if (deletePromises.length > 0) {
-        await Promise.all(deletePromises);
-      }
+      await this.prisma.servicePackage.update({
+        where: { id: dto.targetPackageId },
+        data: { viewCount: { increment: 1 } },
+      });
     } catch (err: any) {
-      this.logger.debug(`[Telemetry] Failed to invalidate home rec cache: ${err?.message}`);
+      this.logger.debug(`[Telemetry] Failed to increment package viewCount: ${err?.message}`);
     }
   }
 
   /**
-   * Đọc ngữ cảnh hành vi (chuyên khoa quan tâm, từ khóa tìm kiếm, gói bỏ dở) từ Redis
+   * Đọc ba nguồn hành vi: đã xem, tìm kiếm và bỏ dở.
    */
   async getBehaviorTelemetryContext(
     userId?: string,
     sessionId?: string,
-  ): Promise<{
-    topSpecialties: Array<{ specialtyId: number; specialtyName: string; score: number }>;
-    lastSearchQuery?: string;
-    dropOffPkgId?: string;
-  }> {
-    if (!this.redis.isEnabled() || (!userId && !sessionId)) {
-      return { topSpecialties: [] };
+  ): Promise<BehaviorTelemetryContext> {
+    const key = this.getUserTelemetryKey(sessionId, userId);
+    if (!this.redis.isEnabled() || !key) {
+      return { recentViews: [], recentSearches: [], recentDropOffs: [] };
     }
+    const client = this.redis.getClient();
+    if (!client) return { recentViews: [], recentSearches: [], recentDropOffs: [] };
 
-    const keys: string[] = [];
-    if (userId) keys.push(`rec:user_interest:${userId}`);
-    if (sessionId) keys.push(`rec:guest_interest:${sessionId}`);
-
-    const specialtyScoreMap = new Map<number, number>();
-    let lastSearchQuery: string | undefined;
-    let dropOffPkgId: string | undefined;
-    let lastSearchAt = 0;
-    let dropOffAt = 0;
-
-    for (const key of keys) {
+    const read = async <T>(source: string, load: () => Promise<T>, fallback: T): Promise<T> => {
       try {
-        const hashData = (await this.redis.hgetall(key)) as Record<string, string> | null;
-        if (!hashData || typeof hashData !== 'object') continue;
-
-        for (const [field, val] of Object.entries(hashData)) {
-          if (field.startsWith('specialty:')) {
-            const specId = parseInt(field.replace('specialty:', ''), 10);
-            const score = parseInt(String(val), 10) || 0;
-            if (!isNaN(specId) && score > 0) {
-              specialtyScoreMap.set(specId, Math.max(specialtyScoreMap.get(specId) || 0, score));
-            }
-          } else if (field === 'last_search_query' && val) {
-            const eventAt = Number(hashData.last_search_at || 0);
-            if (eventAt >= lastSearchAt) {
-              lastSearchAt = eventAt;
-              lastSearchQuery = String(val);
-            }
-          } else if (field === 'drop_off_pkg' && val && hashData.drop_off_verified === '1') {
-            const eventAt = Number(hashData.drop_off_at || 0);
-            if (eventAt >= dropOffAt) {
-              dropOffAt = eventAt;
-              dropOffPkgId = String(val);
-            }
-          }
-        }
-      } catch { }
-    }
-
-    const topSpecialties: Array<{ specialtyId: number; specialtyName: string; score: number }> = [];
-    if (specialtyScoreMap.size > 0) {
-      const specIds = Array.from(specialtyScoreMap.keys());
-      const specialtiesDb = await this.prisma.specialty.findMany({
-        where: { id: { in: specIds } },
-        select: { id: true, name: true },
-      });
-
-      for (const spec of specialtiesDb) {
-        topSpecialties.push({
-          specialtyId: spec.id,
-          specialtyName: spec.name,
-          score: specialtyScoreMap.get(spec.id) || 0,
-        });
+        return await load();
+      } catch {
+        this.logger.debug(`[Telemetry] Unable to read ${source}; skipping this signal.`);
+        return fallback;
       }
-      topSpecialties.sort((a, b) => b.score - a.score);
+    };
+    const recentViews: RecentView[] = [];
+
+    const searches = new Map<string, number>();
+    const dropOffs = new Map<number, number>();
+    const now = Date.now();
+    const cutoff = now - TELEMETRY_CONFIG.BEHAVIOR_TTL_SECONDS * 1000;
+    const isRecent = (at: number) => Number.isSafeInteger(at) && at >= cutoff && at <= now;
+    const addSearch = (raw: string, searchedAt: number) => {
+      const query = raw.normalize('NFC').trim().toLowerCase().replace(/\s+/g, ' ');
+      if (query && isRecent(searchedAt)) {
+        searches.set(query, Math.max(searches.get(query) || 0, searchedAt));
+      }
+    };
+    const addDropOff = (packageId: number, abandonedAt: number) => {
+      if (Number.isInteger(packageId) && packageId > 0 && isRecent(abandonedAt)) {
+        dropOffs.set(packageId, Math.max(dropOffs.get(packageId) || 0, abandonedAt));
+      }
+    };
+
+    // Each read falls back independently, so a broken key does not discard other signals.
+    const [viewed, counts, recentQueries, abandoned, hashData, searchResults] = await Promise.all([
+      read('package views', () => client.zrevrange(key + ':package_views', 0, TELEMETRY_CONFIG.MAX_RECENT_PACKAGE_VIEWS - 1, 'WITHSCORES'), []),
+      read('view counts', () => client.hgetall(key + ':package_view_counts'), {}),
+      read('searches', () => client.zrevrange(key + ':searches', 0, TELEMETRY_CONFIG.MAX_RECENT_SEARCHES - 1, 'WITHSCORES'), []),
+      read('drop-offs', () => client.zrevrange(key + ':drop_offs', 0, TELEMETRY_CONFIG.MAX_RECENT_DROP_OFFS - 1, 'WITHSCORES'), []),
+      read('legacy history', () => client.hgetall(key), {}),
+      read('search results', () => client.hgetall(key + ':search_results'), {}),
+    ]);
+    for (let index = 0; index < abandoned.length; index += 2) {
+      addDropOff(Number(abandoned[index]), Number(abandoned[index + 1]));
+    }
+    for (let index = 0; index < recentQueries.length; index += 2) {
+      addSearch(recentQueries[index], Number(recentQueries[index + 1]));
+    }
+    for (let index = 0; index < viewed.length; index += 2) {
+      const lastViewedAt = Number(viewed[index + 1]);
+      if (Number.isInteger(Number(viewed[index])) && Number(viewed[index]) > 0 && isRecent(lastViewedAt)) {
+        const count = Number(counts[viewed[index]]);
+        recentViews.push({ packageId: Number(viewed[index]), viewCount: Number.isSafeInteger(count) && count > 0 ? count : 1, lastViewedAt });
+      }
+    }
+    // Read legacy data during migration; new events only write sorted sets.
+    if (hashData.last_search_query) {
+      addSearch(hashData.last_search_query, Number(hashData.last_search_at || 0));
+    }
+    if (hashData.drop_off_verified === '1' && hashData.drop_off_pkg) {
+      addDropOff(Number(hashData.drop_off_pkg), Number(hashData.drop_off_at || 0));
     }
 
-    return { topSpecialties, lastSearchQuery, dropOffPkgId };
+    const recentSearches = [...searches].map(([query, searchedAt]) => {
+      let packageIds: number[] = [];
+      try {
+        const parsed: unknown = JSON.parse(searchResults[query] || '[]');
+        if (Array.isArray(parsed)) packageIds = parsed.map(Number).filter((id) => Number.isInteger(id) && id > 0)
+          .slice(0, TELEMETRY_CONFIG.SEMANTIC_SEARCH_LIMIT);
+      } catch { /* Ignore malformed or legacy result snapshots. */ }
+      return { query, searchedAt, ...(searchResults[query] ? { packageIds } : {}) };
+    })
+      .sort((a, b) => b.searchedAt - a.searchedAt || a.query.localeCompare(b.query))
+      .slice(0, TELEMETRY_CONFIG.MAX_RECENT_SEARCHES);
+    const recentDropOffs = [...dropOffs].map(([packageId, abandonedAt]) => ({ packageId, abandonedAt }))
+      .sort((a, b) => b.abandonedAt - a.abandonedAt || a.packageId - b.packageId)
+      .slice(0, TELEMETRY_CONFIG.MAX_RECENT_DROP_OFFS);
+    const qualifiedDropOffs = await read('rebooked drop-offs', () => this.excludeRebookedDropOffs(recentDropOffs, userId, sessionId), []);
+    return { recentViews, recentSearches, recentDropOffs: qualifiedDropOffs };
+  }
+
+  private async excludeRebookedDropOffs(dropOffs: RecentDropOff[], userId?: string, sessionId?: string): Promise<RecentDropOff[]> {
+    if (!dropOffs.length) return [];
+    const since = new Date(Math.min(...dropOffs.map(item => item.abandonedAt)));
+    const successfulStatuses = ['CONFIRMED', 'CHECKED_IN', 'COMPLETED', 'NO_SHOW'] as const;
+    const confirmationStatuses = ['CONFIRMED'] as const;
+    // One account-scoped query; confirmation time also handles holds created before abandonment.
+    const bookings = await this.prisma.appointment.findMany({
+      where: {
+        servicePackageId: { in: dropOffs.map(item => item.packageId) },
+        status: { in: [...successfulStatuses] },
+        AND: [
+          userId ? { OR: [{ patientProfile: { accountId: userId } }, { bookingOrder: { accountId: userId } }] }
+            : { sourceView: { sessionId } },
+          { OR: [
+            { createdAt: { gte: since } },
+            { statusHistories: { some: { toStatus: { in: [...confirmationStatuses] }, createdAt: { gte: since } } } },
+          ] },
+        ],
+      },
+      select: { servicePackageId: true, createdAt: true, statusHistories: {
+        where: { toStatus: { in: [...confirmationStatuses] }, createdAt: { gte: since } },
+        orderBy: { createdAt: 'desc' }, take: 1, select: { createdAt: true },
+      } },
+    });
+    const confirmedAt = new Map<number, number>();
+    for (const booking of bookings) {
+      const at = Math.max(booking.createdAt.getTime(), booking.statusHistories[0]?.createdAt.getTime() || 0);
+      if (booking.servicePackageId) {
+        confirmedAt.set(booking.servicePackageId, Math.max(confirmedAt.get(booking.servicePackageId) || 0, at));
+      }
+    }
+    return dropOffs.filter(item => (confirmedAt.get(item.packageId) || 0) < item.abandonedAt);
   }
 }

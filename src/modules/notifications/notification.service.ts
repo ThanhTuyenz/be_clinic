@@ -146,7 +146,7 @@ export class NotificationService {
   /**
    * Đánh dấu 1 thông báo đã đọc
    */
-  async markAsRead(userId: string, notificationId: string) {
+  async markAsRead(userId: string, notificationId: number) {
     const notif = await this.prisma.notification.findFirst({
       where: { id: notificationId, userId },
     });

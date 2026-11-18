@@ -11,8 +11,6 @@
     "specialtySlug": "noi-tong-quat",
     "isFeatured": true,
     "avatarUrl": "https://images.unsplash.com/photo-1537368910025-700350fe46c7?auto=format&fit=crop&q=80&w=400",
-    "ratingAverage": 4.9,
-    "ratingCount": 180,
     "branchCode": "VC-CENTRAL",
     "roomCode": "P101"
   },
@@ -28,8 +26,6 @@
     "specialtySlug": "noi-tong-quat",
     "isFeatured": false,
     "avatarUrl": "https://images.unsplash.com/photo-1594824813580-c116d44524c5?auto=format&fit=crop&q=80&w=400",
-    "ratingAverage": 4.8,
-    "ratingCount": 112,
     "branchCode": "VC-EAST",
     "roomCode": "P201"
   },
@@ -45,8 +41,6 @@
     "specialtySlug": "noi-tong-quat",
     "isFeatured": false,
     "avatarUrl": "https://images.unsplash.com/photo-1622253692010-333f2da6031d?auto=format&fit=crop&q=80&w=400",
-    "ratingAverage": 4.7,
-    "ratingCount": 89,
     "branchCode": "VC-CENTRAL",
     "roomCode": "P101"
   },
@@ -62,8 +56,6 @@
     "specialtySlug": "tim-mach",
     "isFeatured": true,
     "avatarUrl": "https://images.unsplash.com/photo-1622253692010-333f2da6031d?auto=format&fit=crop&q=80&w=400",
-    "ratingAverage": 4.9,
-    "ratingCount": 168,
     "branchCode": "VC-CENTRAL",
     "roomCode": "P103"
   },
@@ -79,8 +71,6 @@
     "specialtySlug": "tim-mach",
     "isFeatured": true,
     "avatarUrl": "https://images.unsplash.com/photo-1537368910025-700350fe46c7?auto=format&fit=crop&q=80&w=400",
-    "ratingAverage": 5,
-    "ratingCount": 245,
     "branchCode": "VC-EAST",
     "roomCode": "P203"
   },
@@ -96,8 +86,6 @@
     "specialtySlug": "tim-mach",
     "isFeatured": false,
     "avatarUrl": "https://images.unsplash.com/photo-1559839734-2b71ea197ec2?auto=format&fit=crop&q=80&w=400",
-    "ratingAverage": 4.8,
-    "ratingCount": 92,
     "branchCode": "VC-CENTRAL",
     "roomCode": "P103"
   },
@@ -113,8 +101,6 @@
     "specialtySlug": "tieu-hoa-gan-mat",
     "isFeatured": true,
     "avatarUrl": "https://images.unsplash.com/photo-1559839734-2b71ea197ec2?auto=format&fit=crop&q=80&w=400",
-    "ratingAverage": 4.8,
-    "ratingCount": 135,
     "branchCode": "VC-EAST",
     "roomCode": "P201"
   },
@@ -130,8 +116,6 @@
     "specialtySlug": "tieu-hoa-gan-mat",
     "isFeatured": false,
     "avatarUrl": "https://images.unsplash.com/photo-1537368910025-700350fe46c7?auto=format&fit=crop&q=80&w=400",
-    "ratingAverage": 4.9,
-    "ratingCount": 178,
     "branchCode": "VC-CENTRAL",
     "roomCode": "P104"
   },
@@ -147,8 +131,6 @@
     "specialtySlug": "tieu-hoa-gan-mat",
     "isFeatured": false,
     "avatarUrl": "https://images.unsplash.com/photo-1582750433449-648ed127bb54?auto=format&fit=crop&q=80&w=400",
-    "ratingAverage": 4.8,
-    "ratingCount": 96,
     "branchCode": "VC-EAST",
     "roomCode": "P201"
   },
@@ -164,8 +146,6 @@
     "specialtySlug": "ho-hap",
     "isFeatured": false,
     "avatarUrl": "https://images.unsplash.com/photo-1612349317150-e413f6a5b16d?auto=format&fit=crop&q=80&w=400",
-    "ratingAverage": 4.8,
-    "ratingCount": 88,
     "branchCode": "VC-CENTRAL",
     "roomCode": "P105"
   },
@@ -181,8 +161,6 @@
     "specialtySlug": "ho-hap",
     "isFeatured": true,
     "avatarUrl": "https://images.unsplash.com/photo-1594824813580-c116d44524c5?auto=format&fit=crop&q=80&w=400",
-    "ratingAverage": 4.9,
-    "ratingCount": 164,
     "branchCode": "VC-EAST",
     "roomCode": "P201"
   },
@@ -198,8 +176,6 @@
     "specialtySlug": "ho-hap",
     "isFeatured": false,
     "avatarUrl": "https://images.unsplash.com/photo-1622253692010-333f2da6031d?auto=format&fit=crop&q=80&w=400",
-    "ratingAverage": 4.7,
-    "ratingCount": 75,
     "branchCode": "VC-CENTRAL",
     "roomCode": "P105"
   },
@@ -215,8 +191,6 @@
     "specialtySlug": "noi-tiet-dai-thao-duong",
     "isFeatured": false,
     "avatarUrl": "https://images.unsplash.com/photo-1582750433449-648ed127bb54?auto=format&fit=crop&q=80&w=400",
-    "ratingAverage": 4.9,
-    "ratingCount": 115,
     "branchCode": "VC-EAST",
     "roomCode": "P201"
   },
@@ -232,8 +206,6 @@
     "specialtySlug": "noi-tiet-dai-thao-duong",
     "isFeatured": true,
     "avatarUrl": "https://images.unsplash.com/photo-1537368910025-700350fe46c7?auto=format&fit=crop&q=80&w=400",
-    "ratingAverage": 5,
-    "ratingCount": 230,
     "branchCode": "VC-CENTRAL",
     "roomCode": "P101"
   },
@@ -249,8 +221,6 @@
     "specialtySlug": "noi-tiet-dai-thao-duong",
     "isFeatured": false,
     "avatarUrl": "https://images.unsplash.com/photo-1559839734-2b71ea197ec2?auto=format&fit=crop&q=80&w=400",
-    "ratingAverage": 4.8,
-    "ratingCount": 88,
     "branchCode": "VC-EAST",
     "roomCode": "P201"
   },
@@ -266,8 +236,6 @@
     "specialtySlug": "than-kinh",
     "isFeatured": false,
     "avatarUrl": "https://images.unsplash.com/photo-1622902046580-2b47f47f5471?auto=format&fit=crop&q=80&w=400",
-    "ratingAverage": 5,
-    "ratingCount": 176,
     "branchCode": "VC-CENTRAL",
     "roomCode": "P101"
   },
@@ -283,8 +251,6 @@
     "specialtySlug": "than-kinh",
     "isFeatured": true,
     "avatarUrl": "https://images.unsplash.com/photo-1559839734-2b71ea197ec2?auto=format&fit=crop&q=80&w=400",
-    "ratingAverage": 4.9,
-    "ratingCount": 142,
     "branchCode": "VC-EAST",
     "roomCode": "P202"
   },
@@ -300,8 +266,6 @@
     "specialtySlug": "than-kinh",
     "isFeatured": false,
     "avatarUrl": "https://images.unsplash.com/photo-1612349317150-e413f6a5b16d?auto=format&fit=crop&q=80&w=400",
-    "ratingAverage": 4.8,
-    "ratingCount": 94,
     "branchCode": "VC-CENTRAL",
     "roomCode": "P101"
   },
@@ -317,8 +281,6 @@
     "specialtySlug": "ngoai-tong-quat",
     "isFeatured": false,
     "avatarUrl": "https://images.unsplash.com/photo-1579684385127-1ef15d508118?auto=format&fit=crop&q=80&w=400",
-    "ratingAverage": 4.8,
-    "ratingCount": 94,
     "branchCode": "VC-EAST",
     "roomCode": "P202"
   },
@@ -334,8 +296,6 @@
     "specialtySlug": "ngoai-tong-quat",
     "isFeatured": true,
     "avatarUrl": "https://images.unsplash.com/photo-1622253692010-333f2da6031d?auto=format&fit=crop&q=80&w=400",
-    "ratingAverage": 4.9,
-    "ratingCount": 118,
     "branchCode": "VC-CENTRAL",
     "roomCode": "P100"
   },
@@ -351,8 +311,6 @@
     "specialtySlug": "ngoai-tong-quat",
     "isFeatured": false,
     "avatarUrl": "https://images.unsplash.com/photo-1537368910025-700350fe46c7?auto=format&fit=crop&q=80&w=400",
-    "ratingAverage": 4.7,
-    "ratingCount": 81,
     "branchCode": "VC-EAST",
     "roomCode": "P202"
   },
@@ -368,8 +326,6 @@
     "specialtySlug": "ngoai-chan-thuong-chinh-hinh",
     "isFeatured": false,
     "avatarUrl": "https://images.unsplash.com/photo-1623854767648-e7bb8009f0db?auto=format&fit=crop&q=80&w=400",
-    "ratingAverage": 4.9,
-    "ratingCount": 150,
     "branchCode": "VC-CENTRAL",
     "roomCode": "P100"
   },
@@ -385,8 +341,6 @@
     "specialtySlug": "ngoai-chan-thuong-chinh-hinh",
     "isFeatured": true,
     "avatarUrl": "https://images.unsplash.com/photo-1537368910025-700350fe46c7?auto=format&fit=crop&q=80&w=400",
-    "ratingAverage": 5,
-    "ratingCount": 215,
     "branchCode": "VC-EAST",
     "roomCode": "P202"
   },
@@ -402,8 +356,6 @@
     "specialtySlug": "ngoai-chan-thuong-chinh-hinh",
     "isFeatured": false,
     "avatarUrl": "https://images.unsplash.com/photo-1612349317150-e413f6a5b16d?auto=format&fit=crop&q=80&w=400",
-    "ratingAverage": 4.8,
-    "ratingCount": 103,
     "branchCode": "VC-CENTRAL",
     "roomCode": "P100"
   },
@@ -419,8 +371,6 @@
     "specialtySlug": "nhi-khoa",
     "isFeatured": true,
     "avatarUrl": "https://images.unsplash.com/photo-1594824813580-c116d44524c5?auto=format&fit=crop&q=80&w=400",
-    "ratingAverage": 4.9,
-    "ratingCount": 210,
     "branchCode": "VC-EAST",
     "roomCode": "P204"
   },
@@ -436,8 +386,6 @@
     "specialtySlug": "nhi-khoa",
     "isFeatured": true,
     "avatarUrl": "https://images.unsplash.com/photo-1559839734-2b71ea197ec2?auto=format&fit=crop&q=80&w=400",
-    "ratingAverage": 4.9,
-    "ratingCount": 195,
     "branchCode": "VC-CENTRAL",
     "roomCode": "P102"
   },
@@ -453,8 +401,6 @@
     "specialtySlug": "nhi-khoa",
     "isFeatured": false,
     "avatarUrl": "https://images.unsplash.com/photo-1622253692010-333f2da6031d?auto=format&fit=crop&q=80&w=400",
-    "ratingAverage": 4.8,
-    "ratingCount": 87,
     "branchCode": "VC-EAST",
     "roomCode": "P204"
   },
@@ -470,8 +416,6 @@
     "specialtySlug": "san-phu-khoa",
     "isFeatured": false,
     "avatarUrl": "https://images.unsplash.com/photo-1559839734-2b71ea197ec2?auto=format&fit=crop&q=80&w=400",
-    "ratingAverage": 4.9,
-    "ratingCount": 162,
     "branchCode": "VC-EAST",
     "roomCode": "P204"
   },
@@ -487,8 +431,6 @@
     "specialtySlug": "san-phu-khoa",
     "isFeatured": true,
     "avatarUrl": "https://images.unsplash.com/photo-1594824813580-c116d44524c5?auto=format&fit=crop&q=80&w=400",
-    "ratingAverage": 4.9,
-    "ratingCount": 174,
     "branchCode": "VC-CENTRAL",
     "roomCode": "P100"
   },
@@ -504,8 +446,6 @@
     "specialtySlug": "san-phu-khoa",
     "isFeatured": false,
     "avatarUrl": "https://images.unsplash.com/photo-1582750433449-648ed127bb54?auto=format&fit=crop&q=80&w=400",
-    "ratingAverage": 5,
-    "ratingCount": 204,
     "branchCode": "VC-EAST",
     "roomCode": "P204"
   },
@@ -521,8 +461,6 @@
     "specialtySlug": "mat",
     "isFeatured": false,
     "avatarUrl": "https://images.unsplash.com/photo-1559839734-2b71ea197ec2?auto=format&fit=crop&q=80&w=400",
-    "ratingAverage": 4.8,
-    "ratingCount": 105,
     "branchCode": "VC-CENTRAL",
     "roomCode": "P107"
   },
@@ -538,8 +476,6 @@
     "specialtySlug": "mat",
     "isFeatured": true,
     "avatarUrl": "https://images.unsplash.com/photo-1622253692010-333f2da6031d?auto=format&fit=crop&q=80&w=400",
-    "ratingAverage": 4.9,
-    "ratingCount": 128,
     "branchCode": "VC-EAST",
     "roomCode": "P205"
   },
@@ -555,8 +491,6 @@
     "specialtySlug": "mat",
     "isFeatured": false,
     "avatarUrl": "https://images.unsplash.com/photo-1594824813580-c116d44524c5?auto=format&fit=crop&q=80&w=400",
-    "ratingAverage": 4.9,
-    "ratingCount": 156,
     "branchCode": "VC-CENTRAL",
     "roomCode": "P107"
   },
@@ -572,8 +506,6 @@
     "specialtySlug": "tai-mui-hong",
     "isFeatured": false,
     "avatarUrl": "https://images.unsplash.com/photo-1622253692010-333f2da6031d?auto=format&fit=crop&q=80&w=400",
-    "ratingAverage": 4.9,
-    "ratingCount": 130,
     "branchCode": "VC-EAST",
     "roomCode": "P205"
   },
@@ -589,8 +521,6 @@
     "specialtySlug": "tai-mui-hong",
     "isFeatured": true,
     "avatarUrl": "https://images.unsplash.com/photo-1559839734-2b71ea197ec2?auto=format&fit=crop&q=80&w=400",
-    "ratingAverage": 4.8,
-    "ratingCount": 114,
     "branchCode": "VC-CENTRAL",
     "roomCode": "P106"
   },
@@ -606,8 +536,6 @@
     "specialtySlug": "tai-mui-hong",
     "isFeatured": false,
     "avatarUrl": "https://images.unsplash.com/photo-1537368910025-700350fe46c7?auto=format&fit=crop&q=80&w=400",
-    "ratingAverage": 4.7,
-    "ratingCount": 89,
     "branchCode": "VC-EAST",
     "roomCode": "P205"
   },
@@ -623,8 +551,6 @@
     "specialtySlug": "rang-ham-mat",
     "isFeatured": false,
     "avatarUrl": "https://images.unsplash.com/photo-1537368910025-700350fe46c7?auto=format&fit=crop&q=80&w=400",
-    "ratingAverage": 4.8,
-    "ratingCount": 85,
     "branchCode": "VC-CENTRAL",
     "roomCode": "P100"
   },
@@ -640,8 +566,6 @@
     "specialtySlug": "rang-ham-mat",
     "isFeatured": true,
     "avatarUrl": "https://images.unsplash.com/photo-1559839734-2b71ea197ec2?auto=format&fit=crop&q=80&w=400",
-    "ratingAverage": 4.9,
-    "ratingCount": 140,
     "branchCode": "VC-EAST",
     "roomCode": "P201"
   },
@@ -657,8 +581,6 @@
     "specialtySlug": "rang-ham-mat",
     "isFeatured": false,
     "avatarUrl": "https://images.unsplash.com/photo-1622253692010-333f2da6031d?auto=format&fit=crop&q=80&w=400",
-    "ratingAverage": 4.9,
-    "ratingCount": 116,
     "branchCode": "VC-CENTRAL",
     "roomCode": "P100"
   },
@@ -674,8 +596,6 @@
     "specialtySlug": "da-lieu",
     "isFeatured": false,
     "avatarUrl": "https://images.unsplash.com/photo-1582750433449-648ed127bb54?auto=format&fit=crop&q=80&w=400",
-    "ratingAverage": 4.9,
-    "ratingCount": 142,
     "branchCode": "VC-EAST",
     "roomCode": "P202"
   },
@@ -691,8 +611,6 @@
     "specialtySlug": "da-lieu",
     "isFeatured": true,
     "avatarUrl": "https://images.unsplash.com/photo-1594824813580-c116d44524c5?auto=format&fit=crop&q=80&w=400",
-    "ratingAverage": 4.9,
-    "ratingCount": 165,
     "branchCode": "VC-CENTRAL",
     "roomCode": "P108"
   },
@@ -708,8 +626,6 @@
     "specialtySlug": "da-lieu",
     "isFeatured": false,
     "avatarUrl": "https://images.unsplash.com/photo-1537368910025-700350fe46c7?auto=format&fit=crop&q=80&w=400",
-    "ratingAverage": 5,
-    "ratingCount": 198,
     "branchCode": "VC-EAST",
     "roomCode": "P202"
   }

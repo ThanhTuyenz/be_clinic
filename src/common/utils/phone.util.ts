@@ -20,13 +20,3 @@ export function normalizePhoneVariants(raw: string): string[] {
   // Dedup: loại bỏ biến thể trùng nhau
   return [...new Set([cleaned, withPlus, withZero])];
 }
-
-/**
- * Chuẩn hóa số điện thoại về dạng +84xxx (quốc tế).
- * Trả về nguyên bản nếu không nhận dạng được.
- */
-export function toInternationalPhone(raw: string): string {
-  const cleaned = (raw || '').trim();
-  if (cleaned.startsWith('0')) return `+84${cleaned.slice(1)}`;
-  return cleaned;
-}

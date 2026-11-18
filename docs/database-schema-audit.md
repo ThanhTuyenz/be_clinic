@@ -47,8 +47,8 @@ Không nên xóa tất cả quan hệ tam giác. Một số cột là snapshot n
 
 | Model | Đánh giá | Lý do |
 |---|---|---|
-| Clinic, Branch, ClinicRoom | Đạt 3NF | Thuộc tính phụ thuộc trực tiếp PK |
-| UserBranchAssignment, DoctorBranchAssignment, DoctorSpecialty | Đạt 3NF | Bảng nối rõ ràng, unique đúng |
+| Branch, ClinicRoom | Đạt 3NF | Thuộc tính phụ thuộc trực tiếp PK; hệ thống một chuỗi không còn tầng Clinic |
+| User.branchId, DoctorSpecialty | Đạt 3NF | User thuộc tối đa một chi nhánh tại một thời điểm; DoctorSpecialty là bảng nối rõ ràng |
 | DoctorScheduleTemplate, DoctorSchedule, DoctorScheduleSlot | Gần 3NF | Cấu trúc tốt; counter là dữ liệu dẫn xuất có kiểm soát transaction |
 | Appointment | Chưa đạt | `scheduleSlotId -> schedule -> doctorId, branchId`, nhưng hai cột vẫn lặp trong Appointment |
 | Invoice | Cố ý phi chuẩn hóa | Patient/branch là snapshot kế toán; giữ lại có lý do nghiệp vụ |

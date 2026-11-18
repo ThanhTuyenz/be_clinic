@@ -4,6 +4,7 @@ import { MailsModule } from '../../infrastructure/mail/mails.module.js';
 import { NotificationModule } from '../notifications/notification.module.js';
 import { RecommendationModule } from '../recommendations/recommendation.module.js';
 import { AppointmentReminderTask } from './appointment-reminder.task.js';
+import { AppointmentNoShowTask } from './appointment-no-show.task.js';
 import { AppointmentsController } from './appointments.controller.js';
 import { AppointmentsService } from './appointments.service.js';
 
@@ -28,6 +29,7 @@ import { AppointmentConfirmationService } from './appointment-confirmation.servi
     AppointmentConfirmationService,
     PatientAppointmentsService,
     AppointmentReminderTask,
+    AppointmentNoShowTask,
   ],
   exports: [AppointmentConfirmationService],
 })

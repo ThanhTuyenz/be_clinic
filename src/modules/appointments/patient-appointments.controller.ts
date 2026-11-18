@@ -1,14 +1,17 @@
+import { ExcludeRoles } from '../../common/decorators/exclude-roles.decorator.js';
 import { Body, Controller, Get, Param, Post, Req, Res } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiParam, ApiTags } from '@nestjs/swagger';
 import type { Request, Response } from 'express';
 import { SkipPermissions } from '../../common/decorators/skip-permissions.decorator.js';
 import { AppointmentConfirmationService } from './appointment-confirmation.service.js';
 import { RescheduleAppointmentDto } from './dtos/reschedule-appointment.dto.js';
+import { CancelAppointmentDto } from './dtos/cancel-appointment.dto.js';
 import { buildGoogleCalendarUrl, buildIcsContent } from './helpers/calendar.helper.js';
 import { PatientAppointmentsService } from './patient-appointments.service.js';
 
 @ApiTags('PatientAppointments')
 @ApiBearerAuth('access-token')
+@ExcludeRoles('CHAIN_MANAGER')
 @Controller('appointments')
 @SkipPermissions()
 export class PatientAppointmentsController {
@@ -20,13 +23,19 @@ export class PatientAppointmentsController {
     return this.appointments.myAppointments(request.user!.id);
   }
 
+  @Get(':id/cancellation-quote')
+  @ApiOperation({ summary: 'Xem trước tỷ lệ và số tiền hoàn khi hủy lịch' })
+  cancellationQuote(@Req() request: Request, @Param('id') id: string) {
+    return this.appointments.cancellationQuote(request.user!.id, id);
+  }
+
   @Post(':id/cancel')
   @ApiOperation({ summary: 'Bệnh nhân tự hủy lịch hẹn' })
   @ApiParam({ name: 'id', format: 'uuid' })
   cancelAppointment(
     @Req() request: Request,
     @Param('id') id: string,
-    @Body() body: { reason?: string; refundBank?: { bankCode?: string; bankName?: string; bankBin?: string; accountNumber?: string; accountName?: string } },
+    @Body() body: CancelAppointmentDto,
   ) {
     return this.appointments.cancelMyAppointment(request.user!.id, id, body);
   }

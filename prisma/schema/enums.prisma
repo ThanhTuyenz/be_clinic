@@ -9,8 +9,6 @@ enum UserRole {
   DOCTOR         @map("doctor")
   RECEPTIONIST   @map("receptionist")
   PATIENT        @map("patient")
-  PHARMACIST     @map("pharmacist")
-  CASHIER        @map("cashier")
 }
 
 enum UserStatus {
@@ -45,22 +43,16 @@ enum ScheduleStatus {
 enum SlotStatus {
   AVAILABLE
   FULL
-  BLOCKED
 }
 
 enum AppointmentStatus {
   HOLD
-  PENDING_PAYMENT
-  BOOKED
   CONFIRMED
   CHECKED_IN
-  IN_EXAMINATION
   COMPLETED
   CANCELLED
   EXPIRED
   NO_SHOW
-  REFUND_REQUIRED
-  MANUAL_REVIEW
 }
 
 enum BookingOrderStatus {
@@ -68,7 +60,6 @@ enum BookingOrderStatus {
   PENDING_PAYMENT
   PAID
   CANCELLED
-  PARTIALLY_CANCELLED
   REFUNDED
 }
 

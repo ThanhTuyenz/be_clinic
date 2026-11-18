@@ -24,7 +24,7 @@ export interface AppointmentBookedPayload {
   servicePackageName?: string;
   packageName?: string;
   bookingType?: 'DOCTOR' | 'SERVICE_PACKAGE' | 'HEALTH_PACKAGE';
-  branchId?: string;
+  branchId?: number;
   branchName?: string;
   appointmentDate?: string;
   startTime?: string;
@@ -37,7 +37,7 @@ export interface AppointmentStatusChangedPayload {
   status: string;
   previousStatus?: string;
   bookingCode?: string;
-  branchId?: string;
+  branchId?: number;
 }
 
 @WebSocketGateway({

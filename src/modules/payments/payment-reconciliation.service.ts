@@ -44,13 +44,13 @@ export class PaymentReconciliationService {
           provider: 'PAYOS',
           providerTransactionId: { not: null },
           createdAt: { gte: new Date(Date.now() - 24 * 60 * 60 * 1000), lte: new Date(Date.now() - 30_000) },
-          invoice: { status: 'UNPAID' },
+          invoice: { status: { in: ['UNPAID', 'CANCELLED'] } },
           OR: [
             { status: 'PENDING' },
             // Recover old timeout cancellations, never manually cancelled bookings.
-            { status: 'FAILED', invoice: { appointment: {
+            { status: 'FAILED', invoice: { bookingOrder: { appointments: { some: {
               status: 'CANCELLED', statusHistories: { some: { reason: 'PAYMENT_HOLD_TIMEOUT' } },
-            } } },
+            } } } } },
           ],
         },
         select: { id: true },
@@ -78,10 +78,7 @@ export class PaymentReconciliationService {
     const payment = await this.prisma.paymentTransaction.findFirst({
       where: {
         provider: 'PAYOS',
-        invoice: { OR: [
-          { appointmentId },
-          { bookingOrder: { appointments: { some: { id: appointmentId } } } },
-        ] },
+        invoice: { bookingOrder: { appointments: { some: { id: appointmentId } } } },
       },
       select: { id: true, status: true, invoice: { select: { status: true } } },
       orderBy: { createdAt: 'desc' },

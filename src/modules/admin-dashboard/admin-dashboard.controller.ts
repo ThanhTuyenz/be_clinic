@@ -1,8 +1,10 @@
+import { ParseIntPipe } from '@nestjs/common';
+import { ExcludeRoles } from '../../common/decorators/exclude-roles.decorator.js';
 import { Controller, Get, Query, Req } from '@nestjs/common'
 import type { Request } from 'express'
 import { ApiBearerAuth, ApiOperation, ApiQuery, ApiTags } from '@nestjs/swagger'
 import { RequirePermissions } from 'src/common/decorators/require-permissions.decorator'
-import { AppPermission } from 'src/common/constants/permissions.constant'
+import { AppPermission } from '../auth/permissions/constants/permissions.constant.js'
 import { ReceptionSummaryService } from './reception-summary.service.js'
 import { AdminDashboardService } from './admin-dashboard.service.js'
 
@@ -12,15 +14,16 @@ import { AdminDashboardService } from './admin-dashboard.service.js'
 export class AdminDashboardController {
   constructor(private readonly dashboard: AdminDashboardService, private readonly reception: ReceptionSummaryService) {}
 
+  @ExcludeRoles('CHAIN_MANAGER')
   @Get('reception-summary')
   @RequirePermissions(AppPermission.APPOINTMENT_READ)
   @ApiOperation({ summary: 'Thống kê tiếp nhận và thu ngân theo phạm vi chi nhánh' })
   @ApiQuery({ name: 'date', required: false, description: 'YYYY-MM-DD' })
-  @ApiQuery({ name: 'branchId', required: false, description: 'UUID chi nhánh (hoặc all dành cho quản lý chuỗi)' })
+  @ApiQuery({ name: 'branchId', required: false, description: 'ID số của chi nhánh; bỏ trống để xem toàn bộ phạm vi được phép' })
   receptionSummary(
     @Req() request: Request,
     @Query('date') date?: string,
-    @Query('branchId') branchId?: string,
+    @Query('branchId', new ParseIntPipe({ optional: true })) branchId?: number,
   ) {
     return this.reception.getReceptionSummary(request.user!.id, { date, branchId })
   }
@@ -28,11 +31,11 @@ export class AdminDashboardController {
   @Get('dashboard')
   @RequirePermissions(AppPermission.APPOINTMENT_READ)
   @ApiOperation({ summary: 'Thống kê tổng quan vận hành theo role và phạm vi chi nhánh' })
-  @ApiQuery({ name: 'branchId', required: false, description: 'Lọc theo UUID chi nhánh (hoặc "all")' })
+  @ApiQuery({ name: 'branchId', required: false, description: 'Lọc theo ID số của chi nhánh; bỏ trống để xem toàn bộ phạm vi được phép' })
   @ApiQuery({ name: 'timeFilter', required: false, enum: ['today', 'week', 'month'] })
   overview(
     @Req() request: Request,
-    @Query('branchId') branchId?: string,
+    @Query('branchId', new ParseIntPipe({ optional: true })) branchId?: number,
     @Query('timeFilter') timeFilter?: 'today' | 'week' | 'month',
   ) {
     return this.dashboard.overview(request.user!.id, { branchId, timeFilter })
@@ -48,7 +51,7 @@ export class AdminDashboardController {
   analytics(
     @Req() request: Request,
     @Query('timeFilter') timeFilter?: string,
-    @Query('branchId') branchId?: string,
+    @Query('branchId', new ParseIntPipe({ optional: true })) branchId?: number,
     @Query('startDate') startDate?: string,
     @Query('endDate') endDate?: string,
   ) {
@@ -76,7 +79,7 @@ export class AdminDashboardController {
   @ApiQuery({ name: 'endDate', required: false, description: 'YYYY-MM-DD' })
   getDemandInsights(
     @Req() request: Request,
-    @Query('branchId') branchId?: string,
+    @Query('branchId', new ParseIntPipe({ optional: true })) branchId?: number,
     @Query('timeFilter') timeFilter?: string,
     @Query('startDate') startDate?: string,
     @Query('endDate') endDate?: string,
@@ -94,7 +97,7 @@ export class AdminDashboardController {
   @ApiQuery({ name: 'forceRefresh', required: false, type: Boolean })
   getAiExecutiveReport(
     @Req() request: Request,
-    @Query('branchId') branchId?: string,
+    @Query('branchId', new ParseIntPipe({ optional: true })) branchId?: number,
     @Query('timeFilter') timeFilter?: string,
     @Query('startDate') startDate?: string,
     @Query('endDate') endDate?: string,

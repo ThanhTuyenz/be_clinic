@@ -1,3 +1,4 @@
+import { reserveBookingSlot } from './helpers/slot-reservation.helper.js';
 import { BadRequestException, ConflictException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { randomUUID } from 'node:crypto';
@@ -20,7 +21,7 @@ export class ReceptionBookingService {
   async createReception(userId: string, input: CreateReceptionAppointmentDto) {
     const user = await getStaffUser(this.prisma, userId);
     if (!RECEPTION_ROLES.includes(user.role)) throw new ForbiddenException('Không có quyền đặt lịch tại quầy');
-    const branchIds = user.branchAssignments.map(link => link.branchId);
+    const branchIds = user.branchId ? [user.branchId] : [];
     if (user.role !== 'CHAIN_MANAGER' && (!branchIds.length || (input.branchId && !branchIds.includes(input.branchId)))) {
       throw new ForbiddenException('Chỉ được tạo lịch tại chi nhánh phụ trách');
     }
@@ -76,20 +77,20 @@ export class ReceptionBookingService {
       }
       const patientProfileId = await this.patients.resolveReceptionProfile(tx, input);
       await assertPatientSlotAvailable(tx, patientProfileId, slot);
-      const reserved = await tx.$executeRaw`
-        UPDATE "doctor_schedule_slots"
-        SET "occupied_count" = "occupied_count" + 1, "updated_at" = NOW()
-        WHERE "id" = ${slot.id}::uuid AND "is_active" = TRUE
-          AND "slot_status" = 'AVAILABLE' AND "occupied_count" < "capacity"
-      `;
+      const reserved = await reserveBookingSlot(tx, slot.id);
       if (reserved !== 1) throw new ConflictException('Khung giờ vừa hết chỗ, vui lòng chọn lại');
 
       const appointmentId = randomUUID();
       const bookingCode = `VC-${appointmentId.replace(/-/g, '').slice(0, 20).toUpperCase()}`;
+      const profile = await tx.patientProfile.findUniqueOrThrow({ where: { id: patientProfileId }, select: { accountId: true } });
+      const bookingOrder = await tx.bookingOrder.create({ data: {
+        accountId: profile.accountId, orderCode: `ORD-${randomUUID().replace(/-/g, '').slice(0, 24).toUpperCase()}`,
+        groupType: 'SINGLE', totalAmount: service.price,
+      } });
       const queueNumber = await computeQueueNumber(tx, appointmentId, slot.id);
       await tx.appointment.create({
         data: {
-          id: appointmentId, bookingCode, patientProfileId,
+          id: appointmentId, bookingCode, patientProfileId, bookingOrderId: bookingOrder.id,
           branchId: slot.schedule.branchId, bookingMethodId: method.id,
           servicePackageId: service.id, servicePrice: service.price,
           scheduleSlotId: slot.id, queueNumber,
@@ -99,9 +100,8 @@ export class ReceptionBookingService {
       });
       await tx.invoice.create({
         data: {
-          appointmentId, issuedBranchId: slot.schedule.branchId,
+          bookingOrderId: bookingOrder.id, issuedBranchId: slot.schedule.branchId,
           subtotal: service.price, totalAmount: service.price,
-          items: { create: { description: service.name, quantity: 1, unitPrice: service.price, amount: service.price } },
         },
       });
       return tx.appointment.findUniqueOrThrow({ where: { id: appointmentId }, include: appointmentInclude() });

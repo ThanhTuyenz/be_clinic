@@ -1,8 +1,8 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { Cron } from '@nestjs/schedule';
 import { PrismaService } from '../../infrastructure/database/prisma/prisma.service.js';
-import { analyticsRange, vietnamDateKey } from '../search-analytics/analytics-time.js';
-import { conversionPercent, demandTelemetry, SUCCESSFUL_BOOKING_STATUSES } from '../search-analytics/demand-telemetry.js';
+import { analyticsRange, vietnamDateKey } from '../analytics/analytics-time.js';
+import { conversionPercent, demandTelemetry, SUCCESSFUL_BOOKING_STATUSES } from './analytics/demand-telemetry.js';
 
 @Injectable()
 export class TelemetrySyncTask {

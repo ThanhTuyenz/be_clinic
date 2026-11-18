@@ -1,25 +1,25 @@
-import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ForbiddenException, Injectable } from '@nestjs/common';
 import { PrismaService } from '../../infrastructure/database/prisma/prisma.service.js';
-import { isUuid, parseDate as parseDateUtil, parseDateRange } from '../../common/utils/staff.utils.js';
+import { parseDate as parseDateUtil, parseDateRange } from '../../common/utils/staff.utils.js';
 
 @Injectable()
 export class DoctorsService {
   constructor(private readonly prisma: PrismaService) { }
 
 
-  private async resolveBranchId(identifier?: string): Promise<string | undefined> {
+  private async resolveBranchId(identifier?: string | number): Promise<number | undefined> {
     if (!identifier) return undefined;
-    if (isUuid(identifier)) return identifier;
+    if (typeof identifier === 'number') return identifier; if (/^\d+$/.test(identifier)) return Number(identifier);
     const branch = await this.prisma.branch.findFirst({
       where: { OR: [{ slug: identifier }, { code: identifier }], isActive: true },
       select: { id: true },
     });
-    return branch?.id ?? identifier;
+    return branch?.id ?? 0;
   }
 
   async doctors(
-    branchIdentifier?: string,
-    departmentId?: number,
+    branchIdentifier?: string | number,
+    _departmentId?: number, // Legacy positional argument; keep specialtyId and later arguments aligned.
     specialtyId?: number,
     q?: string,
     featuredOnly = false,
@@ -40,12 +40,12 @@ export class DoctorsService {
         specialties: specialtyId ? { some: { specialtyId } } : undefined,
         user: {
           fullName: term ? { contains: term, mode: 'insensitive' } : undefined,
-          ...(branchId ? { branchAssignments: { some: { branchId } } } : {}),
+          ...(branchId ? { branchId } : {}),
         },
       },
       orderBy: featuredOnly
-        ? [{ ratingAverage: 'desc' }, { user: { fullName: 'asc' } }]
-        : [{ isFeatured: 'desc' }, { ratingAverage: 'desc' }, { user: { fullName: 'asc' } }],
+        ? [{ experienceYears: 'desc' }, { user: { fullName: 'asc' } }]
+        : [{ isFeatured: 'desc' }, { experienceYears: 'desc' }, { user: { fullName: 'asc' } }],
       take: effectiveLimit,
       select: {
         id: true,
@@ -56,19 +56,11 @@ export class DoctorsService {
         consultationFee: true,
         onlineConsultationFee: true,
         isOnlineConsultationEnabled: true,
-        ratingAverage: true,
-        ratingCount: true,
         isFeatured: true,
         user: {
           select: {
             fullName: true,
-            branchAssignments: {
-              where: branchId ? { branchId } : undefined,
-              select: {
-                isPrimary: true,
-                branch: { select: { id: true, name: true, address: true } },
-              },
-            },
+            branch: { select: { id: true, name: true, address: true } },
           },
         },
         specialties: {
@@ -85,11 +77,11 @@ export class DoctorsService {
       fullName: user.fullName || 'Bác sĩ',
       consultationFee: Number(doctor.consultationFee),
       onlineConsultationFee: Number(doctor.onlineConsultationFee ?? doctor.consultationFee),
-      branchAssignments: user.branchAssignments,
+      branchAssignments: user.branch ? [{ isPrimary: true, branch: user.branch }] : [],
     }));
   }
 
-  async availableDates(doctorId: string, branchId: string) {
+  async availableDates(doctorId: string, branchId: number) {
     const { minDate, maxDate } = this.getBookingAllowedDateRange();
     const schedules = await this.prisma.doctorSchedule.findMany({
       where: { doctorId, branchId, status: 'OPEN', workDate: { gte: minDate, lte: maxDate } },
@@ -100,7 +92,7 @@ export class DoctorsService {
     return Array.from(new Set(schedules.map(({ workDate }) => workDate.toISOString().slice(0, 10))));
   }
 
-  async timeslots(doctorId: string, branchId: string, date: string) {
+  async timeslots(doctorId: string, branchId: number, date: string) {
     const workDate = parseDateUtil(date) ?? new Date(`${date}T00:00:00.000Z`);
     this.validateDateWithinBookingRange(workDate);
     const schedule = await this.prisma.doctorSchedule.findFirst({

@@ -248,7 +248,7 @@ export class MailsService implements IMailsService {
     })
   }
 
-  async sendAppointmentCancellation(mail: import('./mails.js').AppointmentCancellationMail): Promise<void> {
+  async sendAppointmentCancellation(mail: AppointmentCancellationMail): Promise<void> {
     const d = mail.data
     const isPatient = d.cancelledBy === 'PATIENT'
     const subject = isPatient

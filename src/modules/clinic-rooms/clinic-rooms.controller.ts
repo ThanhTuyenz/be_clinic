@@ -1,10 +1,11 @@
+import { ParseIntPipe } from '@nestjs/common';
 import { Controller, Get, Query, Req } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiQuery, ApiTags } from '@nestjs/swagger';
 import type { Request } from 'express';
 import { Public } from '../../common/decorators/public.decorator.js';
 import { SkipPermissions } from 'src/common/decorators';
 import { RequirePermissions } from '../../common/decorators/require-permissions.decorator.js';
-import { AppPermission } from '../../common/constants/permissions.constant.js';
+import { AppPermission } from '../auth/permissions/constants/permissions.constant.js';
 import { ClinicRoomsService } from './clinic-rooms.service.js';
 
 @ApiTags('Clinic rooms')
@@ -29,7 +30,7 @@ export class ClinicRoomsController {
   getRoomsStatus(
     @Req() request: Request,
     @Query('date') date?: string,
-    @Query('branchId') branchId?: string,
+    @Query('branchId', new ParseIntPipe({ optional: true })) branchId?: number,
   ) {
     return this.rooms.getRoomsStatus(request.user!.id, { date, branchId });
   }

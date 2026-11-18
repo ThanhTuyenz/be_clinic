@@ -22,7 +22,7 @@ export class ClinicRoomsService {
 
 
 
-  async getRoomsStatus(userId: string, query?: { date?: string; branchId?: string }) {
+  async getRoomsStatus(userId: string, query?: { date?: string; branchId?: number }) {
     const user = await getStaffUser(this.prisma, userId)
     const branchId = resolveBranchId(user, query?.branchId)
     const { from, to, dateKey } = parseDateRange(query?.date)
@@ -82,7 +82,7 @@ export class ClinicRoomsService {
       },
     })
 
-    const roomApptMap = new Map<string, { total: number; pending: number; confirmed: number; examined: number }>()
+    const roomApptMap = new Map<number, { total: number; pending: number; confirmed: number; examined: number }>()
 
     for (const appt of appts) {
       const roomId = appt.scheduleSlot?.schedule?.roomId

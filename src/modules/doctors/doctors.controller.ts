@@ -1,3 +1,4 @@
+import { ParseIntPipe } from '@nestjs/common';
 import { Controller, Get, Param, Query, Req } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiQuery, ApiTags } from '@nestjs/swagger';
 import type { Request } from 'express';
@@ -31,7 +32,7 @@ export class DoctorsController {
   @ApiQuery({ name: 'limit', required: false, type: Number })
   @ApiQuery({ name: 'onlineOnly', required: false, type: Boolean })
   doctors(
-    @Query('branchId') branchId?: string,
+    @Query('branchId', new ParseIntPipe({ optional: true })) branchId?: number,
     @Query('departmentId') departmentId?: string,
     @Query('specialtyId') specialtyId?: string,
     @Query('q') q?: string,
@@ -54,7 +55,7 @@ export class DoctorsController {
   @Get(':doctorId/available-dates')
   @ApiOperation({ summary: 'Các ngày bác sĩ còn khung giờ khả dụng' })
   @ApiQuery({ name: 'branchId' })
-  availableDates(@Param('doctorId') doctorId: string, @Query('branchId') branchId: string) {
+  availableDates(@Param('doctorId') doctorId: string, @Query('branchId', new ParseIntPipe({ optional: true })) branchId: number) {
     return this.doctorsService.availableDates(doctorId, branchId);
   }
 
@@ -65,7 +66,7 @@ export class DoctorsController {
   @ApiQuery({ name: 'date', example: '2026-08-10' })
   timeslots(
     @Param('doctorId') doctorId: string,
-    @Query('branchId') branchId: string,
+    @Query('branchId', new ParseIntPipe({ optional: true })) branchId: number,
     @Query('date') date: string,
   ) {
     return this.doctorsService.timeslots(doctorId, branchId, date);

@@ -39,14 +39,18 @@ export class AppointmentReminderTask {
     const now = new Date();
     const flagField = hoursAhead === 24 ? 'reminderSent24h' : 'reminderSent2h';
 
-    // Tìm tất cả lịch hẹn BOOKED chưa được nhắc, có giờ khám trong cửa sổ
+    // Tìm tất cả lịch hẹn đã xác nhận chưa được nhắc, có giờ khám trong cửa sổ
     const appointments = await this.prisma.appointment.findMany({
       where: {
         status: { in: ['CONFIRMED', 'CHECKED_IN'] },
         [hoursAhead === 24 ? 'reminderSent24h' : 'reminderSent2h']: false,
-        scheduleSlot: { OR: reminderSlotWindows(now, hoursAhead) },
+        OR: [
+          { scheduleSlot: { OR: reminderSlotWindows(now, hoursAhead) } },
+          { receptionSlot: { OR: reminderSlotWindows(now, hoursAhead).map(window => ({ date: window.schedule.workDate, startTime: window.startTime })) } },
+        ],
       },
       include: {
+        receptionSlot: true,
         patientProfile: {
           include: { account: { select: { id: true, email: true, phoneNumber: true } } },
         },
@@ -79,10 +83,10 @@ export class AppointmentReminderTask {
         const doctorSlot = appt.scheduleSlot;
         const branch = doctorSlot?.schedule.branch ?? appt.branch;
         const appointmentDate =
-          doctorSlot?.schedule.workDate?.toISOString().slice(0, 10) ??
+          (appt.receptionSlot?.date ?? doctorSlot?.schedule.workDate)?.toISOString().slice(0, 10) ??
           '?';
         const startTime =
-          doctorSlot?.startTime?.toISOString().slice(11, 16) ??
+          (appt.receptionSlot?.startTime ?? doctorSlot?.startTime)?.toISOString().slice(11, 16) ??
           '?';
         const doctorName = doctorSlot?.schedule.doctor
           ? `${doctorSlot.schedule.doctor.academicRank ?? ''} ${doctorSlot.schedule.doctor.user?.fullName ?? ''}`.trim()
@@ -168,7 +172,7 @@ export class AppointmentReminderTask {
 
         // Đánh dấu đã gửi
         await this.prisma.appointment.updateMany({
-          where: { id: appt.id, scheduleSlotId: appt.scheduleSlotId, status: { in: ['CONFIRMED', 'CHECKED_IN'] }, [flagField]: false },
+          where: { id: appt.id, scheduleSlotId: appt.scheduleSlotId, receptionSlotId: appt.receptionSlotId, status: { in: ['CONFIRMED', 'CHECKED_IN'] }, [flagField]: false },
           data: { [flagField]: true },
         });
       } catch (err) {

@@ -9,22 +9,28 @@ export class CreateReceptionAppointmentDto {
   @Min(1)
   specialtyId: number;
 
-  @ApiProperty({ format: 'uuid', description: 'Dịch vụ khám thuộc chuyên khoa đã chọn' })
-  @IsUUID()
-  servicePackageId: string;
+  @ApiProperty({ type: Number, minimum: 1, description: 'Dịch vụ khám thuộc chuyên khoa đã chọn' })
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  servicePackageId: number;
 
   @ApiProperty({ format: 'uuid', description: 'Bác sĩ phụ trách thuộc chuyên khoa' })
   @IsUUID()
   doctorId: string;
 
-  @ApiProperty({ format: 'uuid', description: 'ID slot của bác sĩ trong khung giờ đã chọn từ danh sách khả dụng' })
-  @IsUUID()
-  scheduleSlotId: string;
+  @ApiProperty({ type: Number, minimum: 1, description: 'ID slot của bác sĩ trong khung giờ đã chọn từ danh sách khả dụng' })
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  scheduleSlotId: number;
 
-  @ApiPropertyOptional({ format: 'uuid' })
+  @ApiPropertyOptional({ type: Number, minimum: 1 })
   @IsOptional()
-  @IsUUID()
-  branchId?: string;
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  branchId?: number;
 
   @ApiProperty({ example: '2026-10-19', description: 'Ngày khám YYYY-MM-DD, cho phép đặt trong ngày tại quầy' })
   @IsString()
@@ -75,10 +81,14 @@ export class ReceptionAvailabilityQueryDto {
   specialtyId?: number;
 
   @IsOptional()
-  @IsUUID()
-  servicePackageId?: string;
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  servicePackageId?: number;
 
   @IsOptional()
-  @IsUUID()
-  branchId?: string;
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  branchId?: number;
 }

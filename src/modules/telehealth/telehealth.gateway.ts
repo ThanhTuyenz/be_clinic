@@ -101,6 +101,7 @@ export class TelehealthGateway
 
       await client.join(dto.appointmentId);
 
+      const messages = await this.telehealthService.getChatMessages(dto.appointmentId, peer.userId, peer.role);
       const { room, otherPeer } = this.telehealthService.joinRoom(dto.appointmentId, peer);
 
       client.emit('telehealth:joined-success', {
@@ -108,6 +109,7 @@ export class TelehealthGateway
         status: room.status,
         myPeer: peer,
         otherPeer,
+        messages,
       });
 
       if (otherPeer?.socketId) {
@@ -119,6 +121,7 @@ export class TelehealthGateway
 
       return { success: true };
     } catch (error) {
+      await client.leave(dto.appointmentId);
       return { success: false, message: error instanceof HttpException ? error.message : 'Không thể vào phòng tư vấn. Vui lòng thử lại.' };
     }
   }
@@ -177,13 +180,15 @@ export class TelehealthGateway
    * Tin nhắn Chat trong lúc tư vấn
    */
   @SubscribeMessage('telehealth:send-chat')
-  handleSendChat(
+  async handleSendChat(
     @MessageBody()
-    dto: TelehealthChatMessageDto & { senderId?: string; senderName?: string; senderRole?: 'DOCTOR' | 'PATIENT' },
+    dto: TelehealthChatMessageDto,
     @ConnectedSocket() client: Socket,
   ) {
     const participant = this.telehealthService.getPeerForSocket(client.id);
-    if (!participant || participant.appointmentId !== dto.appointmentId) return;
+    if (!participant || participant.appointmentId !== dto.appointmentId) {
+      return { success: false, message: 'Bạn không ở trong phòng tư vấn này.' };
+    }
     const message = {
       appointmentId: dto.appointmentId,
       senderId: participant.userId,
@@ -191,14 +196,16 @@ export class TelehealthGateway
       senderRole: participant.role,
       text: dto.text,
       fileUrl: dto.fileUrl,
-      timestamp: new Date().toISOString(),
     };
 
-    // Lưu tin nhắn vào phiên khám
-    this.telehealthService.recordChatMessage(dto.appointmentId, message);
-
-    // Broadcast tới toàn bộ người trong phòng (kể cả người gửi)
-    this.server.to(dto.appointmentId).emit('telehealth:new-chat', message);
+    try {
+      const savedMessage = await this.telehealthService.recordChatMessage(dto.appointmentId, message);
+      this.server.to(dto.appointmentId).emit('telehealth:new-chat', savedMessage);
+      return { success: true };
+    } catch (error) {
+      this.logger.error('Không thể lưu tin nhắn tư vấn.', error instanceof Error ? error.stack : undefined);
+      return { success: false, message: error instanceof HttpException ? error.message : 'Không thể lưu tin nhắn. Vui lòng thử lại.' };
+    }
   }
 
   /**
@@ -210,8 +217,6 @@ export class TelehealthGateway
     payload: {
       appointmentId: string;
       endedByRole?: 'DOCTOR' | 'PATIENT';
-      diagnosis?: string;
-      prescriptionNotes?: string;
     },
     @ConnectedSocket() client: Socket,
   ) {
@@ -219,16 +224,16 @@ export class TelehealthGateway
     if (!participant || participant.appointmentId !== payload.appointmentId) {
       return { success: false, message: 'Bạn không ở trong phòng tư vấn này.' };
     }
+    if (participant.role !== 'DOCTOR') {
+      return { success: false, message: 'Chỉ bác sĩ phụ trách mới được hoàn tất buổi tư vấn. Bệnh nhân có thể rời phòng và vào lại.' };
+    }
     this.logger.log(
-      `[Telehealth] Call ended for appointment ${payload.appointmentId} by ${payload.endedByRole}`,
+      `[Telehealth] Call ended for appointment ${payload.appointmentId} by ${participant.role}`,
     );
 
     try {
       await this.telehealthService.endRoomSession(payload.appointmentId, {
-        diagnosis: payload.diagnosis,
-        prescriptionNotes: payload.prescriptionNotes,
         endedByUserId: participant.userId,
-        endReason: 'SOCKET',
       }, participant.role);
       this.notifyRoomEnded(payload.appointmentId, participant.role);
       return { success: true };

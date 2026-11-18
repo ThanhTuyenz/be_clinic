@@ -15,13 +15,13 @@ export class BookingFlowController {
 
   /**
    * API 1: Khởi tạo dữ liệu theo luồng (Bootstrap API)
-   * GET /api/v1/booking/init?flow=doctor | specialty | health-package | facility
+   * GET /api/v1/booking/init?flow=doctor | specialty | online-consultation | after-hours | family | all
    */
   @Get('init')
   @ApiOperation({
     summary: 'Khởi tạo dữ liệu theo luồng đặt lịch (Bootstrap API - Facade Pattern)',
     description:
-      'Dựa vào flow (doctor | specialty | health-package | facility), backend tự gom dữ liệu liên quan và chỉ trả về đúng thứ luồng đó cần.',
+      'Dựa vào hình thức đặt lịch, backend gom dữ liệu liên quan và trả về đúng dữ liệu luồng đó cần; all trả danh mục tổng quan.',
   })
   getInit(@Query() dto: BookingInitDto) {
     return this.flowService.getBookingInit(dto);

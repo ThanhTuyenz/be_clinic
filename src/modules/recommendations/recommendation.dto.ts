@@ -1,9 +1,10 @@
-import { IsIn, IsNotEmpty, IsNumber, IsOptional, IsString, MaxLength, MinLength } from 'class-validator';
+import { Type } from 'class-transformer';
+import { IsIn, IsInt, IsNotEmpty, IsOptional, IsString, Matches, MaxLength, Min } from 'class-validator';
 
 export type RecommendationPriority = 'HIGH' | 'MEDIUM' | 'LOW';
 
 export interface RecommendedPackageItemDto {
-  packageId: string;
+  packageId: number;
   code: string;
   slug?: string;
   name: string;
@@ -14,7 +15,7 @@ export interface RecommendedPackageItemDto {
   priority: RecommendationPriority;
   badge: string;
   clinicalReason: string;
-  sourceType?: 'DROP_OFF' | 'SEARCH_INTENT' | 'RECENT_VIEW' | 'PROFILE_AI' | 'POPULAR' | 'BOTH';
+  sourceType?: 'DROP_OFF' | 'SEARCH_INTENT' | 'RECENT_VIEW' | 'PROFILE_AI';
 }
 
 export interface ProfileRecommendationResponseDto {
@@ -37,60 +38,39 @@ export enum TrackingActionType {
 export class TrackBehaviorDto {
   @IsString()
   @IsNotEmpty({ message: 'sessionId không được để trống' })
+  @MaxLength(100)
+  @Matches(/^[A-Za-z0-9_-]+$/, { message: 'sessionId không hợp lệ' })
   sessionId: string;
 
   @IsIn([TrackingActionType.VIEW_PACKAGE], { message: 'Client chỉ được ghi nhận lượt xem gói khám' })
   actionType: TrackingActionType;
 
-  @IsNumber()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
   @IsOptional()
-  targetSpecialtyId?: number;
-
-  @IsString()
-  @IsOptional()
-  targetPackageId?: string;
+  targetPackageId?: number;
 
 }
 
-export class HomeRecommendationQueryDto {
+export class RecommendationSessionQueryDto {
   @IsString()
   @IsOptional()
-  sessionId?: string;
-
-  @IsString()
-  @IsOptional()
-  profileId?: string;
-}
-
-export class SemanticSearchQueryDto {
-  @IsOptional()
-  @IsString()
-  @MinLength(16)
   @MaxLength(100)
+  @Matches(/^[A-Za-z0-9_-]+$/, { message: 'sessionId không hợp lệ' })
   sessionId?: string;
-  @IsString()
-  @IsNotEmpty({ message: 'Từ khóa tìm kiếm không được để trống' })
-  @MinLength(2, { message: 'Từ khóa tìm kiếm phải có ít nhất 2 ký tự' })
-  @MaxLength(200, { message: 'Từ khóa tìm kiếm không được vượt quá 200 ký tự' })
-  q: string;
-
-  @IsString()
-  @IsOptional()
-  branchId?: string;
 }
 
-export interface HomeRecommendationResponseDto {
-  trackingToken?: string;
-  profileId?: string;
-  profileName?: string;
+export interface RecommendationSectionDto {
+  status: 'READY' | 'EMPTY' | 'PENDING';
   updatedAt: string;
-  // HYBRID describes a backend merge of independent rankings, never a shared LLM prompt.
-  source: 'HYBRID' | 'AI_PROFILE' | 'BEHAVIOR' | 'FALLBACK';
-  event?: string;
-  triggerEvent?: string;
-  triggerReason?: string;
-  dataOrigin: 'CACHE' | 'NEW';
-  isCached: boolean;
   fromCache: boolean;
   packages: RecommendedPackageItemDto[];
+  trackingToken?: string;
 }
+
+export interface ProfileRecommendationSectionDto extends RecommendationSectionDto {
+  profileId: string;
+  profileName?: string;
+}
+

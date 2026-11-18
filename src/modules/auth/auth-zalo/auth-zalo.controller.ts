@@ -11,7 +11,7 @@ import type { Response, CookieOptions } from 'express';
 import { ConfigService } from '@nestjs/config';
 import { Routes, Services } from '../../../common/utils/constants';
 import { IAuthService } from '../auth-local/auth';
-import { AuthProvidersEnum } from '../auth-local/enums/auth-providers.enum';
+import { AuthProvider } from '@prisma/client';
 import { ApiOperation, ApiTags } from '@nestjs/swagger';
 import { Public } from '../../../common/decorators/public.decorator';
 import { SkipPermissions } from 'src/common/decorators';
@@ -39,7 +39,7 @@ export class AuthZaloController {
   ) {
     const socialData = await this.authZaloService.getProfileByToken(loginDto);
     const response = await this.authService.validateSocialLogin(
-      AuthProvidersEnum.zalo,
+      AuthProvider.ZALO,
       socialData,
     );
 

@@ -9,6 +9,8 @@ type StoredProfile = {
   consultationFee: unknown;
   onlineConsultationFee: unknown;
   isOnlineConsultationEnabled: boolean;
+  biography: string;
+  avatarUrl: string;
 };
 
 export function buildDoctorProfileData(input: ProfileInput, stored?: StoredProfile | null) {
@@ -24,6 +26,9 @@ export function buildDoctorProfileData(input: ProfileInput, stored?: StoredProfi
   const consultationFee = input.consultationFee !== undefined ? input.consultationFee : stored?.consultationFee;
   const onlineFee = input.onlineConsultationFee !== undefined ? input.onlineConsultationFee : stored?.onlineConsultationFee;
   const onlineEnabled = input.isOnlineConsultationEnabled ?? stored?.isOnlineConsultationEnabled ?? false;
+  const biography = input.biography !== undefined ? input.biography?.trim() : stored?.biography;
+  const avatarUrl = input.avatarUrl !== undefined ? input.avatarUrl?.trim() : stored?.avatarUrl;
+  if (!licenseNumber || !biography || !avatarUrl) throw new BadRequestException('Vui lòng nhập số CCHN, giới thiệu và ảnh đại diện của bác sĩ.');
   if (!stored || input.doctorIsActive === true) {
     if (!academicRank || !licenseNumber) throw new BadRequestException('Vui lòng nhập học hàm / học vị và số CCHN của bác sĩ.');
     if (consultationFee == null) throw new BadRequestException('Vui lòng nhập phí khám của bác sĩ.');
@@ -46,8 +51,8 @@ export function buildDoctorProfileData(input: ProfileInput, stored?: StoredProfi
     ...(input.doctorIsActive !== undefined ? { isActive: input.doctorIsActive } : {}),
     ...(input.slotDuration !== undefined ? { slotDuration: input.slotDuration } : {}),
     ...(input.isFeatured !== undefined ? { isFeatured: input.isFeatured } : {}),
-    ...(input.biography !== undefined ? { biography: input.biography?.trim() || null } : {}),
-    ...(input.avatarUrl !== undefined ? { avatarUrl: input.avatarUrl || null } : {}),
+    biography,
+    avatarUrl,
   };
 }
 

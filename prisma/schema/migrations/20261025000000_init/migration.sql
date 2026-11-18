@@ -1,7 +1,3 @@
--- Initial schema for a NEW, EMPTY database, consolidated on 2026-10-25.
--- Generated from prisma/schema. Historical data backfills are replaced by seed data.
--- Do not run this initial migration against an existing populated database.
-
 -- CreateSchema
 CREATE SCHEMA IF NOT EXISTS "public";
 
@@ -15,7 +11,7 @@ CREATE TYPE "AIMessageSender" AS ENUM ('USER', 'ASSISTANT', 'SYSTEM');
 CREATE TYPE "PackageSession" AS ENUM ('MORNING', 'AFTERNOON', 'EVENING');
 
 -- CreateEnum
-CREATE TYPE "UserRole" AS ENUM ('admin', 'chain_manager', 'branch_manager', 'doctor', 'receptionist', 'patient', 'pharmacist', 'cashier');
+CREATE TYPE "UserRole" AS ENUM ('admin', 'chain_manager', 'branch_manager', 'doctor', 'receptionist', 'patient');
 
 -- CreateEnum
 CREATE TYPE "UserStatus" AS ENUM ('active', 'inactive');
@@ -33,13 +29,13 @@ CREATE TYPE "PackageGenderTarget" AS ENUM ('ALL', 'MALE', 'FEMALE');
 CREATE TYPE "ScheduleStatus" AS ENUM ('OPEN', 'CLOSED', 'CANCELLED');
 
 -- CreateEnum
-CREATE TYPE "SlotStatus" AS ENUM ('AVAILABLE', 'FULL', 'BLOCKED');
+CREATE TYPE "SlotStatus" AS ENUM ('AVAILABLE', 'FULL');
 
 -- CreateEnum
-CREATE TYPE "AppointmentStatus" AS ENUM ('HOLD', 'PENDING_PAYMENT', 'BOOKED', 'CONFIRMED', 'CHECKED_IN', 'IN_EXAMINATION', 'COMPLETED', 'CANCELLED', 'EXPIRED', 'NO_SHOW', 'REFUND_REQUIRED', 'MANUAL_REVIEW');
+CREATE TYPE "AppointmentStatus" AS ENUM ('HOLD', 'CONFIRMED', 'CHECKED_IN', 'COMPLETED', 'CANCELLED', 'EXPIRED', 'NO_SHOW');
 
 -- CreateEnum
-CREATE TYPE "BookingOrderStatus" AS ENUM ('UNPAID', 'PENDING_PAYMENT', 'PAID', 'CANCELLED', 'PARTIALLY_CANCELLED', 'REFUNDED');
+CREATE TYPE "BookingOrderStatus" AS ENUM ('UNPAID', 'PENDING_PAYMENT', 'PAID', 'CANCELLED', 'REFUNDED');
 
 -- CreateEnum
 CREATE TYPE "InvoiceStatus" AS ENUM ('UNPAID', 'PAID', 'REFUNDED', 'CANCELLED');
@@ -212,20 +208,16 @@ CREATE TABLE "users" (
     "phone_number" VARCHAR(20),
     "full_name" VARCHAR(100),
     "avatar_url" VARCHAR(500),
-    "provider" "AuthProvider" NOT NULL DEFAULT 'email',
     "status" "UserStatus" NOT NULL DEFAULT 'active',
     "role" "UserRole" NOT NULL DEFAULT 'patient',
-    "role_id" VARCHAR(100),
-    "social_id" VARCHAR(255),
-    "zalo_id" VARCHAR(255),
     "custom_permissions" JSONB,
     "hash" VARCHAR(255),
     "is_blocked" BOOLEAN NOT NULL DEFAULT false,
-    "blocked_at" TIMESTAMPTZ(3),
     "is_deleted" BOOLEAN NOT NULL DEFAULT false,
     "last_login_at" TIMESTAMPTZ(3),
     "created_at" TIMESTAMPTZ(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updated_at" TIMESTAMPTZ(3) NOT NULL,
+    "branch_id" UUID,
 
     CONSTRAINT "users_pkey" PRIMARY KEY ("id")
 );
@@ -266,6 +258,7 @@ CREATE TABLE "appointments" (
     "branch_id" UUID NOT NULL,
     "booking_method_id" UUID,
     "schedule_slot_id" UUID,
+    "reception_slot_id" UUID,
     "service_package_id" UUID,
     "service_price" DECIMAL(12,2),
     "symptoms_description" TEXT,
@@ -352,12 +345,8 @@ CREATE TABLE "telehealth_sessions" (
     "appointment_id" UUID NOT NULL,
     "started_at" TIMESTAMPTZ(3),
     "ended_at" TIMESTAMPTZ(3),
-    "duration_seconds" INTEGER NOT NULL DEFAULT 0,
-    "diagnosis" TEXT,
-    "prescription_notes" TEXT,
     "chat_messages" JSONB,
     "ended_by_user_id" UUID,
-    "end_reason" VARCHAR(50),
     "created_at" TIMESTAMPTZ(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updated_at" TIMESTAMPTZ(3) NOT NULL,
 
@@ -377,12 +366,9 @@ CREATE TABLE "patient_profiles" (
     "gender" "Gender",
     "province_code" VARCHAR(20),
     "province_name" VARCHAR(100),
-    "district_code" VARCHAR(20),
-    "district_name" VARCHAR(100),
     "ward_code" VARCHAR(20),
     "ward_name" VARCHAR(100),
-    "street_address" VARCHAR(255),
-    "address" TEXT,
+    "street_address" TEXT,
     "ethnicity" VARCHAR(50),
     "nationality" VARCHAR(50) DEFAULT 'Việt Nam',
     "occupation" VARCHAR(100),
@@ -391,6 +377,12 @@ CREATE TABLE "patient_profiles" (
     "guardian_relationship" VARCHAR(50),
     "medical_history" TEXT,
     "allergies" TEXT,
+    "family_history" TEXT,
+    "smoking_status" VARCHAR(20),
+    "alcohol_use" VARCHAR(20),
+    "activity_level" VARCHAR(20),
+    "pregnancy_status" VARCHAR(20),
+    "is_breastfeeding" BOOLEAN,
     "blood_group" VARCHAR(10),
     "height" DOUBLE PRECISION,
     "weight" DOUBLE PRECISION,
@@ -431,8 +423,6 @@ CREATE TABLE "doctors" (
     "online_consultation_fee" DECIMAL(12,2),
     "is_online_consultation_enabled" BOOLEAN NOT NULL DEFAULT false,
     "slot_duration" INTEGER NOT NULL DEFAULT 30,
-    "rating_average" DOUBLE PRECISION NOT NULL DEFAULT 0.0,
-    "rating_count" INTEGER NOT NULL DEFAULT 0,
     "is_featured" BOOLEAN NOT NULL DEFAULT false,
     "is_active" BOOLEAN NOT NULL DEFAULT true,
     "created_at" TIMESTAMPTZ(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -581,21 +571,8 @@ CREATE TABLE "device_tokens" (
 );
 
 -- CreateTable
-CREATE TABLE "clinics" (
-    "id" UUID NOT NULL,
-    "name" VARCHAR(150) NOT NULL,
-    "slug" VARCHAR(150) NOT NULL,
-    "is_active" BOOLEAN NOT NULL DEFAULT true,
-    "created_at" TIMESTAMPTZ(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    "updated_at" TIMESTAMPTZ(3) NOT NULL,
-
-    CONSTRAINT "clinics_pkey" PRIMARY KEY ("id")
-);
-
--- CreateTable
 CREATE TABLE "branches" (
     "id" UUID NOT NULL,
-    "clinic_id" UUID NOT NULL,
     "code" VARCHAR(30) NOT NULL,
     "slug" VARCHAR(120),
     "name" VARCHAR(150) NOT NULL,
@@ -686,17 +663,6 @@ CREATE TABLE "clinic_room_specialties" (
 );
 
 -- CreateTable
-CREATE TABLE "user_branch_assignments" (
-    "id" UUID NOT NULL,
-    "user_id" UUID NOT NULL,
-    "branch_id" UUID NOT NULL,
-    "is_primary" BOOLEAN NOT NULL DEFAULT false,
-    "created_at" TIMESTAMPTZ(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-
-    CONSTRAINT "user_branch_assignments_pkey" PRIMARY KEY ("id")
-);
-
--- CreateTable
 CREATE TABLE "invoices" (
     "id" UUID NOT NULL,
     "appointment_id" UUID,
@@ -713,18 +679,6 @@ CREATE TABLE "invoices" (
     "updated_at" TIMESTAMPTZ(3) NOT NULL,
 
     CONSTRAINT "invoices_pkey" PRIMARY KEY ("id")
-);
-
--- CreateTable
-CREATE TABLE "invoice_items" (
-    "id" BIGSERIAL NOT NULL,
-    "invoice_id" UUID NOT NULL,
-    "description" VARCHAR(255) NOT NULL,
-    "quantity" INTEGER NOT NULL DEFAULT 1,
-    "unit_price" DECIMAL(12,2) NOT NULL,
-    "amount" DECIMAL(12,2) NOT NULL,
-
-    CONSTRAINT "invoice_items_pkey" PRIMARY KEY ("id")
 );
 
 -- CreateTable
@@ -771,13 +725,29 @@ CREATE TABLE "doctor_schedule_slots" (
     "end_time" TIME(0) NOT NULL,
     "capacity" INTEGER NOT NULL DEFAULT 1,
     "occupied_count" INTEGER NOT NULL DEFAULT 0,
-    "next_queue_number" INTEGER NOT NULL DEFAULT 1,
     "slot_status" "SlotStatus" NOT NULL DEFAULT 'AVAILABLE',
     "is_active" BOOLEAN NOT NULL DEFAULT true,
     "created_at" TIMESTAMPTZ(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updated_at" TIMESTAMPTZ(3) NOT NULL,
 
     CONSTRAINT "doctor_schedule_slots_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "package_reception_slots" (
+    "id" UUID NOT NULL,
+    "branch_id" UUID NOT NULL,
+    "service_package_id" UUID NOT NULL,
+    "date" DATE NOT NULL,
+    "start_time" TIME(0) NOT NULL,
+    "end_time" TIME(0) NOT NULL,
+    "capacity" INTEGER NOT NULL DEFAULT 5,
+    "occupied_count" INTEGER NOT NULL DEFAULT 0,
+    "is_active" BOOLEAN NOT NULL DEFAULT true,
+    "created_at" TIMESTAMPTZ(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updated_at" TIMESTAMPTZ(3) NOT NULL,
+
+    CONSTRAINT "package_reception_slots_pkey" PRIMARY KEY ("id")
 );
 
 -- CreateTable
@@ -857,9 +827,6 @@ CREATE UNIQUE INDEX "users_email_key" ON "users"("email");
 CREATE UNIQUE INDEX "users_phone_number_key" ON "users"("phone_number");
 
 -- CreateIndex
-CREATE UNIQUE INDEX "users_zalo_id_key" ON "users"("zalo_id");
-
--- CreateIndex
 CREATE INDEX "users_role_status_idx" ON "users"("role", "status");
 
 -- CreateIndex
@@ -906,6 +873,9 @@ CREATE INDEX "appointments_branch_id_status_created_at_idx" ON "appointments"("b
 
 -- CreateIndex
 CREATE INDEX "appointments_schedule_slot_id_status_idx" ON "appointments"("schedule_slot_id", "status");
+
+-- CreateIndex
+CREATE INDEX "appointments_reception_slot_id_status_idx" ON "appointments"("reception_slot_id", "status");
 
 -- CreateIndex
 CREATE INDEX "appointments_service_package_id_status_idx" ON "appointments"("service_package_id", "status");
@@ -1025,16 +995,10 @@ CREATE UNIQUE INDEX "device_tokens_token_key" ON "device_tokens"("token");
 CREATE INDEX "device_tokens_user_id_idx" ON "device_tokens"("user_id");
 
 -- CreateIndex
-CREATE UNIQUE INDEX "clinics_slug_key" ON "clinics"("slug");
-
--- CreateIndex
 CREATE UNIQUE INDEX "branches_code_key" ON "branches"("code");
 
 -- CreateIndex
 CREATE UNIQUE INDEX "branches_slug_key" ON "branches"("slug");
-
--- CreateIndex
-CREATE INDEX "branches_clinic_id_is_active_idx" ON "branches"("clinic_id", "is_active");
 
 -- CreateIndex
 CREATE INDEX "branch_specialties_specialty_id_is_active_idx" ON "branch_specialties"("specialty_id", "is_active");
@@ -1070,12 +1034,6 @@ CREATE INDEX "clinic_room_specialties_specialty_id_is_active_priority_idx" ON "c
 CREATE UNIQUE INDEX "clinic_room_specialties_room_id_specialty_id_key" ON "clinic_room_specialties"("room_id", "specialty_id");
 
 -- CreateIndex
-CREATE INDEX "user_branch_assignments_branch_id_idx" ON "user_branch_assignments"("branch_id");
-
--- CreateIndex
-CREATE UNIQUE INDEX "user_branch_assignments_user_id_branch_id_key" ON "user_branch_assignments"("user_id", "branch_id");
-
--- CreateIndex
 CREATE UNIQUE INDEX "invoices_appointment_id_key" ON "invoices"("appointment_id");
 
 -- CreateIndex
@@ -1083,9 +1041,6 @@ CREATE UNIQUE INDEX "invoices_booking_order_id_key" ON "invoices"("booking_order
 
 -- CreateIndex
 CREATE INDEX "invoices_issued_branch_id_status_created_at_idx" ON "invoices"("issued_branch_id", "status", "created_at");
-
--- CreateIndex
-CREATE INDEX "invoice_items_invoice_id_idx" ON "invoice_items"("invoice_id");
 
 -- CreateIndex
 CREATE UNIQUE INDEX "payment_transactions_provider_transaction_id_key" ON "payment_transactions"("provider_transaction_id");
@@ -1116,6 +1071,12 @@ CREATE INDEX "doctor_schedule_slots_schedule_id_is_active_occupied_count_idx" ON
 
 -- CreateIndex
 CREATE UNIQUE INDEX "doctor_schedule_slots_schedule_id_start_time_key" ON "doctor_schedule_slots"("schedule_id", "start_time");
+
+-- CreateIndex
+CREATE INDEX "package_reception_slots_branch_id_service_package_id_date_i_idx" ON "package_reception_slots"("branch_id", "service_package_id", "date", "is_active");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "package_reception_slots_branch_id_service_package_id_date_s_key" ON "package_reception_slots"("branch_id", "service_package_id", "date", "start_time");
 
 -- CreateIndex
 CREATE UNIQUE INDEX "doctor_schedule_exceptions_doctor_id_branch_id_date_key" ON "doctor_schedule_exceptions"("doctor_id", "branch_id", "date");
@@ -1151,6 +1112,9 @@ ALTER TABLE "ai_booking_intent_logs" ADD CONSTRAINT "ai_booking_intent_logs_appo
 ALTER TABLE "analytics_interactions" ADD CONSTRAINT "analytics_interactions_search_id_fkey" FOREIGN KEY ("search_id") REFERENCES "search_requests"("id") ON DELETE SET NULL ON UPDATE CASCADE;
 
 -- AddForeignKey
+ALTER TABLE "users" ADD CONSTRAINT "users_branch_id_fkey" FOREIGN KEY ("branch_id") REFERENCES "branches"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+
+-- AddForeignKey
 ALTER TABLE "oauth_accounts" ADD CONSTRAINT "oauth_accounts_user_id_fkey" FOREIGN KEY ("user_id") REFERENCES "users"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 
 -- AddForeignKey
@@ -1176,6 +1140,9 @@ ALTER TABLE "appointments" ADD CONSTRAINT "appointments_booking_method_id_fkey" 
 
 -- AddForeignKey
 ALTER TABLE "appointments" ADD CONSTRAINT "appointments_schedule_slot_id_fkey" FOREIGN KEY ("schedule_slot_id") REFERENCES "doctor_schedule_slots"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "appointments" ADD CONSTRAINT "appointments_reception_slot_id_fkey" FOREIGN KEY ("reception_slot_id") REFERENCES "package_reception_slots"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE "appointments" ADD CONSTRAINT "appointments_service_package_id_fkey" FOREIGN KEY ("service_package_id") REFERENCES "service_packages"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
@@ -1253,9 +1220,6 @@ ALTER TABLE "notifications" ADD CONSTRAINT "notifications_user_id_fkey" FOREIGN 
 ALTER TABLE "device_tokens" ADD CONSTRAINT "device_tokens_user_id_fkey" FOREIGN KEY ("user_id") REFERENCES "users"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE "branches" ADD CONSTRAINT "branches_clinic_id_fkey" FOREIGN KEY ("clinic_id") REFERENCES "clinics"("id") ON DELETE CASCADE ON UPDATE CASCADE;
-
--- AddForeignKey
 ALTER TABLE "branch_specialties" ADD CONSTRAINT "branch_specialties_branch_id_fkey" FOREIGN KEY ("branch_id") REFERENCES "branches"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 
 -- AddForeignKey
@@ -1277,12 +1241,6 @@ ALTER TABLE "clinic_room_specialties" ADD CONSTRAINT "clinic_room_specialties_ro
 ALTER TABLE "clinic_room_specialties" ADD CONSTRAINT "clinic_room_specialties_specialty_id_fkey" FOREIGN KEY ("specialty_id") REFERENCES "specialties"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE "user_branch_assignments" ADD CONSTRAINT "user_branch_assignments_user_id_fkey" FOREIGN KEY ("user_id") REFERENCES "users"("id") ON DELETE CASCADE ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE "user_branch_assignments" ADD CONSTRAINT "user_branch_assignments_branch_id_fkey" FOREIGN KEY ("branch_id") REFERENCES "branches"("id") ON DELETE CASCADE ON UPDATE CASCADE;
-
--- AddForeignKey
 ALTER TABLE "invoices" ADD CONSTRAINT "invoices_appointment_id_fkey" FOREIGN KEY ("appointment_id") REFERENCES "appointments"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- AddForeignKey
@@ -1290,9 +1248,6 @@ ALTER TABLE "invoices" ADD CONSTRAINT "invoices_booking_order_id_fkey" FOREIGN K
 
 -- AddForeignKey
 ALTER TABLE "invoices" ADD CONSTRAINT "invoices_issued_branch_id_fkey" FOREIGN KEY ("issued_branch_id") REFERENCES "branches"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE "invoice_items" ADD CONSTRAINT "invoice_items_invoice_id_fkey" FOREIGN KEY ("invoice_id") REFERENCES "invoices"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE "payment_transactions" ADD CONSTRAINT "payment_transactions_invoice_id_fkey" FOREIGN KEY ("invoice_id") REFERENCES "invoices"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
@@ -1310,15 +1265,24 @@ ALTER TABLE "doctor_schedules" ADD CONSTRAINT "doctor_schedules_room_id_fkey" FO
 ALTER TABLE "doctor_schedule_slots" ADD CONSTRAINT "doctor_schedule_slots_schedule_id_fkey" FOREIGN KEY ("schedule_id") REFERENCES "doctor_schedules"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 
 -- AddForeignKey
+ALTER TABLE "package_reception_slots" ADD CONSTRAINT "package_reception_slots_branch_id_fkey" FOREIGN KEY ("branch_id") REFERENCES "branches"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "package_reception_slots" ADD CONSTRAINT "package_reception_slots_service_package_id_fkey" FOREIGN KEY ("service_package_id") REFERENCES "service_packages"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
 ALTER TABLE "doctor_schedule_exceptions" ADD CONSTRAINT "doctor_schedule_exceptions_doctor_id_fkey" FOREIGN KEY ("doctor_id") REFERENCES "doctors"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE "doctor_schedule_exceptions" ADD CONSTRAINT "doctor_schedule_exceptions_branch_id_fkey" FOREIGN KEY ("branch_id") REFERENCES "branches"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 
--- Preserve hand-written constraints from the previous migration history.
+-- Constraints not expressible in the Prisma schema.
 ALTER TABLE "package_reception_schedules"
   ALTER COLUMN "sessions" SET NOT NULL,
-  ADD CONSTRAINT "package_reception_schedules_day_of_week_check"
-    CHECK ("day_of_week" BETWEEN 0 AND 6),
-  ADD CONSTRAINT "package_reception_schedules_sessions_check"
-    CHECK (cardinality("sessions") > 0 AND array_position("sessions", NULL) IS NULL);
+  ADD CONSTRAINT "package_reception_schedules_day_of_week_check" CHECK ("day_of_week" BETWEEN 0 AND 6),
+  ADD CONSTRAINT "package_reception_schedules_sessions_check" CHECK (cardinality("sessions") > 0 AND array_position("sessions", NULL) IS NULL);
+ALTER TABLE "package_reception_slots"
+  ADD CONSTRAINT "package_reception_capacity_check" CHECK ("capacity" > 0 AND "occupied_count" >= 0 AND "occupied_count" <= "capacity"),
+  ADD CONSTRAINT "package_reception_time_check" CHECK ("start_time" < "end_time");
+ALTER TABLE "appointments"
+  ADD CONSTRAINT "appointments_one_slot_kind_check" CHECK ("schedule_slot_id" IS NULL OR "reception_slot_id" IS NULL);

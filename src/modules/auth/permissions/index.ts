@@ -1,5 +1,0 @@
-export * from './permissions.module.js'
-export * from './permissions.service.js'
-export * from './permissions.controller.js'
-export * from './constants/permissions.constant.js'
-export * from './guards/permissions.guard.js'

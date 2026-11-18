@@ -16,10 +16,10 @@ export interface TelehealthRoomState {
   startedAt?: Date;
   endedAt?: Date;
   status: 'WAITING' | 'IN_CALL' | 'COMPLETED';
-  messages?: ChatMessagePayload[];
 }
 
 export interface ChatMessagePayload {
+  id?: string;
   appointmentId: string;
   senderId: string;
   senderName: string;
@@ -27,10 +27,4 @@ export interface ChatMessagePayload {
   text: string;
   timestamp: string;
   fileUrl?: string;
-}
-
-export interface MediaTogglePayload {
-  appointmentId: string;
-  isAudioMuted?: boolean;
-  isVideoOff?: boolean;
 }

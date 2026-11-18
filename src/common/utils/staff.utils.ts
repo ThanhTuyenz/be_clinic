@@ -41,7 +41,7 @@ export function isUuid(value: string): boolean {
 export async function getStaffUser(prisma: PrismaService, userId: string) {
   const user = await prisma.user.findUnique({
     where: { id: userId },
-    select: { id: true, role: true, branchAssignments: { select: { branchId: true } } },
+    select: { id: true, role: true, branchId: true },
   })
   if (!user || user.role === 'PATIENT') {
     throw new ForbiddenException('Chi nhan vien phong kham moi co quyen truy cap')
@@ -50,37 +50,14 @@ export async function getStaffUser(prisma: PrismaService, userId: string) {
 }
 
 export function resolveBranchId(
-  user: { role: string; branchAssignments: { branchId: string }[] },
-  requestedBranchId?: string,
-): string | undefined {
-  const branchIds = user.branchAssignments.map((b) => b.branchId)
+  user: { role: string; branchId: number | null },
+  requestedBranchId?: number,
+): number | undefined {
   if (user.role === 'CHAIN_MANAGER') {
-    return requestedBranchId && requestedBranchId !== 'all' ? requestedBranchId : undefined
+    return requestedBranchId !== undefined ? requestedBranchId : undefined
   }
-  if (requestedBranchId && requestedBranchId !== 'all' && branchIds.includes(requestedBranchId)) {
+  if (requestedBranchId !== undefined && user.branchId === requestedBranchId) {
     return requestedBranchId
   }
-  return branchIds[0] || undefined
-}
-
-// --- Booking Date Range Utilities ---
-
-export function getBookingAllowedDateRange(): { minDate: Date; maxDate: Date } {
-  const nowUtc = new Date()
-  const vnOffsetMs = 7 * 60 * 60 * 1000
-  const nowVn = new Date(nowUtc.getTime() + vnOffsetMs)
-  const todayVnStr = nowVn.toISOString().slice(0, 10)
-  const [y, m, d] = todayVnStr.split('-').map(Number)
-  return {
-    minDate: new Date(Date.UTC(y, m - 1, d + 1)),
-    maxDate: new Date(Date.UTC(y, m - 1, d + 31)),
-  }
-}
-
-export function validateDateWithinBookingRange(date: Date): void {
-  const { minDate, maxDate } = getBookingAllowedDateRange()
-  const dateOnly = new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()))
-  if (dateOnly < minDate || dateOnly > maxDate) {
-    throw new Error(`Ngay kham phai tu ngay mai den toi da 30 ngay toi (${minDate.toISOString().slice(0, 10)} -> ${maxDate.toISOString().slice(0, 10)})`)
-  }
+  return user.branchId || undefined
 }

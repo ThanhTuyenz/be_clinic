@@ -39,6 +39,7 @@ export class AuthGoogleService {
     return {
       id: data.sub,
       email: data.email,
+      emailVerified: data.email_verified === true,
       fullName: data.name || [data.family_name, data.given_name].filter(Boolean).join(' ') || data.email.split('@')[0],
       avatarUrl: data.picture,
     };

@@ -1,11 +1,14 @@
-import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { IsNotEmpty, IsOptional, IsString, IsUUID, MaxLength } from 'class-validator';
+import { ApiPropertyOptional } from '@nestjs/swagger';
+import { Type } from 'class-transformer';
+import { IsInt, IsOptional, IsString, MaxLength, Min } from 'class-validator';
 
 export class RescheduleAppointmentDto {
-  @ApiProperty({ description: 'ID slot bác sĩ mới đã được tạo sẵn', format: 'uuid' })
-  @IsUUID()
-  @IsNotEmpty({ message: 'Vui lòng chọn khung giờ khám mới' })
-  newScheduleSlotId: string;
+  @ApiPropertyOptional({ description: 'ID slot bác sĩ mới đã được tạo sẵn', type: Number, minimum: 1 })
+  @IsOptional() @Type(() => Number) @IsInt() @Min(1)
+  newScheduleSlotId?: number;
+  @ApiPropertyOptional({ description: 'ID khung tiếp nhận gói khám mới', type: Number, minimum: 1 })
+  @IsOptional() @Type(() => Number) @IsInt() @Min(1)
+  newReceptionSlotId?: number;
 
   @ApiPropertyOptional({ description: 'Lý do đổi lịch' })
   @IsOptional()

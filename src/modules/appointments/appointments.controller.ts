@@ -1,3 +1,4 @@
+import { ExcludeRoles } from '../../common/decorators/exclude-roles.decorator.js';
 import { Body, Controller, Get, Param, Patch, Post, Query, Req } from '@nestjs/common';
 import {
   ApiBearerAuth,
@@ -9,13 +10,14 @@ import {
 } from '@nestjs/swagger';
 import type { Request } from 'express';
 import { SkipPermissions } from 'src/common/decorators';
-import { AppPermission } from '../../common/constants/permissions.constant.js';
+import { AppPermission } from '../auth/permissions/constants/permissions.constant.js';
 import { RequirePermissions } from '../../common/decorators/require-permissions.decorator.js';
 import { AppointmentsService } from './appointments.service.js';
 import { UpdateAppointmentStatusSwaggerDto } from './dtos/appointment.swagger.dto.js';
 
 @ApiTags('Appointments')
 @ApiBearerAuth('access-token')
+@ExcludeRoles('CHAIN_MANAGER')
 @Controller('appointments')
 @SkipPermissions()
 export class AppointmentsController {
@@ -54,6 +56,7 @@ export class AppointmentsController {
   @ApiQuery({ name: 'to', required: false, example: '2026-08-31' })
   @ApiQuery({ name: 'status', required: false, enum: ['all', 'pending', 'confirmed', 'cancelled'] })
   @ApiQuery({ name: 'q', required: false, description: 'Từ khóa tìm kiếm' })
+  @ApiQuery({ name: 'paymentChannel', required: false, enum: ['counter'], description: 'Lọc thu phí tiền mặt/chuyển khoản tại quầy và hóa đơn chưa thu' })
   listReceptionAppointments(@Req() req: Request) {
     return this.appointments.receptionAppointments(req.user!.id, req.query as Record<string, string | undefined>);
   }
@@ -77,7 +80,7 @@ export class AppointmentsController {
   @ApiOperation({ summary: 'Thực hiện dời lịch thông minh tự động' })
   smartReschedule(
     @Req() request: Request,
-    @Body() body: { items: Array<{ appointmentId: string; newSlotId: string }> },
+    @Body() body: { items: Array<{ appointmentId: string; newSlotId: number }> },
   ) {
     return this.appointments.executeSmartReschedule(request.user!.id, body);
   }
@@ -87,7 +90,7 @@ export class AppointmentsController {
   adminReschedule(
     @Req() request: Request,
     @Param('id') id: string,
-    @Body() body: { newSlotId: string; note?: string },
+    @Body() body: { newSlotId: number; note?: string },
   ) {
     return this.appointments.adminReschedule(request.user!.id, id, body);
   }

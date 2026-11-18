@@ -3,7 +3,7 @@ import { IsOptional, IsString } from 'class-validator';
 
 export class BookingInitDto {
   @ApiPropertyOptional({
-    description: 'Luồng đặt lịch: doctor | specialty | health-package | facility',
+    description: 'Luồng đặt lịch: doctor | specialty | online-consultation | after-hours | family | health-package | followup | all',
     example: 'doctor',
   })
   @IsOptional()

@@ -1,13 +1,15 @@
+import { ExcludeRoles } from '../../common/decorators/exclude-roles.decorator.js';
 import { Controller, Get, Req } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiQuery, ApiTags } from '@nestjs/swagger';
 import type { Request } from 'express';
-import { AppPermission } from '../../common/constants/permissions.constant.js';
+import { AppPermission } from '../auth/permissions/constants/permissions.constant.js';
 import { RequirePermissions } from '../../common/decorators/require-permissions.decorator.js';
 import { SkipPermissions } from '../../common/decorators/skip-permissions.decorator.js';
 import { PatientDirectoryService } from './patient-directory.service.js';
 
 @ApiTags('PatientDirectory')
 @ApiBearerAuth('access-token')
+@ExcludeRoles('CHAIN_MANAGER')
 @Controller('patients')
 @SkipPermissions()
 export class PatientDirectoryController {

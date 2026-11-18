@@ -3,7 +3,7 @@ import type { Response, Request } from 'express';
 import { ConfigService } from '@nestjs/config';
 import { Routes, Services } from '../../../common/utils/constants.js';
 import { IAuthService } from '../auth-local/auth.js';
-import { AuthProvidersEnum } from '../auth-local/enums/auth-providers.enum.js';
+import { AuthProvider } from '@prisma/client';
 import { ApiOperation, ApiTags } from '@nestjs/swagger';
 import { AuthGuard } from '@nestjs/passport';
 import { Public } from '../../../common/decorators/public.decorator.js';
@@ -66,7 +66,7 @@ export class AuthGoogleController {
     };
     try {
       const socialData = await measure('google_verify', () => this.authGoogleService.getProfileByToken(loginDto));
-      return await measure('vitacare_session', () => this.authService.validateSocialLogin(AuthProvidersEnum.google, socialData));
+      return await measure('vitacare_session', () => this.authService.validateSocialLogin(AuthProvider.GOOGLE, socialData));
     } finally {
       // Durations only; no Google token, email or session identifiers.
       res.setHeader('Server-Timing', timings.join(', '));

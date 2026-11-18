@@ -70,10 +70,6 @@ export class HttpExceptionFilter implements ExceptionFilter {
 
     for (const value of Object.values(errors as Record<string, unknown>)) {
       if (typeof value !== 'string') continue;
-      if (value.startsWith('needLoginViaProvider:')) {
-        const provider = value.split(':')[1];
-        return `Tài khoản này cần đăng nhập bằng ${provider}`;
-      }
       return messages[value] ?? value;
     }
 
@@ -110,24 +106,5 @@ export class HttpExceptionFilter implements ExceptionFilter {
       default:
         return ErrorCode.INTERNAL_SERVER_ERROR;
     }
-  }
-}
-
-@Catch()
-export class AllExceptionsFilter implements ExceptionFilter {
-  catch(exception: unknown, host: ArgumentsHost) {
-    const ctx = host.switchToHttp();
-    const response = ctx.getResponse<Response>();
-    const request = ctx.getRequest<Request>();
-
-    console.error('Unhandled exception:', exception);
-
-    response.status(500).json({
-      statusCode: 500,
-      errorCode: ErrorCode.INTERNAL_SERVER_ERROR,
-      message: exception instanceof Error ? exception.message : 'Internal server error',
-      timestamp: new Date().toISOString(),
-      path: request.url,
-    });
   }
 }

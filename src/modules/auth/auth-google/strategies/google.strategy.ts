@@ -5,14 +5,14 @@ import { ConfigService } from '@nestjs/config';
 import { AllConfigType } from '../../../../config/config.type.js';
 import { Services } from '../../../../common/utils/constants.js';
 import { IAuthService } from '../../auth-local/auth.js';
-import { AuthProvidersEnum } from '../../auth-local/enums/auth-providers.enum.js';
+import { AuthProvider } from '@prisma/client';
 import { SocialType } from '../../../../common/utils/social.type.js';
 
 @Injectable()
 export class GoogleStrategy extends PassportStrategy(Strategy) {
   constructor(
     @Inject(Services.AUTH) private readonly authService: IAuthService,
-    private readonly configService: ConfigService<AllConfigType>,
+    configService: ConfigService<AllConfigType>,
   ) {
     super({
       clientID:
@@ -30,8 +30,8 @@ export class GoogleStrategy extends PassportStrategy(Strategy) {
     });
   }
 
-  async validate(accessToken: string, refreshToken: string, profile: Profile) {
-    const primaryEmail = profile.emails?.[0]?.value;
+  async validate(_accessToken: string, _refreshToken: string, profile: Profile) {
+    const primaryEmail = profile.emails?.find((email) => email.verified) || profile.emails?.[0];
 
     // Ưu tiên displayName để giữ đúng trật tự họ tên tiếng Việt
     const fullName =
@@ -41,13 +41,14 @@ export class GoogleStrategy extends PassportStrategy(Strategy) {
 
     const socialData: SocialType = {
       id: profile.id,
-      email: primaryEmail,
+      email: primaryEmail?.value,
+      emailVerified: primaryEmail?.verified === true,
       fullName,
       avatarUrl: profile.photos?.[0]?.value,
     };
 
     return this.authService.validateSocialLogin(
-      AuthProvidersEnum.google,
+      AuthProvider.GOOGLE,
       socialData,
     );
   }

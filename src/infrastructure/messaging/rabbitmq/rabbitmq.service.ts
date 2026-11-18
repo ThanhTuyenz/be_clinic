@@ -4,7 +4,6 @@ import * as amqp from 'amqplib';
 import QRCode from 'qrcode';
 import { RabbitMqConfig } from '../../../config/config.type.js';
 import { checkInToken } from '../../../modules/appointments/helpers/check-in-token.js';
-import { BookingService } from '../../../modules/bookings/booking.service.js';
 import { PaymentReconciliationService } from '../../../modules/payments/payment-reconciliation.service.js';
 import { RecommendationService } from '../../../modules/recommendations/recommendation.service.js';
 import { PrismaService } from '../../database/prisma/prisma.service.js';
@@ -24,7 +23,6 @@ export class RabbitMqService implements OnModuleInit, OnModuleDestroy {
   constructor(
     private readonly config: ConfigService,
     private readonly prisma: PrismaService,
-    private readonly bookingService: BookingService,
     private readonly mailsService: MailsService,
     private readonly recommendationService: RecommendationService,
     private readonly httpSmsService: HttpSmsService,
@@ -118,7 +116,7 @@ export class RabbitMqService implements OnModuleInit, OnModuleDestroy {
           isHold ? topology.holdExchange : topology.eventsExchange,
           isHold ? topology.holdRoutingKey : event.eventType,
           Buffer.from(JSON.stringify({ eventId: event.id, ...event.payload as object })),
-          { persistent: true, messageId: event.id, contentType: 'application/json', expiration },
+          { persistent: true, messageId: String(event.id), contentType: 'application/json', expiration },
         );
         await this.channel.waitForConfirms();
         await this.prisma.outboxEvent.update({ where: { id: event.id }, data: { status: 'PUBLISHED', publishedAt: new Date(), attempts: { increment: 1 } } });
@@ -133,7 +131,7 @@ export class RabbitMqService implements OnModuleInit, OnModuleDestroy {
       if (!message) return;
       try {
         const payload = JSON.parse(message.content.toString()) as {
-          eventId: string;
+          eventId: number;
           appointmentId?: string;
           appointmentIds?: string[];
         };
@@ -163,7 +161,7 @@ export class RabbitMqService implements OnModuleInit, OnModuleDestroy {
       if (!message) return;
       try {
         const payload = JSON.parse(message.content.toString()) as {
-          eventId: string;
+          eventId: number;
           appointmentId: string;
           bookingCode?: string;
           queueNumber?: number;
@@ -188,9 +186,9 @@ export class RabbitMqService implements OnModuleInit, OnModuleDestroy {
       if (!message) return;
       try {
         const payload = JSON.parse(message.content.toString()) as {
-          eventId?: string;
+          eventId?: number;
           profileId: string;
-          branchId?: string;
+          branchId?: number;
         };
         this.logger.log(`[RabbitMQ] Received recommendation analyze task for profile: ${payload.profileId}`);
         if (payload.eventId) {
@@ -217,7 +215,7 @@ export class RabbitMqService implements OnModuleInit, OnModuleDestroy {
     await this.channel.consume(topology.packageVectorSyncQueue, async (message: any) => {
       if (!message) return;
       try {
-        const payload = JSON.parse(message.content.toString()) as { eventId?: string; packageId: string };
+        const payload = JSON.parse(message.content.toString()) as { eventId?: number; packageId: number };
         if (payload.eventId && await this.prisma.processedEvent.findUnique({ where: { eventId: payload.eventId } })) {
           this.channel.ack(message);
           return;
@@ -248,6 +246,7 @@ export class RabbitMqService implements OnModuleInit, OnModuleDestroy {
     const appt = await this.prisma.appointment.findUnique({
       where: { id: appointmentId },
       include: {
+        receptionSlot: true,
         patientProfile: {
           include: {
             account: { select: { email: true, phoneNumber: true } },
@@ -265,7 +264,7 @@ export class RabbitMqService implements OnModuleInit, OnModuleDestroy {
           },
         },
         servicePackage: true,
-        invoice: { select: { totalAmount: true } },
+        bookingOrder: { select: { invoice: { select: { totalAmount: true } } } },
         branch: { select: { name: true, address: true, phoneNumber: true } },
       },
     });
@@ -288,11 +287,11 @@ export class RabbitMqService implements OnModuleInit, OnModuleDestroy {
     const room = doctorSlot?.schedule.room;
 
     const appointmentDate =
-      doctorSlot?.schedule.workDate?.toISOString().slice(0, 10) ??
+      (appt.receptionSlot?.date ?? doctorSlot?.schedule.workDate)?.toISOString().slice(0, 10) ??
       new Date().toISOString().slice(0, 10);
 
     const startTime =
-      doctorSlot?.startTime?.toISOString().slice(11, 16) ??
+      (appt.receptionSlot?.startTime ?? doctorSlot?.startTime)?.toISOString().slice(11, 16) ??
       '';
 
     const doctorName = doctorSlot?.schedule.doctor
@@ -338,7 +337,7 @@ export class RabbitMqService implements OnModuleInit, OnModuleDestroy {
             doctorName,
             servicePackageName,
             roomName: room?.name ?? null,
-            totalAmount: appt.invoice?.totalAmount ? Number(appt.invoice.totalAmount) : null,
+            totalAmount: appt.bookingOrder.invoice?.totalAmount ? Number(appt.bookingOrder.invoice.totalAmount) : null,
             qrCodeDataUrl,
           },
         }).then(() => {
