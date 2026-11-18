@@ -8,6 +8,7 @@ RUN apk add --no-cache openssl
 
 # Copy package files
 COPY package*.json ./
+COPY .npmrc ./
 COPY tsconfig*.json ./
 COPY nest-cli.json ./
 
