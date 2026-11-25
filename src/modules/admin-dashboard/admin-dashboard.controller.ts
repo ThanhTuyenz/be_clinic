@@ -70,48 +70,6 @@ export class AdminDashboardController {
     return this.dashboard.compareBranches(request.user!.id, { timeFilter, startDate, endDate })
   }
 
-  @Get('demand-insights')
-  @RequirePermissions(AppPermission.REPORT_BRANCH_READ)
-  @ApiOperation({ summary: 'Thống kê nhu cầu khám bệnh, phễu chuyển đổi và phân khúc nhân khẩu học (Hospital BI)' })
-  @ApiQuery({ name: 'branchId', required: false, description: 'Lọc theo chi nhánh' })
-  @ApiQuery({ name: 'timeFilter', required: false, enum: ['today', 'week', 'month', 'quarter', '7days', '30days'] })
-  @ApiQuery({ name: 'startDate', required: false, description: 'YYYY-MM-DD' })
-  @ApiQuery({ name: 'endDate', required: false, description: 'YYYY-MM-DD' })
-  getDemandInsights(
-    @Req() request: Request,
-    @Query('branchId', new ParseIntPipe({ optional: true })) branchId?: number,
-    @Query('timeFilter') timeFilter?: string,
-    @Query('startDate') startDate?: string,
-    @Query('endDate') endDate?: string,
-  ) {
-    return this.dashboard.getDemandMetrics(request.user!.id, { branchId, timeFilter, startDate, endDate })
-  }
-
-  @Get('ai-executive-report')
-  @RequirePermissions(AppPermission.REPORT_BRANCH_READ)
-  @ApiOperation({ summary: 'Lấy hoặc tạo Báo cáo Cố vấn Chiến lược Y tế từ AI Gemini' })
-  @ApiQuery({ name: 'branchId', required: false })
-  @ApiQuery({ name: 'timeFilter', required: false, enum: ['today', 'week', 'month', 'quarter', '7days', '30days'] })
-  @ApiQuery({ name: 'startDate', required: false, description: 'YYYY-MM-DD' })
-  @ApiQuery({ name: 'endDate', required: false, description: 'YYYY-MM-DD' })
-  @ApiQuery({ name: 'forceRefresh', required: false, type: Boolean })
-  getAiExecutiveReport(
-    @Req() request: Request,
-    @Query('branchId', new ParseIntPipe({ optional: true })) branchId?: number,
-    @Query('timeFilter') timeFilter?: string,
-    @Query('startDate') startDate?: string,
-    @Query('endDate') endDate?: string,
-    @Query('forceRefresh') forceRefresh?: string,
-  ) {
-    return this.dashboard.generateExecutiveAiReport(request.user!.id, {
-      branchId,
-      timeFilter,
-      startDate,
-      endDate,
-      forceRefresh: forceRefresh === 'true' || forceRefresh === '1',
-    })
-  }
-
   @Get('system-logs')
   @RequirePermissions(AppPermission.SYSTEM_LOG_READ)
   @ApiOperation({ summary: 'Nhật ký hoạt động và giám sát lỗi hệ thống cho Quản trị viên' })

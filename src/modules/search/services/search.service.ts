@@ -1,18 +1,16 @@
+import { PACKAGE_DEPLOYMENT_SELECT, getPackageDeployments, packageDeploymentWhere } from '../../bookings/helpers/package-deployment.helper.js';
 import { Injectable, Logger, ServiceUnavailableException } from '@nestjs/common';
 import { containsSearchPhrase, matchesSearchConstraints, matchesSearchExclusions, normalizeSearch, parseSearchIntent, replaceSearchText, searchTextScore } from '../../../common/utils/search-query.js';
 import { PrismaService } from '../../../infrastructure/database/prisma/prisma.service.js';
 import { RedisService } from '../../../infrastructure/redis/redis.service.js';
 import { mapPackageForRetrieval, PackageForRetrieval } from '../../../infrastructure/embedding/embedding.service.js';
 import { SearchRankingService } from './search-ranking.service.js';
-import { AnalyticsService, type SearchContext } from '../../analytics/analytics.service.js';
-import { vietnamDateKey } from '../../analytics/analytics-time.js';
 import { RecommendationService } from '../../recommendations/recommendation.service.js';
 import { TrackingActionType } from '../../recommendations/recommendation.dto.js';
 
 export interface SemanticSearchResult {
   query: string;
   behaviorRecorded?: boolean;
-  searchId?: number;
   branchId?: number;
   total: number;
   partial?: boolean;
@@ -55,31 +53,16 @@ export class SearchService {
     private readonly prisma: PrismaService,
     private readonly redis: RedisService,
     private readonly ranking: SearchRankingService,
-    private readonly analytics: AnalyticsService,
     private readonly recommendations: RecommendationService,
   ) { }
 
   /**
    * Tìm kiếm thông minh đa thực thể (Gói khám, Bác sĩ, Cơ sở) bằng Vector Embeddings & Heuristic Matcher
    */
-  async find(query: string, branchId?: number, context: SearchContext = {}): Promise<SemanticSearchResult> {
-    const start = performance.now();
-    let result: SemanticSearchResult;
-    try {
-      result = await this.runSearch(query, branchId);
-    } catch (error) {
-      await this.analytics.recordSearch(query, { ...context, branchId }, null, performance.now() - start).catch(() => this.logger.warn('Không thể lưu lỗi tìm kiếm'));
-      throw error;
-    }
-    const tracked = await this.analytics.recordSearch(query, { ...context, branchId }, result, performance.now() - start)
-      .catch(() => { this.logger.warn('Không thể lưu lượt tìm kiếm'); return undefined; });
-    result.searchId = tracked?.id;
+  async find(query: string, branchId?: number, context: { sessionId?: string; accountId?: string } = {}): Promise<SemanticSearchResult> {
+    const result = await this.runSearch(query, branchId);
     result.behaviorRecorded = false;
-    if (tracked?.created && !result.partial) {
-      setImmediate(() => void this.recordTelemetryAsync(query, result.total > 0)
-        .catch(() => this.logger.debug('Không thể cập nhật xếp hạng tìm kiếm')));
-    }
-    if (tracked?.created && !result.partial && query.trim().length >= 2 && (context.sessionId || context.accountId)) {
+    if (!result.partial && query.trim().length >= 2 && (context.sessionId || context.accountId)) {
       // Reuse the actual search ranking for behavior recommendations.
       const behavior = await this.recommendations.trackUserBehavior({
         sessionId: context.sessionId, actionType: TrackingActionType.SEARCH, searchQuery: query.trim(),
@@ -143,7 +126,7 @@ export class SearchService {
   }
 
   /**
-   * 1. Tìm kiếm và phân tích ngữ nghĩa Gói khám với Cache & Threshold
+   * 1. Tìm kiếm gói khám bằng từ khóa và ngữ nghĩa, hợp nhất bằng RRF.
    */
   private async searchPackages(q: string, branchId?: number) {
     try {
@@ -152,7 +135,7 @@ export class SearchService {
 
       const results = await this.ranking.rank(q, candidatePackages, 6);
 
-      // Eligibility and relevance thresholds are applied once by the retrieval engine.
+      // Constraints and ranking are applied once by the retrieval engine.
       return results
         .map((r) => ({
           id: r.package.id,
@@ -161,7 +144,7 @@ export class SearchService {
           price: r.package.price,
           durationMin: r.package.durationMin,
           specialtyName: r.package.specialtyName,
-          similarityScore: Number(r.score.toFixed(6)), // Legacy field: RRF score, not cosine confidence.
+          similarityScore: Number(r.score.toFixed(6)), // RRF score for text queries; not cosine similarity or confidence.
           description: r.package.description,
           branchId: r.package.branchId,
           bookingMethodCode: r.package.bookingMethodCode,
@@ -246,23 +229,20 @@ export class SearchService {
     const pkgs = await this.prisma.servicePackage.findMany({
       where: {
         isActive: true,
-        OR: [
-          { branchBookingMethod: { ...(branchId ? { branchId } : {}), isEnabled: true, branch: { isActive: true }, bookingMethod: { isActive: true } } },
-          { branchBookingMethods: { some: { branchBookingMethod: { ...(branchId ? { branchId } : {}), isEnabled: true, branch: { isActive: true }, bookingMethod: { isActive: true } } } } },
-        ],
+        ...await packageDeploymentWhere(this.prisma, branchId, undefined),
       },
       select: {
         id: true, code: true, name: true, price: true, durationMin: true, description: true,
         symptoms: true, specialtyId: true, targetGender: true, minAge: true, maxAge: true, isFollowUp: true,
         specialty: { select: { id: true, name: true, symptoms: true, description: true } },
-        branchBookingMethod: { select: { branchId: true, isEnabled: true, branch: { select: { isActive: true } }, bookingMethod: { select: { code: true, isActive: true } } } },
-        branchBookingMethods: { select: { branchBookingMethod: { select: { branchId: true, isEnabled: true, branch: { select: { isActive: true } }, bookingMethod: { select: { code: true, isActive: true } } } } } },
+
+        ...PACKAGE_DEPLOYMENT_SELECT,
       },
       orderBy: { price: 'asc' },
     });
 
     const mapped: PackageForRetrieval[] = pkgs.map((p) => {
-      const methods = [p.branchBookingMethod, ...p.branchBookingMethods.map(link => link.branchBookingMethod)]
+      const methods = getPackageDeployments(p)
         .filter(method => method?.isEnabled && method.branch.isActive && method.bookingMethod.isActive);
       const method = methods.find(method => !branchId || method?.branchId === branchId);
       return {
@@ -276,33 +256,5 @@ export class SearchService {
     }
 
     return mapped;
-  }
-
-  /**
-   * Ghi nhận telemetry thống kê từ khóa bất đồng bộ (Non-blocking Background Task)
-   */
-  private async recordTelemetryAsync(query: string, hasResults: boolean): Promise<void> {
-    if (!query || query.trim().length < 2) return;
-    const normalizedQ = query.trim().toLowerCase();
-    const dateKey = vietnamDateKey(new Date());
-
-    // 1. Ghi nhận vào Redis Ranking ZSET (theo ngày và toàn thời gian)
-    if (this.redis.isEnabled()) {
-      try {
-        const client = this.redis.getClient();
-        if (client) {
-          const zsetKey = hasResults ? 'rec:global:search_queries' : 'rec:global:unmatched_queries';
-          const dailyZsetKey = `${zsetKey}:${dateKey}`;
-          const pipeline = client.pipeline();
-          pipeline.zincrby(dailyZsetKey, 1, normalizedQ);
-          pipeline.expire(dailyZsetKey, 172800); // 48 giờ
-          pipeline.zincrby(zsetKey, 1, normalizedQ);
-          await pipeline.exec();
-        }
-      } catch (err: any) {
-        this.logger.debug(`[SemanticSearch] Redis telemetry error: ${err?.message}`);
-      }
-    }
-
   }
 }

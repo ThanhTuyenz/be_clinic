@@ -1,0 +1,1536 @@
+{
+  "version": 1,
+  "exportedAt": "2026-11-19T13:42:32.980Z",
+  "catalogHash": "9c4e1b637d062b5ed0709ba4b0806e0a42f93b4e5417cae2cca86e5f252612ae",
+  "packages": [
+    {
+      "id": 3,
+      "code": "CONSULT-001-BASIC",
+      "slug": "goi-kham-noi-tong-quat-co-ban",
+      "name": "Gói khám Nội tổng quát cơ bản",
+      "description": "Gói khám chuyên khoa Nội tổng quát cơ bản: tiếp nhận thông tin sức khỏe, thăm khám theo nhu cầu và tư vấn các bước chăm sóc tiếp theo.",
+      "symptoms": [
+        "Mệt mỏi suy nhược",
+        "Sụt cân không rõ nguyên nhân",
+        "Sốt kéo dài",
+        "Kiểm tra sức khỏe định kỳ"
+      ],
+      "price": "180000",
+      "durationMin": 20,
+      "specialtyId": 1,
+      "targetGender": "ALL",
+      "minAge": null,
+      "maxAge": null,
+      "isPediatric": false,
+      "isFollowUp": false,
+      "specialty": {
+        "id": 1,
+        "name": "Nội tổng quát",
+        "slug": "noi-tong-quat",
+        "description": "Khám, tư vấn sức khỏe chung và tầm soát bệnh lý mạn tính người lớn.",
+        "symptoms": [
+          "Mệt mỏi suy nhược",
+          "Sụt cân không rõ nguyên nhân",
+          "Sốt kéo dài",
+          "Kiểm tra sức khỏe định kỳ"
+        ]
+      }
+    },
+    {
+      "id": 6,
+      "code": "CONSULT-002-BASIC",
+      "slug": "goi-kham-tim-mach-co-ban",
+      "name": "Gói khám Tim mạch cơ bản",
+      "description": "Gói khám chuyên khoa Tim mạch cơ bản: tiếp nhận thông tin sức khỏe, thăm khám theo nhu cầu và tư vấn các bước chăm sóc tiếp theo.",
+      "symptoms": [
+        "Tức ngực",
+        "Hồi hộp đánh trống ngực",
+        "Khó thở khi gắng sức",
+        "Huyết áp cao",
+        "Chóng mặt"
+      ],
+      "price": "180000",
+      "durationMin": 20,
+      "specialtyId": 2,
+      "targetGender": "ALL",
+      "minAge": null,
+      "maxAge": null,
+      "isPediatric": false,
+      "isFollowUp": false,
+      "specialty": {
+        "id": 2,
+        "name": "Tim mạch",
+        "slug": "tim-mach",
+        "description": "Khám và điều trị tăng huyết áp, xơ vữa động mạch, suy tim và rối loạn nhịp tim.",
+        "symptoms": [
+          "Đau thắt ngực",
+          "Hồi hộp đánh trống ngực",
+          "Khó thở khi gắng sức",
+          "Huyết áp cao hoặc không ổn định"
+        ]
+      }
+    },
+    {
+      "id": 9,
+      "code": "CONSULT-003-BASIC",
+      "slug": "goi-kham-tieu-hoa-gan-mat-co-ban",
+      "name": "Gói khám Tiêu hóa – Gan mật cơ bản",
+      "description": "Gói khám chuyên khoa Tiêu hóa – Gan mật cơ bản: tiếp nhận thông tin sức khỏe, thăm khám theo nhu cầu và tư vấn các bước chăm sóc tiếp theo.",
+      "symptoms": [
+        "Đau thượng vị",
+        "Đầy hơi khó tiêu",
+        "Ợ chua trào ngược",
+        "Rối loạn tiêu hóa",
+        "Buồn nôn"
+      ],
+      "price": "180000",
+      "durationMin": 20,
+      "specialtyId": 3,
+      "targetGender": "ALL",
+      "minAge": null,
+      "maxAge": null,
+      "isPediatric": false,
+      "isFollowUp": false,
+      "specialty": {
+        "id": 3,
+        "name": "Tiêu hóa – Gan mật",
+        "slug": "tieu-hoa-gan-mat",
+        "description": "Viêm loét dạ dày - đại tràng, trào ngược dạ dày, viêm gan B/C và sỏi mật.",
+        "symptoms": [
+          "Đau thượng vị",
+          "Ợ chua trào ngược",
+          "Đầy hơi khó tiêu",
+          "Rối loạn tiêu hóa kéo dài",
+          "Vàng da"
+        ]
+      }
+    },
+    {
+      "id": 12,
+      "code": "CONSULT-004-BASIC",
+      "slug": "goi-kham-ho-hap-co-ban",
+      "name": "Gói khám Hô hấp cơ bản",
+      "description": "Gói khám chuyên khoa Hô hấp cơ bản: tiếp nhận thông tin sức khỏe, thăm khám theo nhu cầu và tư vấn các bước chăm sóc tiếp theo.",
+      "symptoms": [
+        "Ho kéo dài",
+        "Khò khè tức ngực",
+        "Ho có đờm hoặc lẫn máu",
+        "Hụt hơi khó thở"
+      ],
+      "price": "180000",
+      "durationMin": 20,
+      "specialtyId": 4,
+      "targetGender": "ALL",
+      "minAge": null,
+      "maxAge": null,
+      "isPediatric": false,
+      "isFollowUp": false,
+      "specialty": {
+        "id": 4,
+        "name": "Hô hấp",
+        "slug": "ho-hap",
+        "description": "Viêm phế quản, hen suyễn, viêm phổi và bệnh phổi tắc nghẽn mạn tính (COPD).",
+        "symptoms": [
+          "Ho kéo dài",
+          "Khò khè tức ngực",
+          "Ho có đờm hoặc lẫn máu",
+          "Hụt hơi khó thở"
+        ]
+      }
+    },
+    {
+      "id": 15,
+      "code": "CONSULT-005-BASIC",
+      "slug": "goi-kham-noi-tiet-dai-thao-duong-co-ban",
+      "name": "Gói khám Nội tiết – Đái tháo đường cơ bản",
+      "description": "Gói khám chuyên khoa Nội tiết – Đái tháo đường cơ bản: tiếp nhận thông tin sức khỏe, thăm khám theo nhu cầu và tư vấn các bước chăm sóc tiếp theo.",
+      "symptoms": [
+        "Khát nước nhiều",
+        "Tiểu nhiều ban đêm",
+        "Run tay sụt cân nhanh",
+        "Bướu cổ phì đại"
+      ],
+      "price": "180000",
+      "durationMin": 20,
+      "specialtyId": 5,
+      "targetGender": "ALL",
+      "minAge": null,
+      "maxAge": null,
+      "isPediatric": false,
+      "isFollowUp": false,
+      "specialty": {
+        "id": 5,
+        "name": "Nội tiết – Đái tháo đường",
+        "slug": "noi-tiet-dai-thao-duong",
+        "description": "Kiểm soát đường huyết, bệnh lý tuyến giáp và rối loạn chuyển hóa lipid.",
+        "symptoms": [
+          "Khát nước nhiều",
+          "Tiểu nhiều ban đêm",
+          "Run tay sụt cân nhanh",
+          "Bướu cổ phì đại"
+        ]
+      }
+    },
+    {
+      "id": 18,
+      "code": "CONSULT-006-BASIC",
+      "slug": "goi-kham-than-kinh-co-ban",
+      "name": "Gói khám Thần kinh cơ bản",
+      "description": "Gói khám chuyên khoa Thần kinh cơ bản: tiếp nhận thông tin sức khỏe, thăm khám theo nhu cầu và tư vấn các bước chăm sóc tiếp theo.",
+      "symptoms": [
+        "Đau nửa đầu Migraine",
+        "Chóng mặt hoa mắt",
+        "Mất ngủ kéo dài",
+        "Tê bì chân tay"
+      ],
+      "price": "180000",
+      "durationMin": 20,
+      "specialtyId": 6,
+      "targetGender": "ALL",
+      "minAge": null,
+      "maxAge": null,
+      "isPediatric": false,
+      "isFollowUp": false,
+      "specialty": {
+        "id": 6,
+        "name": "Thần kinh",
+        "slug": "than-kinh",
+        "description": "Khám đau đầu mạn tính, mất ngủ, rối loạn tiền đình và suy giảm trí nhớ.",
+        "symptoms": [
+          "Đau nửa đầu Migraine",
+          "Chóng mặt hoa mắt",
+          "Mất ngủ kéo dài",
+          "Tê bì chân tay"
+        ]
+      }
+    },
+    {
+      "id": 21,
+      "code": "CONSULT-007-BASIC",
+      "slug": "goi-kham-ngoai-tong-quat-co-ban",
+      "name": "Gói khám Ngoại tổng quát cơ bản",
+      "description": "Gói khám chuyên khoa Ngoại tổng quát cơ bản: tiếp nhận thông tin sức khỏe, thăm khám theo nhu cầu và tư vấn các bước chăm sóc tiếp theo.",
+      "symptoms": [
+        "Khối u bướu vùng bẹn",
+        "Đau rát hậu môn trĩ",
+        "U mỡ bao hoạt dịch",
+        "Vết thương hở phần mềm"
+      ],
+      "price": "180000",
+      "durationMin": 20,
+      "specialtyId": 7,
+      "targetGender": "ALL",
+      "minAge": null,
+      "maxAge": null,
+      "isPediatric": false,
+      "isFollowUp": false,
+      "specialty": {
+        "id": 7,
+        "name": "Ngoại tổng quát",
+        "slug": "ngoai-tong-quat",
+        "description": "Bệnh lý hậu môn trực tràng, thoát vị bẹn và xử lý tiểu phẫu ngoại khoa.",
+        "symptoms": [
+          "Khối u bướu vùng bẹn",
+          "Đau rát hậu môn trĩ",
+          "U mỡ bao hoạt dịch",
+          "Vết thương hở phần mềm"
+        ]
+      }
+    },
+    {
+      "id": 24,
+      "code": "CONSULT-008-BASIC",
+      "slug": "goi-kham-ngoai-chan-thuong-chinh-hinh-co-ban",
+      "name": "Gói khám Ngoại Chấn thương Chỉnh hình cơ bản",
+      "description": "Gói khám chuyên khoa Ngoại Chấn thương Chỉnh hình cơ bản: tiếp nhận thông tin sức khỏe, thăm khám theo nhu cầu và tư vấn các bước chăm sóc tiếp theo.",
+      "symptoms": [
+        "Đau nhức khớp gối",
+        "Thoái hóa cột sống",
+        "Đau mỏi vai gáy",
+        "Căng cơ chấn thương vận động"
+      ],
+      "price": "180000",
+      "durationMin": 20,
+      "specialtyId": 8,
+      "targetGender": "ALL",
+      "minAge": null,
+      "maxAge": null,
+      "isPediatric": false,
+      "isFollowUp": false,
+      "specialty": {
+        "id": 8,
+        "name": "Ngoại Chấn thương Chỉnh hình",
+        "slug": "ngoai-chan-thuong-chinh-hinh",
+        "description": "Bệnh lý cơ xương khớp, thoái hóa khớp, trật khớp và chấn thương thể thao.",
+        "symptoms": [
+          "Đau nhức khớp gối",
+          "Thoái hóa cột sống",
+          "Đau mỏi vai gáy",
+          "Căng cơ chấn thương vận động"
+        ]
+      }
+    },
+    {
+      "id": 27,
+      "code": "CONSULT-009-BASIC",
+      "slug": "goi-kham-nhi-khoa-co-ban",
+      "name": "Gói khám Nhi khoa cơ bản",
+      "description": "Gói khám chuyên khoa Nhi khoa cơ bản: tiếp nhận thông tin sức khỏe, thăm khám theo nhu cầu và tư vấn các bước chăm sóc tiếp theo.",
+      "symptoms": [
+        "Sốt co giật ở trẻ",
+        "Biếng ăn chậm tăng cân",
+        "Ho sốt cảm cúm",
+        "Phát ban mẩn ngứa trẻ nhỏ"
+      ],
+      "price": "180000",
+      "durationMin": 20,
+      "specialtyId": 9,
+      "targetGender": "ALL",
+      "minAge": null,
+      "maxAge": null,
+      "isPediatric": true,
+      "isFollowUp": false,
+      "specialty": {
+        "id": 9,
+        "name": "Nhi khoa",
+        "slug": "nhi-khoa",
+        "description": "Khám, điều trị và theo dõi sự phát triển thể chất toàn diện của trẻ nhỏ.",
+        "symptoms": [
+          "Sốt co giật ở trẻ",
+          "Biếng ăn chậm tăng cân",
+          "Ho sốt cảm cúm",
+          "Phát ban mẩn ngứa trẻ nhỏ"
+        ]
+      }
+    },
+    {
+      "id": 30,
+      "code": "CONSULT-010-BASIC",
+      "slug": "goi-kham-san-phu-khoa-co-ban",
+      "name": "Gói khám Sản – Phụ khoa cơ bản",
+      "description": "Gói khám chuyên khoa Sản – Phụ khoa cơ bản: tiếp nhận thông tin sức khỏe, thăm khám theo nhu cầu và tư vấn các bước chăm sóc tiếp theo.",
+      "symptoms": [
+        "Rối loạn kinh nguyệt",
+        "Khám thai định kỳ",
+        "Đau bụng dưới bất thường",
+        "Viêm nhiễm phụ khoa"
+      ],
+      "price": "180000",
+      "durationMin": 20,
+      "specialtyId": 10,
+      "targetGender": "FEMALE",
+      "minAge": null,
+      "maxAge": null,
+      "isPediatric": false,
+      "isFollowUp": false,
+      "specialty": {
+        "id": 10,
+        "name": "Sản – Phụ khoa",
+        "slug": "san-phu-khoa",
+        "description": "Chăm sóc sức khỏe sinh sản phụ nữ, tầm soát phụ khoa và theo dõi thai kỳ định kỳ.",
+        "symptoms": [
+          "Rối loạn kinh nguyệt",
+          "Khám thai định kỳ",
+          "Đau bụng dưới bất thường",
+          "Viêm nhiễm phụ khoa"
+        ]
+      }
+    },
+    {
+      "id": 33,
+      "code": "CONSULT-011-BASIC",
+      "slug": "goi-kham-mat-co-ban",
+      "name": "Gói khám Mắt cơ bản",
+      "description": "Gói khám chuyên khoa Mắt cơ bản: tiếp nhận thông tin sức khỏe, thăm khám theo nhu cầu và tư vấn các bước chăm sóc tiếp theo.",
+      "symptoms": [
+        "Mắt nhìn mờ",
+        "Đỏ mắt cộm rát",
+        "Chảy nước mắt sống",
+        "Khám đo kính cận loạn"
+      ],
+      "price": "180000",
+      "durationMin": 20,
+      "specialtyId": 11,
+      "targetGender": "ALL",
+      "minAge": null,
+      "maxAge": null,
+      "isPediatric": false,
+      "isFollowUp": false,
+      "specialty": {
+        "id": 11,
+        "name": "Mắt",
+        "slug": "mat",
+        "description": "Đo thị lực, khám tật khúc xạ, viêm kết mạc, đục thủy tinh thể và soi đáy mắt.",
+        "symptoms": [
+          "Mắt nhìn mờ",
+          "Đỏ mắt cộm rát",
+          "Chảy nước mắt sống",
+          "Khám đo kính cận loạn"
+        ]
+      }
+    },
+    {
+      "id": 36,
+      "code": "CONSULT-012-BASIC",
+      "slug": "goi-kham-tai-mui-hong-co-ban",
+      "name": "Gói khám Tai Mũi Họng cơ bản",
+      "description": "Gói khám chuyên khoa Tai Mũi Họng cơ bản: tiếp nhận thông tin sức khỏe, thăm khám theo nhu cầu và tư vấn các bước chăm sóc tiếp theo.",
+      "symptoms": [
+        "Đau rát họng nuốt vướng",
+        "Nghẹt mũi chảy nước mũi",
+        "Ù tai chảy dịch tai",
+        "Khàn tiếng kéo dài"
+      ],
+      "price": "180000",
+      "durationMin": 20,
+      "specialtyId": 12,
+      "targetGender": "ALL",
+      "minAge": null,
+      "maxAge": null,
+      "isPediatric": false,
+      "isFollowUp": false,
+      "specialty": {
+        "id": 12,
+        "name": "Tai Mũi Họng",
+        "slug": "tai-mui-hong",
+        "description": "Nội soi tai mũi họng, viêm xoang, viêm họng hạt, viêm amidan và viêm tai giữa.",
+        "symptoms": [
+          "Đau rát họng nuốt vướng",
+          "Nghẹt mũi chảy nước mũi",
+          "Ù tai chảy dịch tai",
+          "Khàn tiếng kéo dài"
+        ]
+      }
+    },
+    {
+      "id": 39,
+      "code": "CONSULT-013-BASIC",
+      "slug": "goi-kham-rang-ham-mat-co-ban",
+      "name": "Gói khám Răng Hàm Mặt cơ bản",
+      "description": "Gói khám chuyên khoa Răng Hàm Mặt cơ bản: tiếp nhận thông tin sức khỏe, thăm khám theo nhu cầu và tư vấn các bước chăm sóc tiếp theo.",
+      "symptoms": [
+        "Đau buốt răng sâu",
+        "Chảy máu chân răng nướu",
+        "Răng khôn mọc lệch",
+        "Cần lấy cao răng làm sạch"
+      ],
+      "price": "180000",
+      "durationMin": 20,
+      "specialtyId": 13,
+      "targetGender": "ALL",
+      "minAge": null,
+      "maxAge": null,
+      "isPediatric": false,
+      "isFollowUp": false,
+      "specialty": {
+        "id": 13,
+        "name": "Răng Hàm Mặt",
+        "slug": "rang-ham-mat",
+        "description": "Khám răng tổng quát, nhổ răng, trám răng thẩm mỹ, điều trị tủy và lấy cao răng.",
+        "symptoms": [
+          "Đau buốt răng sâu",
+          "Chảy máu chân răng nướu",
+          "Răng khôn mọc lệch",
+          "Cần lấy cao răng làm sạch"
+        ]
+      }
+    },
+    {
+      "id": 42,
+      "code": "CONSULT-014-BASIC",
+      "slug": "goi-kham-da-lieu-co-ban",
+      "name": "Gói khám Da liễu cơ bản",
+      "description": "Gói khám chuyên khoa Da liễu cơ bản: tiếp nhận thông tin sức khỏe, thăm khám theo nhu cầu và tư vấn các bước chăm sóc tiếp theo.",
+      "symptoms": [
+        "Mụn viêm mụn ẩn",
+        "Dị ứng mẩn ngứa",
+        "Nổi mề đay",
+        "Viêm da cơ địa",
+        "Rụng tóc",
+        "Nấm da"
+      ],
+      "price": "180000",
+      "durationMin": 20,
+      "specialtyId": 14,
+      "targetGender": "ALL",
+      "minAge": null,
+      "maxAge": null,
+      "isPediatric": false,
+      "isFollowUp": false,
+      "specialty": {
+        "id": 14,
+        "name": "Da liễu",
+        "slug": "da-lieu",
+        "description": "Khám, điều trị viêm da cơ địa, mụn trứng cá, nấm da và chăm sóc thẩm mỹ da liễu.",
+        "symptoms": [
+          "Mụn viêm mụn bọc",
+          "Ngứa ngáy dị ứng mề đay",
+          "Vảy nến á sừng",
+          "Nấm da rụng tóc"
+        ]
+      }
+    },
+    {
+      "id": 1,
+      "code": "CONSULT-001-STANDARD",
+      "slug": "kham-noi-tong-quat-trong-gio",
+      "name": "Khám Nội tổng quát trong giờ",
+      "description": "Khám lâm sàng toàn diện các cơ quan nội khoa, đánh giá chỉ số sinh hiệu và tầm soát sớm các bệnh lý lối sống.",
+      "symptoms": [
+        "Mệt mỏi suy nhược",
+        "Sụt cân không rõ nguyên nhân",
+        "Sốt kéo dài",
+        "Kiểm tra sức khỏe định kỳ"
+      ],
+      "price": "220000",
+      "durationMin": 30,
+      "specialtyId": 1,
+      "targetGender": "ALL",
+      "minAge": null,
+      "maxAge": null,
+      "isPediatric": false,
+      "isFollowUp": false,
+      "specialty": {
+        "id": 1,
+        "name": "Nội tổng quát",
+        "slug": "noi-tong-quat",
+        "description": "Khám, tư vấn sức khỏe chung và tầm soát bệnh lý mạn tính người lớn.",
+        "symptoms": [
+          "Mệt mỏi suy nhược",
+          "Sụt cân không rõ nguyên nhân",
+          "Sốt kéo dài",
+          "Kiểm tra sức khỏe định kỳ"
+        ]
+      }
+    },
+    {
+      "id": 4,
+      "code": "CONSULT-002-STANDARD",
+      "slug": "kham-tim-mach-trong-gio",
+      "name": "Khám Tim mạch trong giờ",
+      "description": "Khám lâm sàng chuyên sâu, nghe tim phổi, đo huyết áp và tầm soát các bệnh lý mạch vành, rối loạn nhịp tim, tăng huyết áp.",
+      "symptoms": [
+        "Tức ngực",
+        "Hồi hộp đánh trống ngực",
+        "Khó thở khi gắng sức",
+        "Huyết áp cao",
+        "Chóng mặt"
+      ],
+      "price": "220000",
+      "durationMin": 30,
+      "specialtyId": 2,
+      "targetGender": "ALL",
+      "minAge": null,
+      "maxAge": null,
+      "isPediatric": false,
+      "isFollowUp": false,
+      "specialty": {
+        "id": 2,
+        "name": "Tim mạch",
+        "slug": "tim-mach",
+        "description": "Khám và điều trị tăng huyết áp, xơ vữa động mạch, suy tim và rối loạn nhịp tim.",
+        "symptoms": [
+          "Đau thắt ngực",
+          "Hồi hộp đánh trống ngực",
+          "Khó thở khi gắng sức",
+          "Huyết áp cao hoặc không ổn định"
+        ]
+      }
+    },
+    {
+      "id": 7,
+      "code": "CONSULT-003-STANDARD",
+      "slug": "kham-tieu-hoa-gan-mat-trong-gio",
+      "name": "Khám Tiêu hóa – Gan mật trong giờ",
+      "description": "Thăm khám và chẩn đoán các bệnh lý dạ dày, đại tràng, gan mật tụy, viêm loét đường tiêu hóa và trào ngược dạ dày thực quản.",
+      "symptoms": [
+        "Đau thượng vị",
+        "Đầy hơi khó tiêu",
+        "Ợ chua trào ngược",
+        "Rối loạn tiêu hóa",
+        "Buồn nôn"
+      ],
+      "price": "220000",
+      "durationMin": 30,
+      "specialtyId": 3,
+      "targetGender": "ALL",
+      "minAge": null,
+      "maxAge": null,
+      "isPediatric": false,
+      "isFollowUp": false,
+      "specialty": {
+        "id": 3,
+        "name": "Tiêu hóa – Gan mật",
+        "slug": "tieu-hoa-gan-mat",
+        "description": "Viêm loét dạ dày - đại tràng, trào ngược dạ dày, viêm gan B/C và sỏi mật.",
+        "symptoms": [
+          "Đau thượng vị",
+          "Ợ chua trào ngược",
+          "Đầy hơi khó tiêu",
+          "Rối loạn tiêu hóa kéo dài",
+          "Vàng da"
+        ]
+      }
+    },
+    {
+      "id": 10,
+      "code": "CONSULT-004-STANDARD",
+      "slug": "kham-ho-hap-trong-gio",
+      "name": "Khám Hô hấp trong giờ",
+      "description": "Khám chẩn đoán các bệnh lý phế quản, hen suyễn, phổi tắc nghẽn mạn tính COPD và nhiễm trùng đường hô hấp.",
+      "symptoms": [
+        "Ho kéo dài",
+        "Khò khè tức ngực",
+        "Ho có đờm hoặc lẫn máu",
+        "Hụt hơi khó thở"
+      ],
+      "price": "220000",
+      "durationMin": 30,
+      "specialtyId": 4,
+      "targetGender": "ALL",
+      "minAge": null,
+      "maxAge": null,
+      "isPediatric": false,
+      "isFollowUp": false,
+      "specialty": {
+        "id": 4,
+        "name": "Hô hấp",
+        "slug": "ho-hap",
+        "description": "Viêm phế quản, hen suyễn, viêm phổi và bệnh phổi tắc nghẽn mạn tính (COPD).",
+        "symptoms": [
+          "Ho kéo dài",
+          "Khò khè tức ngực",
+          "Ho có đờm hoặc lẫn máu",
+          "Hụt hơi khó thở"
+        ]
+      }
+    },
+    {
+      "id": 13,
+      "code": "CONSULT-005-STANDARD",
+      "slug": "kham-noi-tiet-dai-thao-duong-trong-gio",
+      "name": "Khám Nội tiết – Đái tháo đường trong giờ",
+      "description": "Kiểm soát đường huyết, bệnh lý tuyến giáp và rối loạn chuyển hóa lipid.",
+      "symptoms": [
+        "Khát nước nhiều",
+        "Tiểu nhiều ban đêm",
+        "Run tay sụt cân nhanh",
+        "Bướu cổ phì đại"
+      ],
+      "price": "220000",
+      "durationMin": 30,
+      "specialtyId": 5,
+      "targetGender": "ALL",
+      "minAge": null,
+      "maxAge": null,
+      "isPediatric": false,
+      "isFollowUp": false,
+      "specialty": {
+        "id": 5,
+        "name": "Nội tiết – Đái tháo đường",
+        "slug": "noi-tiet-dai-thao-duong",
+        "description": "Kiểm soát đường huyết, bệnh lý tuyến giáp và rối loạn chuyển hóa lipid.",
+        "symptoms": [
+          "Khát nước nhiều",
+          "Tiểu nhiều ban đêm",
+          "Run tay sụt cân nhanh",
+          "Bướu cổ phì đại"
+        ]
+      }
+    },
+    {
+      "id": 16,
+      "code": "CONSULT-006-STANDARD",
+      "slug": "kham-than-kinh-trong-gio",
+      "name": "Khám Thần kinh trong giờ",
+      "description": "Khám đau đầu mạn tính, mất ngủ, rối loạn tiền đình và suy giảm trí nhớ.",
+      "symptoms": [
+        "Đau nửa đầu Migraine",
+        "Chóng mặt hoa mắt",
+        "Mất ngủ kéo dài",
+        "Tê bì chân tay"
+      ],
+      "price": "220000",
+      "durationMin": 30,
+      "specialtyId": 6,
+      "targetGender": "ALL",
+      "minAge": null,
+      "maxAge": null,
+      "isPediatric": false,
+      "isFollowUp": false,
+      "specialty": {
+        "id": 6,
+        "name": "Thần kinh",
+        "slug": "than-kinh",
+        "description": "Khám đau đầu mạn tính, mất ngủ, rối loạn tiền đình và suy giảm trí nhớ.",
+        "symptoms": [
+          "Đau nửa đầu Migraine",
+          "Chóng mặt hoa mắt",
+          "Mất ngủ kéo dài",
+          "Tê bì chân tay"
+        ]
+      }
+    },
+    {
+      "id": 19,
+      "code": "CONSULT-007-STANDARD",
+      "slug": "kham-ngoai-tong-quat-trong-gio",
+      "name": "Khám Ngoại tổng quát trong giờ",
+      "description": "Bệnh lý hậu môn trực tràng, thoát vị bẹn và xử lý tiểu phẫu ngoại khoa.",
+      "symptoms": [
+        "Khối u bướu vùng bẹn",
+        "Đau rát hậu môn trĩ",
+        "U mỡ bao hoạt dịch",
+        "Vết thương hở phần mềm"
+      ],
+      "price": "220000",
+      "durationMin": 30,
+      "specialtyId": 7,
+      "targetGender": "ALL",
+      "minAge": null,
+      "maxAge": null,
+      "isPediatric": false,
+      "isFollowUp": false,
+      "specialty": {
+        "id": 7,
+        "name": "Ngoại tổng quát",
+        "slug": "ngoai-tong-quat",
+        "description": "Bệnh lý hậu môn trực tràng, thoát vị bẹn và xử lý tiểu phẫu ngoại khoa.",
+        "symptoms": [
+          "Khối u bướu vùng bẹn",
+          "Đau rát hậu môn trĩ",
+          "U mỡ bao hoạt dịch",
+          "Vết thương hở phần mềm"
+        ]
+      }
+    },
+    {
+      "id": 22,
+      "code": "CONSULT-008-STANDARD",
+      "slug": "kham-ngoai-chan-thuong-chinh-hinh-trong-gio",
+      "name": "Khám Ngoại Chấn thương Chỉnh hình trong giờ",
+      "description": "Khám đánh giá tầm vận động khớp, chẩn đoán thoái hóa khớp, thoát vị đĩa đệm, viêm khớp dạng thấp và loãng xương.",
+      "symptoms": [
+        "Đau nhức khớp gối",
+        "Thoái hóa cột sống",
+        "Đau mỏi vai gáy",
+        "Căng cơ chấn thương vận động"
+      ],
+      "price": "220000",
+      "durationMin": 30,
+      "specialtyId": 8,
+      "targetGender": "ALL",
+      "minAge": null,
+      "maxAge": null,
+      "isPediatric": false,
+      "isFollowUp": false,
+      "specialty": {
+        "id": 8,
+        "name": "Ngoại Chấn thương Chỉnh hình",
+        "slug": "ngoai-chan-thuong-chinh-hinh",
+        "description": "Bệnh lý cơ xương khớp, thoái hóa khớp, trật khớp và chấn thương thể thao.",
+        "symptoms": [
+          "Đau nhức khớp gối",
+          "Thoái hóa cột sống",
+          "Đau mỏi vai gáy",
+          "Căng cơ chấn thương vận động"
+        ]
+      }
+    },
+    {
+      "id": 25,
+      "code": "CONSULT-009-STANDARD",
+      "slug": "kham-nhi-khoa-trong-gio",
+      "name": "Khám Nhi khoa trong giờ",
+      "description": "Khám tổng quát thể trạng trẻ em, chẩn đoán bệnh lý hô hấp, tiêu hóa, dinh dưỡng và tư vấn phát triển toàn diện.",
+      "symptoms": [
+        "Sốt co giật ở trẻ",
+        "Biếng ăn chậm tăng cân",
+        "Ho sốt cảm cúm",
+        "Phát ban mẩn ngứa trẻ nhỏ"
+      ],
+      "price": "220000",
+      "durationMin": 30,
+      "specialtyId": 9,
+      "targetGender": "ALL",
+      "minAge": null,
+      "maxAge": null,
+      "isPediatric": true,
+      "isFollowUp": false,
+      "specialty": {
+        "id": 9,
+        "name": "Nhi khoa",
+        "slug": "nhi-khoa",
+        "description": "Khám, điều trị và theo dõi sự phát triển thể chất toàn diện của trẻ nhỏ.",
+        "symptoms": [
+          "Sốt co giật ở trẻ",
+          "Biếng ăn chậm tăng cân",
+          "Ho sốt cảm cúm",
+          "Phát ban mẩn ngứa trẻ nhỏ"
+        ]
+      }
+    },
+    {
+      "id": 28,
+      "code": "CONSULT-010-STANDARD",
+      "slug": "kham-san-phu-khoa-trong-gio",
+      "name": "Khám Sản – Phụ khoa trong giờ",
+      "description": "Khám phụ khoa định kỳ, siêu âm tử cung phần phụ, siêu âm thai 4D, tầm soát ung thư cổ tử cung Thinprep.",
+      "symptoms": [
+        "Rối loạn kinh nguyệt",
+        "Khám thai định kỳ",
+        "Đau bụng dưới bất thường",
+        "Viêm nhiễm phụ khoa"
+      ],
+      "price": "220000",
+      "durationMin": 30,
+      "specialtyId": 10,
+      "targetGender": "FEMALE",
+      "minAge": null,
+      "maxAge": null,
+      "isPediatric": false,
+      "isFollowUp": false,
+      "specialty": {
+        "id": 10,
+        "name": "Sản – Phụ khoa",
+        "slug": "san-phu-khoa",
+        "description": "Chăm sóc sức khỏe sinh sản phụ nữ, tầm soát phụ khoa và theo dõi thai kỳ định kỳ.",
+        "symptoms": [
+          "Rối loạn kinh nguyệt",
+          "Khám thai định kỳ",
+          "Đau bụng dưới bất thường",
+          "Viêm nhiễm phụ khoa"
+        ]
+      }
+    },
+    {
+      "id": 31,
+      "code": "CONSULT-011-STANDARD",
+      "slug": "kham-mat-trong-gio",
+      "name": "Khám Mắt trong giờ",
+      "description": "Đo thị lực điện tử, soi đáy mắt, đo nhãn áp và chẩn đoán tật khúc xạ cận/viễn/loạn thị, viêm kết mạc.",
+      "symptoms": [
+        "Mắt nhìn mờ",
+        "Đỏ mắt cộm rát",
+        "Chảy nước mắt sống",
+        "Khám đo kính cận loạn"
+      ],
+      "price": "220000",
+      "durationMin": 30,
+      "specialtyId": 11,
+      "targetGender": "ALL",
+      "minAge": null,
+      "maxAge": null,
+      "isPediatric": false,
+      "isFollowUp": false,
+      "specialty": {
+        "id": 11,
+        "name": "Mắt",
+        "slug": "mat",
+        "description": "Đo thị lực, khám tật khúc xạ, viêm kết mạc, đục thủy tinh thể và soi đáy mắt.",
+        "symptoms": [
+          "Mắt nhìn mờ",
+          "Đỏ mắt cộm rát",
+          "Chảy nước mắt sống",
+          "Khám đo kính cận loạn"
+        ]
+      }
+    },
+    {
+      "id": 34,
+      "code": "CONSULT-012-STANDARD",
+      "slug": "kham-tai-mui-hong-trong-gio",
+      "name": "Khám Tai Mũi Họng trong giờ",
+      "description": "Nội soi dải tần hẹp tai mũi họng, chẩn đoán viêm xoang, viêm họng hạt, viêm amidan, viêm tai giữa và polyp.",
+      "symptoms": [
+        "Đau rát họng nuốt vướng",
+        "Nghẹt mũi chảy nước mũi",
+        "Ù tai chảy dịch tai",
+        "Khàn tiếng kéo dài"
+      ],
+      "price": "220000",
+      "durationMin": 30,
+      "specialtyId": 12,
+      "targetGender": "ALL",
+      "minAge": null,
+      "maxAge": null,
+      "isPediatric": false,
+      "isFollowUp": false,
+      "specialty": {
+        "id": 12,
+        "name": "Tai Mũi Họng",
+        "slug": "tai-mui-hong",
+        "description": "Nội soi tai mũi họng, viêm xoang, viêm họng hạt, viêm amidan và viêm tai giữa.",
+        "symptoms": [
+          "Đau rát họng nuốt vướng",
+          "Nghẹt mũi chảy nước mũi",
+          "Ù tai chảy dịch tai",
+          "Khàn tiếng kéo dài"
+        ]
+      }
+    },
+    {
+      "id": 37,
+      "code": "CONSULT-013-STANDARD",
+      "slug": "kham-rang-ham-mat-trong-gio",
+      "name": "Khám Răng Hàm Mặt trong giờ",
+      "description": "Khám kiểm tra tổng quát răng miệng, chụp X-quang răng, cạo vôi răng, trám răng sâu và điều trị tủy răng.",
+      "symptoms": [
+        "Đau buốt răng sâu",
+        "Chảy máu chân răng nướu",
+        "Răng khôn mọc lệch",
+        "Cần lấy cao răng làm sạch"
+      ],
+      "price": "220000",
+      "durationMin": 30,
+      "specialtyId": 13,
+      "targetGender": "ALL",
+      "minAge": null,
+      "maxAge": null,
+      "isPediatric": false,
+      "isFollowUp": false,
+      "specialty": {
+        "id": 13,
+        "name": "Răng Hàm Mặt",
+        "slug": "rang-ham-mat",
+        "description": "Khám răng tổng quát, nhổ răng, trám răng thẩm mỹ, điều trị tủy và lấy cao răng.",
+        "symptoms": [
+          "Đau buốt răng sâu",
+          "Chảy máu chân răng nướu",
+          "Răng khôn mọc lệch",
+          "Cần lấy cao răng làm sạch"
+        ]
+      }
+    },
+    {
+      "id": 40,
+      "code": "CONSULT-014-STANDARD",
+      "slug": "kham-da-lieu-trong-gio",
+      "name": "Khám Da liễu trong giờ",
+      "description": "Khám soi da vi thể, chẩn đoán và điều trị mụn trứng cá, viêm da cơ địa, dị ứng, vảy nến và các bệnh lý ngoài da.",
+      "symptoms": [
+        "Mụn viêm mụn ẩn",
+        "Dị ứng mẩn ngứa",
+        "Nổi mề đay",
+        "Viêm da cơ địa",
+        "Rụng tóc",
+        "Nấm da"
+      ],
+      "price": "220000",
+      "durationMin": 30,
+      "specialtyId": 14,
+      "targetGender": "ALL",
+      "minAge": null,
+      "maxAge": null,
+      "isPediatric": false,
+      "isFollowUp": false,
+      "specialty": {
+        "id": 14,
+        "name": "Da liễu",
+        "slug": "da-lieu",
+        "description": "Khám, điều trị viêm da cơ địa, mụn trứng cá, nấm da và chăm sóc thẩm mỹ da liễu.",
+        "symptoms": [
+          "Mụn viêm mụn bọc",
+          "Ngứa ngáy dị ứng mề đay",
+          "Vảy nến á sừng",
+          "Nấm da rụng tóc"
+        ]
+      }
+    },
+    {
+      "id": 2,
+      "code": "CONSULT-001-AFTER",
+      "slug": "kham-noi-tong-quat-ngoai-gio",
+      "name": "Khám Nội tổng quát ngoài giờ",
+      "description": "Khám lâm sàng toàn diện các cơ quan nội khoa, đánh giá chỉ số sinh hiệu và tầm soát sớm các bệnh lý lối sống.",
+      "symptoms": [
+        "Mệt mỏi suy nhược",
+        "Sụt cân không rõ nguyên nhân",
+        "Sốt kéo dài",
+        "Kiểm tra sức khỏe định kỳ"
+      ],
+      "price": "270000",
+      "durationMin": 30,
+      "specialtyId": 1,
+      "targetGender": "ALL",
+      "minAge": null,
+      "maxAge": null,
+      "isPediatric": false,
+      "isFollowUp": false,
+      "specialty": {
+        "id": 1,
+        "name": "Nội tổng quát",
+        "slug": "noi-tong-quat",
+        "description": "Khám, tư vấn sức khỏe chung và tầm soát bệnh lý mạn tính người lớn.",
+        "symptoms": [
+          "Mệt mỏi suy nhược",
+          "Sụt cân không rõ nguyên nhân",
+          "Sốt kéo dài",
+          "Kiểm tra sức khỏe định kỳ"
+        ]
+      }
+    },
+    {
+      "id": 5,
+      "code": "CONSULT-002-AFTER",
+      "slug": "kham-tim-mach-ngoai-gio",
+      "name": "Khám Tim mạch ngoài giờ",
+      "description": "Khám lâm sàng chuyên sâu, nghe tim phổi, đo huyết áp và tầm soát các bệnh lý mạch vành, rối loạn nhịp tim, tăng huyết áp.",
+      "symptoms": [
+        "Tức ngực",
+        "Hồi hộp đánh trống ngực",
+        "Khó thở khi gắng sức",
+        "Huyết áp cao",
+        "Chóng mặt"
+      ],
+      "price": "270000",
+      "durationMin": 30,
+      "specialtyId": 2,
+      "targetGender": "ALL",
+      "minAge": null,
+      "maxAge": null,
+      "isPediatric": false,
+      "isFollowUp": false,
+      "specialty": {
+        "id": 2,
+        "name": "Tim mạch",
+        "slug": "tim-mach",
+        "description": "Khám và điều trị tăng huyết áp, xơ vữa động mạch, suy tim và rối loạn nhịp tim.",
+        "symptoms": [
+          "Đau thắt ngực",
+          "Hồi hộp đánh trống ngực",
+          "Khó thở khi gắng sức",
+          "Huyết áp cao hoặc không ổn định"
+        ]
+      }
+    },
+    {
+      "id": 8,
+      "code": "CONSULT-003-AFTER",
+      "slug": "kham-tieu-hoa-gan-mat-ngoai-gio",
+      "name": "Khám Tiêu hóa – Gan mật ngoài giờ",
+      "description": "Thăm khám và chẩn đoán các bệnh lý dạ dày, đại tràng, gan mật tụy, viêm loét đường tiêu hóa và trào ngược dạ dày thực quản.",
+      "symptoms": [
+        "Đau thượng vị",
+        "Đầy hơi khó tiêu",
+        "Ợ chua trào ngược",
+        "Rối loạn tiêu hóa",
+        "Buồn nôn"
+      ],
+      "price": "270000",
+      "durationMin": 30,
+      "specialtyId": 3,
+      "targetGender": "ALL",
+      "minAge": null,
+      "maxAge": null,
+      "isPediatric": false,
+      "isFollowUp": false,
+      "specialty": {
+        "id": 3,
+        "name": "Tiêu hóa – Gan mật",
+        "slug": "tieu-hoa-gan-mat",
+        "description": "Viêm loét dạ dày - đại tràng, trào ngược dạ dày, viêm gan B/C và sỏi mật.",
+        "symptoms": [
+          "Đau thượng vị",
+          "Ợ chua trào ngược",
+          "Đầy hơi khó tiêu",
+          "Rối loạn tiêu hóa kéo dài",
+          "Vàng da"
+        ]
+      }
+    },
+    {
+      "id": 11,
+      "code": "CONSULT-004-AFTER",
+      "slug": "kham-ho-hap-ngoai-gio",
+      "name": "Khám Hô hấp ngoài giờ",
+      "description": "Khám chẩn đoán các bệnh lý phế quản, hen suyễn, phổi tắc nghẽn mạn tính COPD và nhiễm trùng đường hô hấp.",
+      "symptoms": [
+        "Ho kéo dài",
+        "Khò khè tức ngực",
+        "Ho có đờm hoặc lẫn máu",
+        "Hụt hơi khó thở"
+      ],
+      "price": "270000",
+      "durationMin": 30,
+      "specialtyId": 4,
+      "targetGender": "ALL",
+      "minAge": null,
+      "maxAge": null,
+      "isPediatric": false,
+      "isFollowUp": false,
+      "specialty": {
+        "id": 4,
+        "name": "Hô hấp",
+        "slug": "ho-hap",
+        "description": "Viêm phế quản, hen suyễn, viêm phổi và bệnh phổi tắc nghẽn mạn tính (COPD).",
+        "symptoms": [
+          "Ho kéo dài",
+          "Khò khè tức ngực",
+          "Ho có đờm hoặc lẫn máu",
+          "Hụt hơi khó thở"
+        ]
+      }
+    },
+    {
+      "id": 14,
+      "code": "CONSULT-005-AFTER",
+      "slug": "kham-noi-tiet-dai-thao-duong-ngoai-gio",
+      "name": "Khám Nội tiết – Đái tháo đường ngoài giờ",
+      "description": "Kiểm soát đường huyết, bệnh lý tuyến giáp và rối loạn chuyển hóa lipid.",
+      "symptoms": [
+        "Khát nước nhiều",
+        "Tiểu nhiều ban đêm",
+        "Run tay sụt cân nhanh",
+        "Bướu cổ phì đại"
+      ],
+      "price": "270000",
+      "durationMin": 30,
+      "specialtyId": 5,
+      "targetGender": "ALL",
+      "minAge": null,
+      "maxAge": null,
+      "isPediatric": false,
+      "isFollowUp": false,
+      "specialty": {
+        "id": 5,
+        "name": "Nội tiết – Đái tháo đường",
+        "slug": "noi-tiet-dai-thao-duong",
+        "description": "Kiểm soát đường huyết, bệnh lý tuyến giáp và rối loạn chuyển hóa lipid.",
+        "symptoms": [
+          "Khát nước nhiều",
+          "Tiểu nhiều ban đêm",
+          "Run tay sụt cân nhanh",
+          "Bướu cổ phì đại"
+        ]
+      }
+    },
+    {
+      "id": 17,
+      "code": "CONSULT-006-AFTER",
+      "slug": "kham-than-kinh-ngoai-gio",
+      "name": "Khám Thần kinh ngoài giờ",
+      "description": "Khám đau đầu mạn tính, mất ngủ, rối loạn tiền đình và suy giảm trí nhớ.",
+      "symptoms": [
+        "Đau nửa đầu Migraine",
+        "Chóng mặt hoa mắt",
+        "Mất ngủ kéo dài",
+        "Tê bì chân tay"
+      ],
+      "price": "270000",
+      "durationMin": 30,
+      "specialtyId": 6,
+      "targetGender": "ALL",
+      "minAge": null,
+      "maxAge": null,
+      "isPediatric": false,
+      "isFollowUp": false,
+      "specialty": {
+        "id": 6,
+        "name": "Thần kinh",
+        "slug": "than-kinh",
+        "description": "Khám đau đầu mạn tính, mất ngủ, rối loạn tiền đình và suy giảm trí nhớ.",
+        "symptoms": [
+          "Đau nửa đầu Migraine",
+          "Chóng mặt hoa mắt",
+          "Mất ngủ kéo dài",
+          "Tê bì chân tay"
+        ]
+      }
+    },
+    {
+      "id": 20,
+      "code": "CONSULT-007-AFTER",
+      "slug": "kham-ngoai-tong-quat-ngoai-gio",
+      "name": "Khám Ngoại tổng quát ngoài giờ",
+      "description": "Bệnh lý hậu môn trực tràng, thoát vị bẹn và xử lý tiểu phẫu ngoại khoa.",
+      "symptoms": [
+        "Khối u bướu vùng bẹn",
+        "Đau rát hậu môn trĩ",
+        "U mỡ bao hoạt dịch",
+        "Vết thương hở phần mềm"
+      ],
+      "price": "270000",
+      "durationMin": 30,
+      "specialtyId": 7,
+      "targetGender": "ALL",
+      "minAge": null,
+      "maxAge": null,
+      "isPediatric": false,
+      "isFollowUp": false,
+      "specialty": {
+        "id": 7,
+        "name": "Ngoại tổng quát",
+        "slug": "ngoai-tong-quat",
+        "description": "Bệnh lý hậu môn trực tràng, thoát vị bẹn và xử lý tiểu phẫu ngoại khoa.",
+        "symptoms": [
+          "Khối u bướu vùng bẹn",
+          "Đau rát hậu môn trĩ",
+          "U mỡ bao hoạt dịch",
+          "Vết thương hở phần mềm"
+        ]
+      }
+    },
+    {
+      "id": 23,
+      "code": "CONSULT-008-AFTER",
+      "slug": "kham-ngoai-chan-thuong-chinh-hinh-ngoai-gio",
+      "name": "Khám Ngoại Chấn thương Chỉnh hình ngoài giờ",
+      "description": "Khám đánh giá tầm vận động khớp, chẩn đoán thoái hóa khớp, thoát vị đĩa đệm, viêm khớp dạng thấp và loãng xương.",
+      "symptoms": [
+        "Đau nhức khớp gối",
+        "Thoái hóa cột sống",
+        "Đau mỏi vai gáy",
+        "Căng cơ chấn thương vận động"
+      ],
+      "price": "270000",
+      "durationMin": 30,
+      "specialtyId": 8,
+      "targetGender": "ALL",
+      "minAge": null,
+      "maxAge": null,
+      "isPediatric": false,
+      "isFollowUp": false,
+      "specialty": {
+        "id": 8,
+        "name": "Ngoại Chấn thương Chỉnh hình",
+        "slug": "ngoai-chan-thuong-chinh-hinh",
+        "description": "Bệnh lý cơ xương khớp, thoái hóa khớp, trật khớp và chấn thương thể thao.",
+        "symptoms": [
+          "Đau nhức khớp gối",
+          "Thoái hóa cột sống",
+          "Đau mỏi vai gáy",
+          "Căng cơ chấn thương vận động"
+        ]
+      }
+    },
+    {
+      "id": 26,
+      "code": "CONSULT-009-AFTER",
+      "slug": "kham-nhi-khoa-ngoai-gio",
+      "name": "Khám Nhi khoa ngoài giờ",
+      "description": "Khám tổng quát thể trạng trẻ em, chẩn đoán bệnh lý hô hấp, tiêu hóa, dinh dưỡng và tư vấn phát triển toàn diện.",
+      "symptoms": [
+        "Sốt co giật ở trẻ",
+        "Biếng ăn chậm tăng cân",
+        "Ho sốt cảm cúm",
+        "Phát ban mẩn ngứa trẻ nhỏ"
+      ],
+      "price": "270000",
+      "durationMin": 30,
+      "specialtyId": 9,
+      "targetGender": "ALL",
+      "minAge": null,
+      "maxAge": null,
+      "isPediatric": true,
+      "isFollowUp": false,
+      "specialty": {
+        "id": 9,
+        "name": "Nhi khoa",
+        "slug": "nhi-khoa",
+        "description": "Khám, điều trị và theo dõi sự phát triển thể chất toàn diện của trẻ nhỏ.",
+        "symptoms": [
+          "Sốt co giật ở trẻ",
+          "Biếng ăn chậm tăng cân",
+          "Ho sốt cảm cúm",
+          "Phát ban mẩn ngứa trẻ nhỏ"
+        ]
+      }
+    },
+    {
+      "id": 29,
+      "code": "CONSULT-010-AFTER",
+      "slug": "kham-san-phu-khoa-ngoai-gio",
+      "name": "Khám Sản – Phụ khoa ngoài giờ",
+      "description": "Khám phụ khoa định kỳ, siêu âm tử cung phần phụ, siêu âm thai 4D, tầm soát ung thư cổ tử cung Thinprep.",
+      "symptoms": [
+        "Rối loạn kinh nguyệt",
+        "Khám thai định kỳ",
+        "Đau bụng dưới bất thường",
+        "Viêm nhiễm phụ khoa"
+      ],
+      "price": "270000",
+      "durationMin": 30,
+      "specialtyId": 10,
+      "targetGender": "FEMALE",
+      "minAge": null,
+      "maxAge": null,
+      "isPediatric": false,
+      "isFollowUp": false,
+      "specialty": {
+        "id": 10,
+        "name": "Sản – Phụ khoa",
+        "slug": "san-phu-khoa",
+        "description": "Chăm sóc sức khỏe sinh sản phụ nữ, tầm soát phụ khoa và theo dõi thai kỳ định kỳ.",
+        "symptoms": [
+          "Rối loạn kinh nguyệt",
+          "Khám thai định kỳ",
+          "Đau bụng dưới bất thường",
+          "Viêm nhiễm phụ khoa"
+        ]
+      }
+    },
+    {
+      "id": 32,
+      "code": "CONSULT-011-AFTER",
+      "slug": "kham-mat-ngoai-gio",
+      "name": "Khám Mắt ngoài giờ",
+      "description": "Đo thị lực điện tử, soi đáy mắt, đo nhãn áp và chẩn đoán tật khúc xạ cận/viễn/loạn thị, viêm kết mạc.",
+      "symptoms": [
+        "Mắt nhìn mờ",
+        "Đỏ mắt cộm rát",
+        "Chảy nước mắt sống",
+        "Khám đo kính cận loạn"
+      ],
+      "price": "270000",
+      "durationMin": 30,
+      "specialtyId": 11,
+      "targetGender": "ALL",
+      "minAge": null,
+      "maxAge": null,
+      "isPediatric": false,
+      "isFollowUp": false,
+      "specialty": {
+        "id": 11,
+        "name": "Mắt",
+        "slug": "mat",
+        "description": "Đo thị lực, khám tật khúc xạ, viêm kết mạc, đục thủy tinh thể và soi đáy mắt.",
+        "symptoms": [
+          "Mắt nhìn mờ",
+          "Đỏ mắt cộm rát",
+          "Chảy nước mắt sống",
+          "Khám đo kính cận loạn"
+        ]
+      }
+    },
+    {
+      "id": 35,
+      "code": "CONSULT-012-AFTER",
+      "slug": "kham-tai-mui-hong-ngoai-gio",
+      "name": "Khám Tai Mũi Họng ngoài giờ",
+      "description": "Nội soi dải tần hẹp tai mũi họng, chẩn đoán viêm xoang, viêm họng hạt, viêm amidan, viêm tai giữa và polyp.",
+      "symptoms": [
+        "Đau rát họng nuốt vướng",
+        "Nghẹt mũi chảy nước mũi",
+        "Ù tai chảy dịch tai",
+        "Khàn tiếng kéo dài"
+      ],
+      "price": "270000",
+      "durationMin": 30,
+      "specialtyId": 12,
+      "targetGender": "ALL",
+      "minAge": null,
+      "maxAge": null,
+      "isPediatric": false,
+      "isFollowUp": false,
+      "specialty": {
+        "id": 12,
+        "name": "Tai Mũi Họng",
+        "slug": "tai-mui-hong",
+        "description": "Nội soi tai mũi họng, viêm xoang, viêm họng hạt, viêm amidan và viêm tai giữa.",
+        "symptoms": [
+          "Đau rát họng nuốt vướng",
+          "Nghẹt mũi chảy nước mũi",
+          "Ù tai chảy dịch tai",
+          "Khàn tiếng kéo dài"
+        ]
+      }
+    },
+    {
+      "id": 38,
+      "code": "CONSULT-013-AFTER",
+      "slug": "kham-rang-ham-mat-ngoai-gio",
+      "name": "Khám Răng Hàm Mặt ngoài giờ",
+      "description": "Khám kiểm tra tổng quát răng miệng, chụp X-quang răng, cạo vôi răng, trám răng sâu và điều trị tủy răng.",
+      "symptoms": [
+        "Đau buốt răng sâu",
+        "Chảy máu chân răng nướu",
+        "Răng khôn mọc lệch",
+        "Cần lấy cao răng làm sạch"
+      ],
+      "price": "270000",
+      "durationMin": 30,
+      "specialtyId": 13,
+      "targetGender": "ALL",
+      "minAge": null,
+      "maxAge": null,
+      "isPediatric": false,
+      "isFollowUp": false,
+      "specialty": {
+        "id": 13,
+        "name": "Răng Hàm Mặt",
+        "slug": "rang-ham-mat",
+        "description": "Khám răng tổng quát, nhổ răng, trám răng thẩm mỹ, điều trị tủy và lấy cao răng.",
+        "symptoms": [
+          "Đau buốt răng sâu",
+          "Chảy máu chân răng nướu",
+          "Răng khôn mọc lệch",
+          "Cần lấy cao răng làm sạch"
+        ]
+      }
+    },
+    {
+      "id": 41,
+      "code": "CONSULT-014-AFTER",
+      "slug": "kham-da-lieu-ngoai-gio",
+      "name": "Khám Da liễu ngoài giờ",
+      "description": "Khám soi da vi thể, chẩn đoán và điều trị mụn trứng cá, viêm da cơ địa, dị ứng, vảy nến và các bệnh lý ngoài da.",
+      "symptoms": [
+        "Mụn viêm mụn ẩn",
+        "Dị ứng mẩn ngứa",
+        "Nổi mề đay",
+        "Viêm da cơ địa",
+        "Rụng tóc",
+        "Nấm da"
+      ],
+      "price": "270000",
+      "durationMin": 30,
+      "specialtyId": 14,
+      "targetGender": "ALL",
+      "minAge": null,
+      "maxAge": null,
+      "isPediatric": false,
+      "isFollowUp": false,
+      "specialty": {
+        "id": 14,
+        "name": "Da liễu",
+        "slug": "da-lieu",
+        "description": "Khám, điều trị viêm da cơ địa, mụn trứng cá, nấm da và chăm sóc thẩm mỹ da liễu.",
+        "symptoms": [
+          "Mụn viêm mụn bọc",
+          "Ngứa ngáy dị ứng mề đay",
+          "Vảy nến á sừng",
+          "Nấm da rụng tóc"
+        ]
+      }
+    },
+    {
+      "id": 46,
+      "code": "PKG-EYE-COMPREHENSIVE",
+      "slug": "goi-kham-mat-toan-dien-do-thi-luc-khuc-xa",
+      "name": "Gói khám Mắt toàn diện & Đo thị lực khúc xạ",
+      "description": "Kiểm tra thị lực kỹ thuật số, soi đáy mắt, đo nhãn áp và tầm soát các tật khúc xạ cận/viễn/loạn thị.",
+      "symptoms": [
+        "Mắt nhìn mờ",
+        "Mỏi mắt chảy nước mắt",
+        "Cần đo cắt kính cận loạn"
+      ],
+      "price": "350000",
+      "durationMin": 30,
+      "specialtyId": null,
+      "targetGender": "ALL",
+      "minAge": null,
+      "maxAge": null,
+      "isPediatric": false,
+      "isFollowUp": false,
+      "specialty": null
+    },
+    {
+      "id": 48,
+      "code": "PKG-ENT-ENDOSCOPY",
+      "slug": "goi-noi-soi-tam-soat-benh-ly-tai-mui-hong",
+      "name": "Gói nội soi tầm soát bệnh lý Tai Mũi Họng",
+      "description": "Nội soi dải tần hẹp NBI tai mũi họng, phát hiện sớm tổn thương niêm mạc xoang, vòm họng và thanh quản.",
+      "symptoms": [
+        "Đau rát họng nuốt vướng",
+        "Nghẹt mũi chảy mũi kéo dài",
+        "Ù tai",
+        "Khàn giọng"
+      ],
+      "price": "450000",
+      "durationMin": 30,
+      "specialtyId": null,
+      "targetGender": "ALL",
+      "minAge": null,
+      "maxAge": null,
+      "isPediatric": false,
+      "isFollowUp": false,
+      "specialty": null
+    },
+    {
+      "id": 47,
+      "code": "PKG-EYE-CATARACT",
+      "slug": "goi-tam-soat-cuom-nuoc-benh-ly-vong-mac",
+      "name": "Gói tầm soát cườm nước & Bệnh lý võng mạc",
+      "description": "Chụp hình màu đáy mắt, đo nhãn áp không tiếp xúc và tư vấn phòng ngừa đục thủy tinh thể, glôcôm.",
+      "symptoms": [
+        "Thị lực giảm sút ở người lớn tuổi",
+        "Nhìn lóa quầng sáng",
+        "Đau nhức hốc mắt"
+      ],
+      "price": "650000",
+      "durationMin": 35,
+      "specialtyId": null,
+      "targetGender": "ALL",
+      "minAge": null,
+      "maxAge": null,
+      "isPediatric": false,
+      "isFollowUp": false,
+      "specialty": null
+    },
+    {
+      "id": 44,
+      "code": "PKG-CARDIO-SCREENING",
+      "slug": "goi-tam-soat-nguy-co-tim-mach",
+      "name": "Gói tầm soát nguy cơ tim mạch",
+      "description": "Đánh giá các yếu tố nguy cơ tim mạch, đo điện tim ECG, siêu âm doppler tim và định lượng lipid máu.",
+      "symptoms": [
+        "Đau tức ngực",
+        "Hồi hộp đánh trống ngực",
+        "Khó thở khi gắng sức",
+        "Huyết áp không ổn định"
+      ],
+      "price": "990000",
+      "durationMin": 40,
+      "specialtyId": null,
+      "targetGender": "ALL",
+      "minAge": null,
+      "maxAge": null,
+      "isPediatric": false,
+      "isFollowUp": false,
+      "specialty": null
+    },
+    {
+      "id": 43,
+      "code": "PKG-GENERAL-BASIC",
+      "slug": "goi-kham-suc-khoe-tong-quat-co-ban",
+      "name": "Gói khám sức khỏe tổng quát cơ bản",
+      "description": "Tầm soát sức khỏe định kỳ với xét nghiệm công thức máu, đường huyết, mỡ máu và chụp X-quang phổi.",
+      "symptoms": [
+        "Kiểm tra sức khỏe định kỳ",
+        "Mệt mỏi suy nhược",
+        "Sụt cân không rõ nguyên nhân"
+      ],
+      "price": "1290000",
+      "durationMin": 45,
+      "specialtyId": null,
+      "targetGender": "ALL",
+      "minAge": null,
+      "maxAge": null,
+      "isPediatric": false,
+      "isFollowUp": false,
+      "specialty": null
+    },
+    {
+      "id": 45,
+      "code": "PKG-WOMEN-WELLNESS",
+      "slug": "goi-kiem-tra-suc-khoe-phu-nu-toan-dien",
+      "name": "Gói kiểm tra sức khỏe phụ nữ toàn diện",
+      "description": "Kiểm tra sức khỏe định kỳ cho nữ, siêu âm tuyến vú, siêu âm phụ khoa và tầm soát tế bào cổ tử cung.",
+      "symptoms": [
+        "Khám phụ khoa định kỳ",
+        "Rối loạn kinh nguyệt",
+        "Tầm soát u xơ u nang"
+      ],
+      "price": "1490000",
+      "durationMin": 50,
+      "specialtyId": null,
+      "targetGender": "FEMALE",
+      "minAge": null,
+      "maxAge": null,
+      "isPediatric": false,
+      "isFollowUp": false,
+      "specialty": null
+    }
+  ]
+}

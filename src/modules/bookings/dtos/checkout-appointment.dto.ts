@@ -17,9 +17,6 @@ import {
 
 // ─── DTO cho 1 thành viên (đơn lẻ hoặc 1 phần tử của nhóm) ──
 export class AppointmentItemDto {
-  @IsOptional() @Type(() => Number) @IsInt() @Min(1) searchId?: number;
-  @IsOptional() @Type(() => Number) @IsInt() @Min(1) sourceViewId?: number;
-  @IsOptional() @IsString() @MaxLength(100) analyticsSessionId?: string;
   @ApiProperty({ format: 'uuid', description: 'Hồ sơ bệnh nhân của thành viên' })
   @IsUUID()
   patientProfileId: string;

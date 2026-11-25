@@ -1,3 +1,4 @@
+import { APPOINTMENT_BRANCH_FIELDS, appointmentBranch } from '../appointments/helpers/appointment-branch.helper.js';
 import { BadRequestException, ConflictException, ForbiddenException, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { randomUUID } from 'node:crypto';
 import { Prisma } from '@prisma/client';
@@ -26,7 +27,7 @@ export class TelehealthService {
         status: true,
         bookingMethod: { select: { code: true } },
         patientProfile: { select: { accountId: true } },
-        scheduleSlot: { select: { startTime: true, endTime: true, schedule: { select: { workDate: true, doctor: { select: { userId: true } } } } } },
+        scheduleSlot: { select: { startTime: true, endTime: true, schedule: { select: { branchId: true, branch: { select: APPOINTMENT_BRANCH_FIELDS },  workDate: true, doctor: { select: { userId: true } } } } } },
       },
     });
     if (!appointment) throw new NotFoundException('Không tìm thấy lịch hẹn.');
@@ -116,20 +117,12 @@ export class TelehealthService {
             phoneNumber: true,
           },
         },
-        branch: {
-          select: {
-            id: true,
-            name: true,
-            phoneNumber: true,
-            address: true,
-          },
-        },
         scheduleSlot: {
           select: {
             startTime: true,
             endTime: true,
             schedule: {
-              select: {
+              select: { branchId: true, branch: { select: APPOINTMENT_BRANCH_FIELDS },
                 workDate: true,
                 doctor: {
                   select: {
@@ -191,7 +184,7 @@ export class TelehealthService {
             specialtyName,
           }
         : null,
-      branch: appointment.branch,
+      branch: appointmentBranch(appointment),
       serviceName: appointment.servicePackage?.name || 'Tư vấn trực tuyến',
       activeRoomState: this.activeRooms.get(appointmentId) || null,
     };
@@ -433,7 +426,7 @@ export class TelehealthService {
             scheduleSlot: {
               include: {
                 schedule: {
-                  include: {
+                  include: { branch: { select: APPOINTMENT_BRANCH_FIELDS },
                     doctor: {
                       include: {
                         user: {

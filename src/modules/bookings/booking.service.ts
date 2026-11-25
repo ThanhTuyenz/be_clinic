@@ -1,3 +1,4 @@
+import { getPackageDeployments } from './helpers/package-deployment.helper.js';
 import { BadRequestException, ConflictException, Injectable, NotFoundException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { AppointmentStatus, Prisma } from '@prisma/client';
@@ -6,7 +7,6 @@ import { RabbitMqConfig } from '../../config/config.type.js';
 import { PrismaService } from '../../infrastructure/database/prisma/prisma.service.js';
 import { assertPatientSlotAvailable, releaseAppointmentSlot } from '../appointments/helpers/appointment.helper.js';
 import { RecommendationService } from '../recommendations/recommendation.service.js';
-import { AnalyticsService } from '../analytics/analytics.service.js';
 import { releaseVoucherUsage, VoucherCalculationResult, VouchersService } from '../vouchers/vouchers.service.js';
 import { AppointmentItemDto, BatchCheckoutDto, CheckoutAppointmentDto } from './dtos/checkout-appointment.dto.js';
 import { assertBookingMethodSlot, assertPackageReception, PACKAGE_RECEPTION_SELECT } from './helpers/package-reception.helper.js';
@@ -28,7 +28,7 @@ const CHECKOUT_SLOT_SELECT = {
 type CheckoutSlot = Prisma.DoctorScheduleSlotGetPayload<{ select: typeof CHECKOUT_SLOT_SELECT }>;
 type PreparedBooking = {
   slot: CheckoutSlot | null;
-  receptionSlot: Prisma.PackageReceptionSlotGetPayload<{}> | null;
+  receptionSlot: Prisma.PackageReceptionSlotGetPayload<{ include: { receptionSchedule: true } }> | null;
   servicePackage: Prisma.ServicePackageGetPayload<{ select: typeof PACKAGE_RECEPTION_SELECT }> | null;
   bookingMethodId: number; price: Prisma.Decimal; branchId: number; workDate: Date;
 };
@@ -49,7 +49,6 @@ export class BookingService {
     private readonly prisma: PrismaService,
     private readonly config: ConfigService,
     private readonly vouchersService: VouchersService,
-    private readonly analytics: AnalyticsService,
     private readonly recommendations: RecommendationService,
   ) { }
   async checkout(accountId: string, dto: CheckoutAppointmentDto, transaction?: Prisma.TransactionClient) {
@@ -72,11 +71,7 @@ export class BookingService {
         const appointment = await tx.appointment.create({
           data: {
             bookingOrderId: bookingOrder.id,
-            patientProfileId: profile.id, branchId,
-            ...await this.analytics.attribution(tx, accountId, dto, {
-              branchId,
-              ...(servicePackage ? { packageId: servicePackage.id } : { doctorId: slot!.schedule.doctor.id }),
-            }),
+            patientProfileId: profile.id,
             bookingMethodId, scheduleSlotId: slot?.id, receptionSlotId: receptionSlot?.id,
             ...(servicePackage ? { servicePackageId: servicePackage.id } : {}),
             servicePrice: price, symptomsDescription: dto.symptomsDescription,
@@ -205,7 +200,7 @@ export class BookingService {
         const { now, expiresAt } = await this.getHoldWindow(tx);
 
         let totalAmount = new Prisma.Decimal(0);
-        const appointmentData: Omit<Prisma.AppointmentUncheckedCreateInput, 'bookingOrderId'>[] = [];
+        const appointmentData: (Omit<Prisma.AppointmentUncheckedCreateInput, 'bookingOrderId'> & { branchId: number })[] = [];
         const bookingDates = new Set<string>();
         for (const item of dto.items) {
           const profile = profiles.find((p) => p.id === item.patientProfileId)!;
@@ -217,10 +212,6 @@ export class BookingService {
           totalAmount = totalAmount.add(price);
           appointmentData.push({
             patientProfileId: profile.id, branchId,
-            ...await this.analytics.attribution(tx, accountId, item, {
-              branchId,
-              ...(servicePackage ? { packageId: servicePackage.id } : { doctorId: slot!.schedule.doctor.id }),
-            }),
             bookingMethodId, scheduleSlotId: slot?.id, receptionSlotId: receptionSlot?.id,
             ...(servicePackage ? { servicePackageId: servicePackage.id } : {}),
             servicePrice: price, symptomsDescription: item.symptomsDescription,
@@ -250,7 +241,7 @@ export class BookingService {
 
         // Tạo tất cả Appointment
         const appointments: Prisma.AppointmentGetPayload<{}>[] = [];
-        for (const appt of appointmentData) {
+        for (const { branchId: _branchId, ...appt } of appointmentData) {
           appointments.push(await tx.appointment.create({
               data: {
                 ...appt,
@@ -354,7 +345,8 @@ export class BookingService {
     await tx.$queryRaw`SELECT 1 AS locked FROM pg_advisory_xact_lock(hashtextextended(${profileId}, 0))`;
     await assertPatientSlotAvailable(tx, profileId, { startTime: slot.startTime, endTime: slot.endTime, schedule: { workDate: slot.date } });
     const reserved = await tx.$executeRaw`UPDATE package_reception_slots SET occupied_count = occupied_count + 1, updated_at = NOW()
-      WHERE id = ${slot.id} AND is_active = true AND occupied_count < capacity`;
+      WHERE id = ${slot.id} AND is_active = true AND occupied_count < capacity
+        AND EXISTS (SELECT 1 FROM package_reception_schedules WHERE id = reception_schedule_id AND is_active = true)`;
     if (reserved !== 1) throw new ConflictException('Khung tiếp nhận vừa hết chỗ. Vui lòng chọn khung khác');
   }
 
@@ -431,14 +423,14 @@ export class BookingService {
     });
     if (!doctorBooking && !servicePackage?.isActive) throw new NotFoundException('Gói dịch vụ không khả dụng' + suffix);
     if (item.bookingMethodCode === 'HEALTH_PACKAGE') {
-      const receptionSlot = await tx.packageReceptionSlot.findUnique({ where: { id: item.receptionSlotId! } });
-      if (!receptionSlot?.isActive || receptionSlot.servicePackageId !== servicePackage!.id) throw new BadRequestException('Khung tiếp nhận không thuộc gói khám hoặc đã ngừng hoạt động');
+      const receptionSlot = await tx.packageReceptionSlot.findUnique({ where: { id: item.receptionSlotId! }, include: { receptionSchedule: true } });
+      if (!receptionSlot?.isActive || !receptionSlot.receptionSchedule.isActive || receptionSlot.receptionSchedule.servicePackageId !== servicePackage!.id) throw new BadRequestException('Khung tiếp nhận không thuộc gói khám hoặc đã ngừng hoạt động');
       this.validateBookingLeadTime(receptionSlot.date);
-      const bookingMethodId = await this.assertBranchBookingMethod(tx, receptionSlot.branchId, 'HEALTH_PACKAGE');
-      const deployments = [servicePackage!.branchBookingMethod, ...servicePackage!.branchBookingMethods.map(link => link.branchBookingMethod)];
-      if (!deployments.some(method => method?.isEnabled && method.branchId === receptionSlot.branchId && method.bookingMethodId === bookingMethodId)) throw new BadRequestException('Gói khám không được triển khai tại cơ sở đã chọn');
-      assertPackageReception(servicePackage!.receptionSchedules, { startTime: receptionSlot.startTime, schedule: { branchId: receptionSlot.branchId, workDate: receptionSlot.date } });
-      return { slot: null, receptionSlot, servicePackage, bookingMethodId, price: servicePackage!.price, branchId: receptionSlot.branchId, workDate: receptionSlot.date };
+      const bookingMethodId = await this.assertBranchBookingMethod(tx, receptionSlot.receptionSchedule.branchId, 'HEALTH_PACKAGE');
+      const deployments = getPackageDeployments(servicePackage!);
+      if (!deployments.some(method => method?.isEnabled && method.branchId === receptionSlot.receptionSchedule.branchId && method.bookingMethodId === bookingMethodId)) throw new BadRequestException('Gói khám không được triển khai tại cơ sở đã chọn');
+      assertPackageReception(servicePackage!.receptionSchedules, { startTime: receptionSlot.startTime, schedule: { branchId: receptionSlot.receptionSchedule.branchId, workDate: receptionSlot.date } });
+      return { slot: null, receptionSlot, servicePackage, bookingMethodId, price: servicePackage!.price, branchId: receptionSlot.receptionSchedule.branchId, workDate: receptionSlot.date };
     }
     const slot = await tx.doctorScheduleSlot.findUnique({ where: { id: item.scheduleSlotId! }, select: CHECKOUT_SLOT_SELECT });
     if (!slot || !slot.isActive || slot.slotStatus !== 'AVAILABLE' || slot.schedule.status !== 'OPEN' || !slot.schedule.doctor.isActive) {
@@ -452,7 +444,7 @@ export class BookingService {
     if (servicePackage) {
       assertBookingMethodSlot(item.bookingMethodCode, slot);
       assertPackageReception(servicePackage.receptionSchedules, slot);
-      const deployments = [servicePackage.branchBookingMethod, ...servicePackage.branchBookingMethods.map(link => link.branchBookingMethod)]
+      const deployments = getPackageDeployments(servicePackage)
         .filter(method => method?.isEnabled && method.branchId === slot.schedule.branchId);
       if (!deployments.length) throw new ConflictException('Gói dịch vụ không được áp dụng hoặc đã bị tắt tại cơ sở này' + suffix);
       if (!deployments.some(method => method.bookingMethodId === bookingMethodId)) {

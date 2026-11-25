@@ -8,7 +8,6 @@ import { BehaviorTelemetryService } from './services/behavior-telemetry.service.
 import type { BehaviorEvent } from './services/behavior-telemetry.service.js';
 import { CandidateRetrievalService, ProfileRecommendationContext } from './services/candidate-retrieval.service.js';
 import { AiRankingService, RankingContext } from './services/ai-ranking.service.js';
-import { AnalyticsService } from '../analytics/analytics.service.js';
 
 import type { CachedRanking, SourceRanking } from './types/ranking.types.js';
 import { rankBehaviorCandidates } from './services/behavior-ranking.js';
@@ -25,7 +24,6 @@ export class RecommendationService {
     private readonly behaviorTelemetryService: BehaviorTelemetryService,
     private readonly candidateRetrievalService: CandidateRetrievalService,
     private readonly aiRankingService: AiRankingService,
-    private readonly analytics: AnalyticsService,
   ) {}
 
   async getProfileRecommendations(profileId: string, sessionId?: string, userId?: string, userRole?: string): Promise<ProfileRecommendationSectionDto> {
@@ -52,13 +50,12 @@ export class RecommendationService {
     return this.toSection(this.refreshRankingItems(rows, catalog, 'BEHAVIOR'), ranking, sessionId, userId);
   }
 
-  private toSection(packages: RecommendedPackageItemDto[], ranking?: SourceRanking, sessionId?: string, userId?: string): RecommendationSectionDto {
+  private toSection(packages: RecommendedPackageItemDto[], ranking?: SourceRanking, _sessionId?: string, _userId?: string): RecommendationSectionDto {
     return {
       status: packages.length ? 'READY' : 'EMPTY',
       updatedAt: ranking?.updatedAt || new Date().toISOString(),
       fromCache: ranking?.fromCache ?? false,
       packages,
-      trackingToken: this.analytics.createRecommendationToken(packages, sessionId, userId),
     };
   }
 

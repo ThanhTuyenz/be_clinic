@@ -1,3 +1,4 @@
+import { RECEPTION_SLOT_LOCATION_SELECT, appointmentBranch } from '../appointments/helpers/appointment-branch.helper.js';
 import {
 BadRequestException,
 ConflictException,
@@ -499,11 +500,11 @@ export class PaymentService {
         queueNumber: true,
         bookingOrder: { select: { invoice: { select: { status: true, payments: { select: { status: true }, orderBy: { createdAt: 'desc' }, take: 1 } } } } },
         qrToken: { select: { id: true } },
-        branch: { select: { id: true, name: true, address: true } },
+        receptionSlot: { select: RECEPTION_SLOT_LOCATION_SELECT },
         scheduleSlot: {
           select: {
             schedule: {
-              select: {
+              select: { branchId: true,
                 room: { select: { id: true, code: true, name: true } },
                 branch: { select: { id: true, name: true, address: true } },
               },
@@ -560,7 +561,7 @@ export class PaymentService {
     const doctorSlot = row.scheduleSlot;
     const isTelehealth = Boolean(row.telehealthSession || row.bookingMethod?.code === 'ONLINE_CONSULTATION');
     const room = doctorSlot?.schedule.room;
-    const branch = doctorSlot?.schedule.branch ?? row.branch;
+    const branch = doctorSlot?.schedule.branch ?? appointmentBranch(row);
     const estimatedQueueNumber = row.queueNumber;
 
     let siblingAppts: any[] = [];

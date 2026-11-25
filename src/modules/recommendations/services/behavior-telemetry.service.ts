@@ -54,7 +54,6 @@ export class BehaviorTelemetryService {
         id: true, bookingOrderId: true, servicePackageId: true,
         patientProfile: { select: { accountId: true } },
         bookingOrder: { select: { accountId: true, invoice: { select: { payments: { where: { paidAt: { not: null } }, select: { id: true }, take: 1 } } } } },
-        sourceView: { select: { sessionId: true } },
         statusHistories: {
           where: { fromStatus: 'HOLD', toStatus: 'CANCELLED', reason: { in: ['PAYMENT_HOLD_TIMEOUT', 'PAYMENT_CANCELLED'] } },
           orderBy: { createdAt: 'desc' }, take: 1, select: { createdAt: true },
@@ -63,13 +62,11 @@ export class BehaviorTelemetryService {
     });
     if (!appointment?.servicePackageId || appointment.bookingOrder.invoice?.payments.length) return;
     const userId = appointment.bookingOrder?.accountId || appointment.patientProfile.accountId || undefined;
-    const sessionId = appointment.sourceView?.sessionId;
-    if (!userId && !sessionId) return;
+    if (!userId) return;
     const key = `rec:dropoff:${appointment.bookingOrderId || appointment.id}:${appointment.servicePackageId}`;
     const recorded = await this.redis.getClient()?.set(key, '1', 'EX', TELEMETRY_CONFIG.BEHAVIOR_TTL_SECONDS, 'NX');
     if (!recorded) return;
     const recordedBehavior = await this.trackUserBehavior({
-      sessionId,
       actionType: TrackingActionType.DROP_OFF, targetPackageId: appointment.servicePackageId,
       abandonedAt: appointment.statusHistories[0]?.createdAt.getTime(),
     }, userId);
@@ -261,8 +258,8 @@ export class BehaviorTelemetryService {
     return { recentViews, recentSearches, recentDropOffs: qualifiedDropOffs };
   }
 
-  private async excludeRebookedDropOffs(dropOffs: RecentDropOff[], userId?: string, sessionId?: string): Promise<RecentDropOff[]> {
-    if (!dropOffs.length) return [];
+  private async excludeRebookedDropOffs(dropOffs: RecentDropOff[], userId?: string, _sessionId?: string): Promise<RecentDropOff[]> {
+    if (!dropOffs.length || !userId) return dropOffs;
     const since = new Date(Math.min(...dropOffs.map(item => item.abandonedAt)));
     const successfulStatuses = ['CONFIRMED', 'CHECKED_IN', 'COMPLETED', 'NO_SHOW'] as const;
     const confirmationStatuses = ['CONFIRMED'] as const;
@@ -272,8 +269,7 @@ export class BehaviorTelemetryService {
         servicePackageId: { in: dropOffs.map(item => item.packageId) },
         status: { in: [...successfulStatuses] },
         AND: [
-          userId ? { OR: [{ patientProfile: { accountId: userId } }, { bookingOrder: { accountId: userId } }] }
-            : { sourceView: { sessionId } },
+          { OR: [{ patientProfile: { accountId: userId } }, { bookingOrder: { accountId: userId } }] },
           { OR: [
             { createdAt: { gte: since } },
             { statusHistories: { some: { toStatus: { in: [...confirmationStatuses] }, createdAt: { gte: since } } } },

@@ -46,29 +46,25 @@ export class LoggingInterceptor implements NestInterceptor {
     const userId =
       (request as any)?.user?.id || 'anonymous';
 
-    const isAnalyticsInteraction = originalUrl.split('?')[0].endsWith('/analytics/interactions');
     const startTime = Date.now();
 
-    if (!isAnalyticsInteraction) {
-      this.logger.log(
-        JSON.stringify({
-          type: 'REQUEST',
-          requestId,
-          method,
-          url: originalUrl,
-          ip,
-          userId,
-          userAgent,
-          query,
-          body: this.sanitizeBody(body),
-          timestamp: new Date().toISOString(),
-        }),
-      );
-    }
+    this.logger.log(
+      JSON.stringify({
+        type: 'REQUEST',
+        requestId,
+        method,
+        url: originalUrl,
+        ip,
+        userId,
+        userAgent,
+        query,
+        body: this.sanitizeBody(body),
+        timestamp: new Date().toISOString(),
+      }),
+    );
 
     return next.handle().pipe(
       tap(() => {
-        if (isAnalyticsInteraction) return;
         const responseTime = Date.now() - startTime;
 
         const statusCode = response.statusCode;
@@ -150,8 +146,6 @@ export class LoggingInterceptor implements NestInterceptor {
         clonedBody[field] = '******';
       }
     }
-
-    delete clonedBody.recommendationToken;
 
     return clonedBody;
   }

@@ -1,3 +1,4 @@
+import { RECEPTION_SLOT_LOCATION_SELECT, appointmentBranch } from './helpers/appointment-branch.helper.js';
 import { Injectable, Logger } from '@nestjs/common';
 import { Cron } from '@nestjs/schedule';
 import { NotificationType } from '@prisma/client';
@@ -50,7 +51,7 @@ export class AppointmentReminderTask {
         ],
       },
       include: {
-        receptionSlot: true,
+        receptionSlot: { include: { receptionSchedule: RECEPTION_SLOT_LOCATION_SELECT.receptionSchedule } },
         patientProfile: {
           include: { account: { select: { id: true, email: true, phoneNumber: true } } },
         },
@@ -65,7 +66,6 @@ export class AppointmentReminderTask {
           },
         },
         servicePackage: { select: { name: true } },
-        branch: { select: { name: true, address: true, phoneNumber: true } },
       },
       take: 200, // Giới hạn mỗi lần chạy
     });
@@ -81,7 +81,7 @@ export class AppointmentReminderTask {
 
       try {
         const doctorSlot = appt.scheduleSlot;
-        const branch = doctorSlot?.schedule.branch ?? appt.branch;
+        const branch = doctorSlot?.schedule.branch ?? appointmentBranch(appt);
         const appointmentDate =
           (appt.receptionSlot?.date ?? doctorSlot?.schedule.workDate)?.toISOString().slice(0, 10) ??
           '?';

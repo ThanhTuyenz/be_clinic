@@ -1,3 +1,5 @@
+import { replaceReceptionSchedules } from '../bookings/helpers/reception-schedule.helper.js'
+import { PACKAGE_DEPLOYMENT_SELECT, getPackageDeployments } from '../bookings/helpers/package-deployment.helper.js'
 import { assertReceptionMethods, parseReceptionDays, parseBranchReceptionSchedules } from '../bookings/helpers/package-reception.helper.js'
 import { UpdatePackageReceptionDto } from './dtos/update-package-reception.dto.js'
 import { BadRequestException, ForbiddenException, Injectable, InternalServerErrorException, NotFoundException } from '@nestjs/common'
@@ -208,25 +210,15 @@ export class SystemCatalogService {
     }
 
     const include = resource === 'service-packages'
-      ? {
-          receptionSchedules: { select: { branchId: true, dayOfWeek: true, sessions: true } },
-          branchBookingMethod: { include: { branch: { select: { id: true, name: true } }, bookingMethod: { select: { id: true, code: true, name: true } } } },
-          specialty: { select: { id: true, name: true } },
-          branchBookingMethods: {
-            include: {
-              branchBookingMethod: {
-                include: {
-                  branch: { select: { id: true, name: true } },
-                  bookingMethod: { select: { id: true, code: true, name: true } },
-                },
-              },
-            },
-          },
-        }
+      ? { receptionSchedules: { where: { isActive: true }, select: { branchId: true, dayOfWeek: true, sessions: true } },
+          bookingMethod: PACKAGE_DEPLOYMENT_SELECT.bookingMethod, branches: PACKAGE_DEPLOYMENT_SELECT.branches,
+          specialty: { select: { id: true, name: true } } }
       : resource === 'rooms'
       ? { branch: { select: { id: true, name: true, address: true } } }
       : resource === 'specialties'
       ? { branches: { where: { isActive: true }, select: { branchId: true } } }
+      : resource === 'branches'
+      ? { users: { where: { role: 'BRANCH_MANAGER', isDeleted: false }, select: { id: true, fullName: true, email: true, isBlocked: true, status: true } } }
       : undefined
     const defaultOrderBy: any =
       resource === 'specialties'
@@ -234,7 +226,11 @@ export class SystemCatalogService {
         : resource === 'rooms'
         ? { code: 'asc' }
         : { name: 'asc' }
-    return { items: await model.findMany({ where, include, orderBy: defaultOrderBy, take: 200 }) }
+    const items = await model.findMany({ where, include, orderBy: defaultOrderBy, take: 200 })
+    return { items: resource === 'branches' ? items.map(({ users, ...branch }: any) => ({
+      ...branch, managers: users,
+      managerNames: users.map((manager: any) => manager.fullName || manager.email || 'Chưa có tên').join(', ') || 'Chưa bổ nhiệm',
+    })) : items }
   }
 
 
@@ -349,52 +345,33 @@ export class SystemCatalogService {
     if (resource === 'service-packages') {
       const data: any = await this.payload(resource, body)
       const updated = await this.prisma.$transaction(async (tx) => {
-        const existing = await tx.servicePackage.findUnique({ where: { id }, select: {
-          branchBookingMethodId: true, branchBookingMethods: { select: { branchBookingMethodId: true } },
-        } })
+        const existing = await tx.servicePackage.findUnique({ where: { id }, select: { bookingMethodId: true, branches: { select: { branchId: true } } } })
         if (!existing) throw new NotFoundException('Không tìm thấy gói khám')
-        const ids = body.branchBookingMethodIds !== undefined ? body.branchBookingMethodIds : [...new Set([
-          ...existing.branchBookingMethods.map((link) => link.branchBookingMethodId),
-          ...(existing.branchBookingMethodId ? [existing.branchBookingMethodId] : []),
-        ])]
-        const methods = await this.packageDeployments(tx, ids, data.specialtyId)
-        const branchIds = [...new Set(methods.map((method) => method.branchId))]
-        const receptionSchedules = parseBranchReceptionSchedules(body.branchReceptionSchedules, branchIds)
-        const retained = await tx.packageReceptionTime.findMany({ where: { servicePackageId: id, branchId: { in: branchIds } }, select: { branchId: true, dayOfWeek: true, sessions: true } })
-        const replaced = new Set((body.branchReceptionSchedules || []).map((entry: any) => entry.branchId))
-        assertReceptionMethods(methods, [...retained.filter((day) => !replaced.has(day.branchId)), ...(receptionSchedules || [])])
-        if (body.branchBookingMethodIds !== undefined) {
-          await tx.packageReceptionTime.deleteMany({ where: { servicePackageId: id, branchId: { notIn: branchIds } } })
-          await tx.packageBranchMethod.deleteMany({ where: { servicePackageId: id } })
-          if (methods.length) await tx.packageBranchMethod.createMany({ data: methods.map((method) => ({ servicePackageId: id, branchBookingMethodId: method.id })) })
-          data.branchBookingMethodId = methods[0]?.id || null
+        const bookingMethodId = body.bookingMethodId === undefined ? existing.bookingMethodId : Number(body.bookingMethodId)
+        if (bookingMethodId !== existing.bookingMethodId) {
+          const [appointments, slots] = await Promise.all([
+            tx.appointment.count({ where: { servicePackageId: id } }),
+            tx.packageReceptionSlot.count({ where: { receptionSchedule: { servicePackageId: id } } }),
+          ])
+          if (appointments || slots) throw new BadRequestException('Gói đã có lịch hẹn hoặc khung tiếp nhận. Hãy tạo gói mới để đổi hình thức khám.')
         }
-
+        const branchIds = body.branchIds === undefined ? existing.branches.map(link => link.branchId) : body.branchIds
+        const methods = await this.packageDeployments(tx, branchIds, bookingMethodId, data.specialtyId)
+        const receptionSchedules = parseBranchReceptionSchedules(body.branchReceptionSchedules, branchIds)
+        const retained = await tx.packageReceptionTime.findMany({ where: { servicePackageId: id, isActive: true, branchId: { in: branchIds } }, select: { branchId: true, dayOfWeek: true, sessions: true } })
+        const replaced = new Set((body.branchReceptionSchedules || []).map((entry: any) => entry.branchId))
+        assertReceptionMethods(methods, [...retained.filter(day => !replaced.has(day.branchId)), ...(receptionSchedules || [])])
+        await tx.packageReceptionTime.updateMany({ where: { servicePackageId: id, branchId: { notIn: branchIds } }, data: { isActive: false } })
+        await tx.packageBranch.deleteMany({ where: { servicePackageId: id, branchId: { notIn: branchIds } } })
+        if (branchIds.length) await tx.packageBranch.createMany({ data: branchIds.map((branchId: number) => ({ servicePackageId: id, branchId })), skipDuplicates: true })
         if (receptionSchedules !== undefined) {
           const scheduleBranchIds = body.branchReceptionSchedules.map((entry: any) => entry.branchId)
-          await tx.packageReceptionTime.deleteMany({ where: { servicePackageId: id, branchId: { in: scheduleBranchIds } } })
-          if (receptionSchedules.length) await tx.packageReceptionTime.createMany({
-            data: receptionSchedules.map((day) => ({ servicePackageId: id, ...day })),
-          })
+          await replaceReceptionSchedules(tx, id, scheduleBranchIds, receptionSchedules)
         }
+        return tx.servicePackage.update({ where: { id }, data: { ...data, bookingMethodId }, include: {
+          bookingMethod: true, branches: { include: { branch: true } }, specialty: true,
+        } })
 
-        return tx.servicePackage.update({
-          where: { id },
-          data,
-          include: {
-            branchBookingMethod: {
-              include: { branch: true, bookingMethod: true },
-            },
-            specialty: true,
-            branchBookingMethods: {
-              include: {
-                branchBookingMethod: {
-                  include: { branch: true, bookingMethod: true },
-                },
-              },
-            },
-          },
-        })
       })
       if (this.redis.isEnabled()) {
         try {
@@ -502,45 +479,30 @@ export class SystemCatalogService {
     return { success: true, specialtyId, count: roomIds.length }
   }
 
-  async setBranchPackage(userId: string, id: number, body: { branchId: number; branchBookingMethodIds: number[]; schedules?: UpdatePackageReceptionDto['schedules'] }) {
+  async setBranchPackage(userId: string, id: number, body: { branchId: number; isDeployed: boolean; schedules?: UpdatePackageReceptionDto['schedules'] }) {
     const user = await this.manager(userId)
     if (user.role === 'ADMIN') throw new ForbiddenException('Quản trị kỹ thuật không điều phối gói khám tại chi nhánh')
     this.assertCrudPermission(user, 'service-packages', 'update')
     const branchId = Number(body.branchId)
-    if (!branchId) throw new BadRequestException('Vui lòng chọn chi nhánh')
+    if (!Number.isInteger(branchId) || branchId < 1 || typeof body.isDeployed !== 'boolean') throw new BadRequestException('Chi nhánh hoặc trạng thái triển khai không hợp lệ')
     await this.assertAssignmentScope(user, 'branch-specialties', { branchId })
-    if (!Array.isArray(body.branchBookingMethodIds)) throw new BadRequestException('Danh sách hình thức đặt khám không hợp lệ')
-    const ids = [...new Set(body.branchBookingMethodIds.map(Number))]
     const days = body.schedules === undefined ? undefined : parseReceptionDays(body.schedules)
-    if (!ids.length && days?.length) throw new BadRequestException('Vui lòng chọn hình thức khám trước khi thiết lập lịch tiếp nhận')
-    await this.prisma.$transaction(async (tx) => {
-      const pkg = await tx.servicePackage.findUnique({ where: { id }, select: { isActive: true, specialtyId: true, branchBookingMethodId: true } })
+    if (!body.isDeployed && days?.length) throw new BadRequestException('Vui lòng triển khai gói trước khi thiết lập lịch tiếp nhận')
+    await this.prisma.$transaction(async tx => {
+      const pkg = await tx.servicePackage.findUnique({ where: { id }, select: { isActive: true, specialtyId: true, bookingMethodId: true, branches: { select: { branchId: true } } } })
       if (!pkg) throw new NotFoundException('Không tìm thấy gói khám')
-      const currentLinks = await tx.packageBranchMethod.findMany({ where: { servicePackageId: id, branchBookingMethod: { branchId } }, select: { branchBookingMethodId: true } })
-      const currentIds = new Set(currentLinks.map((l) => l.branchBookingMethodId))
-      if (pkg.branchBookingMethodId) currentIds.add(pkg.branchBookingMethodId)
-      if (!pkg.isActive && ids.some((methodId) => !currentIds.has(methodId))) throw new BadRequestException('Gói khám đã ngừng hoạt động trên hệ thống')
-      if (pkg.specialtyId && ids.some((methodId) => !currentIds.has(methodId))) {
-        const specialties = await tx.branchSpecialty.findMany({ where: { branchId, specialtyId: pkg.specialtyId, isActive: true }, select: { branchId: true } })
-        if (!specialties.length) throw new BadRequestException('Chi nhánh chưa triển khai chuyên khoa của gói khám')
+      if (body.isDeployed) {
+        const alreadyDeployed = pkg.branches.some(link => link.branchId === branchId)
+        if ((!alreadyDeployed || days?.length) && !pkg.isActive) throw new BadRequestException('Gói khám đã ngừng hoạt động')
+        const methods = await this.packageDeployments(tx, [branchId], pkg.bookingMethodId, pkg.specialtyId)
+        const schedules = days !== undefined ? days.map(day => ({ ...day, branchId }))
+          : await tx.packageReceptionTime.findMany({ where: { servicePackageId: id, branchId, isActive: true }, select: { branchId: true, dayOfWeek: true, sessions: true } })
+        assertReceptionMethods(methods, schedules)
+        await tx.packageBranch.upsert({ where: { servicePackageId_branchId: { servicePackageId: id, branchId } }, update: {}, create: { servicePackageId: id, branchId } })
+      } else {
+        await tx.packageBranch.deleteMany({ where: { servicePackageId: id, branchId } })
       }
-      const methods = await tx.branchBookingMethod.findMany({ where: { id: { in: ids }, branchId }, select: { id: true, branchId: true, isEnabled: true, bookingMethod: { select: { code: true, isActive: true } } } })
-      if (methods.length !== ids.length || methods.some((m) => !currentIds.has(m.id) && (!m.isEnabled || !m.bookingMethod.isActive))) throw new BadRequestException('Hình thức đặt khám không hợp lệ hoặc không thuộc chi nhánh')
-      if (methods.some((method) => !['SPECIALTY_EXAM', 'AFTER_HOURS', 'HEALTH_PACKAGE'].includes(method.bookingMethod.code))) throw new BadRequestException('Hình thức khám không hỗ trợ gói khám')
-      if (days?.length && !pkg.isActive) throw new BadRequestException('Gói khám đã ngừng hoạt động')
-      const schedules = days !== undefined ? days.map((day) => ({ ...day, branchId }))
-        : await tx.packageReceptionTime.findMany({ where: { servicePackageId: id, branchId }, select: { branchId: true, dayOfWeek: true, sessions: true } })
-      assertReceptionMethods(methods, schedules)
-      // Preserve the legacy deployment before replacing only this branch's links.
-      if (pkg.branchBookingMethodId) {
-        await tx.packageBranchMethod.upsert({ where: { servicePackageId_branchBookingMethodId: { servicePackageId: id, branchBookingMethodId: pkg.branchBookingMethodId } }, update: {}, create: { servicePackageId: id, branchBookingMethodId: pkg.branchBookingMethodId } })
-      }
-      await tx.packageBranchMethod.deleteMany({ where: { servicePackageId: id, branchBookingMethod: { branchId } } })
-      if (!ids.length || days !== undefined) await tx.packageReceptionTime.deleteMany({ where: { servicePackageId: id, branchId } })
-      if (days?.length) await tx.packageReceptionTime.createMany({ data: days.map((day) => ({ servicePackageId: id, branchId, ...day })) })
-      if (ids.length) await tx.packageBranchMethod.createMany({ data: ids.map((branchBookingMethodId) => ({ servicePackageId: id, branchBookingMethodId })) })
-      const primary = await tx.packageBranchMethod.findFirst({ where: { servicePackageId: id }, select: { branchBookingMethodId: true }, orderBy: { id: 'asc' } })
-      await tx.servicePackage.update({ where: { id }, data: { branchBookingMethodId: primary?.branchBookingMethodId || null } })
+      if (!body.isDeployed || days !== undefined) await replaceReceptionSchedules(tx, id, [branchId], body.isDeployed ? (days || []).map(day => ({ ...day, branchId })) : [])
     })
     await this.invalidatePublicCache()
     return { success: true }
@@ -553,23 +515,12 @@ export class SystemCatalogService {
     await this.assertAssignmentScope(user, 'branch-specialties', { branchId: body.branchId })
     const days = parseReceptionDays(body.schedules)
     await this.prisma.$transaction(async (tx) => {
-      const pkg = await tx.servicePackage.findUnique({
-        where: { id }, select: {
-          isActive: true, branchBookingMethodId: true,
-          branchBookingMethod: { select: { branchId: true, bookingMethod: { select: { code: true } } } },
-          branchBookingMethods: { select: { branchBookingMethod: { select: { branchId: true, bookingMethod: { select: { code: true } } } } } },
-        },
-      })
+      const pkg = await tx.servicePackage.findUnique({ where: { id }, select: { isActive: true, ...PACKAGE_DEPLOYMENT_SELECT } })
       if (!pkg) throw new NotFoundException('Không tìm thấy gói khám')
       if (days.length && !pkg.isActive) throw new BadRequestException('Gói khám đã ngừng hoạt động')
-      const deployed = pkg.branchBookingMethod?.branchId === body.branchId
-        || pkg.branchBookingMethods.some((link) => link.branchBookingMethod.branchId === body.branchId)
-      if (!deployed) throw new BadRequestException('Gói khám chưa được áp dụng tại chi nhánh này')
-      assertReceptionMethods([...(pkg.branchBookingMethod ? [pkg.branchBookingMethod] : []), ...pkg.branchBookingMethods.map((link) => link.branchBookingMethod)], days.map((day) => ({ ...day, branchId: body.branchId })))
-      await tx.packageReceptionTime.deleteMany({ where: { servicePackageId: id, branchId: body.branchId } })
-      if (days.length) await tx.packageReceptionTime.createMany({
-        data: days.map((day) => ({ servicePackageId: id, branchId: body.branchId, ...day })),
-      })
+      if (!pkg.branches.some(link => link.branchId === body.branchId)) throw new BadRequestException('Gói khám chưa được áp dụng tại chi nhánh này')
+      assertReceptionMethods(getPackageDeployments(pkg), days.map(day => ({ ...day, branchId: body.branchId })))
+      await replaceReceptionSchedules(tx, id, [body.branchId], days.map(day => ({ ...day, branchId: body.branchId })))
     })
     await this.invalidatePublicCache()
     return { success: true }
@@ -578,12 +529,17 @@ export class SystemCatalogService {
   private async payload(resource: string, b: any) {
     if (!['branch-specialties', 'room-specialties'].includes(resource) && !String(b.name || '').trim()) throw new BadRequestException('Tên không được để trống')
     if (resource === 'branches') {
+      const requiredFields = { address: 'Địa chỉ chi tiết', province: 'Tỉnh/Thành phố', ward: 'Phường/Xã', phoneNumber: 'Hotline', openTime: 'Giờ mở cửa', closeTime: 'Giờ đóng cửa' }
+      for (const [field, label] of Object.entries(requiredFields)) {
+        if (!String(b[field] || '').trim()) throw new BadRequestException(`${label} không được để trống`)
+      }
       return {
         name: String(b.name).trim(), slug: String(b.slug || '').trim() || String(b.code || '').trim().toLowerCase() || String(b.name).trim().toLowerCase().replace(/\s+/g, '-'),
         code: String(b.code || '').trim() || `BRC-${new Date().getFullYear()}-${Math.floor(1000 + Math.random() * 9000)}`,
         address: b.address || null,
         province: b.province || null,
-        district: b.district || null,
+        // District is optional for new addresses; preserve legacy values on partial updates.
+        district: b.district === undefined ? undefined : String(b.district || '').trim() || null,
         ward: b.ward || null,
         latitude: b.latitude != null && b.latitude !== '' ? Number(b.latitude) : null,
         longitude: b.longitude != null && b.longitude !== '' ? Number(b.longitude) : null,
@@ -645,27 +601,27 @@ export class SystemCatalogService {
     throw new BadRequestException('Danh mục không hợp lệ')
   }
 
-  private async packageDeployments(tx: Prisma.TransactionClient, value: unknown, specialtyId?: number | null) {
-    if (!Array.isArray(value) || value.some((id) => !Number.isInteger(id) || id < 1)) throw new BadRequestException('Vui lòng chọn hình thức khám tại từng chi nhánh')
+  private async packageDeployments(tx: Prisma.TransactionClient, value: unknown, bookingMethodId: number, specialtyId?: number | null) {
+    if (!Array.isArray(value) || value.some(id => !Number.isInteger(id) || id < 1)) throw new BadRequestException('Danh sách chi nhánh không hợp lệ')
     const ids = [...new Set<number>(value)]
-    const methods = await tx.branchBookingMethod.findMany({ where: { id: { in: ids } }, select: {
+    const method = await tx.bookingMethod.findUnique({ where: { id: bookingMethodId } })
+    if (!method?.isActive || !['SPECIALTY_EXAM', 'AFTER_HOURS', 'HEALTH_PACKAGE'].includes(method.code)) throw new BadRequestException('Vui lòng chọn một hình thức khám hợp lệ cho gói')
+    const methods = await tx.branchBookingMethod.findMany({ where: { branchId: { in: ids }, bookingMethodId }, select: {
       id: true, branchId: true, isEnabled: true, branch: { select: { isActive: true } }, bookingMethod: { select: { code: true, isActive: true } },
     } })
-    if (methods.length !== ids.length || methods.some((method) => !method.isEnabled || !method.branch.isActive || !method.bookingMethod.isActive
-      || !['SPECIALTY_EXAM', 'AFTER_HOURS', 'HEALTH_PACKAGE'].includes(method.bookingMethod.code))) throw new BadRequestException('Hình thức khám không tồn tại, đã ngừng hoạt động hoặc không hỗ trợ gói khám')
-    if (specialtyId && methods.length) {
-      const branchIds = [...new Set(methods.map((method) => method.branchId))]
-      const specialties = await tx.branchSpecialty.findMany({ where: { branchId: { in: branchIds }, specialtyId, isActive: true }, select: { branchId: true } })
-      if (specialties.length !== branchIds.length) throw new BadRequestException('Chi nhánh chưa triển khai chuyên khoa của gói khám. Vui lòng cấu hình chuyên khoa trước.')
+    if (methods.length !== ids.length || methods.some(item => !item.isEnabled || !item.branch.isActive)) throw new BadRequestException('Có chi nhánh chưa bật hình thức khám của gói')
+    if (specialtyId && ids.length) {
+      const count = await tx.branchSpecialty.count({ where: { branchId: { in: ids }, specialtyId, isActive: true } })
+      if (count !== ids.length) throw new BadRequestException('Chi nhánh chưa triển khai chuyên khoa của gói khám')
     }
-    return ids.map((id) => methods.find((method) => method.id === id)!)
+    return methods
   }
 
   private async createServicePackages(b: any) {
     if (!String(b.name || '').trim()) throw new BadRequestException('Tên gói khám không được để trống')
 
     const pkg = await this.prisma.$transaction(async (tx) => {
-      const bbmList = await this.packageDeployments(tx, b.branchBookingMethodIds, b.specialtyId ? Number(b.specialtyId) : null)
+      const bbmList = await this.packageDeployments(tx, b.branchIds, Number(b.bookingMethodId), b.specialtyId ? Number(b.specialtyId) : null)
       if (!bbmList.length) throw new BadRequestException('Vui lòng chọn ít nhất một hình thức khám tại chi nhánh')
       const receptionSchedules = parseBranchReceptionSchedules(b.branchReceptionSchedules, [...new Set(bbmList.map((method) => method.branchId))])
       assertReceptionMethods(bbmList, receptionSchedules || [])
@@ -687,30 +643,17 @@ export class SystemCatalogService {
           imageUrl: b.imageUrl || '',
           description: b.description || '',
           symptoms: Array.isArray(b.symptoms) ? b.symptoms.map(String).map((s: string) => s.trim().toLowerCase()).filter(Boolean) : [],
-          branchBookingMethodId: bbmList[0]?.id || null,
+          bookingMethodId: Number(b.bookingMethodId),
           ...(receptionSchedules?.length ? { receptionSchedules: { create: receptionSchedules } } : {}),
           specialtyId: b.specialtyId ? Number(b.specialtyId) : null,
           price: Number(b.price) || 0,
           durationMin: Number(b.durationMin) || DEFAULT_PACKAGE_DURATION_MIN,
           isFeatured: b.isFeatured === true,
           isActive: b.isActive ?? true,
-          branchBookingMethods: {
-            create: bbmList.map((bbm) => ({
-              branchBookingMethodId: bbm.id,
-            })),
-          },
+          branches: { create: bbmList.map(bbm => ({ branchId: bbm.branchId })) },
         },
         include: {
-          branchBookingMethod: {
-            include: { branch: true, bookingMethod: true },
-          },
-          branchBookingMethods: {
-            include: {
-              branchBookingMethod: {
-                include: { branch: true, bookingMethod: true },
-              },
-            },
-          },
+          bookingMethod: true, branches: { include: { branch: true } },
           specialty: true,
         },
     })

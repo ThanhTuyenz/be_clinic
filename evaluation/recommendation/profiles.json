@@ -1,0 +1,2007 @@
+{
+  "version": "vitacare-profile-eval-v1",
+  "seed": "fixed-stratified-2-dev-8-test-per-group",
+  "description": "100 fictional cases; relevance labels require independent review. No clinical validation claimed.",
+  "profiles": [
+    {
+      "caseId": "VC-001",
+      "split": "test",
+      "group": "cardiovascular",
+      "synthetic": true,
+      "profile": {
+        "age": 52,
+        "gender": "MALE",
+        "bmi": null,
+        "medicalHistory": "Đã được ghi nhận tăng huyết áp, đang theo dõi định kỳ.",
+        "allergies": "",
+        "familyHistory": "",
+        "smokingStatus": null,
+        "alcoholUse": null,
+        "activityLevel": null,
+        "pregnancyStatus": null,
+        "isBreastfeeding": null,
+        "recentlyCompletedPackageIds": []
+      }
+    },
+    {
+      "caseId": "VC-002",
+      "split": "development",
+      "group": "cardiovascular",
+      "synthetic": true,
+      "profile": {
+        "age": 61,
+        "gender": "FEMALE",
+        "bmi": null,
+        "medicalHistory": "Có tiền sử rối loạn nhịp tim, muốn kiểm tra lại theo lịch.",
+        "allergies": "",
+        "familyHistory": "",
+        "smokingStatus": null,
+        "alcoholUse": null,
+        "activityLevel": null,
+        "pregnancyStatus": null,
+        "isBreastfeeding": null,
+        "recentlyCompletedPackageIds": []
+      }
+    },
+    {
+      "caseId": "VC-003",
+      "split": "test",
+      "group": "cardiovascular",
+      "synthetic": true,
+      "profile": {
+        "age": 45,
+        "gender": "MALE",
+        "bmi": null,
+        "medicalHistory": "Huyết áp tại nhà thường không ổn định trong tháng vừa qua.",
+        "allergies": "",
+        "familyHistory": "",
+        "smokingStatus": null,
+        "alcoholUse": null,
+        "activityLevel": null,
+        "pregnancyStatus": null,
+        "isBreastfeeding": null,
+        "recentlyCompletedPackageIds": []
+      }
+    },
+    {
+      "caseId": "VC-004",
+      "split": "test",
+      "group": "cardiovascular",
+      "synthetic": true,
+      "profile": {
+        "age": 39,
+        "gender": "FEMALE",
+        "bmi": null,
+        "medicalHistory": "Thỉnh thoảng hồi hộp khi làm việc, chưa có chẩn đoán bệnh tim.",
+        "allergies": "",
+        "familyHistory": "",
+        "smokingStatus": null,
+        "alcoholUse": null,
+        "activityLevel": null,
+        "pregnancyStatus": null,
+        "isBreastfeeding": null,
+        "recentlyCompletedPackageIds": []
+      }
+    },
+    {
+      "caseId": "VC-005",
+      "split": "test",
+      "group": "cardiovascular",
+      "synthetic": true,
+      "profile": {
+        "age": 67,
+        "gender": "MALE",
+        "bmi": null,
+        "medicalHistory": "Có tiền sử bệnh mạch vành, đang điều trị ngoại trú.",
+        "allergies": "",
+        "familyHistory": "",
+        "smokingStatus": null,
+        "alcoholUse": null,
+        "activityLevel": null,
+        "pregnancyStatus": null,
+        "isBreastfeeding": null,
+        "recentlyCompletedPackageIds": []
+      }
+    },
+    {
+      "caseId": "VC-006",
+      "split": "test",
+      "group": "cardiovascular",
+      "synthetic": true,
+      "profile": {
+        "age": 58,
+        "gender": "FEMALE",
+        "bmi": null,
+        "medicalHistory": "Đã được ghi nhận tăng huyết áp và tăng lipid máu.",
+        "allergies": "",
+        "familyHistory": "",
+        "smokingStatus": null,
+        "alcoholUse": null,
+        "activityLevel": null,
+        "pregnancyStatus": null,
+        "isBreastfeeding": null,
+        "recentlyCompletedPackageIds": []
+      }
+    },
+    {
+      "caseId": "VC-007",
+      "split": "test",
+      "group": "cardiovascular",
+      "synthetic": true,
+      "profile": {
+        "age": 34,
+        "gender": "MALE",
+        "bmi": null,
+        "medicalHistory": "Muốn kiểm tra nguy cơ tim mạch do gia đình có tiền sử bệnh tim.",
+        "allergies": "",
+        "familyHistory": "Mẹ có tiền sử bệnh mạch vành.",
+        "smokingStatus": null,
+        "alcoholUse": null,
+        "activityLevel": null,
+        "pregnancyStatus": null,
+        "isBreastfeeding": null,
+        "recentlyCompletedPackageIds": []
+      }
+    },
+    {
+      "caseId": "VC-008",
+      "split": "development",
+      "group": "cardiovascular",
+      "synthetic": true,
+      "profile": {
+        "age": 72,
+        "gender": "FEMALE",
+        "bmi": null,
+        "medicalHistory": "Đang dùng thuốc huyết áp và cần đánh giá sức khỏe tim mạch định kỳ.",
+        "allergies": "",
+        "familyHistory": "",
+        "smokingStatus": null,
+        "alcoholUse": null,
+        "activityLevel": null,
+        "pregnancyStatus": null,
+        "isBreastfeeding": null,
+        "recentlyCompletedPackageIds": []
+      }
+    },
+    {
+      "caseId": "VC-009",
+      "split": "test",
+      "group": "cardiovascular",
+      "synthetic": true,
+      "profile": {
+        "age": 48,
+        "gender": "MALE",
+        "bmi": null,
+        "medicalHistory": "Đã được ghi nhận huyết áp cao trong lần khám gần đây.",
+        "allergies": "",
+        "familyHistory": "",
+        "smokingStatus": null,
+        "alcoholUse": null,
+        "activityLevel": null,
+        "pregnancyStatus": null,
+        "isBreastfeeding": null,
+        "recentlyCompletedPackageIds": []
+      }
+    },
+    {
+      "caseId": "VC-010",
+      "split": "test",
+      "group": "cardiovascular",
+      "synthetic": true,
+      "profile": {
+        "age": 55,
+        "gender": "FEMALE",
+        "bmi": null,
+        "medicalHistory": "Tiền sử bệnh van tim, muốn kiểm tra theo hẹn trước đây.",
+        "allergies": "",
+        "familyHistory": "",
+        "smokingStatus": null,
+        "alcoholUse": null,
+        "activityLevel": null,
+        "pregnancyStatus": null,
+        "isBreastfeeding": null,
+        "recentlyCompletedPackageIds": []
+      }
+    },
+    {
+      "caseId": "VC-011",
+      "split": "test",
+      "group": "metabolic",
+      "synthetic": true,
+      "profile": {
+        "age": 54,
+        "gender": "FEMALE",
+        "bmi": null,
+        "medicalHistory": "Đã được chẩn đoán đái tháo đường type 2, cần theo dõi định kỳ.",
+        "allergies": "",
+        "familyHistory": "",
+        "smokingStatus": null,
+        "alcoholUse": null,
+        "activityLevel": null,
+        "pregnancyStatus": null,
+        "isBreastfeeding": null,
+        "recentlyCompletedPackageIds": []
+      }
+    },
+    {
+      "caseId": "VC-012",
+      "split": "development",
+      "group": "metabolic",
+      "synthetic": true,
+      "profile": {
+        "age": 43,
+        "gender": "MALE",
+        "bmi": null,
+        "medicalHistory": "Xét nghiệm trước đây ghi nhận đường huyết cao hơn bình thường.",
+        "allergies": "",
+        "familyHistory": "",
+        "smokingStatus": null,
+        "alcoholUse": null,
+        "activityLevel": null,
+        "pregnancyStatus": null,
+        "isBreastfeeding": null,
+        "recentlyCompletedPackageIds": []
+      }
+    },
+    {
+      "caseId": "VC-013",
+      "split": "test",
+      "group": "metabolic",
+      "synthetic": true,
+      "profile": {
+        "age": 62,
+        "gender": "MALE",
+        "bmi": null,
+        "medicalHistory": "Có tiền sử rối loạn lipid máu, đang điều chỉnh chế độ sinh hoạt.",
+        "allergies": "",
+        "familyHistory": "",
+        "smokingStatus": null,
+        "alcoholUse": null,
+        "activityLevel": null,
+        "pregnancyStatus": null,
+        "isBreastfeeding": null,
+        "recentlyCompletedPackageIds": []
+      }
+    },
+    {
+      "caseId": "VC-014",
+      "split": "test",
+      "group": "metabolic",
+      "synthetic": true,
+      "profile": {
+        "age": 38,
+        "gender": "FEMALE",
+        "bmi": null,
+        "medicalHistory": "Đã được ghi nhận suy giáp, đang dùng thuốc theo toa.",
+        "allergies": "",
+        "familyHistory": "",
+        "smokingStatus": null,
+        "alcoholUse": null,
+        "activityLevel": null,
+        "pregnancyStatus": null,
+        "isBreastfeeding": null,
+        "recentlyCompletedPackageIds": []
+      }
+    },
+    {
+      "caseId": "VC-015",
+      "split": "test",
+      "group": "metabolic",
+      "synthetic": true,
+      "profile": {
+        "age": 47,
+        "gender": "MALE",
+        "bmi": 29.4,
+        "medicalHistory": "Muốn kiểm tra chuyển hóa do tăng cân và ít vận động.",
+        "allergies": "",
+        "familyHistory": "",
+        "smokingStatus": null,
+        "alcoholUse": null,
+        "activityLevel": "LOW",
+        "pregnancyStatus": null,
+        "isBreastfeeding": null,
+        "recentlyCompletedPackageIds": []
+      }
+    },
+    {
+      "caseId": "VC-016",
+      "split": "test",
+      "group": "metabolic",
+      "synthetic": true,
+      "profile": {
+        "age": 31,
+        "gender": "FEMALE",
+        "bmi": null,
+        "medicalHistory": "Có tiền sử cường giáp, cần đánh giá lại theo dõi ngoại trú.",
+        "allergies": "",
+        "familyHistory": "",
+        "smokingStatus": null,
+        "alcoholUse": null,
+        "activityLevel": null,
+        "pregnancyStatus": null,
+        "isBreastfeeding": null,
+        "recentlyCompletedPackageIds": []
+      }
+    },
+    {
+      "caseId": "VC-017",
+      "split": "test",
+      "group": "metabolic",
+      "synthetic": true,
+      "profile": {
+        "age": 59,
+        "gender": "FEMALE",
+        "bmi": null,
+        "medicalHistory": "Đái tháo đường type 2 kèm rối loạn mỡ máu.",
+        "allergies": "",
+        "familyHistory": "",
+        "smokingStatus": null,
+        "alcoholUse": null,
+        "activityLevel": null,
+        "pregnancyStatus": null,
+        "isBreastfeeding": null,
+        "recentlyCompletedPackageIds": []
+      }
+    },
+    {
+      "caseId": "VC-018",
+      "split": "development",
+      "group": "metabolic",
+      "synthetic": true,
+      "profile": {
+        "age": 41,
+        "gender": "MALE",
+        "bmi": null,
+        "medicalHistory": "Chưa có bệnh nền; bố mắc đái tháo đường, muốn kiểm tra định kỳ.",
+        "allergies": "",
+        "familyHistory": "",
+        "smokingStatus": null,
+        "alcoholUse": null,
+        "activityLevel": null,
+        "pregnancyStatus": null,
+        "isBreastfeeding": null,
+        "recentlyCompletedPackageIds": []
+      }
+    },
+    {
+      "caseId": "VC-019",
+      "split": "test",
+      "group": "metabolic",
+      "synthetic": true,
+      "profile": {
+        "age": 66,
+        "gender": "MALE",
+        "bmi": null,
+        "medicalHistory": "Đang điều trị đái tháo đường và cần kiểm tra các chỉ số định kỳ.",
+        "allergies": "",
+        "familyHistory": "",
+        "smokingStatus": null,
+        "alcoholUse": null,
+        "activityLevel": null,
+        "pregnancyStatus": null,
+        "isBreastfeeding": null,
+        "recentlyCompletedPackageIds": []
+      }
+    },
+    {
+      "caseId": "VC-020",
+      "split": "test",
+      "group": "metabolic",
+      "synthetic": true,
+      "profile": {
+        "age": 28,
+        "gender": "FEMALE",
+        "bmi": null,
+        "medicalHistory": "Có tiền sử nhân tuyến giáp, muốn tái đánh giá.",
+        "allergies": "",
+        "familyHistory": "",
+        "smokingStatus": null,
+        "alcoholUse": null,
+        "activityLevel": null,
+        "pregnancyStatus": null,
+        "isBreastfeeding": null,
+        "recentlyCompletedPackageIds": []
+      }
+    },
+    {
+      "caseId": "VC-021",
+      "split": "test",
+      "group": "digestive",
+      "synthetic": true,
+      "profile": {
+        "age": 36,
+        "gender": "MALE",
+        "bmi": null,
+        "medicalHistory": "Có tiền sử trào ngược dạ dày thực quản, gần đây hay ợ chua.",
+        "allergies": "",
+        "familyHistory": "",
+        "smokingStatus": null,
+        "alcoholUse": null,
+        "activityLevel": null,
+        "pregnancyStatus": null,
+        "isBreastfeeding": null,
+        "recentlyCompletedPackageIds": []
+      }
+    },
+    {
+      "caseId": "VC-022",
+      "split": "development",
+      "group": "digestive",
+      "synthetic": true,
+      "profile": {
+        "age": 49,
+        "gender": "FEMALE",
+        "bmi": null,
+        "medicalHistory": "Đã được ghi nhận gan nhiễm mỡ trong lần khám trước.",
+        "allergies": "",
+        "familyHistory": "",
+        "smokingStatus": null,
+        "alcoholUse": null,
+        "activityLevel": null,
+        "pregnancyStatus": null,
+        "isBreastfeeding": null,
+        "recentlyCompletedPackageIds": []
+      }
+    },
+    {
+      "caseId": "VC-023",
+      "split": "test",
+      "group": "digestive",
+      "synthetic": true,
+      "profile": {
+        "age": 57,
+        "gender": "MALE",
+        "bmi": null,
+        "medicalHistory": "Đang theo dõi viêm gan B mạn tính tại cơ sở y tế.",
+        "allergies": "",
+        "familyHistory": "",
+        "smokingStatus": null,
+        "alcoholUse": null,
+        "activityLevel": null,
+        "pregnancyStatus": null,
+        "isBreastfeeding": null,
+        "recentlyCompletedPackageIds": []
+      }
+    },
+    {
+      "caseId": "VC-024",
+      "split": "test",
+      "group": "digestive",
+      "synthetic": true,
+      "profile": {
+        "age": 25,
+        "gender": "FEMALE",
+        "bmi": null,
+        "medicalHistory": "Đầy bụng sau ăn kéo dài, chưa có chẩn đoán cụ thể.",
+        "allergies": "",
+        "familyHistory": "",
+        "smokingStatus": null,
+        "alcoholUse": null,
+        "activityLevel": null,
+        "pregnancyStatus": null,
+        "isBreastfeeding": null,
+        "recentlyCompletedPackageIds": []
+      }
+    },
+    {
+      "caseId": "VC-025",
+      "split": "test",
+      "group": "digestive",
+      "synthetic": true,
+      "profile": {
+        "age": 44,
+        "gender": "MALE",
+        "bmi": null,
+        "medicalHistory": "Có tiền sử viêm dạ dày, muốn kiểm tra lại.",
+        "allergies": "",
+        "familyHistory": "",
+        "smokingStatus": null,
+        "alcoholUse": null,
+        "activityLevel": null,
+        "pregnancyStatus": null,
+        "isBreastfeeding": null,
+        "recentlyCompletedPackageIds": []
+      }
+    },
+    {
+      "caseId": "VC-026",
+      "split": "test",
+      "group": "digestive",
+      "synthetic": true,
+      "profile": {
+        "age": 63,
+        "gender": "FEMALE",
+        "bmi": null,
+        "medicalHistory": "Rối loạn tiêu hóa tái diễn, có hồ sơ khám cũ.",
+        "allergies": "",
+        "familyHistory": "",
+        "smokingStatus": null,
+        "alcoholUse": null,
+        "activityLevel": null,
+        "pregnancyStatus": null,
+        "isBreastfeeding": null,
+        "recentlyCompletedPackageIds": []
+      }
+    },
+    {
+      "caseId": "VC-027",
+      "split": "test",
+      "group": "digestive",
+      "synthetic": true,
+      "profile": {
+        "age": 33,
+        "gender": "MALE",
+        "bmi": null,
+        "medicalHistory": "Đã điều trị nhiễm Helicobacter pylori, muốn theo dõi sau điều trị.",
+        "allergies": "",
+        "familyHistory": "",
+        "smokingStatus": null,
+        "alcoholUse": null,
+        "activityLevel": null,
+        "pregnancyStatus": null,
+        "isBreastfeeding": null,
+        "recentlyCompletedPackageIds": []
+      }
+    },
+    {
+      "caseId": "VC-028",
+      "split": "development",
+      "group": "digestive",
+      "synthetic": true,
+      "profile": {
+        "age": 52,
+        "gender": "FEMALE",
+        "bmi": null,
+        "medicalHistory": "Có tiền sử sỏi túi mật được theo dõi ngoại trú.",
+        "allergies": "",
+        "familyHistory": "",
+        "smokingStatus": null,
+        "alcoholUse": null,
+        "activityLevel": null,
+        "pregnancyStatus": null,
+        "isBreastfeeding": null,
+        "recentlyCompletedPackageIds": []
+      }
+    },
+    {
+      "caseId": "VC-029",
+      "split": "test",
+      "group": "digestive",
+      "synthetic": true,
+      "profile": {
+        "age": 40,
+        "gender": "MALE",
+        "bmi": null,
+        "medicalHistory": "Hay khó tiêu và ợ hơi, cần tìm dịch vụ khám tiêu hóa.",
+        "allergies": "",
+        "familyHistory": "",
+        "smokingStatus": null,
+        "alcoholUse": null,
+        "activityLevel": null,
+        "pregnancyStatus": null,
+        "isBreastfeeding": null,
+        "recentlyCompletedPackageIds": []
+      }
+    },
+    {
+      "caseId": "VC-030",
+      "split": "test",
+      "group": "digestive",
+      "synthetic": true,
+      "profile": {
+        "age": 69,
+        "gender": "FEMALE",
+        "bmi": null,
+        "medicalHistory": "Có tiền sử bệnh đại tràng, muốn kiểm tra theo dõi định kỳ.",
+        "allergies": "",
+        "familyHistory": "",
+        "smokingStatus": null,
+        "alcoholUse": null,
+        "activityLevel": null,
+        "pregnancyStatus": null,
+        "isBreastfeeding": null,
+        "recentlyCompletedPackageIds": []
+      }
+    },
+    {
+      "caseId": "VC-031",
+      "split": "test",
+      "group": "musculoskeletal",
+      "synthetic": true,
+      "profile": {
+        "age": 46,
+        "gender": "FEMALE",
+        "bmi": null,
+        "medicalHistory": "Đau vùng cổ vai gáy tái diễn khi làm việc máy tính.",
+        "allergies": "",
+        "familyHistory": "",
+        "smokingStatus": null,
+        "alcoholUse": null,
+        "activityLevel": null,
+        "pregnancyStatus": null,
+        "isBreastfeeding": null,
+        "recentlyCompletedPackageIds": []
+      }
+    },
+    {
+      "caseId": "VC-032",
+      "split": "development",
+      "group": "musculoskeletal",
+      "synthetic": true,
+      "profile": {
+        "age": 64,
+        "gender": "MALE",
+        "bmi": null,
+        "medicalHistory": "Đã được ghi nhận thoái hóa khớp gối.",
+        "allergies": "",
+        "familyHistory": "",
+        "smokingStatus": null,
+        "alcoholUse": null,
+        "activityLevel": null,
+        "pregnancyStatus": null,
+        "isBreastfeeding": null,
+        "recentlyCompletedPackageIds": []
+      }
+    },
+    {
+      "caseId": "VC-033",
+      "split": "test",
+      "group": "musculoskeletal",
+      "synthetic": true,
+      "profile": {
+        "age": 35,
+        "gender": "MALE",
+        "bmi": null,
+        "medicalHistory": "Đau thắt lưng kéo dài, chưa có chẩn đoán cụ thể.",
+        "allergies": "",
+        "familyHistory": "",
+        "smokingStatus": null,
+        "alcoholUse": null,
+        "activityLevel": null,
+        "pregnancyStatus": null,
+        "isBreastfeeding": null,
+        "recentlyCompletedPackageIds": []
+      }
+    },
+    {
+      "caseId": "VC-034",
+      "split": "test",
+      "group": "musculoskeletal",
+      "synthetic": true,
+      "profile": {
+        "age": 58,
+        "gender": "FEMALE",
+        "bmi": null,
+        "medicalHistory": "Có tiền sử loãng xương và đang theo dõi.",
+        "allergies": "",
+        "familyHistory": "Bố mắc đái tháo đường type 2.",
+        "smokingStatus": null,
+        "alcoholUse": null,
+        "activityLevel": null,
+        "pregnancyStatus": null,
+        "isBreastfeeding": null,
+        "recentlyCompletedPackageIds": []
+      }
+    },
+    {
+      "caseId": "VC-035",
+      "split": "test",
+      "group": "musculoskeletal",
+      "synthetic": true,
+      "profile": {
+        "age": 27,
+        "gender": "FEMALE",
+        "bmi": null,
+        "medicalHistory": "Đau cổ tay khi làm việc lặp lại, muốn kiểm tra.",
+        "allergies": "",
+        "familyHistory": "",
+        "smokingStatus": null,
+        "alcoholUse": null,
+        "activityLevel": null,
+        "pregnancyStatus": null,
+        "isBreastfeeding": null,
+        "recentlyCompletedPackageIds": []
+      }
+    },
+    {
+      "caseId": "VC-036",
+      "split": "test",
+      "group": "musculoskeletal",
+      "synthetic": true,
+      "profile": {
+        "age": 71,
+        "gender": "MALE",
+        "bmi": null,
+        "medicalHistory": "Thoái hóa cột sống thắt lưng, cần khám theo dõi.",
+        "allergies": "",
+        "familyHistory": "",
+        "smokingStatus": null,
+        "alcoholUse": null,
+        "activityLevel": null,
+        "pregnancyStatus": null,
+        "isBreastfeeding": null,
+        "recentlyCompletedPackageIds": []
+      }
+    },
+    {
+      "caseId": "VC-037",
+      "split": "test",
+      "group": "musculoskeletal",
+      "synthetic": true,
+      "profile": {
+        "age": 42,
+        "gender": "MALE",
+        "bmi": null,
+        "medicalHistory": "Có tiền sử gout, đang điều trị ngoại trú.",
+        "allergies": "",
+        "familyHistory": "",
+        "smokingStatus": null,
+        "alcoholUse": null,
+        "activityLevel": null,
+        "pregnancyStatus": null,
+        "isBreastfeeding": null,
+        "recentlyCompletedPackageIds": []
+      }
+    },
+    {
+      "caseId": "VC-038",
+      "split": "development",
+      "group": "musculoskeletal",
+      "synthetic": true,
+      "profile": {
+        "age": 53,
+        "gender": "FEMALE",
+        "bmi": null,
+        "medicalHistory": "Cứng và đau các khớp bàn tay vào buổi sáng.",
+        "allergies": "",
+        "familyHistory": "",
+        "smokingStatus": null,
+        "alcoholUse": null,
+        "activityLevel": null,
+        "pregnancyStatus": null,
+        "isBreastfeeding": null,
+        "recentlyCompletedPackageIds": []
+      }
+    },
+    {
+      "caseId": "VC-039",
+      "split": "test",
+      "group": "musculoskeletal",
+      "synthetic": true,
+      "profile": {
+        "age": 30,
+        "gender": "MALE",
+        "bmi": null,
+        "medicalHistory": "Đau khớp vai tái diễn sau hoạt động thể thao.",
+        "allergies": "",
+        "familyHistory": "",
+        "smokingStatus": null,
+        "alcoholUse": null,
+        "activityLevel": null,
+        "pregnancyStatus": null,
+        "isBreastfeeding": null,
+        "recentlyCompletedPackageIds": []
+      }
+    },
+    {
+      "caseId": "VC-040",
+      "split": "test",
+      "group": "musculoskeletal",
+      "synthetic": true,
+      "profile": {
+        "age": 67,
+        "gender": "FEMALE",
+        "bmi": null,
+        "medicalHistory": "Đang theo dõi thoái hóa khớp gối và giảm vận động.",
+        "allergies": "",
+        "familyHistory": "",
+        "smokingStatus": null,
+        "alcoholUse": null,
+        "activityLevel": null,
+        "pregnancyStatus": null,
+        "isBreastfeeding": null,
+        "recentlyCompletedPackageIds": []
+      }
+    },
+    {
+      "caseId": "VC-041",
+      "split": "test",
+      "group": "respiratory",
+      "synthetic": true,
+      "profile": {
+        "age": 29,
+        "gender": "FEMALE",
+        "bmi": null,
+        "medicalHistory": "Có tiền sử hen phế quản, hiện ổn định và cần kiểm tra định kỳ.",
+        "allergies": "",
+        "familyHistory": "",
+        "smokingStatus": null,
+        "alcoholUse": null,
+        "activityLevel": null,
+        "pregnancyStatus": null,
+        "isBreastfeeding": null,
+        "recentlyCompletedPackageIds": []
+      }
+    },
+    {
+      "caseId": "VC-042",
+      "split": "development",
+      "group": "respiratory",
+      "synthetic": true,
+      "profile": {
+        "age": 60,
+        "gender": "MALE",
+        "bmi": null,
+        "medicalHistory": "Có tiền sử bệnh phổi tắc nghẽn mạn tính, theo dõi ngoại trú.",
+        "allergies": "",
+        "familyHistory": "",
+        "smokingStatus": null,
+        "alcoholUse": null,
+        "activityLevel": null,
+        "pregnancyStatus": null,
+        "isBreastfeeding": null,
+        "recentlyCompletedPackageIds": []
+      }
+    },
+    {
+      "caseId": "VC-043",
+      "split": "test",
+      "group": "respiratory",
+      "synthetic": true,
+      "profile": {
+        "age": 45,
+        "gender": "MALE",
+        "bmi": null,
+        "medicalHistory": "Ho tái diễn nhiều tuần, muốn khám chuyên khoa hô hấp.",
+        "allergies": "",
+        "familyHistory": "",
+        "smokingStatus": null,
+        "alcoholUse": null,
+        "activityLevel": null,
+        "pregnancyStatus": null,
+        "isBreastfeeding": null,
+        "recentlyCompletedPackageIds": []
+      }
+    },
+    {
+      "caseId": "VC-044",
+      "split": "test",
+      "group": "respiratory",
+      "synthetic": true,
+      "profile": {
+        "age": 37,
+        "gender": "FEMALE",
+        "bmi": null,
+        "medicalHistory": "Tiền sử viêm phế quản tái phát theo mùa.",
+        "allergies": "",
+        "familyHistory": "",
+        "smokingStatus": null,
+        "alcoholUse": null,
+        "activityLevel": null,
+        "pregnancyStatus": null,
+        "isBreastfeeding": null,
+        "recentlyCompletedPackageIds": []
+      }
+    },
+    {
+      "caseId": "VC-045",
+      "split": "test",
+      "group": "respiratory",
+      "synthetic": true,
+      "profile": {
+        "age": 56,
+        "gender": "MALE",
+        "bmi": null,
+        "medicalHistory": "Hút thuốc nhiều năm, muốn kiểm tra sức khỏe hô hấp.",
+        "allergies": "",
+        "familyHistory": "",
+        "smokingStatus": "DAILY",
+        "alcoholUse": null,
+        "activityLevel": null,
+        "pregnancyStatus": null,
+        "isBreastfeeding": null,
+        "recentlyCompletedPackageIds": []
+      }
+    },
+    {
+      "caseId": "VC-046",
+      "split": "test",
+      "group": "respiratory",
+      "synthetic": true,
+      "profile": {
+        "age": 24,
+        "gender": "FEMALE",
+        "bmi": null,
+        "medicalHistory": "Có tiền sử dị ứng hô hấp và hen từ nhỏ.",
+        "allergies": "",
+        "familyHistory": "",
+        "smokingStatus": null,
+        "alcoholUse": null,
+        "activityLevel": null,
+        "pregnancyStatus": null,
+        "isBreastfeeding": null,
+        "recentlyCompletedPackageIds": []
+      }
+    },
+    {
+      "caseId": "VC-047",
+      "split": "test",
+      "group": "respiratory",
+      "synthetic": true,
+      "profile": {
+        "age": 68,
+        "gender": "MALE",
+        "bmi": null,
+        "medicalHistory": "Đang theo dõi bệnh phổi mạn, cần kiểm tra theo hẹn.",
+        "allergies": "",
+        "familyHistory": "",
+        "smokingStatus": null,
+        "alcoholUse": null,
+        "activityLevel": null,
+        "pregnancyStatus": null,
+        "isBreastfeeding": null,
+        "recentlyCompletedPackageIds": []
+      }
+    },
+    {
+      "caseId": "VC-048",
+      "split": "development",
+      "group": "respiratory",
+      "synthetic": true,
+      "profile": {
+        "age": 40,
+        "gender": "FEMALE",
+        "bmi": null,
+        "medicalHistory": "Ho khan tái diễn khi tiếp xúc bụi, chưa có chẩn đoán.",
+        "allergies": "",
+        "familyHistory": "",
+        "smokingStatus": null,
+        "alcoholUse": null,
+        "activityLevel": null,
+        "pregnancyStatus": null,
+        "isBreastfeeding": null,
+        "recentlyCompletedPackageIds": []
+      }
+    },
+    {
+      "caseId": "VC-049",
+      "split": "test",
+      "group": "respiratory",
+      "synthetic": true,
+      "profile": {
+        "age": 51,
+        "gender": "MALE",
+        "bmi": null,
+        "medicalHistory": "Muốn kiểm tra phổi do có thời gian dài làm việc trong môi trường bụi.",
+        "allergies": "",
+        "familyHistory": "",
+        "smokingStatus": null,
+        "alcoholUse": null,
+        "activityLevel": null,
+        "pregnancyStatus": null,
+        "isBreastfeeding": null,
+        "recentlyCompletedPackageIds": []
+      }
+    },
+    {
+      "caseId": "VC-050",
+      "split": "test",
+      "group": "respiratory",
+      "synthetic": true,
+      "profile": {
+        "age": 32,
+        "gender": "FEMALE",
+        "bmi": null,
+        "medicalHistory": "Từng điều trị hen, muốn đánh giá lại mức độ kiểm soát.",
+        "allergies": "",
+        "familyHistory": "",
+        "smokingStatus": null,
+        "alcoholUse": null,
+        "activityLevel": null,
+        "pregnancyStatus": null,
+        "isBreastfeeding": null,
+        "recentlyCompletedPackageIds": []
+      }
+    },
+    {
+      "caseId": "VC-051",
+      "split": "test",
+      "group": "skin",
+      "synthetic": true,
+      "profile": {
+        "age": 23,
+        "gender": "FEMALE",
+        "bmi": null,
+        "medicalHistory": "Mụn trứng cá tái diễn và cần khám da liễu.",
+        "allergies": "",
+        "familyHistory": "",
+        "smokingStatus": null,
+        "alcoholUse": null,
+        "activityLevel": null,
+        "pregnancyStatus": null,
+        "isBreastfeeding": null,
+        "recentlyCompletedPackageIds": []
+      }
+    },
+    {
+      "caseId": "VC-052",
+      "split": "development",
+      "group": "skin",
+      "synthetic": true,
+      "profile": {
+        "age": 35,
+        "gender": "MALE",
+        "bmi": null,
+        "medicalHistory": "Có tiền sử viêm da cơ địa.",
+        "allergies": "",
+        "familyHistory": "",
+        "smokingStatus": null,
+        "alcoholUse": null,
+        "activityLevel": null,
+        "pregnancyStatus": null,
+        "isBreastfeeding": null,
+        "recentlyCompletedPackageIds": []
+      }
+    },
+    {
+      "caseId": "VC-053",
+      "split": "test",
+      "group": "skin",
+      "synthetic": true,
+      "profile": {
+        "age": 42,
+        "gender": "FEMALE",
+        "bmi": null,
+        "medicalHistory": "Da thường ngứa và nổi mẩn khi thay đổi thời tiết.",
+        "allergies": "",
+        "familyHistory": "",
+        "smokingStatus": null,
+        "alcoholUse": null,
+        "activityLevel": null,
+        "pregnancyStatus": null,
+        "isBreastfeeding": null,
+        "recentlyCompletedPackageIds": []
+      }
+    },
+    {
+      "caseId": "VC-054",
+      "split": "test",
+      "group": "skin",
+      "synthetic": true,
+      "profile": {
+        "age": 19,
+        "gender": "MALE",
+        "bmi": null,
+        "medicalHistory": "Mụn vùng mặt kéo dài, chưa điều trị chuyên khoa.",
+        "allergies": "",
+        "familyHistory": "",
+        "smokingStatus": null,
+        "alcoholUse": null,
+        "activityLevel": null,
+        "pregnancyStatus": null,
+        "isBreastfeeding": null,
+        "recentlyCompletedPackageIds": []
+      }
+    },
+    {
+      "caseId": "VC-055",
+      "split": "test",
+      "group": "skin",
+      "synthetic": true,
+      "profile": {
+        "age": 57,
+        "gender": "FEMALE",
+        "bmi": null,
+        "medicalHistory": "Có tiền sử vảy nến, đang theo dõi ngoại trú.",
+        "allergies": "",
+        "familyHistory": "",
+        "smokingStatus": null,
+        "alcoholUse": null,
+        "activityLevel": null,
+        "pregnancyStatus": null,
+        "isBreastfeeding": null,
+        "recentlyCompletedPackageIds": []
+      }
+    },
+    {
+      "caseId": "VC-056",
+      "split": "test",
+      "group": "skin",
+      "synthetic": true,
+      "profile": {
+        "age": 31,
+        "gender": "MALE",
+        "bmi": null,
+        "medicalHistory": "Viêm da tiếp xúc tái diễn khi làm việc.",
+        "allergies": "",
+        "familyHistory": "",
+        "smokingStatus": null,
+        "alcoholUse": null,
+        "activityLevel": null,
+        "pregnancyStatus": null,
+        "isBreastfeeding": null,
+        "recentlyCompletedPackageIds": []
+      }
+    },
+    {
+      "caseId": "VC-057",
+      "split": "test",
+      "group": "skin",
+      "synthetic": true,
+      "profile": {
+        "age": 28,
+        "gender": "FEMALE",
+        "bmi": null,
+        "medicalHistory": "Da nhạy cảm và kích ứng với một số mỹ phẩm.",
+        "allergies": "",
+        "familyHistory": "",
+        "smokingStatus": null,
+        "alcoholUse": null,
+        "activityLevel": null,
+        "pregnancyStatus": null,
+        "isBreastfeeding": null,
+        "recentlyCompletedPackageIds": []
+      }
+    },
+    {
+      "caseId": "VC-058",
+      "split": "development",
+      "group": "skin",
+      "synthetic": true,
+      "profile": {
+        "age": 66,
+        "gender": "MALE",
+        "bmi": null,
+        "medicalHistory": "Tổn thương da kéo dài, muốn khám để được đánh giá.",
+        "allergies": "",
+        "familyHistory": "",
+        "smokingStatus": null,
+        "alcoholUse": null,
+        "activityLevel": null,
+        "pregnancyStatus": null,
+        "isBreastfeeding": null,
+        "recentlyCompletedPackageIds": []
+      }
+    },
+    {
+      "caseId": "VC-059",
+      "split": "test",
+      "group": "skin",
+      "synthetic": true,
+      "profile": {
+        "age": 46,
+        "gender": "FEMALE",
+        "bmi": null,
+        "medicalHistory": "Từng điều trị chàm, hiện cần khám theo dõi.",
+        "allergies": "",
+        "familyHistory": "",
+        "smokingStatus": null,
+        "alcoholUse": null,
+        "activityLevel": null,
+        "pregnancyStatus": null,
+        "isBreastfeeding": null,
+        "recentlyCompletedPackageIds": []
+      }
+    },
+    {
+      "caseId": "VC-060",
+      "split": "test",
+      "group": "skin",
+      "synthetic": true,
+      "profile": {
+        "age": 38,
+        "gender": "MALE",
+        "bmi": null,
+        "medicalHistory": "Có tiền sử mề đay tái phát.",
+        "allergies": "",
+        "familyHistory": "",
+        "smokingStatus": null,
+        "alcoholUse": null,
+        "activityLevel": null,
+        "pregnancyStatus": null,
+        "isBreastfeeding": null,
+        "recentlyCompletedPackageIds": []
+      }
+    },
+    {
+      "caseId": "VC-061",
+      "split": "test",
+      "group": "eye_ent",
+      "synthetic": true,
+      "profile": {
+        "age": 26,
+        "gender": "FEMALE",
+        "bmi": null,
+        "medicalHistory": "Mỏi mắt và nhìn mờ khi làm việc màn hình kéo dài.",
+        "allergies": "",
+        "familyHistory": "",
+        "smokingStatus": null,
+        "alcoholUse": null,
+        "activityLevel": null,
+        "pregnancyStatus": null,
+        "isBreastfeeding": null,
+        "recentlyCompletedPackageIds": []
+      }
+    },
+    {
+      "caseId": "VC-062",
+      "split": "development",
+      "group": "eye_ent",
+      "synthetic": true,
+      "profile": {
+        "age": 65,
+        "gender": "MALE",
+        "bmi": null,
+        "medicalHistory": "Thị lực giảm dần, có tiền sử đục thủy tinh thể.",
+        "allergies": "",
+        "familyHistory": "",
+        "smokingStatus": null,
+        "alcoholUse": null,
+        "activityLevel": null,
+        "pregnancyStatus": null,
+        "isBreastfeeding": null,
+        "recentlyCompletedPackageIds": []
+      }
+    },
+    {
+      "caseId": "VC-063",
+      "split": "test",
+      "group": "eye_ent",
+      "synthetic": true,
+      "profile": {
+        "age": 34,
+        "gender": "MALE",
+        "bmi": null,
+        "medicalHistory": "Nghẹt mũi kéo dài, có tiền sử viêm xoang.",
+        "allergies": "",
+        "familyHistory": "",
+        "smokingStatus": null,
+        "alcoholUse": null,
+        "activityLevel": null,
+        "pregnancyStatus": null,
+        "isBreastfeeding": null,
+        "recentlyCompletedPackageIds": []
+      }
+    },
+    {
+      "caseId": "VC-064",
+      "split": "test",
+      "group": "eye_ent",
+      "synthetic": true,
+      "profile": {
+        "age": 48,
+        "gender": "FEMALE",
+        "bmi": null,
+        "medicalHistory": "Ù tai tái diễn và muốn kiểm tra tai mũi họng.",
+        "allergies": "",
+        "familyHistory": "",
+        "smokingStatus": null,
+        "alcoholUse": null,
+        "activityLevel": null,
+        "pregnancyStatus": null,
+        "isBreastfeeding": null,
+        "recentlyCompletedPackageIds": []
+      }
+    },
+    {
+      "caseId": "VC-065",
+      "split": "test",
+      "group": "eye_ent",
+      "synthetic": true,
+      "profile": {
+        "age": 21,
+        "gender": "MALE",
+        "bmi": null,
+        "medicalHistory": "Cận thị, muốn đo lại thị lực và kiểm tra mắt.",
+        "allergies": "",
+        "familyHistory": "",
+        "smokingStatus": null,
+        "alcoholUse": null,
+        "activityLevel": null,
+        "pregnancyStatus": null,
+        "isBreastfeeding": null,
+        "recentlyCompletedPackageIds": []
+      }
+    },
+    {
+      "caseId": "VC-066",
+      "split": "test",
+      "group": "eye_ent",
+      "synthetic": true,
+      "profile": {
+        "age": 59,
+        "gender": "FEMALE",
+        "bmi": null,
+        "medicalHistory": "Có tiền sử tăng nhãn áp, đang theo dõi.",
+        "allergies": "",
+        "familyHistory": "",
+        "smokingStatus": null,
+        "alcoholUse": null,
+        "activityLevel": null,
+        "pregnancyStatus": null,
+        "isBreastfeeding": null,
+        "recentlyCompletedPackageIds": []
+      }
+    },
+    {
+      "caseId": "VC-067",
+      "split": "test",
+      "group": "eye_ent",
+      "synthetic": true,
+      "profile": {
+        "age": 43,
+        "gender": "MALE",
+        "bmi": null,
+        "medicalHistory": "Viêm mũi dị ứng theo mùa, chưa khám gần đây.",
+        "allergies": "",
+        "familyHistory": "",
+        "smokingStatus": null,
+        "alcoholUse": null,
+        "activityLevel": null,
+        "pregnancyStatus": null,
+        "isBreastfeeding": null,
+        "recentlyCompletedPackageIds": []
+      }
+    },
+    {
+      "caseId": "VC-068",
+      "split": "development",
+      "group": "eye_ent",
+      "synthetic": true,
+      "profile": {
+        "age": 70,
+        "gender": "FEMALE",
+        "bmi": null,
+        "medicalHistory": "Nghe kém tăng dần trong thời gian dài.",
+        "allergies": "",
+        "familyHistory": "",
+        "smokingStatus": null,
+        "alcoholUse": null,
+        "activityLevel": null,
+        "pregnancyStatus": null,
+        "isBreastfeeding": null,
+        "recentlyCompletedPackageIds": []
+      }
+    },
+    {
+      "caseId": "VC-069",
+      "split": "test",
+      "group": "eye_ent",
+      "synthetic": true,
+      "profile": {
+        "age": 30,
+        "gender": "FEMALE",
+        "bmi": null,
+        "medicalHistory": "Khô mắt và khó chịu khi dùng kính áp tròng.",
+        "allergies": "Chưa xác định thành phần gây kích ứng kính áp tròng.",
+        "familyHistory": "",
+        "smokingStatus": null,
+        "alcoholUse": null,
+        "activityLevel": null,
+        "pregnancyStatus": null,
+        "isBreastfeeding": null,
+        "recentlyCompletedPackageIds": []
+      }
+    },
+    {
+      "caseId": "VC-070",
+      "split": "test",
+      "group": "eye_ent",
+      "synthetic": true,
+      "profile": {
+        "age": 52,
+        "gender": "MALE",
+        "bmi": null,
+        "medicalHistory": "Khàn tiếng tái diễn, muốn kiểm tra chuyên khoa.",
+        "allergies": "",
+        "familyHistory": "",
+        "smokingStatus": null,
+        "alcoholUse": null,
+        "activityLevel": null,
+        "pregnancyStatus": null,
+        "isBreastfeeding": null,
+        "recentlyCompletedPackageIds": []
+      }
+    },
+    {
+      "caseId": "VC-071",
+      "split": "test",
+      "group": "neurological",
+      "synthetic": true,
+      "profile": {
+        "age": 36,
+        "gender": "FEMALE",
+        "bmi": null,
+        "medicalHistory": "Có tiền sử đau nửa đầu, cần khám theo dõi.",
+        "allergies": "",
+        "familyHistory": "",
+        "smokingStatus": null,
+        "alcoholUse": null,
+        "activityLevel": null,
+        "pregnancyStatus": null,
+        "isBreastfeeding": null,
+        "recentlyCompletedPackageIds": []
+      }
+    },
+    {
+      "caseId": "VC-072",
+      "split": "development",
+      "group": "neurological",
+      "synthetic": true,
+      "profile": {
+        "age": 55,
+        "gender": "MALE",
+        "bmi": null,
+        "medicalHistory": "Tê bì bàn tay tái diễn, chưa rõ nguyên nhân.",
+        "allergies": "",
+        "familyHistory": "",
+        "smokingStatus": null,
+        "alcoholUse": null,
+        "activityLevel": null,
+        "pregnancyStatus": null,
+        "isBreastfeeding": null,
+        "recentlyCompletedPackageIds": []
+      }
+    },
+    {
+      "caseId": "VC-073",
+      "split": "test",
+      "group": "neurological",
+      "synthetic": true,
+      "profile": {
+        "age": 44,
+        "gender": "FEMALE",
+        "bmi": null,
+        "medicalHistory": "Mất ngủ kéo dài, muốn được đánh giá tại cơ sở y tế.",
+        "allergies": "",
+        "familyHistory": "",
+        "smokingStatus": null,
+        "alcoholUse": null,
+        "activityLevel": null,
+        "pregnancyStatus": null,
+        "isBreastfeeding": null,
+        "recentlyCompletedPackageIds": []
+      }
+    },
+    {
+      "caseId": "VC-074",
+      "split": "test",
+      "group": "neurological",
+      "synthetic": true,
+      "profile": {
+        "age": 63,
+        "gender": "MALE",
+        "bmi": null,
+        "medicalHistory": "Có tiền sử bệnh Parkinson, đang điều trị ngoại trú.",
+        "allergies": "",
+        "familyHistory": "",
+        "smokingStatus": null,
+        "alcoholUse": null,
+        "activityLevel": null,
+        "pregnancyStatus": null,
+        "isBreastfeeding": null,
+        "recentlyCompletedPackageIds": []
+      }
+    },
+    {
+      "caseId": "VC-075",
+      "split": "test",
+      "group": "neurological",
+      "synthetic": true,
+      "profile": {
+        "age": 28,
+        "gender": "MALE",
+        "bmi": null,
+        "medicalHistory": "Đau đầu tái diễn khi căng thẳng, chưa có chẩn đoán.",
+        "allergies": "",
+        "familyHistory": "",
+        "smokingStatus": null,
+        "alcoholUse": null,
+        "activityLevel": null,
+        "pregnancyStatus": null,
+        "isBreastfeeding": null,
+        "recentlyCompletedPackageIds": []
+      }
+    },
+    {
+      "caseId": "VC-076",
+      "split": "test",
+      "group": "neurological",
+      "synthetic": true,
+      "profile": {
+        "age": 49,
+        "gender": "FEMALE",
+        "bmi": null,
+        "medicalHistory": "Đã từng khám rối loạn tiền đình, muốn theo dõi lại.",
+        "allergies": "",
+        "familyHistory": "",
+        "smokingStatus": null,
+        "alcoholUse": null,
+        "activityLevel": null,
+        "pregnancyStatus": null,
+        "isBreastfeeding": null,
+        "recentlyCompletedPackageIds": []
+      }
+    },
+    {
+      "caseId": "VC-077",
+      "split": "test",
+      "group": "neurological",
+      "synthetic": true,
+      "profile": {
+        "age": 72,
+        "gender": "MALE",
+        "bmi": null,
+        "medicalHistory": "Gia đình ghi nhận giảm trí nhớ từ từ, cần đánh giá.",
+        "allergies": "",
+        "familyHistory": "",
+        "smokingStatus": null,
+        "alcoholUse": null,
+        "activityLevel": null,
+        "pregnancyStatus": null,
+        "isBreastfeeding": null,
+        "recentlyCompletedPackageIds": []
+      }
+    },
+    {
+      "caseId": "VC-078",
+      "split": "development",
+      "group": "neurological",
+      "synthetic": true,
+      "profile": {
+        "age": 39,
+        "gender": "FEMALE",
+        "bmi": null,
+        "medicalHistory": "Hay lo âu và ngủ không tốt trong nhiều tháng.",
+        "allergies": "",
+        "familyHistory": "",
+        "smokingStatus": null,
+        "alcoholUse": null,
+        "activityLevel": null,
+        "pregnancyStatus": null,
+        "isBreastfeeding": null,
+        "recentlyCompletedPackageIds": []
+      }
+    },
+    {
+      "caseId": "VC-079",
+      "split": "test",
+      "group": "neurological",
+      "synthetic": true,
+      "profile": {
+        "age": 58,
+        "gender": "MALE",
+        "bmi": null,
+        "medicalHistory": "Tê bàn chân kéo dài, muốn tìm dịch vụ khám phù hợp.",
+        "allergies": "",
+        "familyHistory": "",
+        "smokingStatus": null,
+        "alcoholUse": null,
+        "activityLevel": null,
+        "pregnancyStatus": null,
+        "isBreastfeeding": null,
+        "recentlyCompletedPackageIds": []
+      }
+    },
+    {
+      "caseId": "VC-080",
+      "split": "test",
+      "group": "neurological",
+      "synthetic": true,
+      "profile": {
+        "age": 33,
+        "gender": "FEMALE",
+        "bmi": null,
+        "medicalHistory": "Có tiền sử đau đầu mạn tính, hiện cần khám định kỳ.",
+        "allergies": "",
+        "familyHistory": "",
+        "smokingStatus": null,
+        "alcoholUse": null,
+        "activityLevel": null,
+        "pregnancyStatus": null,
+        "isBreastfeeding": null,
+        "recentlyCompletedPackageIds": []
+      }
+    },
+    {
+      "caseId": "VC-081",
+      "split": "test",
+      "group": "multiple_conditions",
+      "synthetic": true,
+      "profile": {
+        "age": 62,
+        "gender": "MALE",
+        "bmi": null,
+        "medicalHistory": "Tăng huyết áp, đái tháo đường type 2 và giảm thị lực.",
+        "allergies": "",
+        "familyHistory": "",
+        "smokingStatus": null,
+        "alcoholUse": null,
+        "activityLevel": null,
+        "pregnancyStatus": null,
+        "isBreastfeeding": null,
+        "recentlyCompletedPackageIds": []
+      }
+    },
+    {
+      "caseId": "VC-082",
+      "split": "development",
+      "group": "multiple_conditions",
+      "synthetic": true,
+      "profile": {
+        "age": 57,
+        "gender": "FEMALE",
+        "bmi": null,
+        "medicalHistory": "Tiền sử loãng xương và rối loạn tuyến giáp.",
+        "allergies": "",
+        "familyHistory": "",
+        "smokingStatus": null,
+        "alcoholUse": null,
+        "activityLevel": null,
+        "pregnancyStatus": null,
+        "isBreastfeeding": null,
+        "recentlyCompletedPackageIds": []
+      }
+    },
+    {
+      "caseId": "VC-083",
+      "split": "test",
+      "group": "multiple_conditions",
+      "synthetic": true,
+      "profile": {
+        "age": 48,
+        "gender": "MALE",
+        "bmi": null,
+        "medicalHistory": "Gan nhiễm mỡ, tăng lipid máu và đau thắt lưng.",
+        "allergies": "",
+        "familyHistory": "",
+        "smokingStatus": null,
+        "alcoholUse": null,
+        "activityLevel": null,
+        "pregnancyStatus": null,
+        "isBreastfeeding": null,
+        "recentlyCompletedPackageIds": []
+      }
+    },
+    {
+      "caseId": "VC-084",
+      "split": "test",
+      "group": "multiple_conditions",
+      "synthetic": true,
+      "profile": {
+        "age": 35,
+        "gender": "FEMALE",
+        "bmi": null,
+        "medicalHistory": "Hen phế quản, viêm mũi dị ứng và viêm da cơ địa.",
+        "allergies": "",
+        "familyHistory": "",
+        "smokingStatus": null,
+        "alcoholUse": null,
+        "activityLevel": null,
+        "pregnancyStatus": null,
+        "isBreastfeeding": null,
+        "recentlyCompletedPackageIds": []
+      }
+    },
+    {
+      "caseId": "VC-085",
+      "split": "test",
+      "group": "multiple_conditions",
+      "synthetic": true,
+      "profile": {
+        "age": 69,
+        "gender": "MALE",
+        "bmi": null,
+        "medicalHistory": "Đái tháo đường, bệnh phổi mạn và thoái hóa khớp gối.",
+        "allergies": "",
+        "familyHistory": "",
+        "smokingStatus": null,
+        "alcoholUse": null,
+        "activityLevel": null,
+        "pregnancyStatus": null,
+        "isBreastfeeding": null,
+        "recentlyCompletedPackageIds": []
+      }
+    },
+    {
+      "caseId": "VC-086",
+      "split": "test",
+      "group": "multiple_conditions",
+      "synthetic": true,
+      "profile": {
+        "age": 46,
+        "gender": "FEMALE",
+        "bmi": null,
+        "medicalHistory": "Trào ngược dạ dày, đau nửa đầu và khó ngủ.",
+        "allergies": "",
+        "familyHistory": "",
+        "smokingStatus": null,
+        "alcoholUse": null,
+        "activityLevel": null,
+        "pregnancyStatus": null,
+        "isBreastfeeding": null,
+        "recentlyCompletedPackageIds": []
+      }
+    },
+    {
+      "caseId": "VC-087",
+      "split": "test",
+      "group": "multiple_conditions",
+      "synthetic": true,
+      "profile": {
+        "age": 53,
+        "gender": "MALE",
+        "bmi": null,
+        "medicalHistory": "Có tiền sử gout và tăng huyết áp, đang điều trị ngoại trú.",
+        "allergies": "",
+        "familyHistory": "",
+        "smokingStatus": null,
+        "alcoholUse": null,
+        "activityLevel": null,
+        "pregnancyStatus": null,
+        "isBreastfeeding": null,
+        "recentlyCompletedPackageIds": []
+      }
+    },
+    {
+      "caseId": "VC-088",
+      "split": "development",
+      "group": "multiple_conditions",
+      "synthetic": true,
+      "profile": {
+        "age": 64,
+        "gender": "FEMALE",
+        "bmi": null,
+        "medicalHistory": "Thoái hóa khớp gối, giảm thị lực và nghe kém.",
+        "allergies": "",
+        "familyHistory": "",
+        "smokingStatus": null,
+        "alcoholUse": null,
+        "activityLevel": null,
+        "pregnancyStatus": null,
+        "isBreastfeeding": null,
+        "recentlyCompletedPackageIds": []
+      }
+    },
+    {
+      "caseId": "VC-089",
+      "split": "test",
+      "group": "multiple_conditions",
+      "synthetic": true,
+      "profile": {
+        "age": 41,
+        "gender": "MALE",
+        "bmi": null,
+        "medicalHistory": "Rối loạn mỡ máu kèm viêm xoang tái diễn.",
+        "allergies": "",
+        "familyHistory": "",
+        "smokingStatus": null,
+        "alcoholUse": null,
+        "activityLevel": null,
+        "pregnancyStatus": null,
+        "isBreastfeeding": null,
+        "recentlyCompletedPackageIds": []
+      }
+    },
+    {
+      "caseId": "VC-090",
+      "split": "test",
+      "group": "multiple_conditions",
+      "synthetic": true,
+      "profile": {
+        "age": 38,
+        "gender": "FEMALE",
+        "bmi": null,
+        "medicalHistory": "Suy giáp và viêm da tiếp xúc, cần kiểm tra theo dõi.",
+        "allergies": "",
+        "familyHistory": "",
+        "smokingStatus": null,
+        "alcoholUse": null,
+        "activityLevel": null,
+        "pregnancyStatus": null,
+        "isBreastfeeding": null,
+        "recentlyCompletedPackageIds": []
+      }
+    },
+    {
+      "caseId": "VC-091",
+      "split": "test",
+      "group": "boundary_and_sparse",
+      "synthetic": true,
+      "profile": {
+        "age": 8,
+        "gender": "MALE",
+        "bmi": null,
+        "medicalHistory": "Có tiền sử hen, gia đình muốn khám theo dõi.",
+        "allergies": "",
+        "familyHistory": "",
+        "smokingStatus": null,
+        "alcoholUse": null,
+        "activityLevel": null,
+        "pregnancyStatus": null,
+        "isBreastfeeding": null,
+        "recentlyCompletedPackageIds": []
+      }
+    },
+    {
+      "caseId": "VC-092",
+      "split": "development",
+      "group": "boundary_and_sparse",
+      "synthetic": true,
+      "profile": {
+        "age": 16,
+        "gender": "FEMALE",
+        "bmi": null,
+        "medicalHistory": "Mụn trứng cá và mỏi mắt khi học tập.",
+        "allergies": "",
+        "familyHistory": "",
+        "smokingStatus": null,
+        "alcoholUse": null,
+        "activityLevel": null,
+        "pregnancyStatus": null,
+        "isBreastfeeding": null,
+        "recentlyCompletedPackageIds": []
+      }
+    },
+    {
+      "caseId": "VC-093",
+      "split": "test",
+      "group": "boundary_and_sparse",
+      "synthetic": true,
+      "profile": {
+        "age": 17,
+        "gender": "MALE",
+        "bmi": null,
+        "medicalHistory": "Muốn kiểm tra sức khỏe định kỳ, không có tiền sử bệnh.",
+        "allergies": "",
+        "familyHistory": "",
+        "smokingStatus": null,
+        "alcoholUse": null,
+        "activityLevel": null,
+        "pregnancyStatus": null,
+        "isBreastfeeding": null,
+        "recentlyCompletedPackageIds": []
+      }
+    },
+    {
+      "caseId": "VC-094",
+      "split": "test",
+      "group": "boundary_and_sparse",
+      "synthetic": true,
+      "profile": {
+        "age": 18,
+        "gender": "FEMALE",
+        "bmi": null,
+        "medicalHistory": "Muốn kiểm tra sức khỏe định kỳ, chưa ghi nhận bệnh nền.",
+        "allergies": "",
+        "familyHistory": "",
+        "smokingStatus": null,
+        "alcoholUse": null,
+        "activityLevel": null,
+        "pregnancyStatus": null,
+        "isBreastfeeding": null,
+        "recentlyCompletedPackageIds": []
+      }
+    },
+    {
+      "caseId": "VC-095",
+      "split": "test",
+      "group": "boundary_and_sparse",
+      "synthetic": true,
+      "profile": {
+        "age": 82,
+        "gender": "FEMALE",
+        "bmi": null,
+        "medicalHistory": "Có tiền sử thoái hóa khớp và giảm thính lực.",
+        "allergies": "",
+        "familyHistory": "",
+        "smokingStatus": null,
+        "alcoholUse": null,
+        "activityLevel": null,
+        "pregnancyStatus": null,
+        "isBreastfeeding": null,
+        "recentlyCompletedPackageIds": []
+      }
+    },
+    {
+      "caseId": "VC-096",
+      "split": "test",
+      "group": "boundary_and_sparse",
+      "synthetic": true,
+      "profile": {
+        "age": null,
+        "gender": "OTHER",
+        "bmi": null,
+        "medicalHistory": "Chưa có thông tin về tiền sử sức khỏe.",
+        "allergies": "",
+        "familyHistory": "",
+        "smokingStatus": null,
+        "alcoholUse": null,
+        "activityLevel": null,
+        "pregnancyStatus": null,
+        "isBreastfeeding": null,
+        "recentlyCompletedPackageIds": []
+      }
+    },
+    {
+      "caseId": "VC-097",
+      "split": "test",
+      "group": "boundary_and_sparse",
+      "synthetic": true,
+      "profile": {
+        "age": 30,
+        "gender": "FEMALE",
+        "bmi": null,
+        "medicalHistory": "Đang mang thai, muốn tìm hiểu dịch vụ khám phù hợp.",
+        "allergies": "",
+        "familyHistory": "",
+        "smokingStatus": null,
+        "alcoholUse": null,
+        "activityLevel": null,
+        "pregnancyStatus": "PREGNANT",
+        "isBreastfeeding": null,
+        "recentlyCompletedPackageIds": []
+      }
+    },
+    {
+      "caseId": "VC-098",
+      "split": "development",
+      "group": "boundary_and_sparse",
+      "synthetic": true,
+      "profile": {
+        "age": 27,
+        "gender": "FEMALE",
+        "bmi": null,
+        "medicalHistory": "Đang cho con bú, có tiền sử viêm da cơ địa.",
+        "allergies": "",
+        "familyHistory": "",
+        "smokingStatus": null,
+        "alcoholUse": null,
+        "activityLevel": null,
+        "pregnancyStatus": null,
+        "isBreastfeeding": true,
+        "recentlyCompletedPackageIds": []
+      }
+    },
+    {
+      "caseId": "VC-099",
+      "split": "test",
+      "group": "boundary_and_sparse",
+      "synthetic": true,
+      "profile": {
+        "age": null,
+        "gender": "MALE",
+        "bmi": null,
+        "medicalHistory": "Có tiền sử tăng huyết áp nhưng chưa cung cấp ngày sinh.",
+        "allergies": "",
+        "familyHistory": "",
+        "smokingStatus": null,
+        "alcoholUse": null,
+        "activityLevel": null,
+        "pregnancyStatus": null,
+        "isBreastfeeding": null,
+        "recentlyCompletedPackageIds": []
+      }
+    },
+    {
+      "caseId": "VC-100",
+      "split": "test",
+      "group": "boundary_and_sparse",
+      "synthetic": true,
+      "profile": {
+        "age": 45,
+        "gender": "OTHER",
+        "bmi": null,
+        "medicalHistory": "",
+        "allergies": "",
+        "familyHistory": "",
+        "smokingStatus": null,
+        "alcoholUse": null,
+        "activityLevel": null,
+        "pregnancyStatus": null,
+        "isBreastfeeding": null,
+        "recentlyCompletedPackageIds": []
+      }
+    }
+  ]
+}

@@ -39,6 +39,12 @@ function load(file) {
 }
 
 async function main() {
+  const { AppointmentsService } = load('src/modules/appointments/appointments.service.ts');
+  const { ReceptionSummaryService } = load('src/modules/admin-dashboard/reception-summary.service.ts');
+  const { AdminDashboardService } = load('src/modules/admin-dashboard/admin-dashboard.service.ts');
+  const { SystemCatalogService } = load('src/modules/catalog/system-catalog.service.ts');
+  const { PackageReceptionSlotsService } = load('src/modules/bookings/package-reception-slots.service.ts');
+  const { BookingFlowService } = load('src/modules/bookings/booking-flow.service.ts');
   const { BookingService } = load('src/modules/bookings/booking.service.ts');
   const { ReceptionBookingService } = load('src/modules/bookings/reception-booking.service.ts');
   const { VouchersService } = load('src/modules/vouchers/vouchers.service.ts');
@@ -105,13 +111,14 @@ async function main() {
     const createPackage = (code, specialtyId, price) => tx.servicePackage.create({ data: {
       code: code + '-' + tag, slug: code.toLowerCase() + '-' + tag, name: 'Regression fixture',
       description: 'Regression fixture', imageUrl: 'https://example.test/package.png', specialtyId, price,
-      branchBookingMethodId: methods[code].id,
-      branchBookingMethods: { create: { branchBookingMethodId: methods[code].id } },
+      bookingMethodId: methods[code].bookingMethodId,
+      branches: { create: { branchId: branch.id } },
       receptionSchedules: { create: { branchId: branch.id, dayOfWeek: date.getUTCDay(), sessions: ['MORNING'] } },
     } });
     const specialtyPackage = await createPackage('SPECIALTY_EXAM', specialty.id, 200000);
     const healthPackage = await createPackage('HEALTH_PACKAGE', null, 300000);
-    const receptionSlot = await tx.packageReceptionSlot.create({ data: { branchId: branch.id, servicePackageId: healthPackage.id, date, startTime: time('08:00'), endTime: time('08:30'), capacity: 100 } });
+    const sourceSchedule = await tx.packageReceptionTime.findUniqueOrThrow({ where: { servicePackageId_branchId_dayOfWeek: { servicePackageId: healthPackage.id, branchId: branch.id, dayOfWeek: date.getUTCDay() } } });
+    const receptionSlot = await tx.packageReceptionSlot.create({ data: { receptionScheduleId: sourceSchedule.id, date, startTime: time('08:00'), endTime: time('08:30'), capacity: 100 } });
     const profile = name => tx.patientProfile.create({ data: { accountId: account.id, fullName: name, phoneNumber: '0900000000', dateOfBirth: new Date('2000-01-01'), gender: 'MALE' } });
     const config = { get: key => key === 'auth.secret' ? 'regression-only-secret' : key === 'PAYOS_TEST_AMOUNT' ? '0' : undefined, getOrThrow: () => ({ holdTtlMs: 600000 }) };
     const booking = new BookingService(client, config, new VouchersService(client), { attribution: async () => ({}) }, { recordAbandonedBooking: async () => undefined });
@@ -220,6 +227,108 @@ async function main() {
       await counter.recordPayment(staff.id, result.appointments[0].appointmentId, { method: 'cash', amount: result.totalAmount });
       const members = await tx.appointment.findMany({ where: { bookingOrderId: result.bookingOrderId } });
       assert.ok(members.every(item => item.status === 'CONFIRMED'));
+    });
+    await verify('package method is shared across branches and cannot be changed by branch deployment', async () => {
+      const chain = await tx.user.create({ data: { role: 'CHAIN_MANAGER' } });
+      const branch2 = await tx.branch.create({ data: { ...branch, id: undefined, code: 'TEST-B-' + tag, slug: 'test-b-' + tag } });
+      await tx.branchBookingMethod.create({ data: { branchId: branch2.id, bookingMethodId: methods.HEALTH_PACKAGE.bookingMethodId } });
+      const catalog = new SystemCatalogService(client, { isEnabled: () => false }, {});
+      const pkg = await catalog.create(chain.id, 'service-packages', {
+        name: 'Single method fixture', code: 'SINGLE-' + tag, slug: 'single-' + tag,
+        price: 100000, bookingMethodId: methods.HEALTH_PACKAGE.bookingMethodId,
+        branchIds: [branch.id, branch2.id],
+      });
+      assert.equal(pkg.bookingMethodId, methods.HEALTH_PACKAGE.bookingMethodId);
+      assert.equal(pkg.branches.length, 2);
+      await catalog.setBranchPackage(chain.id, pkg.id, { branchId: branch2.id, isDeployed: true, bookingMethodId: methods.SPECIALTY_EXAM.bookingMethodId, schedules: [] });
+      assert.equal((await tx.servicePackage.findUniqueOrThrow({ where: { id: pkg.id } })).bookingMethodId, methods.HEALTH_PACKAGE.bookingMethodId);
+      await catalog.setBranchPackage(chain.id, pkg.id, { branchId: branch2.id, isDeployed: false, schedules: [] });
+      assert.equal(await tx.packageBranch.count({ where: { servicePackageId: pkg.id } }), 1);
+      await assert.rejects(() => catalog.create(chain.id, 'service-packages', {
+        name: 'Invalid method', code: 'INVALID-' + tag, slug: 'invalid-' + tag,
+        bookingMethodId: methods.CONSULTATION.bookingMethodId, branchIds: [branch.id],
+      }), /hình thức/);
+    });
+    await verify('shared package seed stays one package and one method across branches', async () => {
+      const seedSource = fs.readFileSync(path.join(root, 'prisma/seed.mjs'), 'utf8');
+      const functionSource = seedSource.slice(seedSource.indexOf('async function upsertSharedSeedPackage('), seedSource.indexOf('\nconst DAY ='));
+      const upsertSeed = new Function(functionSource + '; return upsertSharedSeedPackage;')();
+      const create = {
+        code: 'SEED-' + tag, slug: 'seed-' + tag, name: 'Seed fixture', imageUrl: '', description: '',
+        price: 100000, bookingMethodId: methods.HEALTH_PACKAGE.bookingMethodId,
+        branches: { create: { branchId: branch.id } },
+        receptionSchedules: { create: [{ branchId: branch.id, dayOfWeek: 1, sessions: ['MORNING'] }] },
+      };
+      const input = { where: { code: create.code }, create, update: { bookingMethodId: create.bookingMethodId } };
+      const first = await upsertSeed(client, input);
+      const second = await upsertSeed(client, input);
+      assert.equal(first.id, second.id);
+      assert.equal(await tx.packageBranch.count({ where: { servicePackageId: first.id } }), 1);
+      const branch2 = await tx.branch.findFirstOrThrow({ where: { code: 'TEST-B-' + tag } });
+      const third = await upsertSeed(client, { ...input, create: { ...create, branches: { create: { branchId: branch2.id } }, receptionSchedules: { create: [{ branchId: branch2.id, dayOfWeek: 1, sessions: ['MORNING'] }] } } });
+      assert.equal(first.id, third.id);
+      assert.equal(await tx.packageBranch.count({ where: { servicePackageId: first.id } }), 2);
+    });
+    await verify('derived branches preserve staff isolation and patient API responses', async () => {
+      const branch2 = await tx.branch.findFirstOrThrow({ where: { code: 'TEST-B-' + tag } });
+      const otherSource = await tx.packageReceptionTime.create({ data: { branchId: branch2.id, servicePackageId: healthPackage.id, dayOfWeek: date.getUTCDay(), sessions: ['MORNING'] } });
+      const otherSlot = await tx.packageReceptionSlot.create({ data: { receptionScheduleId: otherSource.id, date, startTime: time('08:00'), endTime: time('08:30'), capacity: 100 } });
+      const person = await profile('Branch isolation');
+      const order = await tx.bookingOrder.create({ data: { accountId: account.id, orderCode: 'SCOPE-' + tag, totalAmount: 300000 } });
+      const otherAppointment = await tx.appointment.create({ data: { bookingOrderId: order.id, patientProfileId: person.id, bookingMethodId: methods.HEALTH_PACKAGE.bookingMethodId, receptionSlotId: otherSlot.id, servicePackageId: healthPackage.id, servicePrice: 300000 } });
+      const appointments = new AppointmentsService(client, {}, {}, {});
+      const visible = await appointments.receptionAppointments(staff.id, {});
+      assert.ok(visible.appointments.length > 0);
+      assert.ok(visible.appointments.every(row => row.branch.id === branch.id));
+      assert.ok(!visible.appointments.some(row => row.id === otherAppointment.id));
+      await assert.rejects(() => appointments.updateStatus(staff.id, otherAppointment.id, { status: 'CHECKED_IN' }), /chi nhánh/);
+      const mine = await patient.myAppointments(account.id);
+      assert.ok(mine.some(row => row.id === otherAppointment.id && row.branchId === branch2.id));
+      const summary = new ReceptionSummaryService(client);
+      await summary.getReceptionSummary(staff.id, { date: date.toISOString().slice(0,10), branchId: branch.id });
+    });
+    await verify('dashboard filters and branch comparison use slot joins', async () => {
+      const chain = await tx.user.findFirstOrThrow({ where: { role: 'CHAIN_MANAGER' } });
+      const dashboard = new AdminDashboardService(client, { isEnabled: () => false }, { get: () => undefined });
+      await dashboard.overview(chain.id, { branchId: branch.id });
+      await dashboard.compareBranches(chain.id, { timeFilter: 'month' });
+      await dashboard.getDemandMetrics(chain.id, { branchId: branch.id, timeFilter: 'month' });
+    });
+    await verify('editing and disabling reception schedules retain IDs and existing slots', async () => {
+      const chain = await tx.user.findFirstOrThrow({ where: { role: 'CHAIN_MANAGER' } });
+      const catalog = new SystemCatalogService(client, { isEnabled: () => false }, {});
+      const beforeIds = await tx.packageReceptionSlot.findMany({ where: { receptionScheduleId: sourceSchedule.id }, select: { id: true }, orderBy: { id: 'asc' } });
+      await catalog.setReceptionSchedules(chain.id, healthPackage.id, { branchId: branch.id, schedules: [] });
+      assert.equal((await tx.packageReceptionTime.findUniqueOrThrow({ where: { id: sourceSchedule.id } })).isActive, false);
+      const flow = new BookingFlowService(client);
+      const hidden = await flow.getBookingSlots({ bookingMethodCode: 'HEALTH_PACKAGE', branchId: branch.id, servicePackageId: healthPackage.id, date: date.toISOString().slice(0,10) });
+      assert.equal(hidden.slots.length, 0);
+      await catalog.setReceptionSchedules(chain.id, healthPackage.id, { branchId: branch.id, schedules: [{ dayOfWeek: date.getUTCDay(), sessions: ['MORNING'] }] });
+      const source = await tx.packageReceptionTime.findUniqueOrThrow({ where: { servicePackageId_branchId_dayOfWeek: { servicePackageId: healthPackage.id, branchId: branch.id, dayOfWeek: date.getUTCDay() } } });
+      assert.equal(source.id, sourceSchedule.id);
+      assert.equal(source.isActive, true);
+      assert.deepEqual(await tx.packageReceptionSlot.findMany({ where: { receptionScheduleId: sourceSchedule.id }, select: { id: true }, orderBy: { id: 'asc' } }), beforeIds);
+    });
+    await verify('slot generation, branch scope and capacity operate through the source schedule', async () => {
+      const manager = await tx.user.create({ data: { role: 'BRANCH_MANAGER', branchId: branch.id } });
+      const slotService = new PackageReceptionSlotsService(client);
+      const input = { servicePackageId: healthPackage.id, from: date.toISOString().slice(0,10), to: date.toISOString().slice(0,10), startTime: '09:00', endTime: '10:00', slotDurationMin: 30, capacity: 1 };
+      const generated = await slotService.create(manager.id, input);
+      assert.equal(generated.count, 2);
+      assert.equal((await slotService.create(manager.id, input)).count, 0);
+      const listed = await slotService.list(manager.id, healthPackage.id);
+      const target = listed.find(row => row.date.getTime() === date.getTime() && row.startTime.getTime() === time('09:00').getTime());
+      assert.ok(target);
+      assert.equal(target.servicePackageId, healthPackage.id);
+      assert.equal(target.receptionScheduleId, sourceSchedule.id);
+      const personForCapacity = await profile('Reception capacity B');
+      const bookingInput = { bookingMethodCode: 'HEALTH_PACKAGE', servicePackageId: healthPackage.id, receptionSlotId: target.id };
+      await booking.checkout(account.id, { ...bookingInput, patientProfileId: (await profile('Reception capacity A')).id });
+      await assert.rejects(() => booking.checkout(account.id, { ...bookingInput, patientProfileId: personForCapacity.id }), /hết chỗ/);
+      assert.equal((await tx.packageReceptionSlot.findUniqueOrThrow({ where: { id: target.id } })).occupiedCount, 1);
+      const branch2 = await tx.branch.findFirstOrThrow({ where: { code: 'TEST-B-' + tag } });
+      const manager2 = await tx.user.create({ data: { role: 'BRANCH_MANAGER', branchId: branch2.id } });
+      await assert.rejects(() => slotService.update(manager2.id, target.id, { capacity: 5 }), /chi nhánh/);
     });
     throw rollback;
   }, { timeout: 60000, isolationLevel: Prisma.TransactionIsolationLevel.Serializable }).catch(error => { if (error !== rollback) throw error; });

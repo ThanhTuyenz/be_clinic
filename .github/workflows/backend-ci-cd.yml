@@ -132,7 +132,7 @@ jobs:
 
             echo "[4/5] Khởi động dịch vụ phụ thuộc và chạy migration"
             docker compose --env-file .env.production up -d --wait --wait-timeout 180 redis rabbitmq
-            docker compose --env-file .env.production run --rm --no-deps server npx prisma migrate deploy
+            # docker compose --env-file .env.production run --rm --no-deps server npx prisma migrate deploy
 
             echo "[5/5] Cập nhật container và reload Nginx"
             docker compose --env-file .env.production up -d --remove-orphans --wait --wait-timeout 180

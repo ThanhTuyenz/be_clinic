@@ -1,3 +1,4 @@
+import { RECEPTION_SLOT_LOCATION_SELECT, appointmentBranch } from '../../../modules/appointments/helpers/appointment-branch.helper.js';
 import { Injectable, Logger, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import * as amqp from 'amqplib';
@@ -246,7 +247,7 @@ export class RabbitMqService implements OnModuleInit, OnModuleDestroy {
     const appt = await this.prisma.appointment.findUnique({
       where: { id: appointmentId },
       include: {
-        receptionSlot: true,
+        receptionSlot: { include: { receptionSchedule: RECEPTION_SLOT_LOCATION_SELECT.receptionSchedule } },
         patientProfile: {
           include: {
             account: { select: { email: true, phoneNumber: true } },
@@ -265,7 +266,6 @@ export class RabbitMqService implements OnModuleInit, OnModuleDestroy {
         },
         servicePackage: true,
         bookingOrder: { select: { invoice: { select: { totalAmount: true } } } },
-        branch: { select: { name: true, address: true, phoneNumber: true } },
       },
     });
 
@@ -283,7 +283,7 @@ export class RabbitMqService implements OnModuleInit, OnModuleDestroy {
     }
 
     const doctorSlot = appt.scheduleSlot;
-    const branch = doctorSlot?.schedule.branch ?? appt.branch;
+    const branch = doctorSlot?.schedule.branch ?? appointmentBranch(appt);
     const room = doctorSlot?.schedule.room;
 
     const appointmentDate =

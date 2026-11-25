@@ -10,11 +10,13 @@ import { SpecialtiesService } from './specialties.service.js';
 import { PackagesService } from './packages.service.js';
 import { SystemCatalogController } from './system-catalog.controller.js';
 import { SystemCatalogService } from './system-catalog.service.js';
+import { BranchGeocodingService } from './branch-geocoding.service.js';
+import { BranchManagementService } from './branch-management.service.js';
 
 @Module({
   imports: [PrismaModule, RedisModule, SearchModule, RecommendationModule],
   controllers: [BranchesController, SpecialtiesController, SystemCatalogController],
-  providers: [BranchesService, SpecialtiesService, PackagesService, SystemCatalogService],
+  providers: [BranchesService, SpecialtiesService, PackagesService, SystemCatalogService, BranchGeocodingService, BranchManagementService],
   exports: [BranchesService, SpecialtiesService, PackagesService],
 })
 export class CatalogModule {}

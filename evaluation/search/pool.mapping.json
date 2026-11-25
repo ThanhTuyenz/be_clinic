@@ -1,0 +1,5480 @@
+{
+  "metadata": {
+    "poolingDepth": 5,
+    "queryCount": 100,
+    "pairCount": 480,
+    "rawQueriesHash": "4b59c3692246779aeaca1227ebe78c8f7e69ba8c1fe1bb9c678e146fd05fba82",
+    "runHash": "5f7721f38546641ca465030476ed9cec957a8a906e50a058bf2f71b36d63fb40",
+    "catalogHash": "9c4e1b637d062b5ed0709ba4b0806e0a42f93b4e5417cae2cca86e5f252612ae",
+    "judgmentsGenerated": false,
+    "sourceAndRankHiddenInReviewSheet": true,
+    "independentlyReviewed": false,
+    "note": "Same assistant knows earlier results; hiding columns is not proof of blinded independent assessment. All actual Top-1/Top-5 results of these two runs are included. Do not infer catalog absence from an empty/nonrelevant pool."
+  },
+  "mapping": [
+    {
+      "reviewId": "V3-001-P01",
+      "caseId": "V3-001",
+      "packageId": 7,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 2
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-001-P02",
+      "caseId": "V3-001",
+      "packageId": 8,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 1
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-001-P03",
+      "caseId": "V3-001",
+      "packageId": 3,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 5
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-001-P04",
+      "caseId": "V3-001",
+      "packageId": 9,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 3
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-001-P05",
+      "caseId": "V3-001",
+      "packageId": 1,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 4
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-002-P01",
+      "caseId": "V3-002",
+      "packageId": 23,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 2
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-002-P02",
+      "caseId": "V3-002",
+      "packageId": 24,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 3
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-002-P03",
+      "caseId": "V3-002",
+      "packageId": 2,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 5
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-002-P04",
+      "caseId": "V3-002",
+      "packageId": 15,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 4
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-002-P05",
+      "caseId": "V3-002",
+      "packageId": 22,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 1
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-003-P01",
+      "caseId": "V3-003",
+      "packageId": 32,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 4
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-003-P02",
+      "caseId": "V3-003",
+      "packageId": 47,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 5
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-003-P03",
+      "caseId": "V3-003",
+      "packageId": 13,
+      "sources": [
+        {
+          "method": "KEYWORD_ONLY",
+          "rank": 2
+        },
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 2
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-003-P04",
+      "caseId": "V3-003",
+      "packageId": 14,
+      "sources": [
+        {
+          "method": "KEYWORD_ONLY",
+          "rank": 3
+        },
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 3
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-003-P05",
+      "caseId": "V3-003",
+      "packageId": 15,
+      "sources": [
+        {
+          "method": "KEYWORD_ONLY",
+          "rank": 1
+        },
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 1
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-004-P01",
+      "caseId": "V3-004",
+      "packageId": 40,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 2
+        },
+        {
+          "method": "KEYWORD_ONLY",
+          "rank": 2
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-004-P02",
+      "caseId": "V3-004",
+      "packageId": 42,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 1
+        },
+        {
+          "method": "KEYWORD_ONLY",
+          "rank": 1
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-004-P03",
+      "caseId": "V3-004",
+      "packageId": 46,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 4
+        },
+        {
+          "method": "KEYWORD_ONLY",
+          "rank": 4
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-004-P04",
+      "caseId": "V3-004",
+      "packageId": 48,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 5
+        },
+        {
+          "method": "KEYWORD_ONLY",
+          "rank": 5
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-004-P05",
+      "caseId": "V3-004",
+      "packageId": 41,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 3
+        },
+        {
+          "method": "KEYWORD_ONLY",
+          "rank": 3
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-005-P01",
+      "caseId": "V3-005",
+      "packageId": 2,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 5
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-005-P02",
+      "caseId": "V3-005",
+      "packageId": 12,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 1
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-005-P03",
+      "caseId": "V3-005",
+      "packageId": 43,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 4
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-005-P04",
+      "caseId": "V3-005",
+      "packageId": 10,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 2
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-005-P05",
+      "caseId": "V3-005",
+      "packageId": 11,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 3
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-006-P01",
+      "caseId": "V3-006",
+      "packageId": 48,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 4
+        },
+        {
+          "method": "KEYWORD_ONLY",
+          "rank": 4
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-006-P02",
+      "caseId": "V3-006",
+      "packageId": 34,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 2
+        },
+        {
+          "method": "KEYWORD_ONLY",
+          "rank": 2
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-006-P03",
+      "caseId": "V3-006",
+      "packageId": 32,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 5
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-006-P04",
+      "caseId": "V3-006",
+      "packageId": 35,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 3
+        },
+        {
+          "method": "KEYWORD_ONLY",
+          "rank": 3
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-006-P05",
+      "caseId": "V3-006",
+      "packageId": 36,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 1
+        },
+        {
+          "method": "KEYWORD_ONLY",
+          "rank": 1
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-007-P01",
+      "caseId": "V3-007",
+      "packageId": 45,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 4
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-007-P02",
+      "caseId": "V3-007",
+      "packageId": 30,
+      "sources": [
+        {
+          "method": "KEYWORD_ONLY",
+          "rank": 1
+        },
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 1
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-007-P03",
+      "caseId": "V3-007",
+      "packageId": 29,
+      "sources": [
+        {
+          "method": "KEYWORD_ONLY",
+          "rank": 3
+        },
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 3
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-007-P04",
+      "caseId": "V3-007",
+      "packageId": 28,
+      "sources": [
+        {
+          "method": "KEYWORD_ONLY",
+          "rank": 2
+        },
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 2
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-007-P05",
+      "caseId": "V3-007",
+      "packageId": 32,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 5
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-008-P01",
+      "caseId": "V3-008",
+      "packageId": 13,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 1
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-008-P02",
+      "caseId": "V3-008",
+      "packageId": 36,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 4
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-008-P03",
+      "caseId": "V3-008",
+      "packageId": 14,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 2
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-008-P04",
+      "caseId": "V3-008",
+      "packageId": 35,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 5
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-008-P05",
+      "caseId": "V3-008",
+      "packageId": 15,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 3
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-009-P01",
+      "caseId": "V3-009",
+      "packageId": 31,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 3
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-009-P02",
+      "caseId": "V3-009",
+      "packageId": 32,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 2
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-009-P03",
+      "caseId": "V3-009",
+      "packageId": 33,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 4
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-009-P04",
+      "caseId": "V3-009",
+      "packageId": 47,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 5
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-009-P05",
+      "caseId": "V3-009",
+      "packageId": 46,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 1
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-010-P01",
+      "caseId": "V3-010",
+      "packageId": 6,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 3
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-010-P02",
+      "caseId": "V3-010",
+      "packageId": 5,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 2
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-010-P03",
+      "caseId": "V3-010",
+      "packageId": 46,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 5
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-010-P04",
+      "caseId": "V3-010",
+      "packageId": 44,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 4
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-010-P05",
+      "caseId": "V3-010",
+      "packageId": 4,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 1
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-011-P01",
+      "caseId": "V3-011",
+      "packageId": 39,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 3
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-011-P02",
+      "caseId": "V3-011",
+      "packageId": 38,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 1
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-011-P03",
+      "caseId": "V3-011",
+      "packageId": 26,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 5
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-011-P04",
+      "caseId": "V3-011",
+      "packageId": 35,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 4
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-011-P05",
+      "caseId": "V3-011",
+      "packageId": 37,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 2
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-012-P01",
+      "caseId": "V3-012",
+      "packageId": 32,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 4
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-012-P02",
+      "caseId": "V3-012",
+      "packageId": 19,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 1
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-012-P03",
+      "caseId": "V3-012",
+      "packageId": 20,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 2
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-012-P04",
+      "caseId": "V3-012",
+      "packageId": 21,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 3
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-012-P05",
+      "caseId": "V3-012",
+      "packageId": 8,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 5
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-013-P01",
+      "caseId": "V3-013",
+      "packageId": 36,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 3
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-013-P02",
+      "caseId": "V3-013",
+      "packageId": 10,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 5
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-013-P03",
+      "caseId": "V3-013",
+      "packageId": 35,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 2
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-013-P04",
+      "caseId": "V3-013",
+      "packageId": 34,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 1
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-013-P05",
+      "caseId": "V3-013",
+      "packageId": 48,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 4
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-014-P01",
+      "caseId": "V3-014",
+      "packageId": 32,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 5
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-014-P02",
+      "caseId": "V3-014",
+      "packageId": 36,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 3
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-014-P03",
+      "caseId": "V3-014",
+      "packageId": 48,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 1
+        },
+        {
+          "method": "KEYWORD_ONLY",
+          "rank": 1
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-014-P04",
+      "caseId": "V3-014",
+      "packageId": 34,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 4
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-014-P05",
+      "caseId": "V3-014",
+      "packageId": 35,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 2
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-015-P01",
+      "caseId": "V3-015",
+      "packageId": 45,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 4
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-015-P02",
+      "caseId": "V3-015",
+      "packageId": 30,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 3
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-015-P03",
+      "caseId": "V3-015",
+      "packageId": 29,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 1
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-015-P04",
+      "caseId": "V3-015",
+      "packageId": 27,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 5
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-015-P05",
+      "caseId": "V3-015",
+      "packageId": 28,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 2
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-016-P01",
+      "caseId": "V3-016",
+      "packageId": 33,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 1
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-016-P02",
+      "caseId": "V3-016",
+      "packageId": 1,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 5
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-016-P03",
+      "caseId": "V3-016",
+      "packageId": 32,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 3
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-016-P04",
+      "caseId": "V3-016",
+      "packageId": 18,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 4
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-016-P05",
+      "caseId": "V3-016",
+      "packageId": 2,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 2
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-017-P01",
+      "caseId": "V3-017",
+      "packageId": 25,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 1
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-017-P02",
+      "caseId": "V3-017",
+      "packageId": 15,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 3
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-017-P03",
+      "caseId": "V3-017",
+      "packageId": 14,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 4
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-017-P04",
+      "caseId": "V3-017",
+      "packageId": 27,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 5
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-017-P05",
+      "caseId": "V3-017",
+      "packageId": 26,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 2
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-018-P01",
+      "caseId": "V3-018",
+      "packageId": 33,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 4
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-018-P02",
+      "caseId": "V3-018",
+      "packageId": 26,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 2
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-018-P03",
+      "caseId": "V3-018",
+      "packageId": 27,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 1
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-018-P04",
+      "caseId": "V3-018",
+      "packageId": 32,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 5
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-018-P05",
+      "caseId": "V3-018",
+      "packageId": 25,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 3
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-020-P01",
+      "caseId": "V3-020",
+      "packageId": 31,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 3
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-020-P02",
+      "caseId": "V3-020",
+      "packageId": 47,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 5
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-020-P03",
+      "caseId": "V3-020",
+      "packageId": 32,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 1
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-020-P04",
+      "caseId": "V3-020",
+      "packageId": 33,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 2
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-020-P05",
+      "caseId": "V3-020",
+      "packageId": 46,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 4
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-021-P01",
+      "caseId": "V3-021",
+      "packageId": 31,
+      "sources": [
+        {
+          "method": "KEYWORD_ONLY",
+          "rank": 2
+        },
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 2
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-021-P02",
+      "caseId": "V3-021",
+      "packageId": 39,
+      "sources": [
+        {
+          "method": "KEYWORD_ONLY",
+          "rank": 5
+        },
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 5
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-021-P03",
+      "caseId": "V3-021",
+      "packageId": 33,
+      "sources": [
+        {
+          "method": "KEYWORD_ONLY",
+          "rank": 1
+        },
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 1
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-021-P04",
+      "caseId": "V3-021",
+      "packageId": 9,
+      "sources": [
+        {
+          "method": "KEYWORD_ONLY",
+          "rank": 4
+        },
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 4
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-021-P05",
+      "caseId": "V3-021",
+      "packageId": 32,
+      "sources": [
+        {
+          "method": "KEYWORD_ONLY",
+          "rank": 3
+        },
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 3
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-022-P01",
+      "caseId": "V3-022",
+      "packageId": 34,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 4
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-022-P02",
+      "caseId": "V3-022",
+      "packageId": 38,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 3
+        },
+        {
+          "method": "KEYWORD_ONLY",
+          "rank": 3
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-022-P03",
+      "caseId": "V3-022",
+      "packageId": 39,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 1
+        },
+        {
+          "method": "KEYWORD_ONLY",
+          "rank": 1
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-022-P04",
+      "caseId": "V3-022",
+      "packageId": 35,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 5
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-022-P05",
+      "caseId": "V3-022",
+      "packageId": 37,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 2
+        },
+        {
+          "method": "KEYWORD_ONLY",
+          "rank": 2
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-023-P01",
+      "caseId": "V3-023",
+      "packageId": 28,
+      "sources": [
+        {
+          "method": "KEYWORD_ONLY",
+          "rank": 2
+        },
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 2
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-023-P02",
+      "caseId": "V3-023",
+      "packageId": 29,
+      "sources": [
+        {
+          "method": "KEYWORD_ONLY",
+          "rank": 3
+        },
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 3
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-023-P03",
+      "caseId": "V3-023",
+      "packageId": 38,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 5
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-023-P04",
+      "caseId": "V3-023",
+      "packageId": 43,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 4
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-023-P05",
+      "caseId": "V3-023",
+      "packageId": 30,
+      "sources": [
+        {
+          "method": "KEYWORD_ONLY",
+          "rank": 1
+        },
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 1
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-024-P01",
+      "caseId": "V3-024",
+      "packageId": 26,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 4
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-024-P02",
+      "caseId": "V3-024",
+      "packageId": 13,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 2
+        },
+        {
+          "method": "KEYWORD_ONLY",
+          "rank": 2
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-024-P03",
+      "caseId": "V3-024",
+      "packageId": 25,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 5
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-024-P04",
+      "caseId": "V3-024",
+      "packageId": 15,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 1
+        },
+        {
+          "method": "KEYWORD_ONLY",
+          "rank": 1
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-024-P05",
+      "caseId": "V3-024",
+      "packageId": 14,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 3
+        },
+        {
+          "method": "KEYWORD_ONLY",
+          "rank": 3
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-025-P01",
+      "caseId": "V3-025",
+      "packageId": 34,
+      "sources": [
+        {
+          "method": "KEYWORD_ONLY",
+          "rank": 2
+        },
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 2
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-025-P02",
+      "caseId": "V3-025",
+      "packageId": 37,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 5
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-025-P03",
+      "caseId": "V3-025",
+      "packageId": 36,
+      "sources": [
+        {
+          "method": "KEYWORD_ONLY",
+          "rank": 1
+        },
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 1
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-025-P04",
+      "caseId": "V3-025",
+      "packageId": 35,
+      "sources": [
+        {
+          "method": "KEYWORD_ONLY",
+          "rank": 3
+        },
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 3
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-025-P05",
+      "caseId": "V3-025",
+      "packageId": 48,
+      "sources": [
+        {
+          "method": "KEYWORD_ONLY",
+          "rank": 4
+        },
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 4
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-026-P01",
+      "caseId": "V3-026",
+      "packageId": 31,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 5
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-026-P02",
+      "caseId": "V3-026",
+      "packageId": 15,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 4
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-026-P03",
+      "caseId": "V3-026",
+      "packageId": 7,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 1
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-026-P04",
+      "caseId": "V3-026",
+      "packageId": 8,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 2
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-026-P05",
+      "caseId": "V3-026",
+      "packageId": 9,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 3
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-027-P01",
+      "caseId": "V3-027",
+      "packageId": 7,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 5
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-027-P02",
+      "caseId": "V3-027",
+      "packageId": 40,
+      "sources": [
+        {
+          "method": "KEYWORD_ONLY",
+          "rank": 2
+        },
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 2
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-027-P03",
+      "caseId": "V3-027",
+      "packageId": 8,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 4
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-027-P04",
+      "caseId": "V3-027",
+      "packageId": 42,
+      "sources": [
+        {
+          "method": "KEYWORD_ONLY",
+          "rank": 1
+        },
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 1
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-027-P05",
+      "caseId": "V3-027",
+      "packageId": 41,
+      "sources": [
+        {
+          "method": "KEYWORD_ONLY",
+          "rank": 3
+        },
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 3
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-028-P01",
+      "caseId": "V3-028",
+      "packageId": 43,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 1
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-028-P02",
+      "caseId": "V3-028",
+      "packageId": 44,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 2
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-028-P03",
+      "caseId": "V3-028",
+      "packageId": 6,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 5
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-028-P04",
+      "caseId": "V3-028",
+      "packageId": 14,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 3
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-028-P05",
+      "caseId": "V3-028",
+      "packageId": 13,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 4
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-029-P01",
+      "caseId": "V3-029",
+      "packageId": 37,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 5
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-029-P02",
+      "caseId": "V3-029",
+      "packageId": 11,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 4
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-029-P03",
+      "caseId": "V3-029",
+      "packageId": 12,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 3
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-029-P04",
+      "caseId": "V3-029",
+      "packageId": 10,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 1
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-029-P05",
+      "caseId": "V3-029",
+      "packageId": 43,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 2
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-030-P01",
+      "caseId": "V3-030",
+      "packageId": 44,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 1
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-030-P02",
+      "caseId": "V3-030",
+      "packageId": 6,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 4
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-030-P03",
+      "caseId": "V3-030",
+      "packageId": 14,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 5
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-030-P04",
+      "caseId": "V3-030",
+      "packageId": 4,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 3
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-030-P05",
+      "caseId": "V3-030",
+      "packageId": 5,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 2
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-031-P01",
+      "caseId": "V3-031",
+      "packageId": 45,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 3
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-031-P02",
+      "caseId": "V3-031",
+      "packageId": 43,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 5
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-031-P03",
+      "caseId": "V3-031",
+      "packageId": 28,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 4
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-031-P04",
+      "caseId": "V3-031",
+      "packageId": 48,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 1
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-031-P05",
+      "caseId": "V3-031",
+      "packageId": 29,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 2
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-032-P01",
+      "caseId": "V3-032",
+      "packageId": 2,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 2
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-032-P02",
+      "caseId": "V3-032",
+      "packageId": 3,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 3
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-032-P03",
+      "caseId": "V3-032",
+      "packageId": 1,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 1
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-032-P04",
+      "caseId": "V3-032",
+      "packageId": 43,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 4
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-032-P05",
+      "caseId": "V3-032",
+      "packageId": 21,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 5
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-033-P01",
+      "caseId": "V3-033",
+      "packageId": 1,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 3
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-033-P02",
+      "caseId": "V3-033",
+      "packageId": 3,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 4
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-033-P03",
+      "caseId": "V3-033",
+      "packageId": 2,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 2
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-033-P04",
+      "caseId": "V3-033",
+      "packageId": 43,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 1
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-033-P05",
+      "caseId": "V3-033",
+      "packageId": 33,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 5
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-034-P01",
+      "caseId": "V3-034",
+      "packageId": 45,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 3
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-034-P02",
+      "caseId": "V3-034",
+      "packageId": 48,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 5
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-034-P03",
+      "caseId": "V3-034",
+      "packageId": 28,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 1
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-034-P04",
+      "caseId": "V3-034",
+      "packageId": 30,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 4
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-034-P05",
+      "caseId": "V3-034",
+      "packageId": 29,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 2
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-035-P01",
+      "caseId": "V3-035",
+      "packageId": 23,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 5
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-035-P02",
+      "caseId": "V3-035",
+      "packageId": 22,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 4
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-035-P03",
+      "caseId": "V3-035",
+      "packageId": 17,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 2
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-035-P04",
+      "caseId": "V3-035",
+      "packageId": 16,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 1
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-035-P05",
+      "caseId": "V3-035",
+      "packageId": 18,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 3
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-037-P01",
+      "caseId": "V3-037",
+      "packageId": 40,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 2
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-037-P02",
+      "caseId": "V3-037",
+      "packageId": 47,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 4
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-037-P03",
+      "caseId": "V3-037",
+      "packageId": 41,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 1
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-037-P04",
+      "caseId": "V3-037",
+      "packageId": 8,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 5
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-037-P05",
+      "caseId": "V3-037",
+      "packageId": 42,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 3
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-038-P01",
+      "caseId": "V3-038",
+      "packageId": 41,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 1
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-038-P02",
+      "caseId": "V3-038",
+      "packageId": 19,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 5
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-038-P03",
+      "caseId": "V3-038",
+      "packageId": 20,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 4
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-038-P04",
+      "caseId": "V3-038",
+      "packageId": 42,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 3
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-038-P05",
+      "caseId": "V3-038",
+      "packageId": 40,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 2
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-039-P01",
+      "caseId": "V3-039",
+      "packageId": 35,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 3
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-039-P02",
+      "caseId": "V3-039",
+      "packageId": 34,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 2
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-039-P03",
+      "caseId": "V3-039",
+      "packageId": 16,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 5
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-039-P04",
+      "caseId": "V3-039",
+      "packageId": 48,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 4
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-039-P05",
+      "caseId": "V3-039",
+      "packageId": 36,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 1
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-040-P01",
+      "caseId": "V3-040",
+      "packageId": 3,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 4
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-040-P02",
+      "caseId": "V3-040",
+      "packageId": 33,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 1
+        },
+        {
+          "method": "KEYWORD_ONLY",
+          "rank": 1
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-040-P03",
+      "caseId": "V3-040",
+      "packageId": 15,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 5
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-040-P04",
+      "caseId": "V3-040",
+      "packageId": 39,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 3
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-040-P05",
+      "caseId": "V3-040",
+      "packageId": 36,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 2
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-041-P01",
+      "caseId": "V3-041",
+      "packageId": 44,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 5
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-041-P02",
+      "caseId": "V3-041",
+      "packageId": 4,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 2
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-041-P03",
+      "caseId": "V3-041",
+      "packageId": 2,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 4
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-041-P04",
+      "caseId": "V3-041",
+      "packageId": 6,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 3
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-041-P05",
+      "caseId": "V3-041",
+      "packageId": 5,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 1
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-042-P01",
+      "caseId": "V3-042",
+      "packageId": 46,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 5
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-042-P02",
+      "caseId": "V3-042",
+      "packageId": 33,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 4
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-042-P03",
+      "caseId": "V3-042",
+      "packageId": 29,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 3
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-042-P04",
+      "caseId": "V3-042",
+      "packageId": 30,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 2
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-042-P05",
+      "caseId": "V3-042",
+      "packageId": 28,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 1
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-043-P01",
+      "caseId": "V3-043",
+      "packageId": 34,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 2
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-043-P02",
+      "caseId": "V3-043",
+      "packageId": 1,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 5
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-043-P03",
+      "caseId": "V3-043",
+      "packageId": 36,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 4
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-043-P04",
+      "caseId": "V3-043",
+      "packageId": 48,
+      "sources": [
+        {
+          "method": "KEYWORD_ONLY",
+          "rank": 1
+        },
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 1
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-043-P05",
+      "caseId": "V3-043",
+      "packageId": 35,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 3
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-044-P01",
+      "caseId": "V3-044",
+      "packageId": 48,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 2
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-044-P02",
+      "caseId": "V3-044",
+      "packageId": 20,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 5
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-044-P03",
+      "caseId": "V3-044",
+      "packageId": 34,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 4
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-044-P04",
+      "caseId": "V3-044",
+      "packageId": 21,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 3
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-044-P05",
+      "caseId": "V3-044",
+      "packageId": 19,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 1
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-045-P01",
+      "caseId": "V3-045",
+      "packageId": 33,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 2
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-045-P02",
+      "caseId": "V3-045",
+      "packageId": 47,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 5
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-045-P03",
+      "caseId": "V3-045",
+      "packageId": 31,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 3
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-045-P04",
+      "caseId": "V3-045",
+      "packageId": 32,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 1
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-045-P05",
+      "caseId": "V3-045",
+      "packageId": 29,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 4
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-046-P01",
+      "caseId": "V3-046",
+      "packageId": 41,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 3
+        },
+        {
+          "method": "KEYWORD_ONLY",
+          "rank": 3
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-046-P02",
+      "caseId": "V3-046",
+      "packageId": 42,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 1
+        },
+        {
+          "method": "KEYWORD_ONLY",
+          "rank": 1
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-046-P03",
+      "caseId": "V3-046",
+      "packageId": 40,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 2
+        },
+        {
+          "method": "KEYWORD_ONLY",
+          "rank": 2
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-046-P04",
+      "caseId": "V3-046",
+      "packageId": 48,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 5
+        },
+        {
+          "method": "KEYWORD_ONLY",
+          "rank": 5
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-046-P05",
+      "caseId": "V3-046",
+      "packageId": 46,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 4
+        },
+        {
+          "method": "KEYWORD_ONLY",
+          "rank": 4
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-047-P01",
+      "caseId": "V3-047",
+      "packageId": 10,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 5
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-047-P02",
+      "caseId": "V3-047",
+      "packageId": 26,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 2
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-047-P03",
+      "caseId": "V3-047",
+      "packageId": 25,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 1
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-047-P04",
+      "caseId": "V3-047",
+      "packageId": 11,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 4
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-047-P05",
+      "caseId": "V3-047",
+      "packageId": 27,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 3
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-048-P01",
+      "caseId": "V3-048",
+      "packageId": 45,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 1
+        },
+        {
+          "method": "KEYWORD_ONLY",
+          "rank": 1
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-048-P02",
+      "caseId": "V3-048",
+      "packageId": 29,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 3
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-048-P03",
+      "caseId": "V3-048",
+      "packageId": 25,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 5
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-048-P04",
+      "caseId": "V3-048",
+      "packageId": 30,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 4
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-048-P05",
+      "caseId": "V3-048",
+      "packageId": 28,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 2
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-049-P01",
+      "caseId": "V3-049",
+      "packageId": 39,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 1
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-049-P02",
+      "caseId": "V3-049",
+      "packageId": 37,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 3
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-049-P03",
+      "caseId": "V3-049",
+      "packageId": 21,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 4
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-049-P04",
+      "caseId": "V3-049",
+      "packageId": 38,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 2
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-049-P05",
+      "caseId": "V3-049",
+      "packageId": 20,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 5
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-050-P01",
+      "caseId": "V3-050",
+      "packageId": 22,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 2
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-050-P02",
+      "caseId": "V3-050",
+      "packageId": 26,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 4
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-050-P03",
+      "caseId": "V3-050",
+      "packageId": 32,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 5
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-050-P04",
+      "caseId": "V3-050",
+      "packageId": 23,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 1
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-050-P05",
+      "caseId": "V3-050",
+      "packageId": 38,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 3
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-051-P01",
+      "caseId": "V3-051",
+      "packageId": 8,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 5
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-051-P02",
+      "caseId": "V3-051",
+      "packageId": 36,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 4
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-051-P03",
+      "caseId": "V3-051",
+      "packageId": 48,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 3
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-051-P04",
+      "caseId": "V3-051",
+      "packageId": 34,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 2
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-051-P05",
+      "caseId": "V3-051",
+      "packageId": 35,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 1
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-052-P01",
+      "caseId": "V3-052",
+      "packageId": 22,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 2
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-052-P02",
+      "caseId": "V3-052",
+      "packageId": 20,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 5
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-052-P03",
+      "caseId": "V3-052",
+      "packageId": 47,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 4
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-052-P04",
+      "caseId": "V3-052",
+      "packageId": 24,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 3
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-052-P05",
+      "caseId": "V3-052",
+      "packageId": 23,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 1
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-053-P01",
+      "caseId": "V3-053",
+      "packageId": 33,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 4
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-053-P02",
+      "caseId": "V3-053",
+      "packageId": 47,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 5
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-053-P03",
+      "caseId": "V3-053",
+      "packageId": 46,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 1
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-053-P04",
+      "caseId": "V3-053",
+      "packageId": 32,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 2
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-053-P05",
+      "caseId": "V3-053",
+      "packageId": 31,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 3
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-054-P01",
+      "caseId": "V3-054",
+      "packageId": 43,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 4
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-054-P02",
+      "caseId": "V3-054",
+      "packageId": 1,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 5
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-054-P03",
+      "caseId": "V3-054",
+      "packageId": 13,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 2
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-054-P04",
+      "caseId": "V3-054",
+      "packageId": 15,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 1
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-054-P05",
+      "caseId": "V3-054",
+      "packageId": 14,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 3
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-055-P01",
+      "caseId": "V3-055",
+      "packageId": 2,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 4
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-055-P02",
+      "caseId": "V3-055",
+      "packageId": 8,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 1
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-055-P03",
+      "caseId": "V3-055",
+      "packageId": 7,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 3
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-055-P04",
+      "caseId": "V3-055",
+      "packageId": 43,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 5
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-055-P05",
+      "caseId": "V3-055",
+      "packageId": 9,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 2
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-056-P01",
+      "caseId": "V3-056",
+      "packageId": 26,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 2
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-056-P02",
+      "caseId": "V3-056",
+      "packageId": 36,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 5
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-056-P03",
+      "caseId": "V3-056",
+      "packageId": 25,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 1
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-056-P04",
+      "caseId": "V3-056",
+      "packageId": 35,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 3
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-056-P05",
+      "caseId": "V3-056",
+      "packageId": 34,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 4
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-057-P01",
+      "caseId": "V3-057",
+      "packageId": 36,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 2
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-057-P02",
+      "caseId": "V3-057",
+      "packageId": 46,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 3
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-057-P03",
+      "caseId": "V3-057",
+      "packageId": 47,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 1
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-057-P04",
+      "caseId": "V3-057",
+      "packageId": 35,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 5
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-057-P05",
+      "caseId": "V3-057",
+      "packageId": 32,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 4
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-058-P01",
+      "caseId": "V3-058",
+      "packageId": 3,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 3
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-058-P02",
+      "caseId": "V3-058",
+      "packageId": 2,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 2
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-058-P03",
+      "caseId": "V3-058",
+      "packageId": 1,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 4
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-058-P04",
+      "caseId": "V3-058",
+      "packageId": 43,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 1
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-058-P05",
+      "caseId": "V3-058",
+      "packageId": 18,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 5
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-059-P01",
+      "caseId": "V3-059",
+      "packageId": 14,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 1
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-059-P02",
+      "caseId": "V3-059",
+      "packageId": 13,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 2
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-059-P03",
+      "caseId": "V3-059",
+      "packageId": 15,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 4
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-059-P04",
+      "caseId": "V3-059",
+      "packageId": 32,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 5
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-059-P05",
+      "caseId": "V3-059",
+      "packageId": 5,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 3
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-060-P01",
+      "caseId": "V3-060",
+      "packageId": 31,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 4
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-060-P02",
+      "caseId": "V3-060",
+      "packageId": 2,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 3
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-060-P03",
+      "caseId": "V3-060",
+      "packageId": 1,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 5
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-060-P04",
+      "caseId": "V3-060",
+      "packageId": 46,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 2
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-060-P05",
+      "caseId": "V3-060",
+      "packageId": 32,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 1
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-061-P01",
+      "caseId": "V3-061",
+      "packageId": 40,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 2
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-061-P02",
+      "caseId": "V3-061",
+      "packageId": 41,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 1
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-061-P03",
+      "caseId": "V3-061",
+      "packageId": 42,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 3
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-061-P04",
+      "caseId": "V3-061",
+      "packageId": 25,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 4
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-061-P05",
+      "caseId": "V3-061",
+      "packageId": 26,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 5
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-062-P01",
+      "caseId": "V3-062",
+      "packageId": 32,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 2
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-062-P02",
+      "caseId": "V3-062",
+      "packageId": 46,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 1
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-062-P03",
+      "caseId": "V3-062",
+      "packageId": 47,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 5
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-062-P04",
+      "caseId": "V3-062",
+      "packageId": 33,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 4
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-062-P05",
+      "caseId": "V3-062",
+      "packageId": 31,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 3
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-063-P01",
+      "caseId": "V3-063",
+      "packageId": 30,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 4
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-063-P02",
+      "caseId": "V3-063",
+      "packageId": 29,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 3
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-063-P03",
+      "caseId": "V3-063",
+      "packageId": 45,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 1
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-063-P04",
+      "caseId": "V3-063",
+      "packageId": 43,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 5
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-063-P05",
+      "caseId": "V3-063",
+      "packageId": 28,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 2
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-064-P01",
+      "caseId": "V3-064",
+      "packageId": 47,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 1
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-064-P02",
+      "caseId": "V3-064",
+      "packageId": 44,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 4
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-064-P03",
+      "caseId": "V3-064",
+      "packageId": 14,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 5
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-064-P04",
+      "caseId": "V3-064",
+      "packageId": 15,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 3
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-064-P05",
+      "caseId": "V3-064",
+      "packageId": 13,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 2
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-065-P01",
+      "caseId": "V3-065",
+      "packageId": 2,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 5
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-065-P02",
+      "caseId": "V3-065",
+      "packageId": 36,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 3
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-065-P03",
+      "caseId": "V3-065",
+      "packageId": 34,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 4
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-065-P04",
+      "caseId": "V3-065",
+      "packageId": 35,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 2
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-065-P05",
+      "caseId": "V3-065",
+      "packageId": 48,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 1
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-066-P01",
+      "caseId": "V3-066",
+      "packageId": 24,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 3
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-066-P02",
+      "caseId": "V3-066",
+      "packageId": 23,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 2
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-066-P03",
+      "caseId": "V3-066",
+      "packageId": 47,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 4
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-066-P04",
+      "caseId": "V3-066",
+      "packageId": 32,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 5
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-066-P05",
+      "caseId": "V3-066",
+      "packageId": 22,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 1
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-067-P01",
+      "caseId": "V3-067",
+      "packageId": 42,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 1
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-067-P02",
+      "caseId": "V3-067",
+      "packageId": 26,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 5
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-067-P03",
+      "caseId": "V3-067",
+      "packageId": 25,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 4
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-067-P04",
+      "caseId": "V3-067",
+      "packageId": 41,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 3
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-067-P05",
+      "caseId": "V3-067",
+      "packageId": 40,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 2
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-068-P01",
+      "caseId": "V3-068",
+      "packageId": 4,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 3
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-068-P02",
+      "caseId": "V3-068",
+      "packageId": 5,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 4
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-068-P03",
+      "caseId": "V3-068",
+      "packageId": 6,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 1
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-068-P04",
+      "caseId": "V3-068",
+      "packageId": 1,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 5
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-068-P05",
+      "caseId": "V3-068",
+      "packageId": 44,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 2
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-069-P01",
+      "caseId": "V3-069",
+      "packageId": 7,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 5
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-069-P02",
+      "caseId": "V3-069",
+      "packageId": 8,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 3
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-069-P03",
+      "caseId": "V3-069",
+      "packageId": 43,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 2
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-069-P04",
+      "caseId": "V3-069",
+      "packageId": 3,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 4
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-069-P05",
+      "caseId": "V3-069",
+      "packageId": 9,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 1
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-070-P01",
+      "caseId": "V3-070",
+      "packageId": 29,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 3
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-070-P02",
+      "caseId": "V3-070",
+      "packageId": 45,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 1
+        },
+        {
+          "method": "KEYWORD_ONLY",
+          "rank": 1
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-070-P03",
+      "caseId": "V3-070",
+      "packageId": 33,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 5
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-070-P04",
+      "caseId": "V3-070",
+      "packageId": 30,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 4
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-070-P05",
+      "caseId": "V3-070",
+      "packageId": 28,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 2
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-071-P01",
+      "caseId": "V3-071",
+      "packageId": 32,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 5
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-071-P02",
+      "caseId": "V3-071",
+      "packageId": 2,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 4
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-071-P03",
+      "caseId": "V3-071",
+      "packageId": 18,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 1
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-071-P04",
+      "caseId": "V3-071",
+      "packageId": 16,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 3
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-071-P05",
+      "caseId": "V3-071",
+      "packageId": 17,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 2
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-072-P01",
+      "caseId": "V3-072",
+      "packageId": 44,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 5
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-072-P02",
+      "caseId": "V3-072",
+      "packageId": 16,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 1
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-072-P03",
+      "caseId": "V3-072",
+      "packageId": 18,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 2
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-072-P04",
+      "caseId": "V3-072",
+      "packageId": 17,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 3
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-072-P05",
+      "caseId": "V3-072",
+      "packageId": 6,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 4
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-073-P01",
+      "caseId": "V3-073",
+      "packageId": 36,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 4
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-073-P02",
+      "caseId": "V3-073",
+      "packageId": 34,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 5
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-073-P03",
+      "caseId": "V3-073",
+      "packageId": 39,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 3
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-073-P04",
+      "caseId": "V3-073",
+      "packageId": 37,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 1
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-073-P05",
+      "caseId": "V3-073",
+      "packageId": 38,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 2
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-074-P01",
+      "caseId": "V3-074",
+      "packageId": 37,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 3
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-074-P02",
+      "caseId": "V3-074",
+      "packageId": 36,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 4
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-074-P03",
+      "caseId": "V3-074",
+      "packageId": 35,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 5
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-074-P04",
+      "caseId": "V3-074",
+      "packageId": 38,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 1
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-074-P05",
+      "caseId": "V3-074",
+      "packageId": 39,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 2
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-075-P01",
+      "caseId": "V3-075",
+      "packageId": 1,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 4
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-075-P02",
+      "caseId": "V3-075",
+      "packageId": 13,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 2
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-075-P03",
+      "caseId": "V3-075",
+      "packageId": 15,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 1
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-075-P04",
+      "caseId": "V3-075",
+      "packageId": 2,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 5
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-075-P05",
+      "caseId": "V3-075",
+      "packageId": 14,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 3
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-077-P01",
+      "caseId": "V3-077",
+      "packageId": 45,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 3
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-077-P02",
+      "caseId": "V3-077",
+      "packageId": 2,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 5
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-077-P03",
+      "caseId": "V3-077",
+      "packageId": 30,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 4
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-077-P04",
+      "caseId": "V3-077",
+      "packageId": 28,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 2
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-077-P05",
+      "caseId": "V3-077",
+      "packageId": 29,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 1
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-078-P01",
+      "caseId": "V3-078",
+      "packageId": 14,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 2
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-078-P02",
+      "caseId": "V3-078",
+      "packageId": 13,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 1
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-078-P03",
+      "caseId": "V3-078",
+      "packageId": 48,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 4
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-078-P04",
+      "caseId": "V3-078",
+      "packageId": 15,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 3
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-078-P05",
+      "caseId": "V3-078",
+      "packageId": 34,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 5
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-079-P01",
+      "caseId": "V3-079",
+      "packageId": 43,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 4
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-079-P02",
+      "caseId": "V3-079",
+      "packageId": 23,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 3
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-079-P03",
+      "caseId": "V3-079",
+      "packageId": 22,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 2
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-079-P04",
+      "caseId": "V3-079",
+      "packageId": 16,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 5
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-079-P05",
+      "caseId": "V3-079",
+      "packageId": 47,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 1
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-080-P01",
+      "caseId": "V3-080",
+      "packageId": 22,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 5
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-080-P02",
+      "caseId": "V3-080",
+      "packageId": 17,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 1
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-080-P03",
+      "caseId": "V3-080",
+      "packageId": 16,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 3
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-080-P04",
+      "caseId": "V3-080",
+      "packageId": 18,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 2
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-080-P05",
+      "caseId": "V3-080",
+      "packageId": 23,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 4
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-081-P01",
+      "caseId": "V3-081",
+      "packageId": 2,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 5
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-081-P02",
+      "caseId": "V3-081",
+      "packageId": 6,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 2
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-081-P03",
+      "caseId": "V3-081",
+      "packageId": 4,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 3
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-081-P04",
+      "caseId": "V3-081",
+      "packageId": 5,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 1
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-081-P05",
+      "caseId": "V3-081",
+      "packageId": 44,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 4
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-082-P01",
+      "caseId": "V3-082",
+      "packageId": 4,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 2
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-082-P02",
+      "caseId": "V3-082",
+      "packageId": 2,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 4
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-082-P03",
+      "caseId": "V3-082",
+      "packageId": 5,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 1
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-082-P04",
+      "caseId": "V3-082",
+      "packageId": 32,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 5
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-082-P05",
+      "caseId": "V3-082",
+      "packageId": 6,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 3
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-083-P01",
+      "caseId": "V3-083",
+      "packageId": 10,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 5
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-083-P02",
+      "caseId": "V3-083",
+      "packageId": 26,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 2
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-083-P03",
+      "caseId": "V3-083",
+      "packageId": 11,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 4
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-083-P04",
+      "caseId": "V3-083",
+      "packageId": 27,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 1
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-083-P05",
+      "caseId": "V3-083",
+      "packageId": 25,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 3
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-084-P01",
+      "caseId": "V3-084",
+      "packageId": 21,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 4
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-084-P02",
+      "caseId": "V3-084",
+      "packageId": 19,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 5
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-084-P03",
+      "caseId": "V3-084",
+      "packageId": 24,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 3
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-084-P04",
+      "caseId": "V3-084",
+      "packageId": 23,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 2
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-084-P05",
+      "caseId": "V3-084",
+      "packageId": 22,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 1
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-085-P01",
+      "caseId": "V3-085",
+      "packageId": 11,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 1
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-085-P02",
+      "caseId": "V3-085",
+      "packageId": 44,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 5
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-085-P03",
+      "caseId": "V3-085",
+      "packageId": 12,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 3
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-085-P04",
+      "caseId": "V3-085",
+      "packageId": 43,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 4
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-085-P05",
+      "caseId": "V3-085",
+      "packageId": 10,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 2
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-086-P01",
+      "caseId": "V3-086",
+      "packageId": 39,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 2
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-086-P02",
+      "caseId": "V3-086",
+      "packageId": 42,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 1
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-086-P03",
+      "caseId": "V3-086",
+      "packageId": 37,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 4
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-086-P04",
+      "caseId": "V3-086",
+      "packageId": 40,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 5
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-086-P05",
+      "caseId": "V3-086",
+      "packageId": 38,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 3
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-087-P01",
+      "caseId": "V3-087",
+      "packageId": 17,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 1
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-087-P02",
+      "caseId": "V3-087",
+      "packageId": 47,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 2
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-087-P03",
+      "caseId": "V3-087",
+      "packageId": 16,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 4
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-087-P04",
+      "caseId": "V3-087",
+      "packageId": 23,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 3
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-087-P05",
+      "caseId": "V3-087",
+      "packageId": 22,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 5
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-088-P01",
+      "caseId": "V3-088",
+      "packageId": 31,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 3
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-088-P02",
+      "caseId": "V3-088",
+      "packageId": 47,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 2
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-088-P03",
+      "caseId": "V3-088",
+      "packageId": 33,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 5
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-088-P04",
+      "caseId": "V3-088",
+      "packageId": 46,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 4
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-088-P05",
+      "caseId": "V3-088",
+      "packageId": 32,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 1
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-089-P01",
+      "caseId": "V3-089",
+      "packageId": 26,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 1
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-089-P02",
+      "caseId": "V3-089",
+      "packageId": 3,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 5
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-089-P03",
+      "caseId": "V3-089",
+      "packageId": 1,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 4
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-089-P04",
+      "caseId": "V3-089",
+      "packageId": 2,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 2
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-089-P05",
+      "caseId": "V3-089",
+      "packageId": 25,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 3
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-090-P01",
+      "caseId": "V3-090",
+      "packageId": 48,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 4
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-090-P02",
+      "caseId": "V3-090",
+      "packageId": 7,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 2
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-090-P03",
+      "caseId": "V3-090",
+      "packageId": 8,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 1
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-090-P04",
+      "caseId": "V3-090",
+      "packageId": 1,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 5
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-090-P05",
+      "caseId": "V3-090",
+      "packageId": 9,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 3
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-092-P01",
+      "caseId": "V3-092",
+      "packageId": 2,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 1
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-092-P02",
+      "caseId": "V3-092",
+      "packageId": 1,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 3
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-092-P03",
+      "caseId": "V3-092",
+      "packageId": 43,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 4
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-092-P04",
+      "caseId": "V3-092",
+      "packageId": 21,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 5
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-092-P05",
+      "caseId": "V3-092",
+      "packageId": 3,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 2
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-093-P01",
+      "caseId": "V3-093",
+      "packageId": 5,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 3
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-093-P02",
+      "caseId": "V3-093",
+      "packageId": 43,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 4
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-093-P03",
+      "caseId": "V3-093",
+      "packageId": 1,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 5
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-093-P04",
+      "caseId": "V3-093",
+      "packageId": 4,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 2
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-093-P05",
+      "caseId": "V3-093",
+      "packageId": 6,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 1
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-094-P01",
+      "caseId": "V3-094",
+      "packageId": 2,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 1
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-094-P02",
+      "caseId": "V3-094",
+      "packageId": 1,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 2
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-094-P03",
+      "caseId": "V3-094",
+      "packageId": 25,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 4
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-094-P04",
+      "caseId": "V3-094",
+      "packageId": 29,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 5
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-094-P05",
+      "caseId": "V3-094",
+      "packageId": 26,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 3
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-095-P01",
+      "caseId": "V3-095",
+      "packageId": 43,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 1
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-095-P02",
+      "caseId": "V3-095",
+      "packageId": 1,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 3
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-095-P03",
+      "caseId": "V3-095",
+      "packageId": 3,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 2
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-095-P04",
+      "caseId": "V3-095",
+      "packageId": 31,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 5
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-095-P05",
+      "caseId": "V3-095",
+      "packageId": 33,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 4
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-096-P01",
+      "caseId": "V3-096",
+      "packageId": 4,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 3
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-096-P02",
+      "caseId": "V3-096",
+      "packageId": 44,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 1
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-096-P03",
+      "caseId": "V3-096",
+      "packageId": 5,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 4
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-096-P04",
+      "caseId": "V3-096",
+      "packageId": 28,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 5
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-096-P05",
+      "caseId": "V3-096",
+      "packageId": 6,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 2
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-097-P01",
+      "caseId": "V3-097",
+      "packageId": 10,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 3
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-097-P02",
+      "caseId": "V3-097",
+      "packageId": 12,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 1
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-097-P03",
+      "caseId": "V3-097",
+      "packageId": 11,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 2
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-097-P04",
+      "caseId": "V3-097",
+      "packageId": 3,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 5
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-097-P05",
+      "caseId": "V3-097",
+      "packageId": 33,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 4
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-098-P01",
+      "caseId": "V3-098",
+      "packageId": 15,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 2
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-098-P02",
+      "caseId": "V3-098",
+      "packageId": 13,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 3
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-098-P03",
+      "caseId": "V3-098",
+      "packageId": 44,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 5
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-098-P04",
+      "caseId": "V3-098",
+      "packageId": 14,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 4
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-098-P05",
+      "caseId": "V3-098",
+      "packageId": 43,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 1
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-099-P01",
+      "caseId": "V3-099",
+      "packageId": 33,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 4
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-099-P02",
+      "caseId": "V3-099",
+      "packageId": 32,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 1
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-099-P03",
+      "caseId": "V3-099",
+      "packageId": 47,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 5
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-099-P04",
+      "caseId": "V3-099",
+      "packageId": 2,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 3
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-099-P05",
+      "caseId": "V3-099",
+      "packageId": 31,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 2
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-100-P01",
+      "caseId": "V3-100",
+      "packageId": 23,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 3
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-100-P02",
+      "caseId": "V3-100",
+      "packageId": 38,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 1
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-100-P03",
+      "caseId": "V3-100",
+      "packageId": 32,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 2
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-100-P04",
+      "caseId": "V3-100",
+      "packageId": 37,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 4
+        }
+      ]
+    },
+    {
+      "reviewId": "V3-100-P05",
+      "caseId": "V3-100",
+      "packageId": 46,
+      "sources": [
+        {
+          "method": "HYBRID_GEMINI",
+          "rank": 5
+        }
+      ]
+    }
+  ]
+}

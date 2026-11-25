@@ -1,21 +1,13 @@
 import { Injectable, Logger, ServiceUnavailableException } from '@nestjs/common';
 import { EmbeddingService, type PackageForRetrieval, type ScoredPackage } from '../../../infrastructure/embedding/embedding.service.js';
-import { matchesSearchConstraints, matchesSearchExclusions, normalizeSearch, parseSearchIntent, searchTextScore, searchTypoScore } from '../../../common/utils/search-query.js';
-
-/** Each document contributes at most once per retriever. Rank starts at one. */
-function reciprocalRankFusion(lists: number[][], constant = 60): Map<number, number> {
-  const scores = new Map<number, number>();
-  for (const list of lists) [...new Set(list)].forEach((id, index) =>
-    scores.set(id, (scores.get(id) || 0) + 1 / (constant + index + 1)));
-  return scores;
-}
+import { matchesSearchConstraints, matchesSearchExclusions, parseSearchIntent, searchTextScore, searchTypoScore } from '../../../common/utils/search-query.js';
 
 /** Search policy lives here; recommendation retrieval never calls this service. */
 @Injectable()
 export class SearchRankingService {
   private readonly logger = new Logger(SearchRankingService.name);
-  private readonly minSimilarity = 0.82;
-  private readonly vectorWindow = 50;
+  private readonly rankWindow = 50;
+  private readonly rrfConstant = 60;
 
   constructor(private readonly embedding: EmbeddingService) {}
 
@@ -26,10 +18,7 @@ export class SearchRankingService {
       && matchesSearchExclusions(intent, [pkg.name, pkg.code, pkg.specialtyName, pkg.description, ...(pkg.symptoms || [])]));
     if (!candidates.length) return [];
     const keyword = candidates.map(pkg => ({ package: pkg, score: intent.text
-      ? searchTextScore(intent.text, pkg.name) * 1.3 + searchTextScore(intent.text, pkg.code) * 1.4
-        + searchTextScore(intent.text, pkg.specialtyName) * 1.1
-        + Math.max(0, ...(pkg.symptoms || []).map(s => searchTextScore(intent.text, s))) * 1.2
-        + searchTextScore(intent.text, pkg.description) * 0.3 : 1 }));
+      ? Math.max(searchTextScore(intent.text, pkg.name), searchTextScore(intent.text, pkg.specialtyName)) : 1 }));
     if (intent.text && !keyword.some(item => item.score > 0)) {
       for (const item of keyword) item.score = Math.max(searchTypoScore(intent.text, item.package.name), searchTypoScore(intent.text, item.package.specialtyName));
     }
@@ -43,21 +32,33 @@ export class SearchRankingService {
       let hits: ScoredPackage[] | null = null;
       try {
         const vector = await this.embedding.embedSearchQuery(query);
-        if (vector) hits = await this.embedding.retrieveVectorCandidates(vector, candidates, Math.min(this.vectorWindow, candidates.length));
+        if (vector) hits = await this.embedding.retrieveVectorCandidates(vector, candidates, Math.min(this.rankWindow, candidates.length));
       } catch { /* Keep usable lexical results during a vector outage. */ }
       if (hits === null && !lexical.length) throw new ServiceUnavailableException('Không thể tải kết quả tìm kiếm. Vui lòng thử lại.');
       if (hits === null) this.logger.debug('Vector search unavailable; returning keyword matches.');
       const eligible = new Map(candidates.map(pkg => [pkg.id, pkg]));
-      semantic = (hits || []).filter(hit => eligible.has(hit.package.id) && Number.isFinite(hit.score) && hit.score >= this.minSimilarity)
+      semantic = (hits || []).filter(hit => eligible.has(hit.package.id) && Number.isFinite(hit.score))
         .map(hit => ({ ...hit, package: eligible.get(hit.package.id)! }))
         .sort((a, b) => b.score - a.score || tieBreak(a.package, b.package));
     }
-    // Raw cosine and keyword scores are never added together.
-    const scores = reciprocalRankFusion([lexical.map(item => item.package.id), semantic.map(item => item.package.id)]);
-    const exact = (pkg: PackageForRetrieval) => Boolean(intent.text) &&
-      [pkg.code, pkg.name].some(value => [query, intent.text].some(text => normalizeSearch(value) === normalizeSearch(text)));
-    return candidates.filter(pkg => scores.has(pkg.id)).map(pkg => ({ package: pkg, score: scores.get(pkg.id)! }))
-      .sort((a, b) => Number(exact(b.package)) - Number(exact(a.package))
-        || b.score - a.score || tieBreak(a.package, b.package)).slice(0, limit);
+    // Preserve the keyword-only baseline and constraint-only browsing.
+    if (options.semantic === false || !intent.text) return lexical.slice(0, limit);
+
+    // Reciprocal rank fusion: each distinct package contributes once per retriever.
+    const fused = new Map<number, ScoredPackage>();
+    for (const ranking of [lexical, semantic]) {
+      const seen = new Set<number>();
+      let rank = 0;
+      for (const item of ranking) {
+        if (seen.has(item.package.id)) continue;
+        seen.add(item.package.id);
+        if (++rank > this.rankWindow) break;
+        const score = (fused.get(item.package.id)?.score || 0) + 1 / (this.rrfConstant + rank);
+        fused.set(item.package.id, { package: item.package, score });
+      }
+    }
+    return [...fused.values()]
+      .sort((a, b) => b.score - a.score || tieBreak(a.package, b.package))
+      .slice(0, limit);
   }
 }

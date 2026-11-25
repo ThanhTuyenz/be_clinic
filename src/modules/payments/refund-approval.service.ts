@@ -1,3 +1,4 @@
+import { APPOINTMENT_BRANCH_SELECT, appointmentBranchId } from '../appointments/helpers/appointment-branch.helper.js';
 import { BadRequestException, ConflictException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../infrastructure/database/prisma/prisma.service.js';
@@ -17,10 +18,10 @@ export class RefundApprovalService {
     }
     return appointmentTransaction(this.prisma, async tx => {
       const appointment = await tx.appointment.findUnique({
-        where: { id: appointmentId }, select: { id: true, branchId: true, status: true, bookingOrderId: true },
+        where: { id: appointmentId }, select: { id: true, ...APPOINTMENT_BRANCH_SELECT, status: true, bookingOrderId: true },
       });
       if (!appointment) throw new NotFoundException('Không tìm thấy lịch hẹn');
-      if (appointment.branchId !== actor.branchId) throw new ForbiddenException('Chỉ được duyệt hoàn tiền tại chi nhánh phụ trách');
+      if (appointmentBranchId(appointment) !== actor.branchId) throw new ForbiddenException('Chỉ được duyệt hoàn tiền tại chi nhánh phụ trách');
       if (appointment.status !== 'CANCELLED') throw new BadRequestException('Chỉ duyệt hoàn tiền cho lịch đã hủy');
       const invoice = await tx.invoice.findFirst({
         where: { issuedBranchId: actor.branchId, bookingOrderId: appointment.bookingOrderId }, select: { id: true },
