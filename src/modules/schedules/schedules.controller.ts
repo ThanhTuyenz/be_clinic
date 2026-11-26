@@ -16,10 +16,11 @@ export class SchedulesController {
   constructor(private readonly schedulesService: SchedulesService) {}
 
   @Public()
+  @SkipPermissions()
   @Get(['booking-methods', 'public/booking-methods'])
   @ApiOperation({ summary: 'Hình thức đặt khám đang bật tại một chi nhánh hoặc toàn hệ thống' })
   @ApiQuery({ name: 'branchId', required: false })
-  bookingMethods(@Query('branchId', new ParseIntPipe({ optional: true })) branchId?: number) {
+  bookingMethods(@Query('branchId') branchId?: string) {
     return this.schedulesService.bookingMethods(branchId);
   }
 
