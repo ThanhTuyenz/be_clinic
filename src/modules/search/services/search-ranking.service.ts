@@ -1,4 +1,4 @@
-import { Injectable, Logger, ServiceUnavailableException } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { EmbeddingService, type PackageForRetrieval, type ScoredPackage } from '../../../infrastructure/embedding/embedding.service.js';
 import { matchesSearchConstraints, matchesSearchExclusions, parseSearchIntent, searchTextScore, searchTypoScore } from '../../../common/utils/search-query.js';
 
@@ -34,8 +34,7 @@ export class SearchRankingService {
         const vector = await this.embedding.embedSearchQuery(query);
         if (vector) hits = await this.embedding.retrieveVectorCandidates(vector, candidates, Math.min(this.rankWindow, candidates.length));
       } catch { /* Keep usable lexical results during a vector outage. */ }
-      if (hits === null && !lexical.length) throw new ServiceUnavailableException('Không thể tải kết quả tìm kiếm. Vui lòng thử lại.');
-      if (hits === null) this.logger.debug('Vector search unavailable; returning keyword matches.');
+      if (hits === null) this.logger.warn('Vector search unavailable; returning keyword matches only.');
       const eligible = new Map(candidates.map(pkg => [pkg.id, pkg]));
       semantic = (hits || []).filter(hit => eligible.has(hit.package.id) && Number.isFinite(hit.score))
         .map(hit => ({ ...hit, package: eligible.get(hit.package.id)! }))

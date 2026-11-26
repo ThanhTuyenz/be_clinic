@@ -54,6 +54,7 @@ export class EmbeddingService {
   private readonly embeddingModel: string;
   private readonly queryVectors = new Map<string, { expiresAt: number; vector: number[] }>();
   private readonly pendingQueryVectors = new Map<string, Promise<number[] | null>>();
+  private vectorIndexReady = false;
 
   constructor(
     private readonly config: ConfigService,
@@ -80,10 +81,14 @@ export class EmbeddingService {
   get vectorIndexName(): string { return `idx:packages_vss:openai:v2:${this.embeddingModel}:${this.vectorDimensions}`; }
 
   async ensureVectorIndex(): Promise<void> {
+    if (this.vectorIndexReady) return;
     const client = this.redis.getClient();
     if (!client) throw new Error('Redis must be enabled to synchronize package vectors');
-    try { await client.call('FT.INFO', this.vectorIndexName); return; }
-    catch (error: any) {
+    try {
+      await client.call('FT.INFO', this.vectorIndexName);
+      this.vectorIndexReady = true;
+      return;
+    } catch (error: any) {
       if (!/unknown index|no such index/i.test(error?.message || '')) throw error;
     }
     const prefix = `${client.options.keyPrefix || ''}${this.vectorKeyPrefix}`;
@@ -98,8 +103,10 @@ export class EmbeddingService {
         'TYPE', 'FLOAT32',
         'DIM', this.vectorDimensions, 
         'DISTANCE_METRIC', 'COSINE');
+      this.vectorIndexReady = true;
     } catch (error: any) {
       if (!/index already exists/i.test(error?.message || '')) throw error;
+      this.vectorIndexReady = true;
     }
   }
 
@@ -195,6 +202,7 @@ export class EmbeddingService {
         const vectorBuffer = Buffer.from(float32.buffer);
         const client = this.redis.getClient();
         if (client) {
+          await this.ensureVectorIndex().catch(() => {});
           await client.hset(
             hashKey,
             'packageId', pkg.id,
@@ -268,6 +276,7 @@ export class EmbeddingService {
     if (!this.redis.isEnabled()) return null;
 
     try {
+      await this.ensureVectorIndex();
       const float32 = new Float32Array(queryVector);
       const vectorBuffer = Buffer.from(float32.buffer);
 
