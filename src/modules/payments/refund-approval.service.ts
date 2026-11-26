@@ -1,3 +1,4 @@
+import { APPOINTMENT_BRANCH_SELECT, appointmentBranchId } from '../appointments/helpers/appointment-branch.helper.js';
 import { BadRequestException, ConflictException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../infrastructure/database/prisma/prisma.service.js';
@@ -17,10 +18,10 @@ export class RefundApprovalService {
     }
     return appointmentTransaction(this.prisma, async tx => {
       const appointment = await tx.appointment.findUnique({
-        where: { id: appointmentId }, select: { id: true, branchId: true, status: true, bookingOrderId: true },
+        where: { id: appointmentId }, select: { id: true, ...APPOINTMENT_BRANCH_SELECT, status: true, bookingOrderId: true },
       });
       if (!appointment) throw new NotFoundException('Không tìm thấy lịch hẹn');
-      if (appointment.branchId !== actor.branchId) throw new ForbiddenException('Chỉ được duyệt hoàn tiền tại chi nhánh phụ trách');
+      if (appointmentBranchId(appointment) !== actor.branchId) throw new ForbiddenException('Chỉ được duyệt hoàn tiền tại chi nhánh phụ trách');
       if (appointment.status !== 'CANCELLED') throw new BadRequestException('Chỉ duyệt hoàn tiền cho lịch đã hủy');
       const invoice = await tx.invoice.findFirst({
         where: { issuedBranchId: actor.branchId, bookingOrderId: appointment.bookingOrderId }, select: { id: true },
@@ -63,6 +64,71 @@ export class RefundApprovalService {
         payload: { appointmentId, paymentId: payment.id, invoiceId: invoice.id, amount: input.amount, approvedBy: actor.id, note: input.note } as Prisma.InputJsonValue,
       } });
       return { refund: approved, message: 'Đã duyệt khoản hoàn, đang chờ chuyển tiền cho bệnh nhân.' };
+    });
+  }
+
+  async complete(userId: string, appointmentId: string, note?: string) {
+    const actor = await getStaffUser(this.prisma, userId);
+    if (actor.role !== 'BRANCH_MANAGER' || !actor.branchId) {
+      throw new ForbiddenException('Chỉ quản lý chi nhánh được xác nhận đã hoàn tiền');
+    }
+    return appointmentTransaction(this.prisma, async tx => {
+      const appointment = await tx.appointment.findUnique({
+        where: { id: appointmentId }, select: { id: true, ...APPOINTMENT_BRANCH_SELECT, status: true, bookingOrderId: true },
+      });
+      if (!appointment) throw new NotFoundException('Không tìm thấy lịch hẹn');
+      if (appointmentBranchId(appointment) !== actor.branchId) throw new ForbiddenException('Chỉ được xác nhận hoàn tiền tại chi nhánh phụ trách');
+      if (appointment.status !== 'CANCELLED') throw new BadRequestException('Chỉ xác nhận hoàn tiền cho lịch đã hủy');
+      const invoice = await tx.invoice.findFirst({
+        where: { issuedBranchId: actor.branchId, bookingOrderId: appointment.bookingOrderId }, select: { id: true },
+      });
+      if (!invoice) throw new NotFoundException('Không tìm thấy hóa đơn của lịch hẹn');
+      await tx.$queryRaw`SELECT id FROM invoices WHERE id = ${invoice.id}::uuid FOR UPDATE`;
+      const payment = await tx.paymentTransaction.findFirst({
+        where: { invoiceId: invoice.id, status: { in: ['REFUND_REQUIRED', 'REFUNDED'] } }, orderBy: { createdAt: 'desc' },
+        select: { id: true, status: true, rawPayload: true },
+      });
+      if (!payment) throw new BadRequestException('Không có giao dịch đang chờ hoàn tiền');
+      const raw = payment.rawPayload as Record<string, Prisma.JsonValue> | null;
+      const requests = raw?.appointmentRefunds as Record<string, Prisma.JsonValue> | undefined;
+      const request = requests?.[appointmentId];
+      if (!request || typeof request !== 'object' || Array.isArray(request)) throw new BadRequestException('Lịch hẹn chưa có yêu cầu hoàn tiền');
+      if (request.approvalStatus === 'COMPLETED' || payment.status === 'REFUNDED') {
+        throw new ConflictException('Khoản hoàn đã được xác nhận hoàn tất trước đó.');
+      }
+      if (request.approvalStatus !== 'APPROVED') {
+        throw new BadRequestException('Khoản hoàn cần được duyệt trước khi xác nhận đã chuyển tiền.');
+      }
+
+      const completedAt = new Date().toISOString();
+      const completed = {
+        ...request,
+        approvalStatus: 'COMPLETED',
+        refundedAt: completedAt,
+        refundedBy: actor.id,
+        ...(note?.trim() ? { transferNote: note.trim() } : {}),
+      };
+      const updatedRefunds = { ...requests, [appointmentId]: completed };
+      const allResolved = Object.values(updatedRefunds).every((entry) => {
+        if (!entry || typeof entry !== 'object' || Array.isArray(entry)) return true;
+        return entry.approvalStatus === 'COMPLETED' || entry.approvalStatus === 'NOT_ELIGIBLE';
+      });
+
+      await tx.paymentTransaction.update({
+        where: { id: payment.id },
+        data: {
+          ...(allResolved ? { status: 'REFUNDED' } : {}),
+          rawPayload: { ...raw, appointmentRefunds: updatedRefunds } as Prisma.InputJsonValue,
+        },
+      });
+      if (allResolved) {
+        await tx.invoice.update({ where: { id: invoice.id }, data: { status: 'REFUNDED' } });
+      }
+      await tx.outboxEvent.create({ data: {
+        aggregateType: 'PaymentTransaction', aggregateId: payment.id, eventType: 'payment.refund.completed',
+        payload: { appointmentId, paymentId: payment.id, invoiceId: invoice.id, amount: request.refundAmount ?? 0, refundedBy: actor.id, note: note?.trim() || null } as Prisma.InputJsonValue,
+      } });
+      return { refund: completed, message: 'Đã xác nhận chuyển khoản hoàn tiền cho bệnh nhân.' };
     });
   }
 }

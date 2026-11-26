@@ -1,3 +1,5 @@
+import { appointmentBranchId } from '../appointments/helpers/appointment-branch.helper.js';
+import { getPackageDeployments } from '../bookings/helpers/package-deployment.helper.js';
 import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import { formatTime } from '../../common/utils/staff.utils.js';
 import { ReceptionAvailabilityQueryDto } from '../bookings/dtos/reception-booking.dto.js';
@@ -41,7 +43,7 @@ export class ScheduleAvailabilityService {
       if (!service?.isActive || !service.specialtyId) throw new NotFoundException('Dịch vụ khám chuyên khoa không khả dụng');
       if (specialtyId && specialtyId !== service.specialtyId) throw new BadRequestException('Dịch vụ khám không thuộc chuyên khoa đã chọn');
       specialtyId = service.specialtyId;
-      allowedBranches = [service.branchBookingMethod, ...service.branchBookingMethods.map(link => link.branchBookingMethod)]
+      allowedBranches = getPackageDeployments(service)
         .filter(link => link?.isEnabled && link.bookingMethodId === method!.id)
         .map(link => link.branchId);
     }
@@ -136,7 +138,7 @@ export class ScheduleAvailabilityService {
         ...appointmentInclude(), servicePackage: {
           select: {
             ...PACKAGE_RECEPTION_SELECT, code: true, specialty: { select: { id: true, name: true } },
-            branchBookingMethod: { select: { ...PACKAGE_RECEPTION_SELECT.branchBookingMethod.select, bookingMethod: { select: { code: true, name: true } } } },
+
           }
         }
       },
@@ -146,7 +148,7 @@ export class ScheduleAvailabilityService {
     searchStart.setUTCDate(searchStart.getUTCDate() + 1);
     const searchEnd = new Date(searchStart);
     searchEnd.setUTCDate(searchEnd.getUTCDate() + 5);
-    const branchIds = [...new Set(affected.map(appointment => appointment.branchId))];
+    const branchIds = [...new Set(affected.map(appointment => appointmentBranchId(appointment)))];
     const [slots, exceptions] = branchIds.length ? await Promise.all([
       this.prisma.doctorScheduleSlot.findMany({
         where: {

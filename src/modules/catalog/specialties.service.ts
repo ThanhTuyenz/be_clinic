@@ -1,3 +1,4 @@
+import { PACKAGE_DEPLOYMENT_SELECT, getPackageDeployments, packageDeploymentWhere } from '../bookings/helpers/package-deployment.helper.js';
 import { Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../../infrastructure/database/prisma/prisma.service.js';
 import { RedisService } from '../../infrastructure/redis/redis.service.js';
@@ -75,26 +76,7 @@ export class SpecialtiesService {
       where: {
         specialtyId,
         isActive: true,
-        OR: [
-          {
-            branchBookingMethods: {
-              some: {
-                branchBookingMethod: {
-                  ...(effectiveBranchId ? { branchId: effectiveBranchId } : {}),
-                  isEnabled: true,
-                  bookingMethod: { isActive: true },
-                },
-              },
-            },
-          },
-          {
-            branchBookingMethod: {
-              ...(effectiveBranchId ? { branchId: effectiveBranchId } : {}),
-              isEnabled: true,
-              bookingMethod: { isActive: true },
-            },
-          },
-        ],
+        ...await packageDeploymentWhere(this.prisma, effectiveBranchId, undefined),
       },
       orderBy: [{ price: 'asc' }, { name: 'asc' }],
       take: 60,
@@ -107,40 +89,19 @@ export class SpecialtiesService {
         price: true,
         durationMin: true,
         specialtyId: true,
-        branchBookingMethod: {
-          select: {
-            id: true,
-            branchId: true,
-            branch: { select: { id: true, code: true, slug: true } },
-            bookingMethod: { select: { id: true, code: true, name: true } },
-          },
-        },
-        branchBookingMethods: {
-          select: {
-            branchBookingMethod: {
-              select: {
-                id: true,
-                branchId: true,
-                branch: { select: { id: true, code: true, slug: true } },
-                bookingMethod: { select: { id: true, code: true, name: true } },
-              },
-            },
-          },
-        },
+
+        ...PACKAGE_DEPLOYMENT_SELECT,
       },
     });
 
-    return packages.map(({ branchBookingMethod, branchBookingMethods, ...pkg }) => {
-      const bbm =
-        branchBookingMethods?.find(
-          (l) => !effectiveBranchId || l.branchBookingMethod.branchId === effectiveBranchId,
-        )?.branchBookingMethod || branchBookingMethod;
+    return packages.map((row) => {
+      const { branches, bookingMethod, ...pkg } = row;
+      const bbm = getPackageDeployments(row).find(method => method.isEnabled && (!effectiveBranchId || method.branchId === effectiveBranchId));
 
       return {
         ...pkg,
         branchId: bbm?.branchId,
         branchSlug: bbm?.branch?.slug ?? null,
-        branchBookingMethodId: bbm?.id,
         bookingMethod: bbm?.bookingMethod,
         price: Number(pkg.price),
       };

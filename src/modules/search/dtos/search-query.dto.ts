@@ -1,11 +1,7 @@
-import { IsInt, IsNotEmpty, IsOptional, IsString, IsUUID, MaxLength, Min, MinLength } from 'class-validator';
+import { IsInt, IsNotEmpty, IsOptional, IsString, MaxLength, Min, MinLength } from 'class-validator';
 import { Transform, Type } from 'class-transformer';
 
 export class SearchQueryDto {
-  @IsOptional()
-  @IsUUID()
-  searchRequestId?: string;
-
   @IsOptional()
   @IsString()
   @MinLength(16)

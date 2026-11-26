@@ -598,13 +598,13 @@ async function main() {
             notes: service.notes,
             symptoms: service.symptoms,
             imageUrl: service.imageUrl,
-            branchBookingMethodId: branchBookingMethod.id,
+            bookingMethodId: branchBookingMethod.bookingMethodId,
             specialtyId: spec.id,
             ...packageMetadata(service),
             isActive: true,
           },
           create: {
-            branchBookingMethods: { create: { branchBookingMethodId: branchBookingMethod.id } },
+            branches: { create: { branchId: branch.id } },
             receptionSchedules: { create: (service.methodCode === 'AFTER_HOURS' ? [6, 0] : [0, 1, 2, 3, 4, 5, 6]).map((dayOfWeek) => ({ branchId: branch.id, dayOfWeek, sessions: ['MORNING', 'AFTERNOON'] })) },
             code: service.code,
             name: service.name,
@@ -615,7 +615,7 @@ async function main() {
             notes: service.notes,
             symptoms: service.symptoms,
             imageUrl: service.imageUrl,
-            branchBookingMethodId: branchBookingMethod.id,
+            bookingMethodId: branchBookingMethod.bookingMethodId,
             specialtyId: spec.id,
             ...packageMetadata(service),
             isActive: true,
@@ -643,12 +643,12 @@ async function main() {
             imageUrl: pkg.imageUrl || null,
             durationMin: pkg.durationMin || 45,
             price: pkg.price,
-            branchBookingMethodId: healthPackageMethod.id,
+            bookingMethodId: healthPackageMethod.bookingMethodId,
             ...packageMetadata(pkg),
             isActive: true,
           },
           create: {
-            branchBookingMethods: { create: { branchBookingMethodId: healthPackageMethod.id } },
+            branches: { create: { branchId: branch.id } },
             receptionSchedules: { create: Array.from({ length: 7 }, (_, dayOfWeek) => ({ branchId: branch.id, dayOfWeek, sessions: ['MORNING', 'AFTERNOON'] })) },
             code: fullCode,
             name: fullName,
@@ -659,7 +659,7 @@ async function main() {
             imageUrl: pkg.imageUrl || null,
             durationMin: pkg.durationMin || 45,
             price: pkg.price,
-            branchBookingMethodId: healthPackageMethod.id,
+            bookingMethodId: healthPackageMethod.bookingMethodId,
             ...packageMetadata(pkg),
             isActive: true,
           },
@@ -753,7 +753,7 @@ async function main() {
   // 12. Trợ lý chỉ minh họa tra cứu dịch vụ và đặt lịch.
   console.log('12. Nạp hội thoại trợ lý đặt lịch mẫu...');
   if (mainPatient) {
-    await prisma.aIConversation.create({ data: {
+    await prisma.conversation.create({ data: {
       userId: mainPatient.id, conversationType: 'BOOKING_ASSISTANCE',
       title: 'Tìm dịch vụ khám Mắt', isClosed: true,
       messages: { create: [
@@ -823,20 +823,20 @@ function basicSpecialtyPackage(specialtyName, branchName) {
 
 /** Seed one catalog item, then attach each offering branch without duplicating it. */
 async function upsertSharedSeedPackage(prisma, { where, update, create }) {
-  const { branchBookingMethods, receptionSchedules, ...fields } = create;
-  const { branchBookingMethodId: _legacyMethod, ...updatedFields } = update;
+  const { branches, receptionSchedules, ...fields } = create;
+  const updatedFields = update;
   return prisma.$transaction(async tx => {
     const pkg = await tx.servicePackage.upsert({ where, create: fields, update: updatedFields });
-    const branchBookingMethodId = branchBookingMethods.create.branchBookingMethodId;
-    await tx.packageBranchMethod.upsert({
-      where: { servicePackageId_branchBookingMethodId: { servicePackageId: pkg.id, branchBookingMethodId } },
-      create: { servicePackageId: pkg.id, branchBookingMethodId }, update: {},
+    const branchId = branches.create.branchId;
+    await tx.packageBranch.upsert({
+      where: { servicePackageId_branchId: { servicePackageId: pkg.id, branchId } },
+      create: { servicePackageId: pkg.id, branchId }, update: {},
     });
     for (const schedule of receptionSchedules.create) {
       await tx.packageReceptionTime.upsert({
         where: { servicePackageId_branchId_dayOfWeek: {
           servicePackageId: pkg.id, branchId: schedule.branchId, dayOfWeek: schedule.dayOfWeek,
-        } }, create: { servicePackageId: pkg.id, ...schedule }, update: { sessions: schedule.sessions },
+        } }, create: { servicePackageId: pkg.id, ...schedule }, update: { sessions: schedule.sessions, isActive: true },
       });
     }
     return pkg;
@@ -863,7 +863,7 @@ const demoStaff = [
   ['receptionist.east@vitacare.local', 'Tiếp nhận Phạm Thu Hà', 'RECEPTIONIST', '0988100006', 'VC-EAST'],
   ['receptionist.central2@vitacare.local', 'Tiếp nhận Nguyễn Bảo Trâm', 'RECEPTIONIST', '0988100007', 'VC-CENTRAL'],
   ['receptionist.east2@vitacare.local', 'Tiếp nhận Võ Minh Thư', 'RECEPTIONIST', '0988100008', 'VC-EAST'],
-  ['manager.locked@vitacare.local', 'Quản lý dự phòng Nguyễn Đức Long', 'BRANCH_MANAGER', '0988100009', 'VC-EAST', 'LOCKED'],
+  ['manager.locked@vitacare.local', 'Quản lý dự phòng Nguyễn Đức Long', 'BRANCH_MANAGER', '0988100009', null, 'LOCKED'],
   ['receptionist.locked@vitacare.local', 'Tiếp nhận Trần Mỹ Duyên', 'RECEPTIONIST', '0988100010', 'VC-CENTRAL', 'LOCKED'],
   ['receptionist.inactive@vitacare.local', 'Tiếp nhận nghỉ việc Lý Thanh Tâm', 'RECEPTIONIST', '0988100011', 'VC-EAST', 'INACTIVE'],
   ['patient.locked@vitacare.local', 'Bệnh nhân Nguyễn Hồng Phúc', 'PATIENT', '0988100012', null, 'LOCKED'],
@@ -884,6 +884,7 @@ async function seedDashboardData(prisma, { passwordHash }) {
   for (const [index, [email, fullName, role, phoneNumber, branchCode, state]] of demoStaff.entries()) {
     const isBlocked = state === 'LOCKED';
     const fields = { fullName, role, phoneNumber, status: state === 'INACTIVE' ? 'INACTIVE' : 'ACTIVE',
+      ...(role === 'BRANCH_MANAGER' && !branchCode ? { branchId: null } : {}),
       isBlocked,
       isDeleted: false, lastLoginAt: new Date(now.getTime() - (isBlocked ? DAY * 2 : (index + 1) * 180_000)) };
     const user = await prisma.user.upsert({
@@ -1013,8 +1014,8 @@ async function seedDashboardData(prisma, { passwordHash }) {
 // All dates are relative to one frozen seed time in Vietnam, never fixed dates.
 async function seedPackageReceptionSlots(prisma) {
   const packages = await prisma.servicePackage.findMany({
-    where: { branchBookingMethods: { some: { branchBookingMethod: { bookingMethod: { code: 'HEALTH_PACKAGE' } } } } },
-    select: { id: true, receptionSchedules: true },
+    where: { bookingMethod: { code: 'HEALTH_PACKAGE' } },
+    select: { id: true, receptionSchedules: { where: { isActive: true } } },
   });
   for (const pkg of packages) {
     const rows = [];
@@ -1024,7 +1025,7 @@ async function seedPackageReceptionSlots(prisma) {
         for (const [index, shift] of SHIFT_DEFINITIONS.entries()) {
           if (!reception.sessions.includes(index === 0 ? 'MORNING' : 'AFTERNOON')) continue;
           rows.push(...shift.slots.map(slot => ({
-            branchId: reception.branchId, servicePackageId: pkg.id, date,
+            receptionScheduleId: reception.id, date,
             startTime: slot.startTime, endTime: slot.endTime, capacity: 5,
           })));
         }
@@ -1077,13 +1078,13 @@ async function seedAppointmentScenarios(prisma, { accounts, branchMap }) {
       pkg = await prisma.servicePackage.findFirstOrThrow({
         where: {
           ...(scenario.kind === 'eye' ? { specialty: { slug: 'mat' } } : { code: 'PKG-GENERAL-BASIC' }),
-          branchBookingMethods: { some: { branchBookingMethod: { branchId: branch.id, bookingMethod: { code: methodCode } } } },
+          bookingMethod: { code: methodCode }, branches: { some: { branchId: branch.id } },
         }, orderBy: { code: 'asc' }, select: { id: true, name: true, price: true },
       });
     }
     if (scenario.kind === 'health') {
       receptionSlot = await prisma.packageReceptionSlot.findUniqueOrThrow({
-        where: { branchId_servicePackageId_date_startTime: { branchId: branch.id, servicePackageId: pkg.id, date, startTime } },
+        where: { receptionScheduleId_date_startTime: { receptionScheduleId: (await prisma.packageReceptionTime.findUniqueOrThrow({ where: { servicePackageId_branchId_dayOfWeek: { servicePackageId: pkg.id, branchId: branch.id, dayOfWeek: date.getUTCDay() } } })).id, date, startTime } },
         select: { id: true },
       });
     } else {
@@ -1119,7 +1120,7 @@ async function seedAppointmentScenarios(prisma, { accounts, branchMap }) {
       } });
       await tx.appointment.create({ data: {
         id: appointmentId, bookingCode: scenario.code, bookingOrderId: order.id,
-        patientProfileId: profile.id, branchId: branch.id, bookingMethodId: methods.get(methodCode),
+        patientProfileId: profile.id, bookingMethodId: methods.get(methodCode),
         scheduleSlotId: slot?.id ?? null, receptionSlotId: receptionSlot?.id ?? null,
         servicePackageId: pkg?.id ?? null, servicePrice: price, status: scenario.status,
         queueNumber: slot && paid && scenario.status !== 'CANCELLED' ? 1 : null,

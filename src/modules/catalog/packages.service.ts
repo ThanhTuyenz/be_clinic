@@ -1,3 +1,4 @@
+import { PACKAGE_DEPLOYMENT_SELECT, getPackageDeployments, packageDeploymentWhere } from '../bookings/helpers/package-deployment.helper.js';
 import { Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../../infrastructure/database/prisma/prisma.service.js';
 import { RedisService } from '../../infrastructure/redis/redis.service.js';
@@ -81,16 +82,7 @@ export class PackagesService {
     const bookingMethodCode =
       type === 'health-package' ? 'HEALTH_PACKAGE' : type === 'specialty' ? 'SPECIALTY_EXAM' : undefined;
 
-    const deploymentWhere = {
-      ...(effectiveBranchId ? { branchId: effectiveBranchId } : {}),
-      isEnabled: true,
-      branch: { isActive: true },
-      bookingMethod: { isActive: true, ...(bookingMethodCode ? { code: bookingMethodCode } : {}) },
-    };
-    conditions.push({ OR: [
-      { branchBookingMethods: { some: { branchBookingMethod: deploymentWhere } } },
-      { branchBookingMethod: deploymentWhere },
-    ] });
+    conditions.push(await packageDeploymentWhere(this.prisma, effectiveBranchId, bookingMethodCode));
 
     let orderBy: any = [{ specialty: { name: 'asc' } }, { price: 'asc' }];
     if (sortBy === 'price-asc') {
@@ -139,31 +131,11 @@ export class PackagesService {
       symptoms: true,
       price: true,
       durationMin: true,
-      receptionSchedules: { select: { branchId: true, dayOfWeek: true, sessions: true } },
+      receptionSchedules: { where: { isActive: true }, select: { branchId: true, dayOfWeek: true, sessions: true } },
       specialtyId: true,
       specialty: { select: { id: true, name: true, slug: true } },
-      branchBookingMethod: {
-        select: {
-          id: true,
-          branchId: true,
-          isEnabled: true,
-          bookingMethod: { select: { id: true, code: true, name: true, isActive: true } },
-          branch: { select: { id: true, code: true, slug: true, name: true, isActive: true } },
-        },
-      },
-      branchBookingMethods: {
-        select: {
-          branchBookingMethod: {
-            select: {
-              id: true,
-              branchId: true,
-              isEnabled: true,
-              bookingMethod: { select: { id: true, code: true, name: true, isActive: true } },
-              branch: { select: { id: true, code: true, slug: true, name: true, isActive: true } },
-            },
-          },
-        },
-      },
+
+      ...PACKAGE_DEPLOYMENT_SELECT,
     };
 
     const rankPage = rankedIds !== undefined && sortBy === 'default'
@@ -186,8 +158,9 @@ export class PackagesService {
     }
 
 
-    const formattedData = rows.map(({ branchBookingMethod, branchBookingMethods, ...item }) => {
-      const deployments = [...(branchBookingMethod ? [branchBookingMethod] : []), ...(branchBookingMethods || []).map((link) => link.branchBookingMethod)]
+    const formattedData = rows.map((row) => {
+      const { branches, bookingMethod, ...item } = row;
+      const deployments = getPackageDeployments(row)
         .filter((method) => method.isEnabled && method.bookingMethod.isActive && method.branch.isActive
           && (!effectiveBranchId || method.branchId === effectiveBranchId)
           && (!bookingMethodCode || method.bookingMethod.code === bookingMethodCode));
@@ -198,7 +171,6 @@ export class PackagesService {
         price: Number(item.price),
         branchId: bbm?.branchId,
         branchSlug: bbm?.branch?.slug ?? null,
-        branchBookingMethodId: bbm?.id,
         bookingMethod: bbm?.bookingMethod,
         bookingMethods: [...new Map(deployments.map((method) => [method.id, { branchId: method.branchId, ...method.bookingMethod }])).values()],
       };
@@ -257,7 +229,18 @@ export class PackagesService {
               ...(legacyBasicCode ? [{ code: { equals: legacyBasicCode, mode: 'insensitive' as const } }] : []),
             ],
           },
-      include: {
+      select: {
+        id: true,
+        code: true,
+        slug: true,
+        name: true,
+        imageUrl: true,
+        description: true,
+        notes: true,
+        symptoms: true,
+        price: true,
+        durationMin: true,
+        specialtyId: true,
         specialty: {
           select: {
             id: true,
@@ -285,51 +268,15 @@ export class PackagesService {
             },
           },
         },
-        branchBookingMethod: {
-          include: {
-            branch: {
-              select: {
-                id: true,
-                code: true,
-                slug: true,
-                name: true,
-                address: true,
-                phoneNumber: true,
-                operatingHours: true,
-                isActive: true,
-              },
-            },
-            bookingMethod: { select: { id: true, code: true, name: true, isActive: true } },
-          },
-        },
-        receptionSchedules: { select: { branchId: true, dayOfWeek: true, sessions: true } },
-        branchBookingMethods: {
-          include: {
-            branchBookingMethod: {
-              include: {
-                branch: {
-                  select: {
-                    id: true,
-                    code: true,
-                    slug: true,
-                    name: true,
-                    address: true,
-                    phoneNumber: true,
-                    operatingHours: true,
-                    isActive: true,
-                  },
-                },
-                bookingMethod: { select: { id: true, code: true, name: true, isActive: true } },
-              },
-            },
-          },
-        },
+
+        receptionSchedules: { where: { isActive: true }, select: { branchId: true, dayOfWeek: true, sessions: true } },
+        ...PACKAGE_DEPLOYMENT_SELECT,
       },
     });
 
     if (!pkg) throw new NotFoundException('Không tìm thấy gói khám hoặc dịch vụ này');
 
-    const deployments = [...(pkg.branchBookingMethod ? [pkg.branchBookingMethod] : []), ...pkg.branchBookingMethods.map((link) => link.branchBookingMethod)]
+    const deployments = getPackageDeployments(pkg)
       .filter((method) => method.isEnabled && method.bookingMethod.isActive && method.branch.isActive);
     const branchList = [...new Map(deployments.map((method) => [method.branchId, method.branch])).values()];
 

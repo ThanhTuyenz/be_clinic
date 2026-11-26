@@ -43,6 +43,7 @@ export class UsersService implements IUsersService {
     }
     return this.prisma.$transaction(async (tx) => {
       const targetBranchId = dto.branchId || null;
+      if (this.toPrismaRole(dto.role ?? UserRole.Patient) === 'BRANCH_MANAGER') await this.validateBranchManager(tx, targetBranchId);
       if (this.toPrismaRole(dto.role ?? UserRole.Patient) === 'DOCTOR') await this.validateDoctorBranch(tx, targetBranchId);
       const row = await tx.user.create({
         data: {
@@ -77,7 +78,7 @@ export class UsersService implements IUsersService {
         },
       });
       return userWithRelations ? this.toEntity(userWithRelations) : this.toEntity(row);
-    }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
+    }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable }).catch(error => this.handleManagerConflict(error));
   }
 
   async findOneUser(options: EntityCondition<User>): Promise<NullableType<User>> {
@@ -245,6 +246,7 @@ export class UsersService implements IUsersService {
         ? (p.branchId || null)
         : (['ADMIN', 'CHAIN_MANAGER'].includes(nextRole) ? null : stored.branchId);
       if (p.branchId !== undefined || ['ADMIN', 'CHAIN_MANAGER'].includes(nextRole)) next.branchId = targetBranchId;
+      if (nextRole === 'BRANCH_MANAGER' && payload.isDeleted !== true) await this.validateBranchManager(tx, targetBranchId, id);
       if (nextRole === 'DOCTOR') {
         await this.validateDoctorBranch(tx, targetBranchId);
         if (stored.branchId && stored.branchId !== targetBranchId) {
@@ -268,7 +270,7 @@ export class UsersService implements IUsersService {
       }
 
       return row;
-    }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
+    }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable }).catch(error => this.handleManagerConflict(error));
     this.permissionsService.invalidateCache(id);
     if (payload.isBlocked !== undefined || payload.isDeleted !== undefined) await this.invalidateUserStatusCache(id);
 
@@ -347,6 +349,27 @@ export class UsersService implements IUsersService {
     delete (entity as any).hash;
     (entity as any).effectivePermissions = calculateEffectivePermissions(row.role, row.customPermissions);
     return entity;
+  }
+
+  private handleManagerConflict(error: unknown): never {
+    if (error instanceof Prisma.PrismaClientKnownRequestError) {
+      if (error.code === 'P2002' && /branch_id|users_primary_branch_manager_key/.test(JSON.stringify(error.meta))) {
+        throw new ConflictException('Chi nhánh đã có quản lý chính. Vui lòng dùng chức năng Đổi quản lý tại danh sách chi nhánh.');
+      }
+      if (error.code === 'P2034') throw new ConflictException('Dữ liệu nhân sự vừa thay đổi. Vui lòng tải lại và thử lại.');
+    }
+    throw error;
+  }
+
+  private async validateBranchManager(tx: Prisma.TransactionClient, branchId: number | null, userId?: string) {
+    if (!branchId) return;
+    await tx.$queryRaw`SELECT id FROM branches WHERE id = ${branchId} FOR UPDATE`;
+    const branch = await tx.branch.findUnique({ where: { id: branchId }, select: { isActive: true } });
+    if (!branch?.isActive) throw new BadRequestException('Chi nhánh không tồn tại hoặc đã ngừng hoạt động.');
+    const occupied = await tx.user.findFirst({
+      where: { branchId, role: 'BRANCH_MANAGER', isDeleted: false, ...(userId ? { id: { not: userId } } : {}) }, select: { id: true },
+    });
+    if (occupied) throw new ConflictException('Chi nhánh đã có quản lý chính. Vui lòng dùng chức năng Đổi quản lý tại danh sách chi nhánh.');
   }
 
   private async validateDoctorBranch(tx: Prisma.TransactionClient, branchId: number | null) {

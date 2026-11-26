@@ -1,3 +1,4 @@
+import { PACKAGE_DEPLOYMENT_SELECT, getPackageDeployments, packageDeploymentWhere } from './helpers/package-deployment.helper.js';
 import { resolveBranchId } from '../../common/utils/booking-date-rules.utils.js';
 import { onlineBookingDateRange } from './helpers/booking-date.helper.js';
 import { clinicPeriod } from '../../common/constants/clinic-sessions.js';
@@ -27,22 +28,13 @@ const BOOKING_DOCTOR_SELECT = {
   },
 } satisfies Prisma.DoctorSelect;
 
-const PACKAGE_DEPLOYMENT_SELECT = {
-  branchId: true,
-  isEnabled: true,
-  branch: { select: { id: true, code: true, slug: true, name: true, address: true, isActive: true } },
-  bookingMethod: { select: { id: true, code: true, name: true, isActive: true } },
-} satisfies Prisma.BranchBookingMethodSelect;
 
 const BOOKING_PACKAGE_SELECT = {
   id: true, code: true, slug: true, name: true, description: true, price: true, durationMin: true,
-  receptionSchedules: { select: { branchId: true, dayOfWeek: true, sessions: true } },
+  receptionSchedules: { where: { isActive: true }, select: { branchId: true, dayOfWeek: true, sessions: true } },
   specialtyId: true,
-  branchBookingMethod: { select: PACKAGE_DEPLOYMENT_SELECT },
-  branchBookingMethods: {
-    where: { branchBookingMethod: { isEnabled: true, bookingMethod: { isActive: true } } },
-    select: { branchBookingMethod: { select: PACKAGE_DEPLOYMENT_SELECT } },
-  },
+
+  ...PACKAGE_DEPLOYMENT_SELECT,
 } satisfies Prisma.ServicePackageSelect;
 type BookingInitPackage = Prisma.ServicePackageGetPayload<{ select: typeof BOOKING_PACKAGE_SELECT }>;
 
@@ -51,9 +43,9 @@ type BookingDoctor = Prisma.DoctorGetPayload<{ select: typeof BOOKING_DOCTOR_SEL
 const BOOKING_SLOT_PACKAGE_SELECT = {
   id: true,
   specialtyId: true,
-  receptionSchedules: { select: { branchId: true, dayOfWeek: true, sessions: true } },
-  branchBookingMethod: { select: { branchId: true, isEnabled: true, bookingMethod: { select: { code: true, isActive: true } } } },
-  branchBookingMethods: { select: { branchBookingMethod: { select: { branchId: true, isEnabled: true, bookingMethod: { select: { code: true, isActive: true } } } } } },
+  receptionSchedules: { where: { isActive: true }, select: { branchId: true, dayOfWeek: true, sessions: true } },
+
+  ...PACKAGE_DEPLOYMENT_SELECT,
 } satisfies Prisma.ServicePackageSelect;
 
 type BookingSlotPackage = Prisma.ServicePackageGetPayload<{ select: typeof BOOKING_SLOT_PACKAGE_SELECT }>;
@@ -176,24 +168,7 @@ export class BookingFlowService {
       doctorFlow ? Promise.resolve<BookingInitPackage[]>([]) : this.prisma.servicePackage.findMany({
         where: {
           isActive: true,
-          OR: [
-            {
-              branchBookingMethod: {
-                isEnabled: true,
-                bookingMethod: { isActive: true },
-              },
-            },
-            {
-              branchBookingMethods: {
-                some: {
-                  branchBookingMethod: {
-                    isEnabled: true,
-                    bookingMethod: { isActive: true },
-                  },
-                },
-              },
-            },
-          ],
+          ...await packageDeploymentWhere(this.prisma, effectiveBranchId, undefined),
         },
         orderBy: [{ price: 'asc' }, { name: 'asc' }],
         select: BOOKING_PACKAGE_SELECT,
@@ -201,25 +176,10 @@ export class BookingFlowService {
     ]);
 
     const formatPackages = (methodCode: string) => allServicePackages
-      .map(({ branchBookingMethod, branchBookingMethods, ...pkg }) => {
-        const primaryBbm =
-          branchBookingMethod?.isEnabled && branchBookingMethod.branch.isActive && branchBookingMethod?.bookingMethod?.isActive
-          && branchBookingMethod.bookingMethod.code === methodCode
-            ? branchBookingMethod
-            : null;
-        const validLinks = (branchBookingMethods || [])
-          .map((b) => b.branchBookingMethod)
-          .filter((bbm) => bbm && bbm.isEnabled && bbm.branch.isActive && bbm.bookingMethod?.isActive
-            && bbm.bookingMethod.code === methodCode);
-
-        const branchesList = [
-          ...(primaryBbm?.branch ? [primaryBbm.branch] : []),
-          ...validLinks.map((l) => l.branch).filter(Boolean),
-        ];
-
-        // Deduplicate branches by id
-        const uniqueBranches = Array.from(new Map(branchesList.map((b) => [b.id, b])).values());
-        const deployments = [...(primaryBbm ? [primaryBbm] : []), ...validLinks];
+      .map((row) => {
+        const { branches, bookingMethod, ...pkg } = row;
+        const deployments = getPackageDeployments(row).filter(method => method.isEnabled && method.bookingMethod.code === methodCode);
+        const uniqueBranches = deployments.map(method => method.branch);
         const effectiveBbm = deployments.find((method) => !effectiveBranchId || method.branchId === effectiveBranchId) || null;
 
         return {
@@ -363,24 +323,7 @@ export class BookingFlowService {
               servicePackages: {
                 where: {
                   isActive: true,
-                  OR: [
-                    {
-                      branchBookingMethod: {
-                        isEnabled: true,
-                        bookingMethod: { code: specialtyMethodCode, isActive: true },
-                      },
-                    },
-                    {
-                      branchBookingMethods: {
-                        some: {
-                          branchBookingMethod: {
-                            isEnabled: true,
-                            bookingMethod: { code: specialtyMethodCode, isActive: true },
-                          },
-                        },
-                      },
-                    },
-                  ],
+                  ...await packageDeploymentWhere(this.prisma, effectiveBranchId, specialtyMethodCode),
                 },
               },
             },
@@ -472,7 +415,7 @@ export class BookingFlowService {
       if (!servicePackage || !effectiveBranchId) throw new BadRequestException('Vui lòng chọn gói khám và cơ sở tiếp nhận');
       const range = this.getBookingDateRange(Number(dto.days));
       const rows = await this.prisma.packageReceptionSlot.findMany({
-        where: { branchId: effectiveBranchId, servicePackageId: servicePackage.id, isActive: true, date: { gte: range.minDate, lte: range.maxDate } },
+        where: { receptionSchedule: { branchId: effectiveBranchId, servicePackageId: servicePackage.id, isActive: true }, isActive: true, date: { gte: range.minDate, lte: range.maxDate } },
         select: { id: true, date: true, startTime: true, endTime: true, capacity: true, occupiedCount: true },
         orderBy: [{ date: 'asc' }, { startTime: 'asc' }],
       });
@@ -699,7 +642,7 @@ export class BookingFlowService {
       select: BOOKING_SLOT_PACKAGE_SELECT,
     });
     if (!servicePackage) throw new NotFoundException('Gói khám không khả dụng');
-    const deployments = [servicePackage.branchBookingMethod, ...servicePackage.branchBookingMethods.map(link => link.branchBookingMethod)]
+    const deployments = getPackageDeployments(servicePackage)
       .filter(method => method?.isEnabled && (!bookingMethodCode || (method.bookingMethod?.isActive && method.bookingMethod.code === bookingMethodCode)));
     const allowedBranches = new Set(deployments.map(method => method.branchId));
     if (!allowedBranches.size || (branchId && !allowedBranches.has(branchId))) {

@@ -49,8 +49,7 @@ model DoctorScheduleSlot {
 
 model PackageReceptionSlot {
   id               Int            @id @default(autoincrement())
-  branchId         Int            @map("branch_id")
-  servicePackageId Int            @map("service_package_id")
+  receptionScheduleId Int         @map("reception_schedule_id")
   date             DateTime       @db.Date
   startTime        DateTime       @map("start_time") @db.Time(0)
   endTime          DateTime       @map("end_time") @db.Time(0)
@@ -59,12 +58,11 @@ model PackageReceptionSlot {
   isActive         Boolean        @default(true) @map("is_active")
   createdAt        DateTime       @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt        DateTime       @updatedAt @map("updated_at") @db.Timestamptz(3)
-  branch           Branch         @relation(fields: [branchId], references: [id], onDelete: Restrict)
-  servicePackage   ServicePackage @relation(fields: [servicePackageId], references: [id], onDelete: Restrict)
+  receptionSchedule PackageReceptionTime @relation(fields: [receptionScheduleId], references: [id], onDelete: Restrict)
   appointments     Appointment[]
 
-  @@unique([branchId, servicePackageId, date, startTime])
-  @@index([branchId, servicePackageId, date, isActive])
+  @@unique([receptionScheduleId, date, startTime], map: "package_reception_slot_schedule_date_start_key")
+  @@index([receptionScheduleId, date, isActive], map: "package_reception_slot_schedule_date_active_idx")
   @@map("package_reception_slots")
 }
 

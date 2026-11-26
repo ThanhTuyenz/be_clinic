@@ -1,3 +1,4 @@
+import { appointmentBranchWhere } from '../appointments/helpers/appointment-branch.helper.js';
 import { ForbiddenException, Injectable } from '@nestjs/common';
 import { getStaffUser, parseDateRange } from '../../common/utils/staff.utils.js';
 import { PrismaService } from '../../infrastructure/database/prisma/prisma.service.js';
@@ -33,7 +34,7 @@ export class ReceptionSummaryService {
       ],
     }
     if (branchId) {
-      appointmentWhere.AND.push({ branchId })
+      appointmentWhere.AND.push(appointmentBranchWhere(branchId))
     }
 
     const invoiceWhere: any = {
@@ -73,7 +74,7 @@ export class ReceptionSummaryService {
             },
           },
         }),
-        this.prisma.patientProfile.count({ where: branchId ? { appointments: { some: { branchId } } } : {} }),
+        this.prisma.patientProfile.count({ where: branchId ? { appointments: { some: appointmentBranchWhere(branchId) } } : {} }),
         this.prisma.appointment.count({
           where: {
             ...appointmentWhere,

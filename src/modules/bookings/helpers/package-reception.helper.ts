@@ -1,24 +1,16 @@
 import { BadRequestException } from '@nestjs/common';
+import { PACKAGE_DEPLOYMENT_SELECT } from './package-deployment.helper.js';
 import { Prisma } from '@prisma/client';
 import { CLINIC_SESSION_WINDOWS } from '../../../common/constants/clinic-sessions.js';
 
 export const PACKAGE_RECEPTION_SELECT = {
-  receptionSchedules: { select: { branchId: true, dayOfWeek: true, sessions: true } },
+  receptionSchedules: { where: { isActive: true }, select: { id: true, branchId: true, dayOfWeek: true, sessions: true } },
   id: true,
   name: true,
   price: true,
   isActive: true,
   specialtyId: true,
-  branchBookingMethod: {
-    select: { branchId: true, bookingMethodId: true, isEnabled: true },
-  },
-  branchBookingMethods: {
-    select: {
-      branchBookingMethod: {
-        select: { branchId: true, bookingMethodId: true, isEnabled: true },
-      },
-    },
-  },
+  ...PACKAGE_DEPLOYMENT_SELECT,
 } satisfies Prisma.ServicePackageSelect;
 
 export type ReceptionSession = keyof typeof CLINIC_SESSION_WINDOWS;

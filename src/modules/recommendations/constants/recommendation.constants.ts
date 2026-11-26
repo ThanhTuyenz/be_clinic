@@ -35,7 +35,7 @@ export const TELEMETRY_CONFIG = {
 
   // Mỗi nguồn xếp hạng tối đa 20 ứng viên và trả riêng tối đa 10 gói.
   CACHE_PREFIX: 'rec:v8:account',
-  POLICY_VERSION: 'grounded-independent-account-v6-integer-ids',
+  POLICY_VERSION: 'grounded-independent-account-v7-no-priority',
   MAX_RECENT_PACKAGE_VIEWS: 50,
   MAX_RECENT_SEARCHES: 5,
   MAX_RECENT_DROP_OFFS: 3,

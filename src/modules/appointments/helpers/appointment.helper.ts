@@ -1,3 +1,5 @@
+import { RECEPTION_SLOT_LOCATION_SELECT, APPOINTMENT_BRANCH_FIELDS, appointmentBranch, appointmentBranchId, appointmentBranchWhere } from './appointment-branch.helper.js';
+import { getPackageDeployments } from '../../bookings/helpers/package-deployment.helper.js';
 import { BadRequestException, ConflictException, ForbiddenException } from '@nestjs/common';
 import { AppointmentStatus, Prisma, UserRole } from '@prisma/client';
 import { formatTime } from '../../../common/utils/staff.utils.js';
@@ -28,18 +30,18 @@ export function appointmentScope(actor: AppointmentActor): Prisma.AppointmentWhe
     return { scheduleSlot: { schedule: { doctorId: actor.doctor.id } } };
   }
   if (!actor.branchId) throw new ForbiddenException('Tài khoản chưa được phân công chi nhánh');
-  return { branchId: actor.branchId };
+  return { AND: [appointmentBranchWhere(actor.branchId)] };
 }
 
 export function assertAppointmentAccess(actor: AppointmentActor, appointment: {
-  branchId: number; scheduleSlot?: { schedule: { doctorId: string } } | null;
+  receptionSlot?: { receptionSchedule?: { branchId?: number } } | null; scheduleSlot?: { schedule: { doctorId: string; branchId?: number } } | null;
 }) {
   if (actor.role === 'CHAIN_MANAGER') return;
   if (actor.role === 'DOCTOR') {
     if (!actor.doctor || appointment.scheduleSlot?.schedule.doctorId !== actor.doctor.id) {
       throw new ForbiddenException('Lịch khám không thuộc bác sĩ hiện tại');
     }
-  } else if (actor.branchId !== appointment.branchId) {
+  } else if (actor.branchId !== appointmentBranchId(appointment)) {
     throw new ForbiddenException('Lịch khám không thuộc chi nhánh phụ trách');
   }
 }
@@ -82,8 +84,8 @@ type ReceptionPackage = Prisma.ServicePackageGetPayload<{ select: typeof PACKAGE
 
 export function assertRescheduleDestination(
   appointment: {
-    branchId: number; scheduleSlotId: number | null;
-    scheduleSlot?: { schedule: { doctorId: string } } | null;
+    scheduleSlotId: number | null; receptionSlot?: { receptionSchedule?: { branchId?: number } } | null;
+    scheduleSlot?: { schedule: { doctorId: string; branchId?: number } } | null;
     servicePackage?: ReceptionPackage | null;
     bookingMethod?: { code: string } | null;
   },
@@ -97,11 +99,11 @@ export function assertRescheduleDestination(
   if (appointment.bookingMethod) assertBookingMethodSlot(appointment.bookingMethod.code, slot);
   if (slot.id === appointment.scheduleSlotId) throw new BadRequestException('Khung giờ mới trùng với khung giờ hiện tại');
   if (!appointment.scheduleSlot || slot.schedule.doctorId !== appointment.scheduleSlot.schedule.doctorId) throw new BadRequestException('Đổi lịch phải giữ nguyên bác sĩ phụ trách');
-  if (slot.schedule.branchId !== appointment.branchId) throw new BadRequestException('Đổi lịch phải giữ nguyên cơ sở khám');
+  if (slot.schedule.branchId !== appointmentBranchId(appointment)) throw new BadRequestException('Đổi lịch phải giữ nguyên cơ sở khám');
   if (appointmentDateTime(slot.schedule.workDate, slot.startTime) <= now) throw new BadRequestException('Không thể đổi sang khung giờ trong quá khứ');
   const pkg = appointment.servicePackage;
   if (pkg) {
-    const deployments = [pkg.branchBookingMethod, ...pkg.branchBookingMethods.map(link => link.branchBookingMethod)];
+    const deployments = getPackageDeployments(pkg);
     if (!pkg.isActive || !deployments.some(method => method?.branchId === slot.schedule.branchId && method.isEnabled)) throw new BadRequestException('Gói khám không còn áp dụng tại cơ sở này');
     assertPackageReception(pkg.receptionSchedules, slot);
   }
@@ -136,7 +138,7 @@ export async function transferAppointmentSlot(
       id: appointment.id, status: appointment.status,
       scheduleSlotId: appointment.scheduleSlotId, rescheduleCount: appointment.rescheduleCount,
     },
-    data: { scheduleSlotId: newSlot.id, branchId: newSlot.schedule.branchId, rescheduleCount: { increment: 1 }, reminderSent24h: false, reminderSent2h: false },
+    data: { scheduleSlotId: newSlot.id, rescheduleCount: { increment: 1 }, reminderSent24h: false, reminderSent2h: false },
   });
   if (claimed.count !== 1) throw new ConflictException('Lịch hẹn vừa được cập nhật, vui lòng tải lại');
   const reserved = await reserveBookingSlot(tx, newSlot.id);
@@ -245,10 +247,10 @@ export function serialize(row: any) {
       code: row.bookingMethod.code,
       name: row.bookingMethod.name,
     }
-    : row.servicePackage?.branchBookingMethod?.bookingMethod
+    : row.servicePackage?.bookingMethod
       ? {
-        code: row.servicePackage.branchBookingMethod.bookingMethod.code,
-        name: row.servicePackage.branchBookingMethod.bookingMethod.name,
+        code: row.servicePackage.bookingMethod.code,
+        name: row.servicePackage.bookingMethod.name,
       }
       : { code: 'DOCTOR', name: 'Khám với bác sĩ' }
   const isTelehealth = Boolean(row.telehealthSession || bookingMethod.code === 'ONLINE_CONSULTATION')
@@ -309,7 +311,7 @@ export function serialize(row: any) {
     } : null,
     bookingMethod,
     isTelehealth,
-    branch: row.branch ? { id: row.branch.id, code: row.branch.code, name: row.branch.name, address: row.branch.address } : null,
+    branch: appointmentBranch(row) ? { id: appointmentBranch(row).id, code: appointmentBranch(row).code, name: appointmentBranch(row).name, address: appointmentBranch(row).address } : null,
     invoice: invoice ? {
       id: invoice.id,
       totalAmount: Number(invoice.totalAmount),
@@ -333,7 +335,7 @@ export function serialize(row: any) {
 
 export function appointmentInclude() {
   return {
-    receptionSlot: { select: { date: true, startTime: true, endTime: true } },
+    receptionSlot: { select: { ...RECEPTION_SLOT_LOCATION_SELECT, date: true, startTime: true, endTime: true } },
     patientProfile: {
       select: {
         id: true,
@@ -350,7 +352,6 @@ export function appointmentInclude() {
         account: { select: { id: true, email: true, phoneNumber: true } },
       },
     },
-    branch: { select: { id: true, code: true, name: true, address: true } },
     bookingOrder: {
       select: {
         orderCode: true,
@@ -371,7 +372,7 @@ export function appointmentInclude() {
         startTime: true,
         endTime: true,
         schedule: {
-          select: {
+          select: { branchId: true, branch: { select: APPOINTMENT_BRANCH_FIELDS },
             doctorId: true,
             workDate: true,
             room: { select: { id: true, code: true, name: true } },
@@ -399,7 +400,7 @@ export function appointmentInclude() {
         name: true,
         specialtyId: true,
         specialty: { select: { id: true, name: true } },
-        branchBookingMethod: { select: { bookingMethod: { select: { code: true, name: true } } } },
+        bookingMethod: { select: { code: true, name: true } },
       },
     },
     telehealthSession: {

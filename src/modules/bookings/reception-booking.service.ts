@@ -1,3 +1,5 @@
+import { appointmentBranch, appointmentBranchId } from '../appointments/helpers/appointment-branch.helper.js';
+import { getPackageDeployments } from './helpers/package-deployment.helper.js';
 import { reserveBookingSlot } from './helpers/slot-reservation.helper.js';
 import { BadRequestException, ConflictException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
@@ -44,7 +46,7 @@ export class ReceptionBookingService {
         where: { code: 'SPECIALTY_EXAM', isActive: true }, select: { id: true },
       });
       if (!method) throw new BadRequestException('Hình thức khám chuyên khoa không khả dụng');
-      const deployments = [service.branchBookingMethod, ...service.branchBookingMethods.map(link => link.branchBookingMethod)]
+      const deployments = getPackageDeployments(service)
         .filter(link => link?.isEnabled && link.bookingMethodId === method.id);
       const allowedBranches = deployments.map(link => link.branchId);
       const slot = await tx.doctorScheduleSlot.findFirst({
@@ -91,7 +93,7 @@ export class ReceptionBookingService {
       await tx.appointment.create({
         data: {
           id: appointmentId, bookingCode, patientProfileId, bookingOrderId: bookingOrder.id,
-          branchId: slot.schedule.branchId, bookingMethodId: method.id,
+          bookingMethodId: method.id,
           servicePackageId: service.id, servicePrice: service.price,
           scheduleSlotId: slot.id, queueNumber,
           symptomsDescription: input.note || null, status: 'HOLD',
@@ -122,7 +124,7 @@ export class ReceptionBookingService {
         specialtyName: row.servicePackage?.specialty?.name,
         servicePackageName: row.servicePackage?.name, packageName: row.servicePackage?.name,
         bookingType: 'SERVICE_PACKAGE',
-        branchId: row.branchId, branchName: row.branch.name,
+        branchId: appointmentBranchId(row), branchName: appointmentBranch(row).name,
         appointmentDate: row.scheduleSlot?.schedule.workDate.toISOString().slice(0, 10),
         startTime: row.scheduleSlot ? formatTime(row.scheduleSlot.startTime) : undefined,
         endTime: row.scheduleSlot ? formatTime(row.scheduleSlot.endTime) : undefined,

@@ -1,3 +1,4 @@
+import { RECEPTION_SLOT_LOCATION_SELECT, APPOINTMENT_BRANCH_FIELDS, appointmentBranch, appointmentBranchId } from './helpers/appointment-branch.helper.js';
 import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { AppointmentStatus, NotificationType, Prisma } from '@prisma/client';
@@ -8,11 +9,10 @@ import { PrismaService } from '../../infrastructure/database/prisma/prisma.servi
 import { checkInToken } from './helpers/check-in-token.js';
 
 const CONFIRMATION_INCLUDE = {
-  receptionSlot: true,
+  receptionSlot: { include: { receptionSchedule: RECEPTION_SLOT_LOCATION_SELECT.receptionSchedule } },
   patientProfile: true,
   servicePackage: { include: { specialty: true } },
-  branch: true,
-  scheduleSlot: { include: { schedule: { include: { doctor: { include: { user: true } } } } } },
+  scheduleSlot: { include: { schedule: { include: { branch: { select: APPOINTMENT_BRANCH_FIELDS },  doctor: { include: { user: true } } } } } },
 } as const;
 export type ConfirmedAppointment = Prisma.AppointmentGetPayload<{ include: typeof CONFIRMATION_INCLUDE }>;
 
@@ -94,8 +94,8 @@ export class AppointmentConfirmationService {
         servicePackageName,
         packageName: servicePackageName,
         bookingType: isHealthPkg ? 'HEALTH_PACKAGE' : (updated.servicePackageId ? 'SERVICE_PACKAGE' : 'DOCTOR'),
-        branchId: updated.branchId,
-        branchName: updated.branch?.name,
+        branchId: appointmentBranchId(updated),
+        branchName: appointmentBranch(updated)?.name,
         appointmentDate: (updated.receptionSlot?.date ?? updated.scheduleSlot?.schedule?.workDate)?.toISOString().slice(0, 10),
         startTime: (updated.receptionSlot?.startTime ?? updated.scheduleSlot?.startTime)?.toISOString().slice(11, 16),
         endTime: (updated.receptionSlot?.endTime ?? updated.scheduleSlot?.endTime)?.toISOString().slice(11, 16),
@@ -107,9 +107,9 @@ export class AppointmentConfirmationService {
         await this.notifications.createNotification({
           userId: updated.patientProfile.accountId,
           title: 'Đặt lịch khám thành công!',
-          content: `Lịch khám #${bookingCode} đã được xác nhận. Ngày tiếp nhận: ${(updated.receptionSlot?.date ?? updated.scheduleSlot?.schedule?.workDate)?.toISOString().slice(0, 10) || ''} (${(updated.receptionSlot?.startTime ?? updated.scheduleSlot?.startTime)?.toISOString().slice(11, 16) || ''}) tại ${updated.branch?.name || 'VitaCare Clinic'}.`,
+          content: `Lịch khám #${bookingCode} đã được xác nhận. Ngày tiếp nhận: ${(updated.receptionSlot?.date ?? updated.scheduleSlot?.schedule?.workDate)?.toISOString().slice(0, 10) || ''} (${(updated.receptionSlot?.startTime ?? updated.scheduleSlot?.startTime)?.toISOString().slice(11, 16) || ''}) tại ${appointmentBranch(updated)?.name || 'VitaCare Clinic'}.`,
           type: NotificationType.BOOKING_CONFIRMED,
-          data: { appointmentId, bookingCode, branchName: updated.branch?.name },
+          data: { appointmentId, bookingCode, branchName: appointmentBranch(updated)?.name },
         }).catch(() => { });
       }
     } catch {
@@ -120,7 +120,7 @@ export class AppointmentConfirmationService {
 
 
 
-  // return pass check-in cho lịch hẹn 
+  // return pass check-in cho lịch hẹn
   async issueCheckInPass(appointmentId: string, accountId: string) {
     const row = await this.prisma.appointment.findFirst({
       where: { id: appointmentId, OR: [{ patientProfile: { accountId } }, { bookingOrder: { accountId } }] },
@@ -130,7 +130,7 @@ export class AppointmentConfirmationService {
         status: true,
         queueNumber: true,
         servicePrice: true,
-        receptionSlot: { select: { date: true, startTime: true, endTime: true } },
+        receptionSlot: { select: { ...RECEPTION_SLOT_LOCATION_SELECT, date: true, startTime: true, endTime: true } },
         bookingMethod: { select: { code: true, name: true } },
         telehealthSession: { select: { id: true } },
         patientProfile: {
@@ -145,9 +145,6 @@ export class AppointmentConfirmationService {
         },
         servicePackage: {
           select: { id: true, name: true },
-        },
-        branch: {
-          select: { id: true, name: true, address: true },
         },
         bookingOrder: { select: { invoice: {
           select: {
@@ -165,7 +162,7 @@ export class AppointmentConfirmationService {
             startTime: true,
             endTime: true,
             schedule: {
-              select: {
+              select: { branchId: true,
                 workDate: true,
                 room: { select: { id: true, code: true, name: true } },
                 branch: { select: { id: true, name: true, address: true } },
@@ -194,7 +191,7 @@ export class AppointmentConfirmationService {
     const historical = ['COMPLETED', 'NO_SHOW'].includes(row.status);
     const doctorSlot = row.scheduleSlot;
     const room = doctorSlot?.schedule.room;
-    const branch = doctorSlot?.schedule.branch ?? row.branch;
+    const branch = doctorSlot?.schedule.branch ?? appointmentBranch(row);
     if (!branch) throw new ConflictException('Không xác định được cơ sở khám');
 
     const rawToken = checkInToken(row.id, this.config.get<string>('auth.secret'));

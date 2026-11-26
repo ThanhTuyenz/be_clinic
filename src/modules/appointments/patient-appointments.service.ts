@@ -1,3 +1,4 @@
+import { RECEPTION_SLOT_LOCATION_SELECT, APPOINTMENT_BRANCH_FIELDS, appointmentBranch, appointmentBranchId } from './helpers/appointment-branch.helper.js';
 import { appointmentTransaction, releaseCancelledHoldVoucher } from './helpers/appointment-mutation.helper.js';
 import { BadRequestException, ConflictException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
@@ -12,17 +13,17 @@ import { RescheduleAppointmentDto } from './dtos/reschedule-appointment.dto.js';
 import { assertPatientSlotAvailable, assertRescheduleDestination, releaseAppointmentSlot, transferAppointmentSlot, appointmentDateTime } from './helpers/appointment.helper.js';
 
 const PATIENT_MUTATION_INCLUDE = {
-  receptionSlot: { select: { date: true, startTime: true, endTime: true } },
+  receptionSlot: { select: { ...RECEPTION_SLOT_LOCATION_SELECT, date: true, startTime: true, endTime: true } },
   bookingMethod: { select: { code: true } },
   bookingOrder: { select: { accountId: true } },
   patientProfile: { select: { id: true, accountId: true, fullName: true, account: { select: { email: true } } } },
-  scheduleSlot: { include: { schedule: { select: {
+  scheduleSlot: { include: { schedule: { select: { branchId: true,
     doctorId: true, workDate: true,
     doctor: { select: { academicRank: true, user: { select: { fullName: true } } } },
     branch: { select: { name: true } },
   } } } },
   servicePackage: { select: { name: true } },
-  branch: { select: { name: true, address: true } },
+
 } satisfies Prisma.AppointmentInclude;
 
 function assertUpcomingPatientAppointment(appointment: {
@@ -81,8 +82,8 @@ export class PatientAppointmentsService {
         servicePackageId: true,
         scheduleSlotId: true,
         receptionSlotId: true,
-        receptionSlot: { select: { date: true, startTime: true, endTime: true } },
-        branchId: true,
+        receptionSlot: { select: { ...RECEPTION_SLOT_LOCATION_SELECT, date: true, startTime: true, endTime: true } },
+
         symptomsDescription: true,
         bookingMethod: {
           select: { id: true, code: true, name: true },
@@ -95,18 +96,15 @@ export class PatientAppointmentsService {
             id: true,
             name: true,
             code: true,
-            branchBookingMethod: {
+            bookingMethod: {
               select: {
-                bookingMethod: { select: { code: true, name: true } },
+                code: true, name: true,
               },
             },
           },
         },
         telehealthSession: {
           select: { id: true },
-        },
-        branch: {
-          select: { id: true, name: true, address: true },
         },
         bookingOrder: {
           select: { orderCode: true, groupType: true, invoice: { select: { totalAmount: true, status: true, payments: { select: { status: true }, orderBy: { createdAt: 'desc' }, take: 1 } } } },
@@ -116,7 +114,7 @@ export class PatientAppointmentsService {
             startTime: true,
             endTime: true,
             schedule: {
-              select: {
+              select: { branchId: true, branch: { select: APPOINTMENT_BRANCH_FIELDS },
                 workDate: true,
                 doctorId: true,
                 doctor: {
@@ -141,11 +139,11 @@ export class PatientAppointmentsService {
     return rows.map((row) => {
       const doctorSlot = row.scheduleSlot;
       const room = doctorSlot?.schedule.room;
-      const branch = row.branch;
+      const branch = appointmentBranch(row);
       const bookingMethod = row.bookingMethod
         ? { code: row.bookingMethod.code, name: row.bookingMethod.name }
-        : row.servicePackage?.branchBookingMethod?.bookingMethod
-          ? { code: row.servicePackage.branchBookingMethod.bookingMethod.code, name: row.servicePackage.branchBookingMethod.bookingMethod.name }
+        : row.servicePackage?.bookingMethod
+          ? { code: row.servicePackage.bookingMethod.code, name: row.servicePackage.bookingMethod.name }
           : null;
 
       const isTelehealth = Boolean(
@@ -181,7 +179,7 @@ export class PatientAppointmentsService {
           ? { id: row.servicePackage.id, name: row.servicePackage.name }
           : null,
         branch: branch ? { id: branch.id, name: branch.name, address: branch.address } : null,
-        branchId: branch?.id ?? row.branchId,
+        branchId: branch?.id ?? appointmentBranchId(row),
         room: !isTelehealth && room ? { id: room.id, code: room.code, name: room.name } : null,
         totalAmount: Number(row.bookingOrder.invoice?.totalAmount ?? row.servicePrice),
         invoiceStatus: row.bookingOrder.invoice?.status ?? null,
@@ -308,7 +306,7 @@ export class PatientAppointmentsService {
         ? `${doctorSlot.schedule.doctor.academicRank ? doctorSlot.schedule.doctor.academicRank + ' ' : ''}${doctorSlot.schedule.doctor.user?.fullName ?? ''}`.trim()
         : null;
       const serviceName = appointment.servicePackage?.name || null;
-      const branchName = doctorSlot?.schedule?.branch?.name || appointment.branch?.name || 'VitaCare Clinic';
+      const branchName = doctorSlot?.schedule?.branch?.name || appointmentBranch(appointment)?.name || 'VitaCare Clinic';
 
       try {
         await this.mailsService.sendAppointmentCancellation({
@@ -439,8 +437,8 @@ export class PatientAppointmentsService {
         ? `${newSlot.schedule.doctor.academicRank ? newSlot.schedule.doctor.academicRank + ' ' : ''}${newSlot.schedule.doctor.user?.fullName ?? ''}`.trim()
         : null;
       const serviceName = appointment.servicePackage?.name || null;
-      const branchName = newSlot.schedule?.branch?.name || appointment.branch?.name || 'VitaCare Clinic';
-      const branchAddress = newSlot.schedule?.branch?.address || appointment.branch?.address || '';
+      const branchName = newSlot.schedule?.branch?.name || appointmentBranch(appointment)?.name || 'VitaCare Clinic';
+      const branchAddress = newSlot.schedule?.branch?.address || appointmentBranch(appointment)?.address || '';
       const roomName = newSlot.schedule?.room?.name ? `${newSlot.schedule.room.code} · ${newSlot.schedule.room.name}` : null;
 
       try {
@@ -478,12 +476,12 @@ export class PatientAppointmentsService {
       const oldDate = appointment.receptionSlot?.date ?? appointment.scheduleSlot?.schedule.workDate;
       const oldTime = appointment.receptionSlot?.startTime ?? appointment.scheduleSlot?.startTime;
       if (!oldDate || !oldTime || (Date.now() - appointment.createdAt.getTime() > 1800000 && appointmentDateTime(oldDate, oldTime).getTime() - Date.now() < 6 * 3600000)) throw new BadRequestException('Chỉ được đổi trước giờ tiếp nhận ít nhất 6 giờ');
-      const slot = await tx.packageReceptionSlot.findUnique({ where: { id: dto.newReceptionSlotId! } });
-      if (!slot?.isActive || slot.id === appointment.receptionSlotId || slot.branchId !== appointment.branchId || slot.servicePackageId !== appointment.servicePackageId) throw new BadRequestException('Khung tiếp nhận mới không hợp lệ');
+      const slot = await tx.packageReceptionSlot.findUnique({ where: { id: dto.newReceptionSlotId! }, include: { receptionSchedule: true } });
+      if (!slot?.isActive || !slot.receptionSchedule.isActive || slot.id === appointment.receptionSlotId || slot.receptionSchedule.branchId !== appointmentBranchId(appointment) || slot.receptionSchedule.servicePackageId !== appointment.servicePackageId) throw new BadRequestException('Khung tiếp nhận mới không hợp lệ');
       onlineBookingDateRange(60).resolveDate(slot.date.toISOString().slice(0, 10));
-      assertPackageReception(appointment.servicePackage!.receptionSchedules, { startTime: slot.startTime, schedule: { branchId: slot.branchId, workDate: slot.date } });
+      assertPackageReception(appointment.servicePackage!.receptionSchedules, { startTime: slot.startTime, schedule: { branchId: slot.receptionSchedule.branchId, workDate: slot.date } });
       await assertPatientSlotAvailable(tx, appointment.patientProfileId, { startTime: slot.startTime, endTime: slot.endTime, schedule: { workDate: slot.date } }, appointment.id);
-      const reserved = await tx.$executeRaw`UPDATE package_reception_slots SET occupied_count = occupied_count + 1, updated_at = NOW() WHERE id = ${slot.id} AND is_active = true AND occupied_count < capacity`;
+      const reserved = await tx.$executeRaw`UPDATE package_reception_slots SET occupied_count = occupied_count + 1, updated_at = NOW() WHERE id = ${slot.id} AND is_active = true AND occupied_count < capacity AND EXISTS (SELECT 1 FROM package_reception_schedules WHERE id = reception_schedule_id AND is_active = true)`;
       if (reserved !== 1) throw new ConflictException('Khung tiếp nhận mới vừa hết chỗ');
       await releaseAppointmentSlot(tx, appointment.scheduleSlotId, appointment.receptionSlotId);
       const updated = await tx.appointment.update({ where: { id: appointment.id }, data: {

@@ -1,3 +1,4 @@
+import { RECEPTION_SLOT_LOCATION_SELECT, appointmentBranch } from '../appointments/helpers/appointment-branch.helper.js';
 import { BadRequestException, ConflictException, Injectable, NotFoundException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { isISO8601 } from 'class-validator';
@@ -200,20 +201,20 @@ export class PatientProfilesService {
       where: recordScope,
       orderBy: { createdAt: 'desc' },
       select: {
+        receptionSlot: { select: { ...RECEPTION_SLOT_LOCATION_SELECT, date: true, startTime: true, endTime: true } },
         id: true,
         bookingCode: true,
         createdAt: true,
         status: true,
         symptomsDescription: true,
         queueNumber: true,
-        branch: { select: { id: true, name: true, address: true } },
         servicePackage: { select: { id: true, name: true, code: true, price: true } },
         scheduleSlot: {
           select: {
             startTime: true,
             endTime: true,
             schedule: {
-              select: {
+              select: { branchId: true,
                 workDate: true,
                 room: { select: { code: true, name: true } },
                 branch: { select: { id: true, name: true, address: true } },
@@ -246,7 +247,7 @@ export class PatientProfilesService {
       const slot = appt.scheduleSlot;
       const doc = slot?.schedule?.doctor;
       const docUser = doc?.user;
-      const branch = slot?.schedule?.branch || appt.branch;
+      const branch = slot?.schedule?.branch || appointmentBranch(appt);
       const room = slot?.schedule?.room;
       const apptDate = slot?.schedule?.workDate
         ? slot.schedule.workDate.toISOString().slice(0, 10)

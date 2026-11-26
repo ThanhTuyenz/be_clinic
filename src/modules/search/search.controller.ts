@@ -15,10 +15,10 @@ export class SearchController {
   constructor(private readonly search: SearchService) {}
   @Get()
   @Public()
-  @ApiOperation({ summary: 'Tìm gói khám, bác sĩ và cơ sở; xếp hạng gói khám bằng RRF' })
+  @ApiOperation({ summary: 'Tìm gói khám bằng từ khóa và ngữ nghĩa kết hợp RRF; tra cứu bác sĩ và cơ sở' })
   find(@Query() query: SearchQueryDto, @Req() req: SearchRequest) {
     return this.search.find(query.q, query.branchId, {
-      sessionId: query.sessionId, accountId: req.user?.id, searchRequestId: query.searchRequestId,
+      sessionId: query.sessionId, accountId: req.user?.id,
     });
   }
 }
@@ -34,7 +34,7 @@ export class LegacySearchController {
   @ApiOperation({ summary: 'Đường dẫn tương thích; dùng GET /search cho client mới', deprecated: true })
   find(@Query() query: SearchQueryDto, @Req() req: SearchRequest) {
     return this.search.find(query.q, query.branchId, {
-      sessionId: query.sessionId, accountId: req.user?.id, searchRequestId: query.searchRequestId,
+      sessionId: query.sessionId, accountId: req.user?.id,
     });
   }
 }

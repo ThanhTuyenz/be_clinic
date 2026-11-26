@@ -1,12 +1,30 @@
-import { ParseIntPipe } from '@nestjs/common';
-import { ExcludeRoles } from '../../common/decorators/exclude-roles.decorator.js';
 import { Controller, Get, Query, Req } from '@nestjs/common'
 import type { Request } from 'express'
 import { ApiBearerAuth, ApiOperation, ApiQuery, ApiTags } from '@nestjs/swagger'
+import { Type } from 'class-transformer'
+import { IsIn, IsInt, IsOptional, IsString, Min } from 'class-validator'
+import { ExcludeRoles } from '../../common/decorators/exclude-roles.decorator.js'
 import { RequirePermissions } from 'src/common/decorators/require-permissions.decorator'
 import { AppPermission } from '../auth/permissions/constants/permissions.constant.js'
 import { ReceptionSummaryService } from './reception-summary.service.js'
 import { AdminDashboardService } from './admin-dashboard.service.js'
+
+class ReceptionSummaryQueryDto {
+  @IsOptional() @IsString() date?: string
+  @IsOptional() @Type(() => Number) @IsInt() @Min(1) branchId?: number
+}
+
+class DashboardOverviewQueryDto {
+  @IsOptional() @Type(() => Number) @IsInt() @Min(1) branchId?: number
+  @IsOptional() @IsIn(['today', 'week', 'month']) timeFilter?: 'today' | 'week' | 'month'
+}
+
+class DashboardAnalyticsQueryDto {
+  @IsOptional() @IsString() timeFilter?: string
+  @IsOptional() @Type(() => Number) @IsInt() @Min(1) branchId?: number
+  @IsOptional() @IsString() startDate?: string
+  @IsOptional() @IsString() endDate?: string
+}
 
 @ApiTags('Admin dashboard & Analytics')
 @ApiBearerAuth('access-token')
@@ -22,10 +40,9 @@ export class AdminDashboardController {
   @ApiQuery({ name: 'branchId', required: false, description: 'ID số của chi nhánh; bỏ trống để xem toàn bộ phạm vi được phép' })
   receptionSummary(
     @Req() request: Request,
-    @Query('date') date?: string,
-    @Query('branchId', new ParseIntPipe({ optional: true })) branchId?: number,
+    @Query() query: ReceptionSummaryQueryDto,
   ) {
-    return this.reception.getReceptionSummary(request.user!.id, { date, branchId })
+    return this.reception.getReceptionSummary(request.user!.id, query)
   }
 
   @Get('dashboard')
@@ -35,10 +52,9 @@ export class AdminDashboardController {
   @ApiQuery({ name: 'timeFilter', required: false, enum: ['today', 'week', 'month'] })
   overview(
     @Req() request: Request,
-    @Query('branchId', new ParseIntPipe({ optional: true })) branchId?: number,
-    @Query('timeFilter') timeFilter?: 'today' | 'week' | 'month',
+    @Query() query: DashboardOverviewQueryDto,
   ) {
-    return this.dashboard.overview(request.user!.id, { branchId, timeFilter })
+    return this.dashboard.overview(request.user!.id, query)
   }
 
   @Get('analytics')
@@ -50,12 +66,9 @@ export class AdminDashboardController {
   @ApiQuery({ name: 'endDate', required: false, description: 'YYYY-MM-DD' })
   analytics(
     @Req() request: Request,
-    @Query('timeFilter') timeFilter?: string,
-    @Query('branchId', new ParseIntPipe({ optional: true })) branchId?: number,
-    @Query('startDate') startDate?: string,
-    @Query('endDate') endDate?: string,
+    @Query() query: DashboardAnalyticsQueryDto,
   ) {
-    return this.dashboard.analytics(request.user!.id, { timeFilter, branchId, startDate, endDate })
+    return this.dashboard.analytics(request.user!.id, query)
   }
 
   @Get('branch-comparison')
@@ -68,48 +81,6 @@ export class AdminDashboardController {
     @Query('endDate') endDate?: string,
   ) {
     return this.dashboard.compareBranches(request.user!.id, { timeFilter, startDate, endDate })
-  }
-
-  @Get('demand-insights')
-  @RequirePermissions(AppPermission.REPORT_BRANCH_READ)
-  @ApiOperation({ summary: 'Thống kê nhu cầu khám bệnh, phễu chuyển đổi và phân khúc nhân khẩu học (Hospital BI)' })
-  @ApiQuery({ name: 'branchId', required: false, description: 'Lọc theo chi nhánh' })
-  @ApiQuery({ name: 'timeFilter', required: false, enum: ['today', 'week', 'month', 'quarter', '7days', '30days'] })
-  @ApiQuery({ name: 'startDate', required: false, description: 'YYYY-MM-DD' })
-  @ApiQuery({ name: 'endDate', required: false, description: 'YYYY-MM-DD' })
-  getDemandInsights(
-    @Req() request: Request,
-    @Query('branchId', new ParseIntPipe({ optional: true })) branchId?: number,
-    @Query('timeFilter') timeFilter?: string,
-    @Query('startDate') startDate?: string,
-    @Query('endDate') endDate?: string,
-  ) {
-    return this.dashboard.getDemandMetrics(request.user!.id, { branchId, timeFilter, startDate, endDate })
-  }
-
-  @Get('ai-executive-report')
-  @RequirePermissions(AppPermission.REPORT_BRANCH_READ)
-  @ApiOperation({ summary: 'Lấy hoặc tạo Báo cáo Cố vấn Chiến lược Y tế từ AI Gemini' })
-  @ApiQuery({ name: 'branchId', required: false })
-  @ApiQuery({ name: 'timeFilter', required: false, enum: ['today', 'week', 'month', 'quarter', '7days', '30days'] })
-  @ApiQuery({ name: 'startDate', required: false, description: 'YYYY-MM-DD' })
-  @ApiQuery({ name: 'endDate', required: false, description: 'YYYY-MM-DD' })
-  @ApiQuery({ name: 'forceRefresh', required: false, type: Boolean })
-  getAiExecutiveReport(
-    @Req() request: Request,
-    @Query('branchId', new ParseIntPipe({ optional: true })) branchId?: number,
-    @Query('timeFilter') timeFilter?: string,
-    @Query('startDate') startDate?: string,
-    @Query('endDate') endDate?: string,
-    @Query('forceRefresh') forceRefresh?: string,
-  ) {
-    return this.dashboard.generateExecutiveAiReport(request.user!.id, {
-      branchId,
-      timeFilter,
-      startDate,
-      endDate,
-      forceRefresh: forceRefresh === 'true' || forceRefresh === '1',
-    })
   }
 
   @Get('system-logs')

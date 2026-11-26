@@ -1,12 +1,18 @@
-import { ParseIntPipe } from '@nestjs/common';
 import { Controller, Get, Query, Req } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiQuery, ApiTags } from '@nestjs/swagger';
+import { Type } from 'class-transformer';
+import { IsInt, IsOptional, IsString, Min } from 'class-validator';
 import type { Request } from 'express';
 import { Public } from '../../common/decorators/public.decorator.js';
 import { SkipPermissions } from 'src/common/decorators';
 import { RequirePermissions } from '../../common/decorators/require-permissions.decorator.js';
 import { AppPermission } from '../auth/permissions/constants/permissions.constant.js';
 import { ClinicRoomsService } from './clinic-rooms.service.js';
+
+class RoomsStatusQueryDto {
+  @IsOptional() @IsString() date?: string;
+  @IsOptional() @Type(() => Number) @IsInt() @Min(1) branchId?: number;
+}
 
 @ApiTags('Clinic rooms')
 @Controller(['clinic-rooms', 'reception'])
@@ -26,12 +32,11 @@ export class ClinicRoomsController {
   @RequirePermissions(AppPermission.ROOM_READ)
   @ApiOperation({ summary: 'Tình trạng tải của các phòng khám bác sĩ theo thời gian thực' })
   @ApiQuery({ name: 'date', required: false, description: 'YYYY-MM-DD' })
-  @ApiQuery({ name: 'branchId', required: false, description: 'UUID chi nhánh (hoặc "all")' })
+  @ApiQuery({ name: 'branchId', required: false, description: 'ID số chi nhánh' })
   getRoomsStatus(
     @Req() request: Request,
-    @Query('date') date?: string,
-    @Query('branchId', new ParseIntPipe({ optional: true })) branchId?: number,
+    @Query() query: RoomsStatusQueryDto,
   ) {
-    return this.rooms.getRoomsStatus(request.user!.id, { date, branchId });
+    return this.rooms.getRoomsStatus(request.user!.id, query);
   }
 }

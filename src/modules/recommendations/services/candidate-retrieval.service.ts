@@ -1,3 +1,4 @@
+import { packageDeploymentWhere } from '../../bookings/helpers/package-deployment.helper.js';
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../../../infrastructure/database/prisma/prisma.service.js';
 import { Prisma } from '@prisma/client';
@@ -149,10 +150,7 @@ export class CandidateRetrievalService {
     return this.prisma.servicePackage.findMany({
       where: {
         isActive: true,
-        OR: [
-          { branchBookingMethod: { isEnabled: true, branch: { isActive: true }, bookingMethod: { isActive: true } } },
-          { branchBookingMethods: { some: { branchBookingMethod: { isEnabled: true, branch: { isActive: true }, bookingMethod: { isActive: true } } } } },
-        ],
+        ...await packageDeploymentWhere(this.prisma, undefined, undefined),
       },
       include: RECOMMENDATION_PACKAGE_INCLUDE,
       orderBy: [{ price: 'asc' }, { id: 'asc' }],

@@ -42,7 +42,7 @@ export function rankBehaviorCandidates(candidates: BehaviorCandidate[], now = Da
     if (selected.size >= TELEMETRY_CONFIG.SOURCE_PACKAGES_LIMIT) break;
     selected.add(item.candidate.pkg.id);
   }
-  return sorted.filter(item => selected.has(item.candidate.pkg.id)).map(({ candidate }, index) => {
+  return sorted.filter(item => selected.has(item.candidate.pkg.id)).map(({ candidate }) => {
     const pkg = candidate.pkg;
     const badge = candidate.sourceType === 'DROP_OFF' ? 'Tiếp tục đăng ký'
       : candidate.sourceType === 'SEARCH_INTENT' ? 'Phù hợp tìm kiếm' : 'Đã xem gần đây';
@@ -54,7 +54,7 @@ export function rankBehaviorCandidates(candidates: BehaviorCandidate[], now = Da
     return {
       packageId: pkg.id, code: pkg.code, slug: pkg.slug || undefined, name: pkg.name,
       price: Number(pkg.price), durationMin: pkg.durationMin, specialtyId: pkg.specialtyId,
-      specialtyName: pkg.specialty?.name || 'Đa khoa', priority: index === 0 ? 'HIGH' : 'MEDIUM',
+      specialtyName: pkg.specialty?.name || 'Đa khoa',
       sourceType: candidate.sourceType, badge, clinicalReason,
     };
   });

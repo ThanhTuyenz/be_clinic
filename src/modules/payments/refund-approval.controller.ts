@@ -21,4 +21,10 @@ export class RefundApprovalController {
   approve(@Req() request: Request, @Param('id', ParseUUIDPipe) id: string, @Body() input: ApproveRefundDto) {
     return this.refunds.approve(request.user!.id, id, input);
   }
+
+  @Post(':id/refund/complete')
+  @ApiOperation({ summary: 'Quản lý chi nhánh xác nhận đã chuyển khoản hoàn tiền' })
+  complete(@Req() request: Request, @Param('id', ParseUUIDPipe) id: string, @Body() body?: { note?: string }) {
+    return this.refunds.complete(request.user!.id, id, body?.note);
+  }
 }

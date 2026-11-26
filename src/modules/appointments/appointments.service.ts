@@ -1,3 +1,4 @@
+import { RECEPTION_SLOT_LOCATION_SELECT, APPOINTMENT_BRANCH_FIELDS, appointmentBranch, appointmentBranchId } from './helpers/appointment-branch.helper.js';
 import { appointmentTransaction, releaseCancelledHoldVoucher } from './helpers/appointment-mutation.helper.js';
 import { BadRequestException, ConflictException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
@@ -31,10 +32,10 @@ import {
 
 interface StatusInput { status?: string; cancelReason?: string; note?: string; visitQueueNumber?: number }
 const MUTATION_INCLUDE = {
-  receptionSlot: { select: { date: true, startTime: true, endTime: true } },
+  receptionSlot: { select: { ...RECEPTION_SLOT_LOCATION_SELECT, date: true, startTime: true, endTime: true } },
   patientProfile: { select: { id: true, fullName: true, account: { select: { email: true } } } },
   scheduleSlot: { include: { schedule: { include: { doctor: { select: { academicRank: true, user: { select: { fullName: true } } } }, branch: { select: { name: true } } } } } },
-  servicePackage: { select: { name: true } }, branch: { select: { name: true } },
+  servicePackage: { select: { name: true } },
 } satisfies Prisma.AppointmentInclude;
 
 @Injectable()
@@ -216,7 +217,7 @@ export class AppointmentsService {
             to: email, data: {
               patientName: current.patientProfile.fullName, bookingCode: current.bookingCode || current.id,
               appointmentDate: (current.receptionSlot?.date ?? slot?.schedule.workDate)?.toISOString().slice(0, 10) || '', startTime: (current.receptionSlot?.startTime ?? slot?.startTime)?.toISOString().slice(11, 16) || '',
-              branchName: slot?.schedule.branch.name || current.branch.name,
+              branchName: slot?.schedule.branch.name || appointmentBranch(current).name,
               doctorOrServiceName: doctorName ? 'Bác sĩ ' + doctorName : current.servicePackage?.name || 'Khám chuyên khoa',
               cancelReason: input.cancelReason?.trim() || 'Phòng khám thay đổi lịch khám', cancelledBy: 'CLINIC',
               refundStatusNote: refundRequested ? 'Yêu cầu hoàn tiền đã được ghi nhận để bộ phận kế toán xử lý.' : undefined,
@@ -226,7 +227,7 @@ export class AppointmentsService {
       }
     }
     try {
-      this.realtimeGateway.emitAppointmentStatusChanged({ appointmentId, status: row.status, previousStatus: current.status, bookingCode: row.bookingCode, branchId: row.branchId });
+      this.realtimeGateway.emitAppointmentStatusChanged({ appointmentId, status: row.status, previousStatus: current.status, bookingCode: row.bookingCode, branchId: appointmentBranchId(row) });
     } catch { /* Realtime is best effort after commit. */ }
     if (status === 'COMPLETED' && current.status !== 'COMPLETED') {
       this.recommendationService.invalidateCache(current.patientProfileId).catch(() => { });
@@ -260,7 +261,7 @@ export class AppointmentsService {
     return appointmentTransaction(this.prisma, async tx => {
       const appointment = await tx.appointment.findUnique({
         where: { id: appointmentId }, include: {
-          scheduleSlot: { select: { schedule: { select: { doctorId: true } } } }, servicePackage: { select: PACKAGE_RECEPTION_SELECT },
+          scheduleSlot: { select: { schedule: { select: {branchId: true, branch: { select: APPOINTMENT_BRANCH_FIELDS },  doctorId: true } } } }, servicePackage: { select: PACKAGE_RECEPTION_SELECT },
           bookingMethod: { select: { code: true } },
         }
       });
@@ -268,7 +269,7 @@ export class AppointmentsService {
       assertAppointmentAccess(actor, appointment);
       const slot = await tx.doctorScheduleSlot.findUnique({
         where: { id: body.newSlotId }, include: {
-          schedule: { select: { doctorId: true, branchId: true, workDate: true, status: true, doctor: { select: { id: true, isActive: true, user: { select: { fullName: true } } } } } },
+          schedule: { select: {branch: { select: APPOINTMENT_BRANCH_FIELDS },  doctorId: true, branchId: true, workDate: true, status: true, doctor: { select: { id: true, isActive: true, user: { select: { fullName: true } } } } } },
         }
       });
       if (!slot) throw new NotFoundException('Không tìm thấy khung giờ khám mới');

@@ -1,8 +1,6 @@
 import { Type } from 'class-transformer';
 import { IsIn, IsInt, IsNotEmpty, IsOptional, IsString, Matches, MaxLength, Min } from 'class-validator';
 
-export type RecommendationPriority = 'HIGH' | 'MEDIUM' | 'LOW';
-
 export interface RecommendedPackageItemDto {
   packageId: number;
   code: string;
@@ -12,7 +10,6 @@ export interface RecommendedPackageItemDto {
   durationMin?: number;
   specialtyId?: number | null;
   specialtyName: string;
-  priority: RecommendationPriority;
   badge: string;
   clinicalReason: string;
   sourceType?: 'DROP_OFF' | 'SEARCH_INTENT' | 'RECENT_VIEW' | 'PROFILE_AI';
@@ -66,7 +63,6 @@ export interface RecommendationSectionDto {
   updatedAt: string;
   fromCache: boolean;
   packages: RecommendedPackageItemDto[];
-  trackingToken?: string;
 }
 
 export interface ProfileRecommendationSectionDto extends RecommendationSectionDto {

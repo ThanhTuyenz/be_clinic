@@ -29,7 +29,6 @@ model Appointment {
   bookingOrderId               String             @map("booking_order_id") @db.Uuid
   bookingCode                  String?            @unique @map("booking_code") @db.VarChar(30)
   patientProfileId             String             @map("patient_profile_id") @db.Uuid
-  branchId                     Int                @map("branch_id")
   bookingMethodId              Int                @map("booking_method_id")
   scheduleSlotId               Int?               @map("schedule_slot_id")
   receptionSlotId              Int?               @map("reception_slot_id")
@@ -37,10 +36,6 @@ model Appointment {
   servicePrice                 Decimal            @map("service_price") @db.Decimal(12, 2)
   symptomsDescription          String?            @map("symptoms_description")
   bookedViaAi                  Boolean            @default(false) @map("booked_via_ai")
-  searchId                     Int?               @map("search_id")
-  sourceViewId                 Int?               @map("source_view_id")
-  search                       SearchRequest?     @relation(fields: [searchId], references: [id], onDelete: SetNull)
-  sourceView                   AnalyticsInteraction? @relation(fields: [sourceViewId], references: [id], onDelete: SetNull)
   status                       AppointmentStatus  @default(HOLD)
   holdExpiresAt                DateTime?          @map("hold_expires_at") @db.Timestamptz(3)
   queueNumber                  Int?               @map("queue_number")
@@ -54,7 +49,6 @@ model Appointment {
 
   bookingOrder                 BookingOrder                 @relation(fields: [bookingOrderId], references: [id], onDelete: Restrict)
   patientProfile               PatientProfile               @relation(fields: [patientProfileId], references: [id], onDelete: Restrict)
-  branch                       Branch                       @relation(fields: [branchId], references: [id], onDelete: Restrict)
   bookingMethod                BookingMethod                 @relation(fields: [bookingMethodId], references: [id], onDelete: Restrict)
   scheduleSlot                 DoctorScheduleSlot?          @relation(fields: [scheduleSlotId], references: [id], onDelete: Restrict)
   receptionSlot                PackageReceptionSlot?        @relation(fields: [receptionSlotId], references: [id], onDelete: Restrict)
@@ -63,18 +57,14 @@ model Appointment {
   statusHistories              AppointmentStatusHistory[]
   qrToken                      AppointmentQrToken?
   voucherUsages                VoucherUsage[]
-  aiBookingIntentLogs          AIBookingIntentLog[]
   telehealthSession            TelehealthSession?
 
   @@index([bookingOrderId])
-  @@index([searchId])
-  @@index([sourceViewId])
   @@index([bookingMethodId])
   @@index([patientProfileId, status])
   @@index([patientProfileId, createdAt])
-  @@index([branchId, status, createdAt])
-  @@index([scheduleSlotId, status])
-  @@index([receptionSlotId, status])
+  @@index([scheduleSlotId, status, createdAt])
+  @@index([receptionSlotId, status, createdAt])
   @@index([servicePackageId, status])
   @@map("appointments")
 }

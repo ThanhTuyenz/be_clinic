@@ -93,12 +93,12 @@ export class AiAssistantService {
     // Only the latest assistant turn needs its structured card data. Avoid
     // loading up to twelve package/proposal/payment snapshots with the text history.
     const [rows, lastMessage] = await Promise.all([
-      this.prisma.aIMessage.findMany({
+      this.prisma.message.findMany({
         where: { conversationId: conversation.id, sender: { in: ['USER', 'ASSISTANT'] } },
         orderBy: [{ createdAt: 'desc' }, { sender: 'desc' }], take: 12,
         select: { sender: true, content: true },
       }),
-      this.prisma.aIMessage.findFirst({
+      this.prisma.message.findFirst({
         where: { conversationId: conversation.id, sender: 'ASSISTANT' },
         orderBy: { createdAt: 'desc' }, select: { structuredResponse: true },
       }),
@@ -726,14 +726,14 @@ export class AiAssistantService {
   }
 
   private async conversation(id?: string, userId?: string) {
-    if (!id) return this.prisma.aIConversation.create({
+    if (!id) return this.prisma.conversation.create({
       data: { userId, conversationType: 'BOOKING_ASSISTANCE' }, select: { id: true, userId: true, isClosed: true, updatedAt: true },
     });
-    let row = await this.prisma.aIConversation.findUnique({ where: { id }, select: { id: true, userId: true, isClosed: true, updatedAt: true } });
+    let row = await this.prisma.conversation.findUnique({ where: { id }, select: { id: true, userId: true, isClosed: true, updatedAt: true } });
     if (!row) throw new NotFoundException('Không tìm thấy cuộc trò chuyện. Vui lòng mở phiên mới.');
     if (!row.userId && userId) {
-      await this.prisma.aIConversation.updateMany({ where: { id, userId: null }, data: { userId } });
-      row = await this.prisma.aIConversation.findUniqueOrThrow({ where: { id }, select: { id: true, userId: true, isClosed: true, updatedAt: true } });
+      await this.prisma.conversation.updateMany({ where: { id, userId: null }, data: { userId } });
+      row = await this.prisma.conversation.findUniqueOrThrow({ where: { id }, select: { id: true, userId: true, isClosed: true, updatedAt: true } });
     }
     if (row.userId !== (userId || null)) throw new ForbiddenException('Bạn không có quyền truy cập cuộc trò chuyện này.');
     return row;
@@ -743,12 +743,12 @@ export class AiAssistantService {
     return this.prisma.$transaction(async tx => {
       const userAt = new Date(Math.max(Date.now(), (version?.getTime() || 0) + 1));
       const assistantAt = new Date(userAt.getTime() + 1);
-      const changed = await tx.aIConversation.updateMany({
+      const changed = await tx.conversation.updateMany({
         where: { id: conversationId, userId: userId || null, isClosed: false, ...(version ? { updatedAt: version } : {}) },
         data: { title: message.slice(0, 100), updatedAt: assistantAt },
       });
       if (!changed.count) throw new ConflictException('Cuộc trò chuyện đã thay đổi. Vui lòng gửi lại tin nhắn.');
-      await tx.aIMessage.createMany({
+      await tx.message.createMany({
         data: [
           { conversationId, sender: 'USER', content: message, createdAt: userAt },
           { conversationId, sender: 'ASSISTANT', content: response.message, structuredResponse: json({ ...response, ...(scheduleState ? { scheduleState } : {}) }), createdAt: assistantAt },
