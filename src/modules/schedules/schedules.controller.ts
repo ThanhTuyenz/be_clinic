@@ -29,7 +29,7 @@ export class SchedulesController {
   @ApiOperation({ summary: 'Danh sách ca làm việc (có thể lọc theo doctorId, branchId, ngày, withSlots, availableOnly)' })
   findAll(
     @Query('doctorId') doctorId?: string,
-    @Query('branchId', new ParseIntPipe({ optional: true })) branchId?: number,
+    @Query('branchId') branchId?: string,
     @Query('startDate') startDate?: string,
     @Query('endDate') endDate?: string,
     @Query('withSlots') withSlots?: string,
@@ -37,7 +37,7 @@ export class SchedulesController {
   ) {
     return this.schedulesService.findAll(
       doctorId,
-      branchId,
+      branchId ? Number(branchId) : undefined,
       startDate,
       endDate,
       withSlots === 'true',
@@ -106,8 +106,8 @@ export class SchedulesController {
   getAvailableSlots(
     @Param('doctorId') doctorId: string,
     @Query('date') date: string,
-    @Query('branchId', new ParseIntPipe({ optional: true })) branchId?: number,
+    @Query('branchId') branchId?: string,
   ) {
-    return this.schedulesService.getAvailableSlots(doctorId, date, branchId);
+    return this.schedulesService.getAvailableSlots(doctorId, date, branchId ? Number(branchId) : undefined);
   }
 }
